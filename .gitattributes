@@ -1,0 +1,11 @@
+# Prettier is configured for LF, and the Windows release runner checks out with
+# git's autocrlf on, which rewrites every source file to CRLF and fails the
+# format check. Pin the working tree to LF on every platform.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.svg text eol=lf
+*.exe binary
+*.7z binary
+*.wav binary
