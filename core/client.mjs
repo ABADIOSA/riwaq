@@ -8,12 +8,16 @@ import {
   resourceUrl,
   catalogExtras,
   mergeAddons,
-  rankStreams,
   safeSettings,
   webUrl,
 } from "./protocol.mjs";
+import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
 import { DataHub } from "./data-hub.mjs";
 import { Integrations } from "./integrations.mjs";
+import { LiveHub } from "./live-hub.mjs";
+import { Profiles } from "./profiles.mjs";
+import { Notifier } from "./notify.mjs";
+import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 
 export async function fetchJson(url, init = {}) {
   try {
@@ -34,6 +38,25 @@ export async function fetchJson(url, init = {}) {
     );
   }
 }
+/** Playlists and XMLTV guides are text, and large: fetched separately from JSON. */
+export async function fetchText(url, init = {}) {
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(45000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    if (text.length > 120_000_000) throw new Error("Response too large");
+    return text;
+  } catch (error) {
+    throw new Error(
+      error.message?.startsWith("HTTP ")
+        ? error.message
+        : "تعذّر تحميل الملف من المصدر. تحقق من الرابط والاتصال.",
+    );
+  }
+}
 export async function stremioCall(method, payload) {
   const response = await fetchJson(`https://api.strem.io/api/${method}`, {
     method: "POST",
@@ -45,9 +68,16 @@ export async function stremioCall(method, payload) {
   return response.result;
 }
 export class Client {
-  constructor({ load, save, request = fetchJson, api = stremioCall }) {
+  constructor({
+    load,
+    save,
+    request = fetchJson,
+    requestText = fetchText,
+    api = stremioCall,
+  }) {
     this.saveData = save;
     this.request = request;
+    this.requestText = requestText;
     this.api = api;
     this.state = {
       addons: [],
@@ -65,8 +95,15 @@ export class Client {
     this.cache = new Map();
     this.dataHub = new DataHub(this);
     this.integrations = new Integrations(this);
+    this.live = new LiveHub(this);
+    this.profiles = new Profiles(this);
+    this.notifier = new Notifier(this);
+    // The active profile owns favorites, progress, lists and settings, so the
+    // client state has to point at its bucket before anything reads them.
+    this.profiles.ensure();
   }
   persist() {
+    this.profiles.capture();
     this.saveData(this.state);
   }
   async init() {
@@ -110,6 +147,10 @@ export class Client {
       lastSync,
       providers: this.dataHub.publicState(),
       integrations: this.integrations.publicState(),
+      live: this.live.publicState(),
+      profiles: this.profiles.publicState(),
+      notify: this.notifier.publicState(),
+      hotkeys: publicHotkeys(this.state.hotkeys),
       connectedLists: this.state.connectedLists || [],
       user: auth ? { email: auth.email, name: auth.name } : null,
       addons: this.state.addons.map((a) => ({
@@ -127,6 +168,26 @@ export class Client {
         configurable: !!a.manifest.behaviorHints?.configurable,
       })),
     };
+  }
+  /** Hotkeys belong to the installation rather than to one profile. */
+  setHotkey({ id, binding }) {
+    if (!HOTKEY_ACTIONS.some((action) => action.id === id))
+      throw new Error("إجراء غير معروف");
+    const store = (this.state.hotkeys ||= {});
+    if (binding === null || binding === "" || binding === undefined)
+      delete store[id];
+    else if (validBinding(binding)) store[id] = binding;
+    else
+      throw new Error(
+        "اختصار غير صالح. استخدم مفتاحاً واحداً مع Ctrl أو Shift أو Alt.",
+      );
+    this.persist();
+    return this.publicState();
+  }
+  resetHotkeys() {
+    this.state.hotkeys = {};
+    this.persist();
+    return this.publicState();
   }
   enabled() {
     return this.state.addons.filter(
@@ -421,9 +482,27 @@ export class Client {
     }
     throw new Error("تفاصيل العنوان غير متاحة الآن");
   }
+  /**
+   * Requested season, episode and runtime let the stream engine reject offers
+   * that cannot be the episode the viewer asked for.
+   */
+  requestContext(type, id) {
+    const parts = String(id).split(":");
+    const requested = {};
+    if (parts.length >= 3) {
+      const season = Number(parts[1]);
+      const episode = Number(parts[2]);
+      if (Number.isInteger(season)) requested.season = season;
+      if (Number.isInteger(episode)) requested.episode = episode;
+    }
+    const meta =
+      this.metas.get(`${type}:${id}`) || this.metas.get(`${type}:${parts[0]}`);
+    const runtime = Number(String(meta?.runtime || "").match(/\d+/)?.[0]);
+    if (Number.isFinite(runtime) && runtime > 0) requested.runtime = runtime;
+    return { requested };
+  }
   async getStreams({ type, id }) {
-    const failures = [],
-      streams = [];
+    const failures = [];
     const addons = this.enabled().filter((a) =>
       accepts(a.manifest, "stream", type, id),
     );
@@ -435,10 +514,7 @@ export class Client {
           );
           return (response.streams || [])
             .filter((s) => s && typeof s === "object")
-            .map((s) => ({
-              ...s,
-              provider: addon.manifest.name,
-            }));
+            .map((s) => ({ ...s, provider: addon.manifest.name }));
         } catch {
           failures.push(addon.manifest.name);
           return [];
@@ -446,7 +522,8 @@ export class Client {
       }),
     );
     const seen = new Set();
-    for (const stream of rankStreams(results.flat(), this.state.settings)) {
+    const unique = [];
+    for (const stream of results.flat()) {
       const identity = JSON.stringify([
         stream.url,
         stream.infoHash,
@@ -457,7 +534,16 @@ export class Client {
       ]);
       if (seen.has(identity)) continue;
       seen.add(identity);
-      const key = keyFor(identity);
+      unique.push({ stream, identity });
+    }
+    const analysis = analyzeStreams(
+      unique.map((entry) => entry.stream),
+      this.state.settings,
+      this.requestContext(type, id),
+    );
+    const streams = analysis.kept.map((entry) => {
+      const { stream, parsed } = entry;
+      const key = keyFor(unique[entry.index].identity);
       this.streams.set(key, { ...stream, type, videoId: id });
       const supported = !!(
         (typeof stream.url === "string" && /^https?:\/\//i.test(stream.url)) ||
@@ -467,22 +553,55 @@ export class Client {
           /^https?:\/\//i.test(stream.externalUrl)) ||
         (typeof stream.ytId === "string" && !!stream.ytId)
       );
-      streams.push({
+      return {
         key,
         name: stream.name || stream.provider,
         title: stream.title || stream.description || "",
         provider: stream.provider,
-        resolution: stream.resolution,
-        hdr: stream.hdr,
-        codec: stream.codec,
-        cam: stream.cam,
-        arabic: stream.arabic,
+        tier: entry.tier,
+        score: entry.score,
+        reasons: entry.reasons.slice(0, 5),
+        resolution: parsed.resolution,
+        resolutionLabel: parsed.resolutionLabel,
+        hdr: parsed.hdr,
+        codec: parsed.codec,
+        audio: parsed.audio,
+        channels: parsed.channels,
+        source: parsed.source,
+        group: parsed.group,
+        trustedGroup: parsed.trustedGroup,
+        size: parsed.size,
+        sizeLabel: sizeLabel(parsed.size),
+        seeders: parsed.seeders,
+        cached: parsed.cached,
+        debrid: parsed.debrid,
+        arabicSub: parsed.arabic.sub,
+        arabicDub: parsed.arabic.dub,
+        languages: parsed.languages,
+        cam: ["CAM", "TS", "TC"].includes(parsed.source),
+        arabic: parsed.languages.includes("ar"),
         torrent: !!stream.infoHash,
         external: !!(stream.externalUrl || stream.ytId),
         supported,
-      });
-    }
-    return { streams, failures, providers: addons.length };
+      };
+    });
+    const dropped = analysis.dropped.map((entry) => ({
+      name: entry.stream.name || entry.stream.provider || "مصدر",
+      provider: entry.stream.provider,
+      reasons: entry.rejections,
+    }));
+    return {
+      streams,
+      groups: analysis.groups.map((group) => ({
+        tier: group.tier,
+        label: group.label,
+        count: group.items.length,
+      })),
+      dropped,
+      failures,
+      providers: addons.length,
+      safety: analysis.safety,
+    };
   }
   async getSubtitles({ type, id, streamKey }) {
     const selected = this.streams.get(streamKey);

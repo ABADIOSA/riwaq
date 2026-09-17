@@ -6,7 +6,6 @@ import {
   accepts,
   catalogExtras,
   mergeAddons,
-  rankStreams,
   torrentUrl,
   continueWatching,
   safeSettings,
@@ -105,21 +104,6 @@ test("sync preserves differently configured instances and disabled local state",
   assert.equal(result[0].manifest.name, "updated");
   assert.equal(result[1].enabled, true);
   assert.equal(local[0].manifest.name, "one");
-});
-test("ranking respects quality ceiling, hides CAM and keeps ties stable", () => {
-  const streams = [
-    { name: "4K HDR HEVC" },
-    { name: "1080p Arabic A" },
-    { name: "1080p Arabic B" },
-    { name: "HDCAM 2160p" },
-    { name: "720p" },
-  ];
-  const ranked = rankStreams(streams, { quality: "1080", hideCam: true });
-  assert.deepEqual(
-    ranked.map((s) => s.name),
-    ["1080p Arabic A", "1080p Arabic B", "720p", "4K HDR HEVC"],
-  );
-  assert.equal(ranked[3].hdr, true);
 });
 test("torrent paths use largest-file sentinel and preserve trackers", () => {
   const hash = "A".repeat(40);

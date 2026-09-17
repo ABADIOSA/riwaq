@@ -9,6 +9,11 @@ import {
   Subtitles,
   Star,
   LoaderCircle,
+  Zap,
+  Users,
+  ShieldCheck,
+  EyeOff,
+  Info,
 } from "lucide-react";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
@@ -30,6 +35,8 @@ export default function Details({
     [result, setResult] = useState(null),
     [streamsLoading, setStreamsLoading] = useState(false),
     [quality, setQuality] = useState(""),
+    [showDropped, setShowDropped] = useState(false),
+    [explained, setExplained] = useState(""),
     [playing, setPlaying] = useState(""),
     [subs, setSubs] = useState([]),
     [subLoading, setSubLoading] = useState(false),
@@ -114,8 +121,9 @@ export default function Details({
   };
   const shown =
     result?.streams?.filter(
-      (s) => !quality || String(s.resolution) === quality,
+      (s) => !quality || s.tier === quality || String(s.resolution) === quality,
     ) || [];
+  const dropped = result?.dropped || [];
   return (
     <Modal onClose={onClose} className="details-modal">
       <div
@@ -253,7 +261,11 @@ export default function Details({
           <div className="section-heading">
             <div>
               <h2>اختر مصدر المشاهدة</h2>
-              <span>مرتبة حسب الجودة المفضلة وبيانات الإضافة</span>
+              <span>
+                {result
+                  ? `${shown.length} مصدر جاهز${dropped.length ? ` · ${dropped.length} مستبعد` : ""}`
+                  : "مرتبة بمحرّك رِواق: الجودة واللغة والموثوقية"}
+              </span>
             </div>
             <div className="button-row">
               <select
@@ -262,9 +274,11 @@ export default function Details({
                 onChange={(e) => setQuality(e.target.value)}
               >
                 <option value="">كل الجودات</option>
-                <option value="2160">4K</option>
-                <option value="1080">1080p</option>
-                <option value="720">720p</option>
+                {(result?.groups || []).map((g) => (
+                  <option key={g.tier} value={g.tier}>
+                    {g.label} ({g.count})
+                  </option>
+                ))}
               </select>
               <IconButton
                 title="تحديث المصادر"
@@ -279,42 +293,98 @@ export default function Details({
           ) : shown.length ? (
             <div className="stream-list">
               {shown.map((s, i) => (
-                <button
+                <div
                   key={s.key}
                   className={`stream ${i === 0 ? "recommended" : ""}`}
-                  disabled={!s.supported || !!playing}
-                  onClick={() => playStream(s)}
                 >
-                  <span className="stream-quality">
-                    {s.resolution === 2160 ? (
-                      "4K"
-                    ) : s.resolution ? (
-                      `${s.resolution}p`
-                    ) : (
-                      <Play size={20} />
-                    )}
-                  </span>
-                  <span className="stream-info">
-                    <b dir="auto">{s.name}</b>
-                    <span dir="auto">{s.title || s.provider}</span>
-                    <small>
-                      {s.codec && <em>{s.codec}</em>}
-                      {s.hdr && <em>HDR</em>}
-                      {s.arabic && <em>عربي</em>}
-                      {s.torrent && <em>Stremio Service</em>}
-                      {s.external && <em>رابط خارجي</em>}
-                      {!s.supported && <em>صيغة غير مدعومة</em>}
-                    </small>
-                  </span>
-                  <span className="stream-action">
-                    {i === 0 && <small>الأعلى ترتيباً</small>}
-                    {playing === s.key ? (
-                      <LoaderCircle className="spin" size={22} />
-                    ) : (
-                      <Play size={20} fill="currentColor" />
-                    )}
-                  </span>
-                </button>
+                  <button
+                    className="stream-play"
+                    disabled={!s.supported || !!playing}
+                    onClick={() => playStream(s)}
+                  >
+                    <span className="stream-quality">
+                      {s.resolution === 2160 ? (
+                        "4K"
+                      ) : s.resolution ? (
+                        `${s.resolution}p`
+                      ) : (
+                        <Play size={20} />
+                      )}
+                    </span>
+                    <span className="stream-info">
+                      <b dir="auto">{s.name}</b>
+                      <span dir="auto">{s.title || s.provider}</span>
+                      <small>
+                        {s.hdr && <em className="tag-hdr">{s.hdr}</em>}
+                        {s.codec && <em>{s.codec}</em>}
+                        {s.source && <em>{s.source}</em>}
+                        {s.audio && (
+                          <em>
+                            {s.audio}
+                            {s.channels ? ` ${s.channels}` : ""}
+                          </em>
+                        )}
+                        {s.sizeLabel && <em>{s.sizeLabel}</em>}
+                        {s.cached && (
+                          <em className="tag-cached">
+                            <Zap size={11} /> {s.debrid || "مخزّن"}
+                          </em>
+                        )}
+                        {s.seeders !== null && s.seeders !== undefined && (
+                          <em>
+                            <Users size={11} /> {s.seeders}
+                          </em>
+                        )}
+                        {s.trustedGroup && (
+                          <em className="tag-trusted">
+                            <ShieldCheck size={11} /> {s.group}
+                          </em>
+                        )}
+                        {s.arabicDub && (
+                          <em className="tag-arabic">دبلجة عربية</em>
+                        )}
+                        {s.arabicSub && (
+                          <em className="tag-arabic">ترجمة عربية</em>
+                        )}
+                        {s.torrent && <em>Stremio Service</em>}
+                        {s.external && <em>رابط خارجي</em>}
+                        {!s.supported && <em>صيغة غير مدعومة</em>}
+                      </small>
+                      {explained === s.key && (
+                        <small className="stream-why" dir="auto">
+                          {s.reasons.map((r) => (
+                            <em
+                              key={r.code}
+                              className={r.points < 0 ? "minus" : "plus"}
+                            >
+                              {r.label} {r.points > 0 ? "+" : ""}
+                              {r.points}
+                            </em>
+                          ))}
+                        </small>
+                      )}
+                    </span>
+                    <span className="stream-action">
+                      {i === 0 && <small>الأعلى ترتيباً</small>}
+                      {playing === s.key ? (
+                        <LoaderCircle className="spin" size={22} />
+                      ) : (
+                        <Play size={20} fill="currentColor" />
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    className="stream-why-toggle"
+                    title="لماذا هذا الترتيب؟"
+                    aria-label="لماذا هذا الترتيب؟"
+                    aria-expanded={explained === s.key}
+                    onClick={() =>
+                      setExplained(explained === s.key ? "" : s.key)
+                    }
+                  >
+                    <Info size={15} />
+                  </button>
+                </div>
               ))}
             </div>
           ) : (
@@ -330,6 +400,29 @@ export default function Details({
                 ? "جرّب تغيير فلتر الجودة أو تحديث المصادر."
                 : "اربط حساب ستريميو أو أضف رابط إضافة تدعم مصادر التشغيل. Cinemeta يعرض معلومات الأعمال فقط."}
             </Empty>
+          )}
+          {dropped.length > 0 && (
+            <div className="dropped-block">
+              <button
+                className="text-button"
+                onClick={() => setShowDropped(!showDropped)}
+              >
+                <EyeOff size={15} /> {showDropped ? "إخفاء" : "عرض"}{" "}
+                {dropped.length} مصدراً استبعده المحرّك
+              </button>
+              {showDropped && (
+                <ul className="dropped-list">
+                  {dropped.slice(0, 40).map((entry, index) => (
+                    <li key={index}>
+                      <b dir="auto">{entry.name}</b>
+                      <span>
+                        {entry.reasons.map((r) => r.label).join("، ")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           {result?.failures.length > 0 && (
             <p className="inline-warning">

@@ -21,6 +21,9 @@ import {
   MonitorPlay,
   Pause,
   SlidersHorizontal,
+  Tv,
+  Lock,
+  Users,
 } from "lucide-react";
 import { api, call } from "./lib/api.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
@@ -31,6 +34,8 @@ import Addons from "./components/Addons.jsx";
 import Preferences from "./components/SettingsStudio.jsx";
 import PlayerView from "./components/PlayerView.jsx";
 import PlayerPanel from "./components/PlayerPanel.jsx";
+import LiveTV from "./components/LiveTV.jsx";
+import Profiles from "./components/Profiles.jsx";
 const initial = {
   addons: [],
   favorites: [],
@@ -69,15 +74,52 @@ export default function App() {
     [playerOpen, setPlayerOpen] = useState(false),
     [refresh, setRefresh] = useState(0),
     [heroIndex, setHeroIndex] = useState(0),
-    [paging, setPaging] = useState(false);
+    [paging, setPaging] = useState(false),
+    [profilesOpen, setProfilesOpen] = useState(false),
+    [unlockRoom, setUnlockRoom] = useState("");
   const searchRef = useRef(),
     stateRef = useRef(state),
+    playerRef = useRef(null),
     toastTimer = useRef();
   stateRef.current = state;
   const notice = (message) => {
     setToast(message);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 6500);
+  };
+  /** Moves to the neighbouring episode and plays the best available source. */
+  const advance = async (meta, videoId, direction) => {
+    if (!meta || meta.type === "local" || meta.type === "live") return;
+    try {
+      const details = await call("metadata", { type: meta.type, id: meta.id });
+      const videos = episodeList(details);
+      const index = videos.findIndex((v) => v.id === videoId);
+      const target = videos[index + direction];
+      if (index < 0 || !target || target.id === videoId) {
+        notice(direction > 0 ? "هذه آخر حلقة متاحة" : "هذه أول حلقة");
+        return;
+      }
+      notice(
+        direction > 0
+          ? "جاري تجهيز الحلقة التالية…"
+          : "جاري تجهيز الحلقة السابقة…",
+      );
+      const result = await call("streams", { type: meta.type, id: target.id });
+      const stream = result.streams.find((s) => s.supported && !s.external);
+      if (!stream) {
+        setSelected({ meta: details, videoId: target.id });
+        notice("اختر مصدراً لهذه الحلقة");
+        return;
+      }
+      await call("play", {
+        key: stream.key,
+        meta: details,
+        videoId: target.id,
+      });
+      setSelected(null);
+    } catch (e) {
+      notice(e.message);
+    }
   };
   const act = async (method, args) => {
     try {
@@ -115,43 +157,22 @@ export default function App() {
           }),
           api.on("player", (s) => {
             setPlayer(s);
+            playerRef.current = s;
             if (s.error) notice(s.error);
           }),
           api.on("notice", notice),
-          api.on("ended", async ({ meta, videoId }) => {
-            if (!stateRef.current.settings.autoplay || meta.type === "local")
-              return;
-            try {
-              const details = await call("metadata", {
-                type: meta.type,
-                id: meta.id,
-              });
-              const videos = episodeList(details);
-              const currentIndex = videos.findIndex((v) => v.id === videoId);
-              const next = videos[currentIndex + 1];
-              if (currentIndex < 0 || !next || next.id === videoId) return;
-              notice("جاري تجهيز الحلقة التالية…");
-              const result = await call("streams", {
-                type: meta.type,
-                id: next.id,
-              });
-              const stream = result.streams.find(
-                (s) => s.supported && !s.external,
-              );
-              if (!stream) {
-                setSelected({ meta: details, videoId: next.id });
-                notice("اختر مصدراً للحلقة التالية");
-                return;
-              }
-              await call("play", {
-                key: stream.key,
-                meta: details,
-                videoId: next.id,
-              });
-              setSelected(null);
-            } catch (e) {
-              notice(e.message);
-            }
+          api.on("ended", ({ meta, videoId }) => {
+            if (!stateRef.current.settings.autoplay) return;
+            advance(meta, videoId, 1);
+          }),
+          api.on("playerRequest", ({ type }) => {
+            const current = playerRef.current;
+            if (!current?.active || !current.meta) return;
+            advance(
+              current.meta,
+              current.videoId,
+              type === "previous" ? -1 : 1,
+            );
           }),
         ]
       : [];
@@ -235,7 +256,19 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
   const open = (meta, videoId) => setSelected({ meta, videoId });
+  const activeProfile = state.profiles?.list?.find(
+    (p) => p.id === state.profiles.active,
+  );
+  // Mirrors the gate in core/profiles.mjs: a room only locks behind a real PIN.
+  const isLocked = (room) =>
+    !!activeProfile?.protected &&
+    !!activeProfile.lockedRooms?.includes(room) &&
+    state.profiles?.unlocked === false;
   const navigate = (v) => {
+    if (isLocked(v)) {
+      setUnlockRoom(v);
+      return;
+    }
     setView(v);
     setCatalog("");
     setFilter("");
@@ -314,6 +347,7 @@ export default function App() {
             [Home, "home", "الرئيسية"],
             [Compass, "discover", "اكتشف"],
             [Library, "library", "مكتبتي"],
+            [Tv, "live", "بث مباشر"],
             [Puzzle, "addons", "الإضافات"],
           ].map(([Icon, id, label]) => (
             <button
@@ -323,6 +357,7 @@ export default function App() {
             >
               <Icon size={20} />
               <span>{label}</span>
+              {isLocked(id) && <Lock size={13} className="nav-lock" />}
               {id === "library" && favorites.length > 0 && (
                 <small>{favorites.length}</small>
               )}
@@ -341,6 +376,17 @@ export default function App() {
           >
             <Settings size={20} />
             الإعدادات
+          </button>
+          <button
+            className="profile-button"
+            onClick={() => setProfilesOpen(true)}
+            title="تبديل الملف الشخصي"
+          >
+            <Users size={17} />
+            <span>{activeProfile?.name || "المشاهد"}</span>
+            {state.profiles?.list?.length > 1 && (
+              <small>{state.profiles.list.length}</small>
+            )}
           </button>
           <button className="account-button" onClick={() => setAccount(true)}>
             <span className="avatar">
@@ -702,6 +748,9 @@ export default function App() {
             )}
           </div>
         )}
+        {view === "live" && (
+          <LiveTV state={state} act={act} notice={notice} update={update} />
+        )}
         {view === "addons" && (
           <Addons
             state={state}
@@ -724,7 +773,7 @@ export default function App() {
           <span>
             رِواق <b>·</b> مساحة للحكايات
           </span>
-          <small>عميل مستقل لمنظومة Stremio · 0.2.0</small>
+          <small>عميل مستقل لمنظومة Stremio · 0.3.0</small>
         </footer>
       </main>
       {toast && (
@@ -735,6 +784,28 @@ export default function App() {
             <X size={16} />
           </button>
         </div>
+      )}
+      {(profilesOpen || unlockRoom) && (
+        <Profiles
+          state={state}
+          act={act}
+          update={update}
+          notice={notice}
+          unlockRoom={unlockRoom}
+          onUnlocked={() => {
+            const room = unlockRoom;
+            setUnlockRoom("");
+            if (room) {
+              setView(room);
+              setCatalog("");
+              setFilter("");
+            }
+          }}
+          onClose={() => {
+            setProfilesOpen(false);
+            setUnlockRoom("");
+          }}
+        />
       )}
       {account && (
         <Account
@@ -763,8 +834,13 @@ export default function App() {
           player={player}
           state={state}
           act={act}
-          hidden={!!selected || account || playerOpen}
+          hidden={
+            !!selected || account || playerOpen || profilesOpen || !!unlockRoom
+          }
           onSettings={() => setPlayerOpen(true)}
+          onAdvance={(direction) =>
+            advance(player.meta, player.videoId, direction)
+          }
         />
       )}
       {playerOpen && (

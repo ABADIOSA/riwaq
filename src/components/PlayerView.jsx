@@ -10,17 +10,35 @@ import {
   RotateCcw,
   RotateCw,
   Subtitles,
+  SkipForward,
+  SkipBack,
+  Camera,
+  Repeat,
+  Moon,
+  Activity,
+  Radio,
 } from "lucide-react";
 import { IconButton } from "./UI.jsx";
 import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
 
-export default function PlayerView({ player, state, act, hidden, onSettings }) {
+export default function PlayerView({
+  player,
+  state,
+  act,
+  hidden,
+  onSettings,
+  onAdvance,
+}) {
   const surface = useRef(),
     [subs, setSubs] = useState([]),
     [subMenu, setSubMenu] = useState(false);
   const mini = player.pip,
     command = (action, value) => act("playerCommand", { action, value });
+  const series = player.mediaType === "series";
+  const sleepLeft = player.sleepAt
+    ? Math.max(0, Math.round((player.sleepAt - Date.now()) / 60000))
+    : 0;
   useEffect(() => {
     let pending;
     const report = () => {
@@ -107,6 +125,51 @@ export default function PlayerView({ player, state, act, hidden, onSettings }) {
           <span className="video-loading">جاري تجهيز المشاهدة…</span>
         )}
         {player.error && <p>{player.error}</p>}
+        {player.skip && !hidden && (
+          <button
+            className="skip-segment"
+            onClick={() => command("skipSegment")}
+          >
+            <SkipForward size={16} /> {player.skip.label}
+            <small>{player.skip.remaining} ث</small>
+          </button>
+        )}
+        {player.stats && !hidden && (
+          <dl className="player-stats" dir="ltr">
+            <div>
+              <dt>Resolution</dt>
+              <dd>
+                {player.width || "?"}×{player.height || "?"}
+                {player.fps ? ` @ ${Number(player.fps).toFixed(2)}` : ""}
+              </dd>
+            </div>
+            <div>
+              <dt>Decoder</dt>
+              <dd>{player.decoder || "sw"}</dd>
+            </div>
+            <div>
+              <dt>Bitrate</dt>
+              <dd>
+                {player.videoBitrate
+                  ? `${Math.round(player.videoBitrate / 1000)} kbps`
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt>Buffer</dt>
+              <dd>
+                {player.bufferedUntil
+                  ? `${Math.max(0, Math.round(player.bufferedUntil - (player.position || 0)))}s`
+                  : "—"}
+                {player.buffering ? ` (${player.buffering}%)` : ""}
+              </dd>
+            </div>
+            <div>
+              <dt>Picture</dt>
+              <dd>{player.shader || "none"}</dd>
+            </div>
+          </dl>
+        )}
         {subMenu && (
           <div className="subtitle-picker">
             <h3>ترجمات إضافاتك</h3>
@@ -144,17 +207,42 @@ export default function PlayerView({ player, state, act, hidden, onSettings }) {
       </div>
       <div className="theater-controls">
         <div className="seek-line" dir="ltr">
-          <span>{clock(player.position)}</span>
-          <input
-            type="range"
-            aria-label="موضع التشغيل"
-            min="0"
-            max={player.duration || 1}
-            step="1"
-            value={Math.min(player.position || 0, player.duration || 1)}
-            onChange={(e) => command("seek", Number(e.target.value))}
-          />
-          <span>{clock(player.duration)}</span>
+          <span>{player.live ? "مباشر" : clock(player.position)}</span>
+          <span className="seek-track">
+            <input
+              type="range"
+              aria-label="موضع التشغيل"
+              min="0"
+              max={player.duration || 1}
+              step="1"
+              disabled={!!player.live}
+              value={Math.min(player.position || 0, player.duration || 1)}
+              onChange={(e) => command("seek", Number(e.target.value))}
+            />
+            {player.duration > 0 &&
+              (player.segments || []).map((segment, index) => (
+                <i
+                  key={index}
+                  className={`seek-marker ${segment.kind}`}
+                  style={{
+                    insetInlineStart: `${(segment.start / player.duration) * 100}%`,
+                    width: `${((segment.end - segment.start) / player.duration) * 100}%`,
+                  }}
+                />
+              ))}
+            {player.abLoop && player.duration > 0 && (
+              <i
+                className="seek-loop"
+                style={{
+                  insetInlineStart: `${(player.abLoop.a / player.duration) * 100}%`,
+                  width: `${(((player.abLoop.b ?? player.position) - player.abLoop.a) / player.duration) * 100}%`,
+                }}
+              />
+            )}
+          </span>
+          <span>
+            {player.live ? <Radio size={14} /> : clock(player.duration)}
+          </span>
         </div>
         <div className="theater-actions">
           <div className="button-row">
@@ -168,6 +256,14 @@ export default function PlayerView({ player, state, act, hidden, onSettings }) {
                 <Pause fill="currentColor" />
               )}
             </IconButton>
+            {!mini && series && (
+              <IconButton
+                title="الحلقة السابقة"
+                onClick={() => onAdvance?.(-1)}
+              >
+                <SkipBack size={19} />
+              </IconButton>
+            )}
             {!mini && (
               <>
                 <IconButton
@@ -205,8 +301,55 @@ export default function PlayerView({ player, state, act, hidden, onSettings }) {
                 <small>{Math.round(player.volume || 0)}%</small>
               </>
             )}
+            {!mini && series && (
+              <IconButton title="الحلقة التالية" onClick={() => onAdvance?.(1)}>
+                <SkipForward size={19} />
+              </IconButton>
+            )}
           </div>
           <div className="button-row">
+            {!mini && (
+              <>
+                <IconButton
+                  title={
+                    player.abLoop
+                      ? player.abLoop.b === null
+                        ? "حدّد نهاية التكرار"
+                        : "إلغاء التكرار"
+                      : "تكرار مقطع A/B"
+                  }
+                  className={player.abLoop ? "icon-button on" : "icon-button"}
+                  onClick={() => command("abLoop", player.position)}
+                >
+                  <Repeat size={19} />
+                </IconButton>
+                <IconButton
+                  title={
+                    sleepLeft ? `إيقاف بعد ${sleepLeft} دقيقة` : "مؤقّت النوم"
+                  }
+                  className={sleepLeft ? "icon-button on" : "icon-button"}
+                  onClick={() => command("sleep", sleepLeft ? 0 : 30)}
+                >
+                  <Moon size={19} />
+                </IconButton>
+                <IconButton
+                  title="التقاط صورة"
+                  onClick={async () => {
+                    await command("screenshot");
+                    await act("openScreenshots");
+                  }}
+                >
+                  <Camera size={19} />
+                </IconButton>
+                <IconButton
+                  title="إحصائيات التشغيل"
+                  className={player.stats ? "icon-button on" : "icon-button"}
+                  onClick={() => command("stats")}
+                >
+                  <Activity size={19} />
+                </IconButton>
+              </>
+            )}
             <IconButton title="ترجمات إضافاتك" onClick={loadSubtitles}>
               <Subtitles size={20} />
             </IconButton>

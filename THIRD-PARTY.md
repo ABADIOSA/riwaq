@@ -4,12 +4,15 @@ Riwaq is an independent implementation of a desktop client for the Stremio HTTP 
 
 ## Design and behavior references
 
-- Harbor: https://github.com/harborstremio/harbor (MIT). Reference for configured addon transport preservation, native-player behavior, and source ranking ideas.
-- NuvioDesktop: https://github.com/NuvioMedia/NuvioDesktop (GPL-3.0). Reference for discovery, library organization, and resume flows. No Nuvio code is included.
-- Stremio Community 5.0.0-beta.22: https://github.com/Zaarrg/stremio-community-v5/releases/tag/5.0.0-beta.22 (GPL-3.0). Reference for native MPV, language priorities, HDR settings, and floating playback. No Community shell code is included.
+- Harbor: https://github.com/harborstremio/harbor (MIT), source reviewed at commit 0117755. Reference for configured addon transport preservation, native-player behavior, the shape of a source-ranking pipeline, IPTV catchup conventions, profiles with a parental PIN, and optional presence and webhooks. No Harbor code is included; Riwaq is JavaScript on Electron and Harbor is Rust and TypeScript on Tauri.
+- NuvioDesktop: https://github.com/NuvioMedia/NuvioDesktop (GPL-3.0), source reviewed at commit 48e1ca3 (0.1.24-alpha). Reference for discovery, library organization, and resume flows. No Nuvio code is included.
+- Stremio Community v5: https://github.com/Zaarrg/stremio-community-v5 (GPL-3.0), source reviewed at commit 3e96a6f ("Bump to version 5.0.22"); the newest tagged release at review time was 5.0.0-beta.22. Reference for native MPV surface area, language priorities, HDR and upscaling settings, Discord Rich Presence, and floating playback. No Community shell code is included.
 - Stremio addon protocol: https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/protocol.md
 - Stremio resource schemas: https://github.com/Stremio/stremio-addon-sdk/tree/master/docs/api/responses
 - MPV IPC documentation: https://mpv.io/manual/stable/#json-ipc
+- XMLTV DTD (guide format): https://github.com/XMLTV/xmltv/blob/master/xmltv.dtd
+- Discord RPC / IPC documentation: https://discord.com/developers/docs/topics/rpc
+- Anime4K is referenced for context only. Riwaq bundles no Anime4K files and no third-party shaders; its picture profiles are built from MPV's own scaler, deband and sigmoid options.
 
 ## Bundled runtimes
 

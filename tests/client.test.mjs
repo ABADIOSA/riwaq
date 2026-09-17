@@ -214,3 +214,76 @@ test("local library, addon order and progress persist without cloud mutations", 
   c.favorite({ id: "tt1", type: "movie", name: "Title" });
   assert.equal(saved.favorites.length, 0);
 });
+
+test("stream results carry tiers, reasons and what the engine removed", async () => {
+  const c = client({
+    load: () => ({
+      addons: [{ transportUrl: "https://ok.test/manifest.json", manifest }],
+    }),
+    request: async () => ({
+      streams: [
+        {
+          name: "good",
+          title: "Show.S01E02.2160p.WEB-DL.DV.HEVC.Atmos-FLUX 💾 12 GB",
+          url: "https://media.test/a",
+        },
+        {
+          name: "wrong",
+          title: "Show.S01E05.1080p.WEB-DL",
+          url: "https://media.test/b",
+        },
+        {
+          name: "sample",
+          title: "Show.S01E02.1080p-SAMPLE.mkv",
+          url: "https://media.test/c",
+        },
+      ],
+    }),
+  });
+  const result = await c.getStreams({ type: "series", id: "tt1:1:2" });
+  assert.equal(result.streams.length, 1);
+  assert.equal(result.streams[0].tier, "4K_DV");
+  assert.equal(result.streams[0].sizeLabel, "12 GB");
+  assert.ok(result.streams[0].reasons.length > 0);
+  assert.deepEqual(
+    result.dropped.map((entry) => entry.reasons[0].code).sort(),
+    ["episode", "sample"],
+  );
+  assert.deepEqual(
+    result.groups.map((group) => group.tier),
+    ["4K_DV"],
+  );
+});
+
+test("the safety setting reaches the engine through the client", async () => {
+  const request = async () => ({
+    streams: [
+      {
+        name: "cam",
+        title: "Movie 2024 HDCAM x264",
+        url: "https://media.test/a",
+      },
+    ],
+  });
+  const strict = client({
+    load: () => ({
+      addons: [{ transportUrl: "https://ok.test/manifest.json", manifest }],
+    }),
+    request,
+  });
+  assert.equal(
+    (await strict.getStreams({ type: "movie", id: "tt1" })).streams.length,
+    0,
+  );
+  const relaxed = client({
+    load: () => ({
+      addons: [{ transportUrl: "https://ok.test/manifest.json", manifest }],
+      settings: { streamSafety: "off", hideCam: false },
+    }),
+    request,
+  });
+  assert.equal(
+    (await relaxed.getStreams({ type: "movie", id: "tt1" })).streams.length,
+    1,
+  );
+});

@@ -20,6 +20,8 @@ import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { Client } from "../core/client.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
+import { inputConf } from "../core/hotkeys.mjs";
+import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
 import { VideoHost } from "./video-host.mjs";
 
@@ -27,7 +29,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 if (process.env.RIWAQ_DATA_DIR)
   app.setPath("userData", process.env.RIWAQ_DATA_DIR);
 app.setName("Riwaq");
-let window, client, player, videoHost, loginServer, loginTimer;
+let window, client, player, videoHost, loginServer, loginTimer, presence;
 const emit = (name, data) => {
   if (window && !window.isDestroyed())
     window.webContents.send("riwaq:" + name, data);
@@ -124,6 +126,59 @@ async function beginLogin() {
   );
   return true;
 }
+function hotkeyFile() {
+  const path = join(app.getPath("userData"), "input.conf");
+  writeFileSync(path, inputConf(client.state.hotkeys), "utf8");
+  return path;
+}
+function screenshotDir() {
+  const path = join(app.getPath("userData"), "screenshots");
+  mkdirSync(path, { recursive: true });
+  return path;
+}
+/**
+ * Rich Presence mirrors whatever the player is doing. It is rebuilt on every
+ * player state change, which is cheap, and skipped entirely when the viewer
+ * has not opted in.
+ */
+function updatePresence() {
+  const settings = client?.state.settings || {};
+  if (!presence?.ready) return;
+  if (!settings.discordPresence || settings.presenceDetail === "off") {
+    presence.set(null);
+    return;
+  }
+  const state = player?.state || {};
+  presence.set(
+    buildActivity({
+      playing: !!state.active,
+      paused: !!state.pause,
+      live: !!state.live,
+      title: state.name || "",
+      episode:
+        state.mediaType === "series"
+          ? String(state.videoId || "")
+              .split(":")
+              .slice(1)
+              .join("×")
+          : "",
+      position: Number(state.position) || 0,
+      duration: Number(state.duration) || 0,
+      detail: settings.presenceDetail || "title",
+    }),
+  );
+}
+async function applyPresence() {
+  const settings = client.state.settings;
+  if (!presence) presence = new DiscordPresence();
+  if (!settings.discordPresence || settings.presenceDetail === "off") {
+    presence.disable();
+    return false;
+  }
+  await presence.enable(client.state.discordAppId || "");
+  updatePresence();
+  return true;
+}
 function executable() {
   return (
     client.state.settings.mpvPath ||
@@ -189,6 +244,29 @@ async function play({ key, meta, videoId, resume = true }) {
     videoId,
     start,
     headers: stream.behaviorHints?.proxyHeaders?.request || {},
+    inputConf: hotkeyFile(),
+    screenshotDir: screenshotDir(),
+  });
+}
+async function playChannel({ key, start = 0, stop = 0 }) {
+  client.profiles.gate("live");
+  const channel = client.live.resolve(key, { start, stop });
+  await player.stop();
+  return player.start({
+    executable: executable(),
+    settings: client.state.settings,
+    url: channel.url,
+    meta: {
+      id: `live:${key}`,
+      type: "live",
+      name: channel.name,
+      poster: channel.logo,
+    },
+    videoId: `live:${key}`,
+    headers: channel.headers,
+    live: channel.live,
+    inputConf: hotkeyFile(),
+    screenshotDir: screenshotDir(),
   });
 }
 const methods = {
@@ -199,7 +277,12 @@ const methods = {
   subtitles: (a) => client.getSubtitles(a),
   install: (a) => client.install(a.url),
   updateAddon: (a) => client.updateAddon(a),
-  settings: (a) => client.settings(a),
+  settings: async (a) => {
+    const state = client.settings(a);
+    // Presence and the key map are derived from settings, so they follow.
+    await applyPresence().catch(() => {});
+    return state;
+  },
   providerSave: (a) => client.dataHub.save(a),
   providerTest: (a) => client.dataHub.test(a.id),
   integrationSave: (a) => client.integrations.save(a),
@@ -230,12 +313,78 @@ const methods = {
       simklActivate: "https://simkl.com/pin/",
       letterboxd: "https://letterboxd.com/settings/data/",
       stremboxd: "https://stremboxd.com",
+      discord: "https://support.discord.com/hc/articles/228383668",
+      telegram: "https://core.telegram.org/bots#how-do-i-create-a-bot",
+      discordApp: "https://discord.com/developers/applications",
     };
     if (!urls[id]) throw new Error("رابط الخدمة غير معروف");
     await shell.openExternal(urls[id]);
     return true;
   },
   favorite: (a) => client.favorite(a),
+  profileCreate: (a) => client.profiles.create(a),
+  profileUpdate: (a) => client.profiles.update(a),
+  profileRemove: (a) => client.profiles.remove(a),
+  profileSwitch: (a) => client.profiles.switch(a),
+  profilePin: (a) => client.profiles.setPin(a),
+  profileUnlock: (a) => client.profiles.unlock(a?.pin),
+  profileLock: () => client.profiles.lock(),
+  setHotkey: (a) => client.setHotkey(a),
+  resetHotkeys: () => client.resetHotkeys(),
+  notifySave: (a) => client.notifier.save(a),
+  notifyTest: (a) => client.notifier.test(a.id),
+  presenceSave: async ({ appId }) => {
+    if (appId !== undefined) {
+      if (appId && !/^\d{17,20}$/.test(String(appId)))
+        throw new Error("معرّف تطبيق Discord غير صالح");
+      client.state.discordAppId = String(appId || "");
+      client.persist();
+    }
+    await applyPresence().catch((error) => emit("notice", error.message));
+    return client.publicState();
+  },
+  liveAdd: (a) => {
+    client.profiles.gate("live");
+    return client.live.addSource(a);
+  },
+  liveUpdate: (a) => {
+    client.profiles.gate("live");
+    return client.live.updateSource(a);
+  },
+  liveRefresh: async (a) => {
+    client.profiles.gate("live");
+    await client.live.refresh(a.id);
+    return client.publicState();
+  },
+  liveChannels: (a) => {
+    client.profiles.gate("live");
+    return client.live.list(a || {});
+  },
+  liveGuide: (a) => {
+    client.profiles.gate("live");
+    return client.live.guide(a || {});
+  },
+  liveFavorite: (a) => {
+    client.profiles.gate("live");
+    return client.live.favorite(a.key);
+  },
+  playChannel,
+  openScreenshots: async () => {
+    await shell.openPath(screenshotDir());
+    return true;
+  },
+  chooseShader: async () => {
+    const result = await dialog.showOpenDialog(window, {
+      title: "اختيار مرشّح GLSL",
+      filters: [{ name: "GLSL shader", extensions: ["glsl", "hook"] }],
+      properties: ["openFile"],
+    });
+    if (!result.canceled) {
+      client.state.settings.shaderPath = result.filePaths[0];
+      client.persist();
+    }
+    return client.publicState();
+  },
   login: beginLogin,
   cancelLogin: () => {
     cancelLogin();
@@ -389,6 +538,7 @@ app
         onFullscreen: () => window.setFullScreen(!window.isFullScreen()),
         onState: (s) => {
           emit("player", s);
+          updatePresence();
           if (!s.active) {
             videoHost.hide();
             if (window.isFullScreen()) window.setFullScreen(false);
@@ -399,8 +549,22 @@ app
           client.integrations.queueHistory(...args);
           broadcast();
         },
-        onEnded: (data) => emit("ended", data),
+        onEnded: (data) => {
+          emit("ended", data);
+          client.notifier
+            .notify({
+              kind: "finished",
+              title: data.meta?.name,
+              episode: data.meta?.type === "series" ? data.videoId : "",
+              poster: data.meta?.poster,
+            })
+            .catch(() => {});
+        },
+        // The in-player episode keys are requests: the interface owns which
+        // episode comes next and which source plays it.
+        onEvent: (event) => emit("playerRequest", event),
       });
+      applyPresence().catch(() => {});
       window.on("minimize", () => {
         if (
           client.state.settings.pauseOnMinimize &&

@@ -187,6 +187,29 @@ export async function runSmoke({ window, client, player, app, root }) {
         res.end(wav.subarray(start, end + 1));
         return;
       }
+      if (req.url === "/live.m3u") {
+        res.setHeader("Content-Type", "audio/x-mpegurl");
+        res.end(
+          `#EXTM3U url-tvg="${base}/epg.xml"\n` +
+            '#EXTINF:-1 tvg-id="riwaq1" group-title="اختبار",قناة رِواق\n' +
+            `${base}/audio.wav\n`,
+        );
+        return;
+      }
+      if (req.url === "/epg.xml") {
+        const stamp = (offset) =>
+          new Date(Date.now() + offset)
+            .toISOString()
+            .replace(/[-:T]/g, "")
+            .slice(0, 14) + " +0000";
+        res.setHeader("Content-Type", "application/xml");
+        res.end(
+          `<tv><channel id="riwaq1"><display-name>قناة رِواق</display-name></channel>` +
+            `<programme start="${stamp(-1800000)}" stop="${stamp(1800000)}" channel="riwaq1">` +
+            `<title lang="ar">برنامج الاختبار</title></programme></tv>`,
+        );
+        return;
+      }
       if (req.url === "/ar.srt") {
         res.setHeader("Content-Type", "text/plain");
         res.end("1\n00:00:00,000 --> 00:00:25,000\nاختبار الترجمة العربية\n");
@@ -289,6 +312,83 @@ export async function runSmoke({ window, client, player, app, root }) {
     await player.stop();
     results.push({
       test: "Native player resumes persisted playback position",
+      status: "passed",
+    });
+
+    // The stream engine must publish its ranking, not just an order.
+    assert.ok(streams.streams[0].tier);
+    assert.ok(streams.streams[0].reasons.length > 0);
+    assert.ok(Array.isArray(streams.groups));
+    results.push({
+      test: "Stream engine returns tiers and inspectable ranking reasons",
+      status: "passed",
+    });
+
+    await js(
+      `window.riwaq.call('liveAdd',{kind:'m3u',name:'اختبار',url:${JSON.stringify(base + "/live.m3u")}})`,
+    );
+    const channels = await js(`window.riwaq.call('liveChannels',{})`);
+    assert.equal(channels.total, 1);
+    assert.equal(channels.channels[0].name, "قناة رِواق");
+    assert.equal(channels.channels[0].now?.title, "برنامج الاختبار");
+    // A channel must never carry its playback URL across the bridge.
+    assert.ok(!JSON.stringify(channels).includes("/audio.wav"));
+    const guide = await js(
+      `window.riwaq.call('liveGuide',{start:${Date.now() - 1800000},hours:4})`,
+    );
+    assert.ok(guide.rows[0].blocks.length >= 1);
+    await click("بث مباشر", ".nav-item");
+    await wait(
+      () => js(`!!document.querySelector('.channel-card')`),
+      "live channel grid",
+    );
+    await shot("livetv");
+    await js(
+      `window.riwaq.call('playChannel',{key:${JSON.stringify(channels.channels[0].key)}})`,
+    );
+    await wait(
+      () => Promise.resolve(player.state.active && player.state.live === true),
+      "live channel playback",
+    );
+    await js(`window.riwaq.call('stop')`);
+    await click("الرئيسية", ".nav-item");
+    results.push({
+      test: "M3U source with XMLTV guide → channel grid → EPG blocks → live playback by opaque key",
+      status: "passed",
+    });
+
+    const withGuest = await js(
+      `window.riwaq.call('profileCreate',{name:'ضيف'})`,
+    );
+    const guestId = withGuest.profiles.list.find((p) => p.name === "ضيف").id;
+    await js(
+      `window.riwaq.call('profileSwitch',{id:${JSON.stringify(guestId)}})`,
+    );
+    assert.equal(client.state.favorites.length, 0);
+    assert.equal(Object.keys(client.state.progress).length, 0);
+    await js(
+      `window.riwaq.call('profilePin',{id:${JSON.stringify(guestId)},pin:'2468'})`,
+    );
+    await js(
+      `window.riwaq.call('profileUpdate',{id:${JSON.stringify(guestId)},lockedRooms:['live']})`,
+    );
+    await js(`window.riwaq.call('profileLock')`);
+    const blocked = await js(
+      `window.riwaq.call('liveChannels',{}).then(()=>'allowed',(e)=>e.message)`,
+    );
+    assert.match(blocked, /محمي/);
+    const encrypted = JSON.parse(
+      safeStorage.decryptString(
+        readFileSync(join(app.getPath("userData"), "profile.bin")),
+      ),
+    );
+    assert.ok(!JSON.stringify(encrypted).includes("2468"));
+    await js(`window.riwaq.call('profileUnlock',{pin:'2468'})`);
+    assert.equal((await js(`window.riwaq.call('liveChannels',{})`)).total, 1);
+    await js(`window.riwaq.call('profileSwitch',{id:'default'})`);
+    assert.ok(client.state.progress["movie:riwaq:test"].position >= 11);
+    results.push({
+      test: "Profiles isolate library and progress, hash the PIN and gate a locked room",
       status: "passed",
     });
     const videoPath = join(output, "test-video.y4m");
