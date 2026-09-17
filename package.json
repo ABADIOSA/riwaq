@@ -1,0 +1,68 @@
+{
+  "name": "riwaq",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Riwaq — an Arabic-first desktop client for the Stremio addon ecosystem",
+  "author": "Riwaq contributors",
+  "license": "MIT",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "electron .",
+    "test": "node --test tests/*.test.mjs",
+    "format": "prettier --write src core electron tests scripts",
+    "check": "prettier --check src core electron tests scripts",
+    "package": "npm run build && node node_modules/electron/install.js && electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "koffi": "^3.3.0",
+    "lucide-react": "^0.577.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@vitejs/plugin-react": "latest",
+    "7zip-bin": "^5.2.0",
+    "electron": "44.4.1",
+    "electron-builder": "^26.0.12",
+    "prettier": "^3.9.7",
+    "vite": "8.3.0"
+  },
+  "build": {
+    "appId": "app.riwaq.desktop",
+    "productName": "Riwaq",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "core/**/*",
+      "assets/**/*",
+      "package.json",
+      "LICENSE",
+      "THIRD-PARTY.md"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/mpv",
+        "to": "mpv"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": true
+    },
+    "portable": {
+      "artifactName": "Riwaq-${version}-win-x64.exe"
+    },
+    "asarUnpack": [
+      "node_modules/koffi/**"
+    ]
+  }
+}
