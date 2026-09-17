@@ -628,20 +628,6 @@ body:has(.theater:not(.mini-theater)) {
   letter-spacing: 7px;
   color: var(--accent);
 }
-.shortcut-list {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-  font-size: 12px;
-}
-.shortcut-list kbd {
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  margin-left: 6px;
-  direction: ltr;
-  display: inline-block;
-}
 .ratings-strip {
   display: flex;
   gap: 9px;

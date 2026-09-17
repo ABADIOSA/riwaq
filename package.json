@@ -1,6 +1,6 @@
 {
   "name": "riwaq",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Riwaq — an Arabic-first desktop client for the Stremio addon ecosystem",
@@ -45,7 +45,8 @@
       "assets/**/*",
       "package.json",
       "LICENSE",
-      "THIRD-PARTY.md"
+      "THIRD-PARTY.md",
+      "!node_modules/@koromix/koffi-!(win32)-*/**"
     ],
     "extraResources": [
       {

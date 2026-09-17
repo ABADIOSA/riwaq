@@ -34,6 +34,27 @@ const allowed = new Set([
   "diagnostics",
   "exportAddons",
   "importAddons",
+  "profileCreate",
+  "profileUpdate",
+  "profileRemove",
+  "profileSwitch",
+  "profilePin",
+  "profileUnlock",
+  "profileLock",
+  "setHotkey",
+  "resetHotkeys",
+  "notifySave",
+  "notifyTest",
+  "presenceSave",
+  "liveAdd",
+  "liveUpdate",
+  "liveRefresh",
+  "liveChannels",
+  "liveGuide",
+  "liveFavorite",
+  "playChannel",
+  "openScreenshots",
+  "chooseShader",
 ]);
 contextBridge.exposeInMainWorld("riwaq", {
   call: async (method, args) => {
@@ -43,7 +64,8 @@ contextBridge.exposeInMainWorld("riwaq", {
     return r.value;
   },
   on: (name, fn) => {
-    if (!["state", "player", "notice", "ended"].includes(name)) return () => {};
+    if (!["state", "player", "notice", "ended", "playerRequest"].includes(name))
+      return () => {};
     const handler = (_event, data) => fn(data);
     ipcRenderer.on("riwaq:" + name, handler);
     return () => ipcRenderer.removeListener("riwaq:" + name, handler);

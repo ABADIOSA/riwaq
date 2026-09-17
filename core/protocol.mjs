@@ -26,6 +26,20 @@ export const DEFAULT_SETTINGS = {
   subtitlePosition: 95,
   pauseOnMinimize: true,
   seekStep: 10,
+  streamSafety: "strict",
+  preferCached: true,
+  streamSizeLimit: 0,
+  skipIntro: "button",
+  skipOutro: "off",
+  shaderPath: "",
+  sleepTimer: 0,
+  shader: "none",
+  toneMapping: "auto",
+  discordPresence: false,
+  presenceDetail: "title",
+  notifyOnFinish: false,
+  liveBufferSeconds: 4,
+  epgHours: 4,
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -155,45 +169,6 @@ export function mergeAddons(local, incoming) {
   }
   return result;
 }
-export function describeStream(stream) {
-  const text = `${stream.name || ""} ${stream.title || ""} ${stream.description || ""}`;
-  const resolution = /2160|4k|uhd/i.test(text)
-    ? 2160
-    : /1080/i.test(text)
-      ? 1080
-      : /720/i.test(text)
-        ? 720
-        : /480/i.test(text)
-          ? 480
-          : 0;
-  const cam = /\b(cam|hdcam|telesync|telecine|hdts)\b/i.test(text);
-  const hdr = /\b(hdr10\+?|hdr|dolby vision|dv)\b/i.test(text);
-  const codec = /hevc|h[ .]?265|x265/i.test(text)
-    ? "HEVC"
-    : /av1/i.test(text)
-      ? "AV1"
-      : /h[ .]?264|x264/i.test(text)
-        ? "H.264"
-        : "";
-  const arabic = /arabic|\bara\b|عربي/i.test(text);
-  return { resolution, cam, hdr, codec, arabic };
-}
-export function rankStreams(streams, settings) {
-  const preferred = Number(settings.quality) || 2160;
-  return streams
-    .map((stream, index) => {
-      const info = describeStream(stream);
-      const score =
-        (info.resolution <= preferred
-          ? info.resolution
-          : preferred - (info.resolution - preferred)) +
-        (info.arabic ? 60 : 0) -
-        (info.cam ? 10000 : 0);
-      return { ...stream, ...info, score, originalIndex: index };
-    })
-    .filter((s) => !(settings.hideCam && s.cam))
-    .sort((a, b) => b.score - a.score || a.originalIndex - b.originalIndex);
-}
 export function torrentUrl(stream, base) {
   if (!/^[a-f\d]{40}$/i.test(stream.infoHash || ""))
     throw new Error("معرّف التورنت غير صالح");
@@ -236,6 +211,9 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "reduceMotion",
     "hideWatched",
     "pauseOnMinimize",
+    "preferCached",
+    "discordPresence",
+    "notifyOnFinish",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (
@@ -253,10 +231,29 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.subtitleSize = Math.max(18, Math.min(80, input.subtitleSize));
   if (Number.isFinite(input.subtitleDelay))
     next.subtitleDelay = Math.max(-60, Math.min(60, input.subtitleDelay));
+  if (Number.isFinite(input.streamSizeLimit))
+    next.streamSizeLimit = Math.max(
+      0,
+      Math.min(200, Math.round(input.streamSizeLimit)),
+    );
+  if (Number.isFinite(input.sleepTimer))
+    next.sleepTimer = Math.max(0, Math.min(240, Math.round(input.sleepTimer)));
+  if (Number.isFinite(input.liveBufferSeconds))
+    next.liveBufferSeconds = Math.max(
+      0,
+      Math.min(30, Math.round(input.liveBufferSeconds)),
+    );
   if (typeof input.serverUrl === "string")
     next.serverUrl = webUrl(input.serverUrl).toString().replace(/\/$/, "");
   for (const [key, values] of Object.entries({
     layout: ["cinematic", "sidebar", "topbar"],
+    streamSafety: ["strict", "balanced", "off"],
+    skipIntro: ["off", "button", "auto"],
+    skipOutro: ["off", "button", "auto"],
+    presenceDetail: ["title", "generic", "off"],
+    shader: ["none", "sharp", "anime", "film", "custom"],
+    toneMapping: ["auto", "bt.2446a", "hable", "mobius", "reinhard", "off"],
+    epgHours: [2, 4, 6, 12],
     cardStyle: ["glass", "flat"],
     cardSize: ["compact", "comfortable", "large"],
     metadataLanguage: ["ar-SA", "en-US", "ja-JP", "fr-FR"],

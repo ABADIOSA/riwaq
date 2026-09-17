@@ -15,8 +15,45 @@ import {
   AlertCircle,
   Trash2,
   Download,
+  Filter,
+  Bell,
+  Keyboard,
+  Sparkles,
 } from "lucide-react";
 import { call } from "../lib/api.js";
+
+const NAMED_KEYS = {
+  " ": "SPACE",
+  Escape: "ESC",
+  Enter: "ENTER",
+  Tab: "TAB",
+  Backspace: "BS",
+  Delete: "DEL",
+  Insert: "INS",
+  Home: "HOME",
+  End: "END",
+  PageUp: "PGUP",
+  PageDown: "PGDWN",
+  ArrowUp: "UP",
+  ArrowDown: "DOWN",
+  ArrowLeft: "LEFT",
+  ArrowRight: "RIGHT",
+};
+/** Turns a browser key event into the binding syntax MPV's input.conf uses. */
+function mpvKey(event) {
+  if (["Control", "Alt", "Shift", "Meta"].includes(event.key)) return "";
+  const named =
+    NAMED_KEYS[event.key] || (/^F\d{1,2}$/.test(event.key) ? event.key : "");
+  const parts = [];
+  if (event.ctrlKey) parts.push("Ctrl");
+  if (event.altKey) parts.push("Alt");
+  // A shifted printable key already reports its shifted character, so adding
+  // the modifier would give MPV a binding it can never match.
+  if (event.shiftKey && named) parts.push("Shift");
+  const key = named || event.key;
+  if (!named && key.length !== 1) return "";
+  return [...parts, key].join("+");
+}
 
 const sections = [
   [
@@ -43,7 +80,20 @@ const sections = [
     "HDR الجودة تسريع العتاد متابعة إيقاف",
     MonitorPlay,
   ],
+  [
+    "sources",
+    "محرّك المصادر",
+    "ترتيب جودة أمان تخزين debrid حجم استبعاد CAM",
+    Filter,
+  ],
   ["subtitles", "الصوت والترجمة", "عربي لغة حجم توقيت مسارات", Subtitles],
+  ["hotkeys", "اختصارات لوحة المفاتيح", "مفاتيح تخصيص تعارض MPV", Keyboard],
+  [
+    "presence",
+    "الحضور والإشعارات",
+    "Discord Telegram webhook حالة إشعار",
+    Bell,
+  ],
   [
     "system",
     "الاتصال والتطبيق",
@@ -113,7 +163,7 @@ export default function SettingsStudio({ state, update, act, notice }) {
           <h1>تفاصيل تصنع تجربتك.</h1>
           <p>من أول بوستر… إلى آخر مشهد.</p>
         </div>
-        <span className="version-badge">BETA 0.2</span>
+        <span className="version-badge">BETA 0.3</span>
       </div>
       <div className="studio-layout">
         <aside className="studio-nav">
@@ -364,29 +414,147 @@ export default function SettingsStudio({ state, update, act, notice }) {
                       [10, "10 ثوانٍ"],
                       [30, "30 ثانية"],
                     ])}
+                    {select("liveBufferSeconds", "مخزون البث المباشر", [
+                      [2, "ثانيتان · أقل تأخير"],
+                      [4, "4 ثوانٍ"],
+                      [8, "8 ثوانٍ · أثبت"],
+                      [15, "15 ثانية"],
+                    ])}
                   </section>
                   <section className="settings-card">
-                    <h2>اختصارات المشاهدة</h2>
-                    <div className="shortcut-list">
-                      <span>
-                        <kbd>Space</kbd> تشغيل وإيقاف مؤقت
-                      </span>
-                      <span>
-                        <kbd>F</kbd> ملء الشاشة
-                      </span>
-                      <span>
-                        <kbd>← →</kbd> رجوع وتقديم
-                      </span>
-                      <span>
-                        <kbd>Ctrl K</kbd> البحث
-                      </span>
-                    </div>
-                    <p className="subtle">
-                      حجم وتوقيت الترجمة والمسارات وضبط الصورة متاحة أيضًا أثناء
-                      التشغيل.
+                    <h2>
+                      <Sparkles size={17} /> معالجة الصورة
+                    </h2>
+                    <p>
+                      مرشّحات مبنية على محرّك MPV نفسه. رِواق لا يرفق ملفات شيدر
+                      من طرف ثالث؛ إن كان لديك سلسلة GLSL خاصة بك فاخترها من
+                      الملف المخصص.
+                    </p>
+                    {select("shader", "مرشّح الصورة", [
+                      ["none", "بدون · أسرع"],
+                      ["sharp", "حِدّة · تحسين الحواف"],
+                      ["anime", "رسوم متحركة · حِدّة مع تنعيم التدرّج"],
+                      ["film", "سينمائي · تدرّج ناعم"],
+                      ["custom", "ملف GLSL خاص بي"],
+                    ])}
+                    {s.shader === "custom" && (
+                      <div className="setting-row">
+                        <div>
+                          <b>ملف الشيدر</b>
+                          <p className="path" dir="ltr">
+                            {s.shaderPath || "لم يُختر ملف"}
+                          </p>
+                        </div>
+                        <button
+                          className="secondary small"
+                          onClick={async () => {
+                            const result = await act("chooseShader");
+                            if (result) notice("تم اختيار ملف الشيدر");
+                          }}
+                        >
+                          اختيار…
+                        </button>
+                      </div>
+                    )}
+                    {select("toneMapping", "تحويل HDR إلى SDR", [
+                      ["auto", "تلقائي"],
+                      ["bt.2446a", "bt.2446a · الأدق"],
+                      ["hable", "hable"],
+                      ["mobius", "mobius"],
+                      ["reinhard", "reinhard"],
+                      ["off", "بدون تحويل"],
+                    ])}
+                  </section>
+                  <section className="settings-card">
+                    <h2>تخطي المقدمة والخاتمة</h2>
+                    <p>
+                      يعتمد التخطي على فصول الملف. عند غيابها يُعرض الزر فقط ضمن
+                      النافذة التي تقع فيها المقدمة فعلياً، فلا يبتلع الزر جزءاً
+                      من الحلقة.
+                    </p>
+                    {select("skipIntro", "المقدمة والملخص", [
+                      ["button", "إظهار زر تخطي"],
+                      ["auto", "تخطٍ تلقائي"],
+                      ["off", "بدون"],
+                    ])}
+                    {select("skipOutro", "الخاتمة والإعلان", [
+                      ["off", "بدون"],
+                      ["button", "إظهار زر تخطي"],
+                      ["auto", "تخطٍ تلقائي"],
+                    ])}
+                  </section>
+                  <section className="settings-card">
+                    <h2>لقطات الشاشة</h2>
+                    <p>
+                      تُحفظ اللقطات بصيغة PNG داخل مجلد بيانات رِواق، ويفتح الزر
+                      المجلد مباشرة.
+                    </p>
+                    <button
+                      className="secondary small"
+                      onClick={() => act("openScreenshots")}
+                    >
+                      فتح مجلد اللقطات
+                    </button>
+                  </section>
+                </>
+              )}
+              {id === "sources" && (
+                <>
+                  <section className="settings-card">
+                    <h2>كيف يختار رِواق المصدر</h2>
+                    <p>
+                      يقرأ المحرّك وصف كل مصدر، يستبعد ما لا يطابق العمل، ثم
+                      يرتّب الباقي ويشرح سبب الترتيب داخل صفحة العنوان.
+                    </p>
+                    {select("streamSafety", "مستوى الاستبعاد", [
+                      ["strict", "صارم · يستبعد النسخ الأولية والمشبوهة"],
+                      ["balanced", "متوازن · يبقي النسخ الأولية عند الحاجة"],
+                      ["off", "مطفأ · لا يستبعد إلا الدعاية والعيّنات"],
+                    ])}
+                    {select("quality", "سقف الجودة", [
+                      ["2160", "4K · أعلى جودة"],
+                      ["1080", "1080p · متوازنة"],
+                      ["720", "720p · بيانات أقل"],
+                    ])}
+                    {toggle(
+                      "hideCam",
+                      "إخفاء تصوير السينما",
+                      "استبعاد المصادر التي تحمل CAM أو Telesync أو Telecine.",
+                    )}
+                    {toggle(
+                      "preferCached",
+                      "تفضيل المصادر المخزّنة",
+                      "تقديم المصادر الجاهزة على debrid لأنها تبدأ فوراً.",
+                    )}
+                    {select("streamSizeLimit", "حدّ حجم الملف", [
+                      [0, "بلا حدّ"],
+                      [5, "5 جيجابايت"],
+                      [10, "10 جيجابايت"],
+                      [20, "20 جيجابايت"],
+                      [50, "50 جيجابايت"],
+                    ])}
+                  </section>
+                  <section className="settings-card">
+                    <h2>الأولوية العربية</h2>
+                    <p>
+                      يميّز المحرّك بين «مترجم» و«مدبلج»: الترجمة العربية
+                      تُقدَّم عندما تضع
+                      <code> ara </code> في لغات الترجمة، والدبلجة تُقدَّم فقط
+                      عندما تضعها في لغات الصوت. اضبطهما من قسم الصوت والترجمة.
                     </p>
                   </section>
                 </>
+              )}
+              {id === "hotkeys" && (
+                <HotkeyEditor state={state} update={update} notice={notice} />
+              )}
+              {id === "presence" && (
+                <PresenceAndAlerts
+                  state={state}
+                  update={update}
+                  act={act}
+                  notice={notice}
+                />
               )}
               {id === "subtitles" && (
                 <form
@@ -891,5 +1059,295 @@ function IntegrationCard({ integration: s, update, act, notice }) {
         </div>
       )}
     </section>
+  );
+}
+
+function HotkeyEditor({ state, update, notice }) {
+  const [capturing, setCapturing] = useState("");
+  const hotkeys = state.hotkeys || [];
+  return (
+    <section className="settings-card">
+      <h2>اختصارات المشغّل</h2>
+      <p>
+        رِواق يشغّل MPV بلا إعدادات خارجية، فهذه القائمة هي لوحة المفاتيح كاملة.
+        اضغط على الاختصار ثم اضغط المفتاح الجديد.
+      </p>
+      <div className="hotkey-list">
+        {hotkeys.map((action) => (
+          <div
+            key={action.id}
+            className={action.conflict ? "hotkey-row clash" : "hotkey-row"}
+          >
+            <span>{action.label}</span>
+            <button
+              className={
+                capturing === action.id ? "hotkey-key capturing" : "hotkey-key"
+              }
+              onClick={() =>
+                setCapturing(capturing === action.id ? "" : action.id)
+              }
+              onKeyDown={async (event) => {
+                if (capturing !== action.id) return;
+                event.preventDefault();
+                const binding = mpvKey(event.nativeEvent);
+                if (!binding) return;
+                setCapturing("");
+                await update("setHotkey", { id: action.id, binding });
+              }}
+            >
+              <kbd dir="ltr">
+                {capturing === action.id ? "اضغط مفتاحاً…" : action.binding}
+              </kbd>
+            </button>
+            {!action.isDefault && (
+              <button
+                className="text-button"
+                onClick={() =>
+                  update("setHotkey", { id: action.id, binding: null })
+                }
+              >
+                إرجاع
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {hotkeys.some((action) => action.conflict) && (
+        <p className="inline-warning">
+          <AlertCircle size={15} /> بعض الاختصارات مكرّرة. سيعمل آخر إجراء في
+          القائمة.
+        </p>
+      )}
+      <button
+        className="secondary small"
+        onClick={async () => {
+          const result = await update("resetHotkeys");
+          if (result) notice("تمت إعادة الاختصارات الافتراضية");
+        }}
+      >
+        إعادة كل الاختصارات
+      </button>
+    </section>
+  );
+}
+
+function PresenceAndAlerts({ state, update, act, notice }) {
+  const s = state.settings;
+  const [appId, setAppId] = useState("");
+  const [webhook, setWebhook] = useState("");
+  const [bot, setBot] = useState({ token: "", chatId: "" });
+  const targets = state.notify || [];
+  return (
+    <>
+      <section className="settings-card">
+        <h2>حضور Discord</h2>
+        <p>
+          مطفأ افتراضياً. يحتاج تطبيق Discord يعمل على جهازك ومعرّف تطبيق خاص بك
+          من بوابة مطوّري Discord. لا يُرسل رِواق شيئاً إلى خوادمنا.
+        </p>
+        <div className="setting-row">
+          <div>
+            <b>تفعيل الحضور</b>
+            <p>إظهار ما تشاهده في ملفك على Discord.</p>
+          </div>
+          <button
+            className={`toggle ${s.discordPresence ? "on" : ""}`}
+            aria-label="تفعيل حضور Discord"
+            aria-pressed={!!s.discordPresence}
+            onClick={() =>
+              update("settings", { discordPresence: !s.discordPresence })
+            }
+          >
+            <span />
+          </button>
+        </div>
+        <label className="setting-row">
+          <b>مستوى التفصيل</b>
+          <select
+            aria-label="مستوى تفصيل الحضور"
+            value={s.presenceDetail}
+            onChange={(event) =>
+              update("settings", { presenceDetail: event.target.value })
+            }
+          >
+            <option value="title">اسم العمل</option>
+            <option value="generic">«يشاهد شيئاً» فقط</option>
+            <option value="off">لا شيء</option>
+          </select>
+        </label>
+        <form
+          className="stacked-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const result = await update("presenceSave", { appId });
+            if (result) notice("تم حفظ معرّف التطبيق");
+          }}
+        >
+          <label>
+            معرّف تطبيق Discord
+            <input
+              value={appId}
+              onChange={(event) => setAppId(event.target.value.trim())}
+              inputMode="numeric"
+              dir="ltr"
+              placeholder="000000000000000000"
+            />
+          </label>
+          <button className="secondary small" type="submit">
+            حفظ وتفعيل
+          </button>
+        </form>
+      </section>
+      <section className="settings-card">
+        <h2>إشعارات خارجية</h2>
+        <p>اختياري بالكامل، ويستخدم Webhook أو بوتاً تملكه أنت.</p>
+        <div className="setting-row">
+          <div>
+            <b>إشعار عند إنهاء المشاهدة</b>
+            <p>يُرسل عنوان العمل إلى الوجهات المفعّلة.</p>
+          </div>
+          <button
+            className={`toggle ${s.notifyOnFinish ? "on" : ""}`}
+            aria-label="إشعار عند إنهاء المشاهدة"
+            aria-pressed={!!s.notifyOnFinish}
+            onClick={() =>
+              update("settings", { notifyOnFinish: !s.notifyOnFinish })
+            }
+          >
+            <span />
+          </button>
+        </div>
+        {targets.map((target) => (
+          <div key={target.id} className="provider-card">
+            <div className="provider-head">
+              <b>{target.name}</b>
+              <span className={`status ${target.status}`}>
+                {target.status === "ok" ? (
+                  <CheckCircle2 size={15} />
+                ) : target.status === "error" ? (
+                  <AlertCircle size={15} />
+                ) : null}
+                {target.configured
+                  ? target.status === "ok"
+                    ? "يعمل"
+                    : "محفوظ"
+                  : "غير مهيأ"}
+              </span>
+            </div>
+            <p>{target.description}</p>
+            {target.id === "discord" ? (
+              <form
+                className="stacked-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const result = await update("notifySave", {
+                    id: "discord",
+                    webhook,
+                  });
+                  if (result) {
+                    setWebhook("");
+                    notice("تم حفظ رابط Webhook");
+                  }
+                }}
+              >
+                <input
+                  value={webhook}
+                  onChange={(event) => setWebhook(event.target.value)}
+                  dir="ltr"
+                  type="url"
+                  placeholder="https://discord.com/api/webhooks/…"
+                  aria-label="رابط Webhook"
+                />
+                <div className="button-row">
+                  <button className="secondary small" type="submit">
+                    حفظ
+                  </button>
+                  <button
+                    className="secondary small"
+                    type="button"
+                    disabled={!target.configured}
+                    onClick={() => update("notifyTest", { id: "discord" })}
+                  >
+                    <RefreshCw size={14} /> اختبار
+                  </button>
+                  <button
+                    className="secondary small"
+                    type="button"
+                    onClick={() =>
+                      update("notifySave", { id: "discord", clear: true })
+                    }
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form
+                className="stacked-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const result = await update("notifySave", {
+                    id: "telegram",
+                    token: bot.token,
+                    chatId: bot.chatId,
+                  });
+                  if (result) {
+                    setBot({ token: "", chatId: "" });
+                    notice("تم حفظ بيانات البوت");
+                  }
+                }}
+              >
+                <input
+                  value={bot.token}
+                  onChange={(event) =>
+                    setBot({ ...bot, token: event.target.value })
+                  }
+                  dir="ltr"
+                  placeholder="رمز البوت"
+                  aria-label="رمز بوت Telegram"
+                />
+                <input
+                  value={bot.chatId}
+                  onChange={(event) =>
+                    setBot({ ...bot, chatId: event.target.value })
+                  }
+                  dir="ltr"
+                  placeholder="معرّف المحادثة"
+                  aria-label="معرّف محادثة Telegram"
+                />
+                <div className="button-row">
+                  <button className="secondary small" type="submit">
+                    حفظ
+                  </button>
+                  <button
+                    className="secondary small"
+                    type="button"
+                    disabled={!target.configured}
+                    onClick={() => update("notifyTest", { id: "telegram" })}
+                  >
+                    <RefreshCw size={14} /> اختبار
+                  </button>
+                  <button
+                    className="secondary small"
+                    type="button"
+                    onClick={() =>
+                      update("notifySave", { id: "telegram", clear: true })
+                    }
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </form>
+            )}
+            <button
+              className="text-button"
+              onClick={() => act("openService", { id: target.id })}
+            >
+              كيف أحصل عليه <ArrowUpRight size={14} />
+            </button>
+          </div>
+        ))}
+      </section>
+    </>
   );
 }

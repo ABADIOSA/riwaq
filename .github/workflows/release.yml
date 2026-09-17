@@ -1,0 +1,65 @@
+name: Release Windows build
+
+# Riwaq targets Windows x64 and links Win32 through Koffi, so the portable
+# executable is built on a real Windows runner. Cross-building from Linux
+# silently bundles the wrong Koffi native module and the wrong Electron
+# distribution, which produces an executable that starts and then fails to
+# create the embedded video surface.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish, for example v0.3.0. Leave empty to build without releasing."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Fetch the pinned MPV build
+        run: node scripts/fetch-mpv.mjs
+      - run: npm test
+      - run: npm run check
+      - run: npm run package
+      - name: Record the artifact checksum
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem release/*.exe | Select-Object -First 1
+          $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
+          "$hash  $($file.Name)" | Out-File -Encoding ascii release/SHA256SUMS.txt
+          Get-Content release/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: riwaq-win-x64
+          path: |
+            release/*.exe
+            release/SHA256SUMS.txt
+          retention-days: 14
+      # gh creates the tag itself, which is how a release is cut when a tag
+      # cannot be pushed directly to the remote.
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$env:TAG" `
+            (Get-ChildItem release/*.exe).FullName `
+            release/SHA256SUMS.txt `
+            --target "${{ github.sha }}" `
+            --title "رِواق $env:TAG" `
+            --notes-file .github/release-notes.md `
+            --prerelease
