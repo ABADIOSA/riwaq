@@ -45,7 +45,8 @@
       "assets/**/*",
       "package.json",
       "LICENSE",
-      "THIRD-PARTY.md"
+      "THIRD-PARTY.md",
+      "!node_modules/@koromix/koffi-!(win32)-*/**"
     ],
     "extraResources": [
       {
