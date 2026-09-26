@@ -498,6 +498,16 @@ const methods = {
     return client.publicState();
   },
   diagnostics,
+  updatesCheck: async () => {
+    await client.updates.check({ current: app.getVersion(), force: true });
+    return client.publicState();
+  },
+  updatesSetEnabled: (a) => client.updates.setEnabled(a?.enabled),
+  openUpdate: async () => {
+    // The page comes from the validated store, never from the renderer.
+    await shell.openExternal(client.updates.releaseUrl());
+    return true;
+  },
   backupExport: async ({ passphrase, includeSecrets = false } = {}) => {
     // Seal first: a bad passphrase should fail before a file dialog opens.
     const { text, left } = client.exportBackup({
@@ -616,7 +626,7 @@ app
   .then(async () => {
     mkdirSync(app.getPath("userData"), { recursive: true });
     try {
-      client = new Client({ load, save });
+      client = new Client({ load, save, version: app.getVersion() });
     } catch (error) {
       dialog.showErrorBox("Riwaq", error.message);
       app.exit(1);
@@ -685,6 +695,25 @@ app
         }
       };
       applyPresence().catch(() => {});
+      // One anonymous check a day, after startup settles; never in smoke runs.
+      if (!process.env.RIWAQ_SMOKE)
+        setTimeout(async () => {
+          const update = await client.updates.check({
+            current: app.getVersion(),
+          });
+          if (
+            update.available &&
+            client.state.updates.notified !== update.latest.version
+          ) {
+            client.state.updates.notified = update.latest.version;
+            client.persist();
+            emit(
+              "notice",
+              `يتوفر إصدار جديد من رِواق: ${update.latest.version}. تجده في الإعدادات ← الاتصال والتطبيق.`,
+            );
+          }
+          broadcast();
+        }, 8000);
       window.on("minimize", () => {
         if (
           client.state.settings.pauseOnMinimize &&

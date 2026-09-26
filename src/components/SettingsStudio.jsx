@@ -646,6 +646,7 @@ export default function SettingsStudio({ state, update, act, notice }) {
               )}
               {id === "system" && (
                 <>
+                  <UpdatesCard state={state} update={update} act={act} />
                   <section className="settings-card">
                     <div className="section-heading">
                       <h2>الاتصال والتشخيص</h2>
@@ -1640,5 +1641,81 @@ function BackupRoom({ update, act, notice }) {
         )}
       </section>
     </>
+  );
+}
+
+/**
+ * Update checks only look: Riwaq never downloads or replaces itself. An
+ * available release opens its GitHub page, where the viewer can read the notes
+ * and verify the checksum before running anything.
+ */
+function UpdatesCard({ state, update, act }) {
+  const [busy, setBusy] = useState(false);
+  const info = state.update || {};
+  return (
+    <section className="settings-card">
+      <div className="section-heading">
+        <h2>التحديثات</h2>
+        <button
+          className="secondary"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            await update("updatesCheck");
+            setBusy(false);
+          }}
+        >
+          <RefreshCw size={16} /> {busy ? "جاري التحقق…" : "تحقق الآن"}
+        </button>
+      </div>
+      <p>
+        الإصدار الحالي <b dir="ltr">{info.current || "—"}</b>
+        {info.latest && (
+          <>
+            {" "}
+            · أحدث إصدار <b dir="ltr">{info.latest.version}</b>
+            {info.latest.prerelease ? " (تجريبي)" : ""}
+          </>
+        )}
+        {info.checkedAt && (
+          <small className="subtle">
+            {" "}
+            · آخر تحقق {new Date(info.checkedAt).toLocaleString("ar-SA")}
+          </small>
+        )}
+      </p>
+      {info.failed && (
+        <p className="inline-warning">
+          <AlertCircle size={15} /> تعذّر الوصول إلى GitHub عند آخر تحقق.
+        </p>
+      )}
+      {info.available ? (
+        <button className="primary" onClick={() => act("openUpdate")}>
+          <ArrowUpRight size={16} /> صفحة الإصدار {info.latest.version} على
+          GitHub
+        </button>
+      ) : (
+        info.latest && <p className="subtle">لديك أحدث إصدار.</p>
+      )}
+      <div className="setting-row">
+        <div>
+          <b>التحقق تلقائياً</b>
+          <p>
+            طلب واحد يومياً إلى واجهة GitHub العامة، بلا أي بيانات عنك. رِواق
+            يتحقق فقط ولا ينزّل أو يثبّت شيئاً بنفسه.
+          </p>
+        </div>
+        <button
+          className={`toggle ${info.enabled !== false ? "on" : ""}`}
+          aria-label="التحقق من التحديثات تلقائياً"
+          aria-pressed={info.enabled !== false}
+          onClick={() =>
+            update("updatesSetEnabled", { enabled: info.enabled === false })
+          }
+        >
+          <span />
+        </button>
+      </div>
+    </section>
   );
 }

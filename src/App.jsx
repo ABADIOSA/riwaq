@@ -440,6 +440,11 @@ export default function App() {
           >
             <Settings size={20} />
             الإعدادات
+            {state.update?.available && (
+              <small className="update-dot" title="يتوفر إصدار جديد">
+                جديد
+              </small>
+            )}
           </button>
           <button
             className="profile-button"

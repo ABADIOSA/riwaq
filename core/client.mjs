@@ -17,6 +17,7 @@ import { Integrations } from "./integrations.mjs";
 import { LiveHub } from "./live-hub.mjs";
 import { Profiles } from "./profiles.mjs";
 import { Notifier } from "./notify.mjs";
+import { Updates } from "./updates.mjs";
 import { cleanMedia, editQueue, isCompleted } from "./library.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
@@ -83,7 +84,9 @@ export class Client {
     request = fetchJson,
     requestText = fetchText,
     api = stremioCall,
+    version = "",
   }) {
+    this.version = version;
     this.saveData = save;
     this.request = request;
     this.requestText = requestText;
@@ -107,6 +110,7 @@ export class Client {
     this.live = new LiveHub(this);
     this.profiles = new Profiles(this);
     this.notifier = new Notifier(this);
+    this.updates = new Updates(this);
     // The active profile owns favorites, progress, lists and settings, so the
     // client state has to point at its bucket before anything reads them.
     this.profiles.ensure();
@@ -161,6 +165,7 @@ export class Client {
       profiles: this.profiles.publicState(),
       notify: this.notifier.publicState(),
       hotkeys: publicHotkeys(this.state.hotkeys),
+      update: this.updates.publicState(this.version),
       connectedLists: this.state.connectedLists || [],
       user: auth ? { email: auth.email, name: auth.name } : null,
       addons: this.state.addons.map((a) => ({
