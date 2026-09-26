@@ -1,3 +1,4 @@
+import { languageOf } from "../../core/subtitles.mjs";
 import React, { useState, useEffect, useRef } from "react";
 import {
   Plus,
@@ -514,7 +515,8 @@ export default function Details({
                     onClick={() => act("subtitle", { key: s.key })}
                   >
                     <Subtitles size={16} />
-                    {s.lang} · {s.name}
+                    {languageOf(s.lang).name} ·{" "}
+                    {s.label || s.provider || "ترجمة"}
                   </button>
                 ))}
               </div>
