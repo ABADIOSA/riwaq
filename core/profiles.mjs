@@ -189,13 +189,7 @@ export class Profiles {
     return this.client.publicState();
   }
   remove({ id, pin }) {
-    if (this.store.list.length <= 1)
-      throw new Error("لا يمكن حذف الملف الشخصي الوحيد");
-    const profile = this.find(id);
-    // A protected profile can be deleted from inside it, or with its own PIN.
-    const unlockedHere = profile.id === this.store.active && this.unlocked;
-    if (profile.pin && !unlockedHere && !matchesPin(profile.pin, pin || ""))
-      throw new Error("أدخل رمز الحماية لحذف هذا الملف الشخصي");
+    this.check({ id, pin, intent: "remove" });
     this.store.list = this.store.list.filter((entry) => entry.id !== id);
     delete this.store.data[id];
     if (this.store.active === id) {
@@ -206,10 +200,33 @@ export class Profiles {
     this.client.persist();
     return this.client.publicState();
   }
-  switch({ id, pin }) {
+  /**
+   * Throws unless `intent` would succeed, without changing anything. Main runs
+   * this before stopping playback, so a wrong PIN leaves the current viewer's
+   * film running instead of cutting it off and then refusing the switch.
+   */
+  check({ id, pin, intent = "switch" }) {
+    if (intent === "remove" && this.store.list.length <= 1)
+      throw new Error("لا يمكن حذف الملف الشخصي الوحيد");
     const profile = this.find(id);
-    if (profile.pin && !matchesPin(profile.pin, pin || ""))
-      throw new Error("رمز الحماية غير صحيح");
+    if (!profile.pin) return true;
+    if (
+      intent === "remove" &&
+      profile.id === this.store.active &&
+      this.unlocked
+    )
+      return true;
+    if (!matchesPin(profile.pin, pin || ""))
+      throw new Error(
+        intent === "remove"
+          ? "أدخل رمز الحماية لحذف هذا الملف الشخصي"
+          : "رمز الحماية غير صحيح",
+      );
+    return true;
+  }
+  switch({ id, pin }) {
+    this.check({ id, pin, intent: "switch" });
+    const profile = this.find(id);
     this.capture();
     this.store.active = id;
     // A new profile starts locked even when the previous one was unlocked.

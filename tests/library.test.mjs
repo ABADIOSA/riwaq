@@ -144,3 +144,29 @@ test("automatic episode candidates exclude future releases without changing addo
   );
   assert.equal(meta.videos[0].id, "future");
 });
+
+test("ticking off an earlier episode never hides the one in progress", () => {
+  const c = fixture().client;
+  c.recordProgress(series, "tt1:1:5", 500, 1000);
+  c.historyEdit({ action: "complete", meta: series, videoId: "tt1:1:1" });
+  assert.deepEqual(
+    continueWatching(c.state.progress).map((p) => p.videoId),
+    ["tt1:1:5"],
+  );
+  assert.ok(isCompleted(c.state.progress["series:tt1:1:1"]));
+  assert.ok(c.state.progress["series:tt1:1:1"].markedAt > 0);
+});
+
+test("marking the episode in progress keeps its place and completes the title", () => {
+  const c = fixture().client;
+  c.recordProgress(series, "tt1:1:4", 900, 1000);
+  c.recordProgress(series, "tt1:1:5", 500, 1000);
+  // Two calls can share a millisecond; pin the playback order explicitly.
+  c.state.progress["series:tt1:1:4"].updated = 1000;
+  c.state.progress["series:tt1:1:5"].updated = 2000;
+  c.historyEdit({ action: "complete", meta: series, videoId: "tt1:1:5" });
+  // The mark keeps episode 5's playback time, so it is still the latest
+  // record and the finished title drops out of continue watching.
+  assert.equal(c.state.progress["series:tt1:1:5"].updated, 2000);
+  assert.deepEqual(continueWatching(c.state.progress), []);
+});

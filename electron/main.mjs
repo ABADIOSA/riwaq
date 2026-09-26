@@ -344,11 +344,14 @@ const methods = {
   profileCreate: (a) => client.profiles.create(a),
   profileUpdate: (a) => client.profiles.update(a),
   profileRemove: async (a) => {
+    client.profiles.check({ ...a, intent: "remove" });
     if (client.profiles.store.active === a.id) await player.stop();
     return client.profiles.remove(a);
   },
   profileSwitch: async (a) => {
-    // Save the outgoing viewer's last position before replacing their bucket.
+    // A wrong PIN must be refused before playback is touched. Then save the
+    // outgoing viewer's last position before replacing their bucket.
+    client.profiles.check({ ...a, intent: "switch" });
     await player.stop();
     const result = client.profiles.switch(a);
     await applyPresence().catch(() => {});

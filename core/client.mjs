@@ -407,7 +407,11 @@ export class Client {
         position: 0,
         duration: 0,
         completed: true,
-        updated: Date.now(),
+        // Continue watching picks each title's most recent playback. A manual
+        // mark is not playback: stamping it "now" would let ticking off an
+        // earlier episode hide the one the viewer is halfway through.
+        updated: this.state.progress[key]?.updated || 0,
+        markedAt: Date.now(),
       };
     else throw new Error("إجراء السجل غير صالح");
     // Manual history changes stay local; they never submit tracker history.

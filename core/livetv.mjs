@@ -9,6 +9,7 @@
  */
 
 import { keyFor, webUrl } from "./protocol.mjs";
+import { foldArabic } from "./arabic.mjs";
 
 export const CATCHUP_TYPES = [
   "default",
@@ -440,16 +441,6 @@ export function groupChannels(channels) {
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ar"));
 }
-
-const foldArabic = (value) =>
-  String(value || "")
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[ً-ْـ]/g, "")
-    .replace(/[أإآٱ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/[^\p{L}\p{N}]/gu, "");
 
 /** Search that ignores Arabic diacritics and alef/ya/ta-marbuta spelling drift. */
 export function searchChannels(channels, query) {
