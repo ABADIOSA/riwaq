@@ -11,6 +11,7 @@ const allowed = new Set([
   "favorite",
   "queueEdit",
   "historyEdit",
+  "episodes",
   "login",
   "cancelLogin",
   "logout",

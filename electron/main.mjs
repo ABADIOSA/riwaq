@@ -339,14 +339,16 @@ const methods = {
   favorite: (a) => client.favorite(a),
   queueEdit: (a) => client.queueEdit(a),
   historyEdit: (a) => {
+    const touched = Array.isArray(a?.videoIds) ? a.videoIds : [a?.videoId];
     if (
       player.state.active &&
-      player.videoId === a.videoId &&
-      player.meta?.type === a.meta?.type
+      player.meta?.type === a?.meta?.type &&
+      touched.includes(player.videoId)
     )
       throw new Error("أوقف تشغيل هذا العنوان قبل تعديل سجله");
     return client.historyEdit(a);
   },
+  episodes: (a) => client.episodes(a || {}),
   profileCreate: (a) => client.profiles.create(a),
   profileUpdate: (a) => client.profiles.update(a),
   profileRemove: async (a) => {

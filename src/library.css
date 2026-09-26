@@ -257,3 +257,158 @@
   font-size: 13px;
   color: #d7dce2;
 }
+
+/* ---- Up next ---- */
+.up-next-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: right;
+  color: inherit;
+  width: 280px;
+  flex-shrink: 0;
+}
+.up-next-art {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #111519;
+  color: #5d6670;
+  border: 1px solid #ffffff0c;
+}
+.up-next-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.up-next-card:hover .up-next-art {
+  border-color: #e7b66e55;
+}
+.up-next-fresh {
+  position: absolute;
+  top: 8px;
+  inset-inline-start: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-style: normal;
+  font-size: 10.5px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.up-next-card strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.up-next-label {
+  font-size: 11.5px;
+  color: #9aa2ab;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.up-next-card small {
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+/* ---- Episode calendar ---- */
+.calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.calendar-day h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #b9bfc7;
+}
+.calendar-day.today h3 {
+  color: var(--accent);
+}
+.calendar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.calendar-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #ffffff0e;
+  background: #ffffff03;
+  border-radius: 10px;
+  padding: 8px 12px;
+  text-align: right;
+  color: inherit;
+}
+.calendar-entry:hover {
+  background: #ffffff08;
+}
+.calendar-entry.upcoming {
+  opacity: 0.75;
+}
+.calendar-poster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 52px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #111519;
+  color: #5d6670;
+  flex-shrink: 0;
+}
+.calendar-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.calendar-text {
+  flex: 1;
+  min-width: 0;
+}
+.calendar-text b {
+  display: block;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-text span {
+  display: block;
+  font-size: 11px;
+  color: #8a939d;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-entry small {
+  font-size: 10.5px;
+  color: #8fbcf0;
+}
+.calendar-watched {
+  color: #7fd6a2;
+}
+
+/* ---- Episode watched marks ---- */
+.episode-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}

@@ -15,6 +15,8 @@ import {
   EyeOff,
   Info,
   ListPlus,
+  CheckCheck,
+  Undo2,
 } from "lucide-react";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
@@ -307,6 +309,15 @@ export default function Details({
                     </button>
                   ))}
               </div>
+              {videos.some((v) => v.id === videoId) && (
+                <EpisodeActions
+                  meta={meta}
+                  videoId={videoId}
+                  progress={state.progress}
+                  update={update}
+                  notice={notice}
+                />
+              )}
             </section>
           )
         )}
@@ -511,5 +522,56 @@ export default function Details({
         )}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Watched marks for the selected episode. "Watched everything before it" is
+ * for a series the viewer followed somewhere else: up next then starts after
+ * this episode instead of at the pilot. Marks stay local to this profile.
+ */
+function EpisodeActions({ meta, videoId, progress, update, notice }) {
+  const [busy, setBusy] = useState(false);
+  const watched = isCompleted(progress[`${meta.type}:${videoId}`]);
+  const ordered = releasedEpisodes(meta).filter((v) => (v.season ?? 1) > 0);
+  const index = ordered.findIndex((v) => v.id === videoId);
+  const run = async (input, message) => {
+    setBusy(true);
+    const result = await update("historyEdit", { meta, ...input });
+    setBusy(false);
+    if (result) notice(message);
+  };
+  return (
+    <div className="episode-actions">
+      <button
+        className="secondary small"
+        disabled={busy}
+        onClick={() =>
+          watched
+            ? run({ action: "remove", videoId }, "أزيلت علامة المشاهدة")
+            : run({ action: "complete", videoId }, "عُلّمت الحلقة كمشاهدة")
+        }
+      >
+        {watched ? <Undo2 size={15} /> : <Check size={15} />}
+        {watched ? "لم أشاهدها" : "شاهدت هذه الحلقة"}
+      </button>
+      {index > 0 && (
+        <button
+          className="secondary small"
+          disabled={busy}
+          onClick={() =>
+            run(
+              {
+                action: "completeThrough",
+                videoIds: ordered.slice(0, index + 1).map((v) => v.id),
+              },
+              `عُلّمت ${index + 1} حلقة كمشاهدة`,
+            )
+          }
+        >
+          <CheckCheck size={15} /> شاهدت كل ما قبلها
+        </button>
+      )}
+    </div>
   );
 }
