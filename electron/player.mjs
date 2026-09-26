@@ -372,6 +372,7 @@ export class Player {
     if (event.event === "file-loaded") {
       this.state.loading = false;
       this.state.error = null;
+      this.onLoaded?.({ meta: this.meta, videoId: this.videoId });
       this.refreshSegments();
       this.onState(this.state);
     }

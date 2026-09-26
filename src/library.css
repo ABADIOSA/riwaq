@@ -1,0 +1,220 @@
+.library-studio {
+  max-width: 1440px;
+  margin-inline: auto;
+}
+.library-studio .page-heading h1 {
+  font-size: clamp(27px, 3vw, 42px);
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+}
+.library-studio .page-heading p {
+  color: var(--muted);
+}
+.library-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin: 24px 0 30px;
+}
+.library-summary > div {
+  padding: 22px 26px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--accent) 9%, transparent),
+    transparent
+  );
+  display: flex;
+  align-items: baseline;
+  gap: 15px;
+}
+.library-summary b {
+  color: var(--accent);
+  font-size: 32px;
+  font-weight: 600;
+}
+.library-summary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.library-tabs {
+  display: flex;
+  gap: 5px;
+  padding-bottom: 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+.library-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 17px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--muted);
+}
+.library-tabs button.selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--accent);
+}
+.library-tabs small {
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+.library-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 22px 0;
+}
+.library-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 220px;
+  padding: 0 14px;
+  background: #ffffff05;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+}
+.library-search input {
+  border: none;
+  background: transparent;
+  padding: 13px 0;
+  width: 100%;
+  color: inherit;
+  outline: none;
+}
+.library-search:focus-within {
+  border-color: var(--accent);
+}
+.library-toolbar select {
+  min-width: 140px;
+}
+.watch-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+.watch-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff03;
+}
+.watch-row:hover {
+  background: #ffffff06;
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.watch-number {
+  min-width: 24px;
+  color: var(--accent);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.watch-cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 76px;
+  flex: 0 0 54px;
+  border-radius: 8px;
+  background: #ffffff09;
+  overflow: hidden;
+  border: 0;
+  color: #fff;
+}
+.watch-cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.watch-cover svg {
+  position: relative;
+  filter: drop-shadow(0 2px 5px black);
+}
+.watch-description {
+  flex: 1;
+  min-width: 0;
+}
+.watch-description h3 {
+  margin: 0 0 7px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.watch-description p,
+.watch-description small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.watch-description small {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.watch-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.watch-actions .secondary {
+  font-size: 12px;
+  padding: 9px 13px;
+}
+.watch-actions button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.library-remove {
+  padding: 9px 2px;
+  border: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  background: none;
+  font-size: 11px;
+}
+.library-remove:hover {
+  color: #f99;
+}
+.queue-add {
+  margin-inline-start: 9px;
+}
+.queue-add:disabled {
+  opacity: 0.65;
+}
+.episode:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+@media (max-width: 1100px) {
+  .library-summary > div {
+    flex-direction: column;
+    gap: 5px;
+    padding: 17px;
+  }
+  .watch-row {
+    gap: 11px;
+    flex-wrap: wrap;
+  }
+  .watch-actions {
+    margin-inline-start: auto;
+  }
+  .library-tabs button {
+    padding: 10px;
+  }
+}

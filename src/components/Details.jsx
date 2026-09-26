@@ -14,15 +14,22 @@ import {
   ShieldCheck,
   EyeOff,
   Info,
+  ListPlus,
 } from "lucide-react";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
+import {
+  queueKey,
+  releasedEpisodes,
+  isCompleted,
+} from "../../core/library.mjs";
 export default function Details({
   selection,
   state,
   onClose,
   onFavorite,
+  update,
   act,
   notice,
   onPlayer,
@@ -49,13 +56,18 @@ export default function Details({
         setMeta(data);
         const videos = episodeList(data);
         const saved = Object.values(state.progress)
-          .filter((p) => p.meta.id === data.id)
+          .filter((p) => p.meta.id === data.id && p.meta.type === data.type)
           .sort((a, b) => b.updated - a.updated)[0];
+        const released = releasedEpisodes(data);
+        const savedIndex = released.findIndex((v) => v.id === saved?.videoId);
+        const resumeId = isCompleted(saved)
+          ? released[savedIndex + 1]?.id
+          : saved?.videoId;
         const initialId =
           selection.videoId ||
-          saved?.videoId ||
+          resumeId ||
           data.behaviorHints?.defaultVideoId ||
-          videos.find((v) => (v.season ?? 1) > 0)?.id ||
+          released.find((v) => (v.season ?? 1) > 0)?.id ||
           data.id;
         setVideoId(initialId);
         setSeason(videos.find((v) => v.id === initialId)?.season ?? 1);
@@ -108,7 +120,12 @@ export default function Details({
     );
   const playStream = async (stream) => {
     setPlaying(stream.key);
-    const ok = await act("play", { key: stream.key, meta, videoId });
+    const ok = await act("play", {
+      key: stream.key,
+      meta,
+      videoId,
+      profileId: state.profiles?.active,
+    });
     setPlaying("");
     if (ok && !ok.external) {
       notice("بدأ التشغيل في مشغل رِواق المدمج");
@@ -200,6 +217,37 @@ export default function Details({
           {isFavorite ? <Check size={18} /> : <Plus size={18} />}{" "}
           {isFavorite ? "في مكتبتي" : "أضف إلى مكتبتي"}
         </button>
+        <button
+          className="secondary queue-add"
+          disabled={
+            !videoId ||
+            loading ||
+            (state.queue || []).some(
+              (q) => q.key === queueKey(meta.type, videoId),
+            )
+          }
+          onClick={async () => {
+            const episode = videos.find((v) => v.id === videoId);
+            const label = episode
+              ? (episode.season === 0
+                  ? "إضافات خاصة"
+                  : "الموسم " + (episode.season ?? 1)) +
+                " · الحلقة " +
+                (episode.episode ?? "")
+              : "";
+            if (
+              await update("queueEdit", { action: "add", meta, videoId, label })
+            )
+              notice("أضيف إلى طابور المشاهدة في مكتبتي");
+          }}
+        >
+          <ListPlus size={18} />
+          {(state.queue || []).some(
+            (q) => q.key === queueKey(meta.type, videoId),
+          )
+            ? "في طابور المشاهدة"
+            : "أضف إلى الطابور"}
+        </button>
         {error && <p className="inline-warning">{error}</p>}
         {loading ? (
           <Busy text="جاري تحميل التفاصيل…" />
@@ -229,6 +277,9 @@ export default function Details({
                       className={
                         videoId === v.id ? "episode selected" : "episode"
                       }
+                      disabled={
+                        v.released && Date.parse(v.released) > Date.now()
+                      }
                       onClick={() => setVideoId(v.id)}
                     >
                       <span className="episode-number">
@@ -246,7 +297,9 @@ export default function Details({
                           </small>
                         )}
                       </span>
-                      {videoId === v.id ? (
+                      {isCompleted(state.progress[`${meta.type}:${v.id}`]) ? (
+                        <Check size={16} />
+                      ) : videoId === v.id ? (
                         <Play size={16} />
                       ) : (
                         <ChevronLeft size={16} />

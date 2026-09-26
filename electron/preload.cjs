@@ -9,6 +9,8 @@ const allowed = new Set([
   "updateAddon",
   "settings",
   "favorite",
+  "queueEdit",
+  "historyEdit",
   "login",
   "cancelLogin",
   "logout",

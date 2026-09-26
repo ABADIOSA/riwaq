@@ -84,10 +84,12 @@ try {
   assert.equal(diagnostics.mpv, true);
   assert.equal(diagnostics.encryption, true);
   assert.equal(diagnostics.video.embedded, true);
+  assert.equal(diagnostics.version, "0.4.0");
   const state = await evaluate(`window.riwaq.call('init')`);
   assert.equal(state.user, null);
   assert.equal(state.addons.length, 1);
   assert.equal(state.addons[0].name, "Cinemeta");
+  assert.deepEqual(state.queue, []);
   const screenshot = await send("Page.captureScreenshot", { format: "png" });
   writeFileSync(
     join(output, "packaged-home.png"),
@@ -141,6 +143,9 @@ try {
     `window.riwaq.call('streams',{type:'movie',id:'riwaq:packaged'})`,
   );
   await evaluate(
+    `window.riwaq.call('queueEdit',{action:'add',meta:{id:'riwaq:packaged',type:'movie',name:'Packaged native verification'},videoId:'riwaq:packaged'})`,
+  );
+  await evaluate(
     `window.riwaq.call('play',{key:${JSON.stringify(streams.streams[0].key)},meta:{id:'riwaq:packaged',type:'movie',name:'Packaged native verification'},videoId:'riwaq:packaged'})`,
   );
   let decoded = false;
@@ -152,8 +157,24 @@ try {
     await new Promise((r) => setTimeout(r, 200));
   }
   assert.ok(decoded, "Packaged MPV decodes actual video");
-  const active = await evaluate(`window.riwaq.call('diagnostics')`);
-  assert.ok(active.video.nativeVisible && active.video.siblingsClipped);
+  const afterPlay = await evaluate(`window.riwaq.call('init')`);
+  assert.deepEqual(
+    afterPlay.queue,
+    [],
+    "Loaded queue item is consumed in portable build",
+  );
+  // Decoding can start before React has committed the theater and reported
+  // its rectangle. Wait for the actual native surface, as the source smoke does.
+  let active;
+  for (let i = 0; i < 80; i++) {
+    active = await evaluate(`window.riwaq.call('diagnostics')`);
+    if (active.video.nativeVisible && active.video.siblingsClipped) break;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  assert.ok(
+    active.video.nativeVisible && active.video.siblingsClipped,
+    JSON.stringify(active.video),
+  );
   assert.ok(active.video.rectangle.width > 800);
   await evaluate(`window.riwaq.call('stop')`);
   const result = {
@@ -161,6 +182,8 @@ try {
     packagedFile: executable.split(/[\\/]/).pop(),
     checks: [
       "Portable application starts",
+      "Version 0.4.0 and per-profile queue are present",
+      "Loaded queue entry is consumed by packaged player",
       "Live catalogs render",
       "Bundled MPV is found",
       "Windows encryption is available",

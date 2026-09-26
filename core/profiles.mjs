@@ -26,6 +26,7 @@ const AVATARS = ["amber", "teal", "violet", "rose", "forest", "nord"];
 const emptyBucket = () => ({
   favorites: [],
   progress: {},
+  queue: [],
   connectedLists: [],
   settings: { ...DEFAULT_SETTINGS },
 });
@@ -77,6 +78,9 @@ export class Profiles {
         connectedLists: Array.isArray(this.client.state.connectedLists)
           ? this.client.state.connectedLists
           : [],
+        queue: Array.isArray(this.client.state.queue)
+          ? this.client.state.queue
+          : [],
         settings: {
           ...DEFAULT_SETTINGS,
           ...(this.client.state.settings || {}),
@@ -101,6 +105,7 @@ export class Profiles {
     const bucket = store.data[id];
     bucket.favorites ||= [];
     bucket.progress ||= {};
+    bucket.queue ||= [];
     bucket.connectedLists ||= [];
     bucket.settings = { ...DEFAULT_SETTINGS, ...(bucket.settings || {}) };
     return bucket;
@@ -111,6 +116,7 @@ export class Profiles {
     const state = this.client.state;
     state.favorites = bucket.favorites;
     state.progress = bucket.progress;
+    state.queue = bucket.queue;
     state.connectedLists = bucket.connectedLists;
     state.settings = bucket.settings;
   }
@@ -121,6 +127,7 @@ export class Profiles {
     const state = this.client.state;
     if (state.favorites) bucket.favorites = state.favorites;
     if (state.progress) bucket.progress = state.progress;
+    if (state.queue) bucket.queue = state.queue;
     if (state.connectedLists) bucket.connectedLists = state.connectedLists;
     if (state.settings) bucket.settings = state.settings;
   }
