@@ -41,6 +41,35 @@ function line(event) {
   return `${label}: ${title}${episode}`;
 }
 
+/** Normalized webhook URL, or a thrown Arabic error. Shared with backup import. */
+export function validDiscordWebhook(value) {
+  let url;
+  try {
+    url = new URL(String(value));
+  } catch {
+    throw new Error("أدخل رابط Webhook رسمياً من Discord");
+  }
+  if (
+    url.protocol !== "https:" ||
+    !DISCORD_HOSTS.has(url.host) ||
+    !url.pathname.startsWith("/api/webhooks/")
+  )
+    throw new Error("أدخل رابط Webhook رسمياً من Discord");
+  return url.toString();
+}
+export function validTelegramToken(value) {
+  if (!/^\d{5,}:[\w-]{20,}$/.test(String(value)))
+    throw new Error("رمز البوت غير صالح");
+  return String(value);
+}
+export function validTelegramChat(value) {
+  if (
+    !/^-?\d{1,20}$/.test(String(value)) &&
+    !/^@[\w]{3,64}$/.test(String(value))
+  )
+    throw new Error("معرّف المحادثة غير صالح");
+  return String(value);
+}
 export function discordPayload(event) {
   return {
     username: "رِواق",
@@ -104,30 +133,16 @@ export class Notifier {
     }
     const entry = (this.store[id] ||= {});
     if (id === "discord" && webhook !== undefined) {
-      const url = new URL(String(webhook));
-      if (
-        url.protocol !== "https:" ||
-        !DISCORD_HOSTS.has(url.host) ||
-        !url.pathname.startsWith("/api/webhooks/")
-      )
-        throw new Error("أدخل رابط Webhook رسمياً من Discord");
-      entry.webhook = url.toString();
+      entry.webhook = validDiscordWebhook(webhook);
       entry.status = "untested";
     }
     if (id === "telegram") {
       if (token !== undefined) {
-        if (!/^\d{5,}:[\w-]{20,}$/.test(String(token)))
-          throw new Error("رمز البوت غير صالح");
-        entry.token = String(token);
+        entry.token = validTelegramToken(token);
         entry.status = "untested";
       }
       if (chatId !== undefined) {
-        if (
-          !/^-?\d{1,20}$/.test(String(chatId)) &&
-          !/^@[\w]{3,64}$/.test(String(chatId))
-        )
-          throw new Error("معرّف المحادثة غير صالح");
-        entry.chatId = String(chatId);
+        entry.chatId = validTelegramChat(chatId);
         entry.status = "untested";
       }
     }

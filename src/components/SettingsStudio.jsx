@@ -19,6 +19,9 @@ import {
   Bell,
   Keyboard,
   Sparkles,
+  Archive,
+  Upload,
+  LockKeyhole,
 } from "lucide-react";
 import { call } from "../lib/api.js";
 
@@ -93,6 +96,12 @@ const sections = [
     "الحضور والإشعارات",
     "Discord Telegram webhook حالة إشعار",
     Bell,
+  ],
+  [
+    "backup",
+    "النسخ الاحتياطي",
+    "نسخة احتياطية استعادة نقل جهاز جديد تصدير تشفير",
+    Archive,
   ],
   [
     "system",
@@ -547,6 +556,9 @@ export default function SettingsStudio({ state, update, act, notice }) {
               )}
               {id === "hotkeys" && (
                 <HotkeyEditor state={state} update={update} notice={notice} />
+              )}
+              {id === "backup" && (
+                <BackupRoom update={update} act={act} notice={notice} />
               )}
               {id === "presence" && (
                 <PresenceAndAlerts
@@ -1347,6 +1359,263 @@ function PresenceAndAlerts({ state, update, act, notice }) {
             </button>
           </div>
         ))}
+      </section>
+    </>
+  );
+}
+
+const when = (iso) =>
+  iso
+    ? new Date(iso).toLocaleString("ar-SA", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        numberingSystem: "latn",
+      })
+    : "";
+
+/**
+ * Backup and restore. The profile file is sealed to this Windows account, so
+ * this room is how a viewer carries their library to a reinstall or a new PC.
+ */
+function BackupRoom({ update, act, notice }) {
+  const [pass, setPass] = useState({ one: "", two: "" });
+  const [secrets, setSecrets] = useState(false);
+  const [left, setLeft] = useState(null);
+  const [picked, setPicked] = useState(null);
+  const [openPass, setOpenPass] = useState("");
+  const [summary, setSummary] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const mismatch = pass.two && pass.one !== pass.two;
+  const leftCount = left
+    ? left.configuredAddons +
+      left.liveSources +
+      left.providers +
+      left.integrations +
+      left.notify +
+      (left.stremio ? 1 : 0)
+    : 0;
+  return (
+    <>
+      <section className="settings-card">
+        <h2>
+          <Archive size={17} /> حفظ نسخة احتياطية
+        </h2>
+        <p>
+          بيانات رِواق مشفّرة بحساب ويندوز الحالي، فإعادة تثبيت ويندوز أو
+          الانتقال لجهاز جديد تفقدك مكتبتك ومتابعتك وطابورك وملفاتك الشخصية.
+          النسخة الاحتياطية ملف واحد تحمله معك، مشفّر بعبارة مرور لا يعرفها غيرك
+          — لا نستطيع استعادتها إن نسيتها.
+        </p>
+        <form
+          className="stacked-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (pass.one !== pass.two) return;
+            setBusy(true);
+            const result = await act("backupExport", {
+              passphrase: pass.one,
+              includeSecrets: secrets,
+            });
+            setBusy(false);
+            if (result?.saved) {
+              setLeft(result.left);
+              setPass({ one: "", two: "" });
+              notice("تم حفظ النسخة الاحتياطية");
+            }
+          }}
+        >
+          <label>
+            عبارة المرور (8 أحرف على الأقل)
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={pass.one}
+              onChange={(event) =>
+                setPass({ ...pass, one: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            أعد كتابتها
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={pass.two}
+              onChange={(event) =>
+                setPass({ ...pass, two: event.target.value })
+              }
+            />
+          </label>
+          {mismatch && (
+            <p className="inline-warning">العبارتان غير متطابقتين</p>
+          )}
+          <label className="switch-row">
+            <input
+              type="checkbox"
+              checked={secrets}
+              onChange={(event) => setSecrets(event.target.checked)}
+            />
+            تضمين مفاتيحي وحساباتي
+          </label>
+          {secrets && (
+            <p className="inline-warning">
+              <LockKeyhole size={15} /> ستحمل النسخة مفاتيح الخدمات وجلسات Trakt
+              وSimkl وستريميو وبيانات اشتراكات القنوات وروابط الإضافات المهيأة.
+              أمانها بقدر عبارة المرور فقط؛ لا تشاركها ولا تحفظها في مكان عام.
+            </p>
+          )}
+          <button
+            className="primary"
+            type="submit"
+            disabled={busy || mismatch || [...pass.one].length < 8}
+          >
+            <Download size={16} />{" "}
+            {busy ? "جاري التشفير…" : "حفظ نسخة احتياطية"}
+          </button>
+        </form>
+        {left && leftCount > 0 && (
+          <p className="subtle">
+            لم تُضمَّن عمداً:{" "}
+            {[
+              left.configuredAddons && `${left.configuredAddons} إضافة مهيأة`,
+              left.liveSources && `${left.liveSources} مصدر قنوات`,
+              left.providers && `${left.providers} مفتاح خدمة`,
+              left.integrations && `${left.integrations} ربط منصة`,
+              left.notify && "وجهات الإشعارات",
+              left.stremio && "تسجيل دخول ستريميو",
+            ]
+              .filter(Boolean)
+              .join("، ")}
+            . أعد إضافتها على الجهاز الجديد، أو احفظ نسخة تتضمن المفاتيح.
+          </p>
+        )}
+      </section>
+      <section className="settings-card">
+        <h2>
+          <Upload size={17} /> استعادة نسخة احتياطية
+        </h2>
+        <p>
+          تستبدل الاستعادة الملفات الشخصية ومكتباتها وإعداداتها بما في النسخة.
+          المفاتيح التي لا تحملها النسخة تبقى كما هي على هذا الجهاز، وتُحفظ
+          نسختك الحالية بجانبها ليمكن التراجع على هذا الجهاز.
+        </p>
+        {!picked ? (
+          <button
+            className="secondary"
+            onClick={async () => {
+              const result = await act("backupPick");
+              if (result) {
+                setPicked(result);
+                setSummary(null);
+                setOpenPass("");
+              }
+            }}
+          >
+            اختيار ملف .riwaq
+          </button>
+        ) : (
+          <form
+            className="stacked-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setBusy(true);
+              if (!summary) {
+                const result = await act("backupPreview", {
+                  token: picked.token,
+                  passphrase: openPass,
+                });
+                if (result) setSummary(result);
+              } else {
+                const result = await update("backupRestore", {
+                  token: picked.token,
+                  passphrase: openPass,
+                });
+                if (result) {
+                  notice("تمت استعادة النسخة الاحتياطية");
+                  setPicked(null);
+                  setSummary(null);
+                  setOpenPass("");
+                }
+              }
+              setBusy(false);
+            }}
+          >
+            <p className="backup-file">
+              <b dir="ltr">{picked.name}</b>
+              <span>
+                {when(picked.createdAt)}
+                {picked.app ? ` · رِواق ${picked.app}` : ""}
+                {picked.includesSecrets
+                  ? " · تتضمن المفاتيح"
+                  : " · بدون مفاتيح"}
+              </span>
+            </p>
+            <label>
+              عبارة المرور
+              <input
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                value={openPass}
+                onChange={(event) => {
+                  setOpenPass(event.target.value);
+                  setSummary(null);
+                }}
+              />
+            </label>
+            {summary && (
+              <dl className="backup-summary">
+                <div>
+                  <dt>الملفات الشخصية</dt>
+                  <dd>{summary.profiles.join("، ")}</dd>
+                </div>
+                <div>
+                  <dt>في المكتبات</dt>
+                  <dd>{summary.titles}</dd>
+                </div>
+                <div>
+                  <dt>سجل المشاهدة</dt>
+                  <dd>{summary.progress}</dd>
+                </div>
+                <div>
+                  <dt>في الطوابير</dt>
+                  <dd>{summary.queue}</dd>
+                </div>
+                <div>
+                  <dt>إضافات</dt>
+                  <dd>{summary.addons}</dd>
+                </div>
+                {summary.liveSources > 0 && (
+                  <div>
+                    <dt>مصادر قنوات</dt>
+                    <dd>{summary.liveSources}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
+            <div className="button-row">
+              <button
+                className="primary"
+                type="submit"
+                disabled={busy || !openPass}
+              >
+                {summary ? "استعادة الآن" : "فتح ومعاينة"}
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => {
+                  act("backupCancel");
+                  setPicked(null);
+                  setSummary(null);
+                  setOpenPass("");
+                }}
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        )}
       </section>
     </>
   );

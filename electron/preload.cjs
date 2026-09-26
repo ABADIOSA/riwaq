@@ -57,6 +57,11 @@ const allowed = new Set([
   "playChannel",
   "openScreenshots",
   "chooseShader",
+  "backupExport",
+  "backupPick",
+  "backupPreview",
+  "backupRestore",
+  "backupCancel",
 ]);
 contextBridge.exposeInMainWorld("riwaq", {
   call: async (method, args) => {

@@ -19,6 +19,13 @@ import { Profiles } from "./profiles.mjs";
 import { Notifier } from "./notify.mjs";
 import { cleanMedia, editQueue } from "./library.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
+import {
+  collectBackup,
+  encryptBackup,
+  decryptBackup,
+  restoreState,
+  summarizeBackup,
+} from "./backup.mjs";
 
 export async function fetchJson(url, init = {}) {
   try {
@@ -415,6 +422,40 @@ export class Client {
       };
     else throw new Error("إجراء السجل غير صالح");
     // Manual history changes stay local; they never submit tracker history.
+    this.persist();
+    return this.publicState();
+  }
+  /** Seals the installation into backup text. File dialogs live in main. */
+  exportBackup({ passphrase, includeSecrets = false, app = "" }) {
+    this.profiles.capture();
+    const { payload, left } = collectBackup(this.state, {
+      includeSecrets: includeSecrets === true,
+    });
+    const text = encryptBackup(payload, passphrase, {
+      app,
+      includesSecrets: includeSecrets === true,
+    });
+    return { text, left };
+  }
+  inspectBackup({ text, passphrase }) {
+    const { header, payload } = decryptBackup(text, passphrase);
+    return summarizeBackup(header, payload);
+  }
+  restoreBackup({ text, passphrase }) {
+    const { payload } = decryptBackup(text, passphrase);
+    this.state = restoreState(this.state, payload);
+    // A restored profile starts locked, and nothing derived from the old
+    // state may survive: stream keys, metadata and live listings all reset.
+    this.profiles.unlocked = false;
+    this.profiles.ensure();
+    this.streams.clear();
+    this.subtitles.clear();
+    this.metas.clear();
+    this.cache.clear();
+    this.live.loaded.clear();
+    this.dataHub.cache.clear();
+    this.dataHub.generation++;
+    this.integrations.devices.clear();
     this.persist();
     return this.publicState();
   }

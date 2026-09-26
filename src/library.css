@@ -218,3 +218,42 @@
     padding: 10px;
   }
 }
+
+/* ---- Backup room ---- */
+.backup-file {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #ffffff0e;
+  border-radius: 9px;
+  padding: 10px 13px;
+  margin: 0;
+}
+.backup-file b {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.backup-file span {
+  font-size: 11px;
+  color: #838e9a;
+}
+.backup-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.backup-summary div {
+  border: 1px solid #ffffff0c;
+  border-radius: 8px;
+  padding: 8px 11px;
+}
+.backup-summary dt {
+  font-size: 10.5px;
+  color: #79838e;
+}
+.backup-summary dd {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: #d7dce2;
+}
