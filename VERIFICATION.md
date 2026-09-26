@@ -1,4 +1,18 @@
-# Verification — Riwaq 0.6.0
+# Verification — Riwaq 0.7.0
+
+## 0.7.0 — appearance studio and the pointer
+
+The owner reported that the pointer stayed visible during playback, and asked for settings as rich as Nuvio HTPC's and Harbor's latest beta so each viewer can make Riwaq their own.
+
+Executed:
+
+- `npm test`: **204 passing, 0 failing** (195 + 9 new): every preset keeping body text at 7:1 or better and secondary text at 4.5:1; field-by-field validation including a font name that tries to carry CSS; presets as fresh palettes and older accent choices carrying over; variables and classes; root classes never reusing an element class; the scale floor at 980×680; share codes carrying appearance only, refusing junk and keeping Arabic; the settings; main hiding the pointer only on change and only during a viewing.
+- `npm run check` and `npm run build` pass.
+- Rendered in headless Chromium at 980×680 and 1440×960: ten presets, choosing the royal green preset recolouring the whole app, radius, density, hover and font changes reaching the root, a custom accent turning the design custom, undo, a share code copied and applied back, a junk code refused, and a hidden navigation item. Zero page errors and zero horizontal overflow. Rendering caught a real defect before release: the details background class `detail-backdrop` on the app root collided with the element of that name and turned the whole app translucent and unclickable; the classes were renamed and a test now guards against it.
+
+Not executed:
+
+- Nothing in 0.7.0 has run on Windows. Unverified natively: MPV honouring `cursor-autohide=always` inside the embedded surface (the fix relies on it), the interface zoom from main, the clipboard write, and fonts that are not installed falling back to Segoe UI.
 
 ## 0.6.0 — subtitles and audio
 

@@ -4,6 +4,7 @@ const allowed = new Set([
   "catalog",
   "catalogPlan",
   "subtitleCues",
+  "copyThemeCode",
   "metadata",
   "streams",
   "subtitles",

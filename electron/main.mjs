@@ -6,6 +6,8 @@ import {
   dialog,
   shell,
   session,
+  screen,
+  clipboard,
 } from "electron";
 import {
   readFileSync,
@@ -30,6 +32,7 @@ import {
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
+import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
 import { VideoHost } from "./video-host.mjs";
@@ -51,7 +54,24 @@ const emit = (name, data) => {
   if (window && !window.isDestroyed())
     window.webContents.send("riwaq:" + name, data);
 };
-const broadcast = () => emit("state", client.publicState());
+let appliedZoom = 1;
+/** The viewer's interface scale, never shrinking the layout below 980×680. */
+function applyZoom() {
+  if (!window || window.isDestroyed() || !client) return;
+  const [width, height] = window.getContentSize();
+  const zoom = effectiveZoom(
+    resolveAppearance(client.state.settings).uiScale,
+    width,
+    height,
+  );
+  if (zoom === appliedZoom) return;
+  appliedZoom = zoom;
+  window.webContents.setZoomFactor(zoom);
+}
+const broadcast = () => {
+  applyZoom();
+  emit("state", client.publicState());
+};
 function save(data) {
   if (!safeStorage.isEncryptionAvailable())
     throw new Error("تشفير ويندوز غير متاح، تعذّر حفظ البيانات بأمان.");
@@ -337,6 +357,14 @@ const methods = {
   init: () => client.init(),
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
+  // Only a design code may be copied; nothing else reaches the clipboard.
+  copyThemeCode: (a) => {
+    const code = String(a?.code || "");
+    if (!code.startsWith("RIWAQ-THEME-1:") || code.length > 6000)
+      throw new Error("رمز التصميم غير صالح");
+    clipboard.writeText(code);
+    return true;
+  },
   metadata: (a) => client.metadata(a),
   streams: (a) => client.getStreams(a),
   subtitles: () => {
@@ -372,6 +400,7 @@ const methods = {
   updateAddon: (a) => client.updateAddon(a),
   settings: async (a) => {
     const state = client.settings(a);
+    applyZoom();
     // Presence and the key map are derived from settings, so they follow.
     await applyPresence().catch(() => {});
     return state;
@@ -440,6 +469,7 @@ const methods = {
     client.profiles.check({ ...a, intent: "switch" });
     await player.stop();
     const result = client.profiles.switch(a);
+    applyZoom();
     await applyPresence().catch(() => {});
     return result;
   },
@@ -745,7 +775,14 @@ app
         player?.setFullscreen(false);
         settle();
       });
-      window.on("resize", settle);
+      window.on("resize", () => {
+        settle();
+        applyZoom();
+      });
+      window.webContents.on("did-finish-load", () => {
+        appliedZoom = 0;
+        applyZoom();
+      });
       player = new Player({
         host: videoHost,
         inputConf: join(root, "assets", "player-input.conf"),
@@ -798,6 +835,21 @@ app
         // episode comes next and which source plays it.
         onEvent: (event) => emit("playerRequest", event),
       });
+      // MPV's own cursor autohide does not fire reliably inside the embedded
+      // surface, so main watches the pointer and tells MPV when to hide it.
+      let lastPoint = null;
+      let stillSince = Date.now();
+      setInterval(() => {
+        if (!player.state.active || window.isDestroyed()) return;
+        const point = screen.getCursorScreenPoint();
+        const moved =
+          !lastPoint || point.x !== lastPoint.x || point.y !== lastPoint.y;
+        lastPoint = point;
+        if (moved) stillSince = Date.now();
+        player.setCursorHidden(
+          !moved && window.isFocused() && Date.now() - stillSince > 2000,
+        );
+      }, 250);
       player.onLoaded = ({ meta, videoId }) => {
         autoSubtitle(videoId);
         const key = JSON.stringify([meta.type, videoId]);
