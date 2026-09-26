@@ -461,6 +461,9 @@ export class Client {
   }
   /** Seals the installation into backup text. File dialogs live in main. */
   exportBackup({ passphrase, includeSecrets = false, app = "" }) {
+    // Backups live in Settings. When a parent locks Settings the lock has to
+    // hold here too, not only in the interface: a full backup carries keys.
+    this.profiles.gate("settings");
     this.profiles.capture();
     const { payload, left } = collectBackup(this.state, {
       includeSecrets: includeSecrets === true,
@@ -472,10 +475,14 @@ export class Client {
     return { text, left };
   }
   inspectBackup({ text, passphrase }) {
+    this.profiles.gate("settings");
     const { header, payload } = decryptBackup(text, passphrase);
     return summarizeBackup(header, payload);
   }
   restoreBackup({ text, passphrase }) {
+    // A restore replaces every profile. Behind a locked Settings room it would
+    // let anyone holding an older backup strip the parental PINs.
+    this.profiles.gate("settings");
     const { payload } = decryptBackup(text, passphrase);
     this.state = restoreState(this.state, payload);
     // A restored profile starts locked, and nothing derived from the old

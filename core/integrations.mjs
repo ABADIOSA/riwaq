@@ -440,8 +440,9 @@ export class Integrations {
    * stop. Called on every player update, so it only acts on transitions.
    */
   observePlayback(player) {
-    const s = this.get("trakt");
-    if (!s.token || !s.trackHistory || !s.scrobble) {
+    // Read, never create: this runs on every player frame.
+    const s = this.client.state.integrations?.trakt;
+    if (!s?.token || !s.trackHistory || !s.scrobble) {
       this.session = null;
       return;
     }
@@ -495,6 +496,9 @@ export class Integrations {
   sendScrobble(event, session) {
     const body = scrobbleBody(session.meta, session.videoId, session.progress);
     if (!body) return Promise.resolve();
+    // History is account-scoped. A reply that arrives after the viewer
+    // disconnected or switched Trakt accounts must not write into the new one.
+    const account = this.client.state.integrations?.trakt;
     const watched = event === "stop" && session.progress >= SCROBBLE_WATCHED;
     // Write ahead: a play Trakt should record is queued before the request,
     // held so the history queue does not send it too. If the request never
@@ -510,7 +514,8 @@ export class Integrations {
         )
       : null;
     const settle = (recorded) => {
-      const s = this.get("trakt");
+      const s = this.client.state.integrations?.trakt;
+      if (!s || s !== account) return;
       if (recorded) {
         s.pending = (s.pending || []).filter((e) => e !== entry);
         if (!s.sent?.includes(session.key))

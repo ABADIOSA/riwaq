@@ -774,6 +774,6 @@ app.on("before-quit", (event) => {
   // Stopping the player sends the final scrobble; give it a moment to land so
   // a play finished just before closing is recorded rather than queued.
   Promise.resolve(player?.stop())
-    .then(() => client?.integrations.settle(3000))
+    .then(() => client?.integrations?.settle(3000))
     .finally(() => app.quit());
 });

@@ -375,3 +375,16 @@ test("a backup without a single valid profile is refused", () => {
   );
   assert.throws(() => restoreState(fresh.state, null), /تالفة/);
 });
+
+test("a locked Settings room blocks backup export, preview and restore", () => {
+  const { c } = populated();
+  const { text } = c.exportBackup({ passphrase: PASS });
+  c.profiles.setPin({ id: "default", pin: "1357" });
+  c.profiles.update({ id: "default", lockedRooms: ["settings"] });
+  c.profiles.lock();
+  assert.throws(() => c.exportBackup({ passphrase: PASS }), /محمي/);
+  assert.throws(() => c.inspectBackup({ text, passphrase: PASS }), /محمي/);
+  assert.throws(() => c.restoreBackup({ text, passphrase: PASS }), /محمي/);
+  c.profiles.unlock("1357");
+  assert.ok(c.inspectBackup({ text, passphrase: PASS }).profiles.length);
+});

@@ -266,3 +266,30 @@ test("skipping to the end and closing at once still records the play", async () 
   assert.equal(calls.at(-1).body.progress, 99);
   assert.ok(trakt.sent.includes("movie:tt1"));
 });
+
+test("observing the player never creates a Trakt entry as a side effect", () => {
+  const { integrations } = rig();
+  delete integrations.client.state.integrations.trakt;
+  integrations.observePlayback(frame());
+  assert.equal(integrations.client.state.integrations.trakt, undefined);
+});
+
+test("a reply after disconnecting never writes into the next account", async () => {
+  let release;
+  const { integrations } = rig({
+    respond: (path) =>
+      path === "/scrobble/stop"
+        ? new Promise((resolve) => (release = resolve))
+        : {},
+  });
+  integrations.observePlayback(frame());
+  integrations.observePlayback(frame({ active: false, position: 990 }));
+  await new Promise((resolve) => setImmediate(resolve));
+  integrations.disconnect("trakt");
+  // The viewer connects a different account before the old reply lands.
+  integrations.client.state.integrations.trakt = { clientId: "other" };
+  release({ action: "scrobble" });
+  await integrations.settle();
+  assert.equal(integrations.client.state.integrations.trakt.sent, undefined);
+  assert.equal(integrations.client.state.integrations.trakt.pending, undefined);
+});
