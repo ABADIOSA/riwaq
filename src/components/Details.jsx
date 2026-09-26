@@ -26,6 +26,7 @@ import {
   releasedEpisodes,
   isCompleted,
 } from "../../core/library.mjs";
+import { arabicCount, EPISODES } from "../../core/arabic.mjs";
 export default function Details({
   selection,
   state,
@@ -565,7 +566,7 @@ function EpisodeActions({ meta, videoId, progress, update, notice }) {
                 action: "completeThrough",
                 videoIds: ordered.slice(0, index + 1).map((v) => v.id),
               },
-              `عُلّمت ${index + 1} حلقة كمشاهدة`,
+              `عُلّمت ${arabicCount(index + 1, EPISODES)} كمشاهدة`,
             )
           }
         >

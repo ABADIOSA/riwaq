@@ -797,7 +797,10 @@ export default function App() {
           <span>
             رِواق <b>·</b> مساحة للحكايات
           </span>
-          <small>عميل مستقل لمنظومة Stremio · 0.4.0</small>
+          <small>
+            عميل مستقل لمنظومة Stremio
+            {state.update?.current ? ` · ${state.update.current}` : ""}
+          </small>
         </footer>
       </main>
       {toast && (

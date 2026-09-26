@@ -47,3 +47,17 @@ test("library search and Live TV search agree", () => {
       query,
     );
 });
+
+test("counts agree with their number the way Arabic grammar requires", async () => {
+  const { arabicCount, EPISODES, MINUTES } = await import("../core/arabic.mjs");
+  assert.equal(arabicCount(1, EPISODES), "حلقة واحدة");
+  assert.equal(arabicCount(2, EPISODES), "حلقتان");
+  assert.equal(arabicCount(3, EPISODES), "3 حلقات");
+  assert.equal(arabicCount(10, EPISODES), "10 حلقات");
+  assert.equal(arabicCount(11, EPISODES), "11 حلقة");
+  assert.equal(arabicCount(103, EPISODES), "103 حلقات");
+  assert.equal(arabicCount(2, MINUTES), "دقيقتان");
+  assert.equal(arabicCount(0, MINUTES), "أقل من دقيقة");
+  // A missing category falls back to "other".
+  assert.equal(arabicCount(2, { other: "{n} عنصر" }), "2 عنصر");
+});

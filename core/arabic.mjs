@@ -32,3 +32,30 @@ export function matchesArabic(haystack, needle) {
   const folded = foldArabic(needle);
   return !folded || foldArabic(haystack).includes(folded);
 }
+
+const plural = new Intl.PluralRules("ar");
+/**
+ * Arabic counts agree with their number: حلقة واحدة، حلقتان، 3 حلقات، 11 حلقة،
+ * 103 حلقات. `forms` gives each plural category; `{n}` is replaced by the
+ * number, and a missing category falls back to `other`.
+ */
+export function arabicCount(n, forms) {
+  const form = forms[plural.select(n)] ?? forms.other;
+  return String(form).replace("{n}", String(n));
+}
+export const EPISODES = {
+  zero: "لا حلقات",
+  one: "حلقة واحدة",
+  two: "حلقتان",
+  few: "{n} حلقات",
+  many: "{n} حلقة",
+  other: "{n} حلقة",
+};
+export const MINUTES = {
+  zero: "أقل من دقيقة",
+  one: "دقيقة واحدة",
+  two: "دقيقتان",
+  few: "{n} دقائق",
+  many: "{n} دقيقة",
+  other: "{n} دقيقة",
+};

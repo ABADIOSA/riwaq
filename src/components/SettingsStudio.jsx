@@ -24,6 +24,7 @@ import {
   LockKeyhole,
 } from "lucide-react";
 import { call } from "../lib/api.js";
+import { arabicCount } from "../../core/arabic.mjs";
 
 const NAMED_KEYS = {
   " ": "SPACE",
@@ -172,7 +173,9 @@ export default function SettingsStudio({ state, update, act, notice }) {
           <h1>تفاصيل تصنع تجربتك.</h1>
           <p>من أول بوستر… إلى آخر مشهد.</p>
         </div>
-        <span className="version-badge">BETA 0.3</span>
+        <span className="version-badge">
+          BETA {(state.update?.current || "").split(".").slice(0, 2).join(".")}
+        </span>
       </div>
       <div className="studio-layout">
         <aside className="studio-nav">
@@ -707,7 +710,7 @@ export default function SettingsStudio({ state, update, act, notice }) {
                     </button>
                   </section>
                   <section className="settings-card">
-                    <h2>رِواق 0.2.0</h2>
+                    <h2>رِواق {state.update?.current || ""}</h2>
                     <p>
                       عميل مستقل لإضافات Stremio، بتصميم مستلهم من Harbor وتجربة
                       تشغيل تستفيد من Nuvio ونسخة المجتمع.
@@ -1044,11 +1047,7 @@ function IntegrationCard({ integration: s, update, act, notice }) {
           </button>
         )}
       </div>
-      {s.lastSync && (
-        <p className="subtle">
-          آخر مزامنة: {new Date(s.lastSync).toLocaleString("ar-SA")}
-        </p>
-      )}
+      {s.lastSync && <p className="subtle">آخر مزامنة: {when(s.lastSync)}</p>}
       {id === "trakt" && s.connected && (
         <div className="setting-row">
           <div>
@@ -1387,11 +1386,14 @@ function PresenceAndAlerts({ state, update, act, notice }) {
   );
 }
 
-const when = (iso) =>
-  iso
-    ? new Date(iso).toLocaleString("ar-SA", {
+// ar-SA alone picks the Umm al-Qura calendar and Arabic-Indic digits. Release,
+// backup and episode dates are Gregorian, so they are shown that way everywhere.
+const when = (value) =>
+  value
+    ? new Date(value).toLocaleString("ar-SA", {
         dateStyle: "medium",
         timeStyle: "short",
+        calendar: "gregory",
         numberingSystem: "latn",
       })
     : "";
@@ -1500,10 +1502,34 @@ function BackupRoom({ update, act, notice }) {
           <p className="subtle">
             لم تُضمَّن عمداً:{" "}
             {[
-              left.configuredAddons && `${left.configuredAddons} إضافة مهيأة`,
-              left.liveSources && `${left.liveSources} مصدر قنوات`,
-              left.providers && `${left.providers} مفتاح خدمة`,
-              left.integrations && `${left.integrations} ربط منصة`,
+              left.configuredAddons &&
+                arabicCount(left.configuredAddons, {
+                  one: "إضافة مهيأة واحدة",
+                  two: "إضافتان مهيأتان",
+                  few: "{n} إضافات مهيأة",
+                  other: "{n} إضافة مهيأة",
+                }),
+              left.liveSources &&
+                arabicCount(left.liveSources, {
+                  one: "مصدر قنوات واحد",
+                  two: "مصدرا قنوات",
+                  few: "{n} مصادر قنوات",
+                  other: "{n} مصدر قنوات",
+                }),
+              left.providers &&
+                arabicCount(left.providers, {
+                  one: "مفتاح خدمة واحد",
+                  two: "مفتاحا خدمة",
+                  few: "{n} مفاتيح خدمات",
+                  other: "{n} مفتاح خدمة",
+                }),
+              left.integrations &&
+                arabicCount(left.integrations, {
+                  one: "حساب منصة واحد",
+                  two: "حسابا منصتين",
+                  few: "{n} حسابات منصات",
+                  other: "{n} حساب منصة",
+                }),
               left.notify && "وجهات الإشعارات",
               left.stremio && "تسجيل دخول ستريميو",
             ]
@@ -1678,10 +1704,7 @@ function UpdatesCard({ state, update, act }) {
           </>
         )}
         {info.checkedAt && (
-          <small className="subtle">
-            {" "}
-            · آخر تحقق {new Date(info.checkedAt).toLocaleString("ar-SA")}
-          </small>
+          <small className="subtle"> · آخر تحقق {when(info.checkedAt)}</small>
         )}
       </p>
       {info.failed && (

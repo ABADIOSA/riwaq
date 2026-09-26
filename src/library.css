@@ -413,11 +413,20 @@
   margin-top: 10px;
 }
 
-.update-dot {
+/* Beats `.nav-item small`, which would otherwise paint it dark on dark. */
+.nav-item small.update-dot {
   margin-inline-start: auto;
   background: var(--accent);
   color: var(--accent-ink);
   border-radius: 999px;
   padding: 1px 8px;
   font-size: 10px;
+}
+
+/* A checkbox row inside a stacked form sits beside its label, not above it. */
+.stacked-form label.switch-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: #c9ced4;
 }

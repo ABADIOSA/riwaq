@@ -2,6 +2,7 @@ import React from "react";
 import { Film, Sparkles, CalendarDays, Check, Tv } from "lucide-react";
 import { imgUrl } from "../lib/helpers.js";
 import { groupByDay } from "../../core/episodes.mjs";
+import { arabicCount, EPISODES } from "../../core/arabic.mjs";
 
 const dayKey = (time) =>
   new Intl.DateTimeFormat("en-CA", {
@@ -75,7 +76,7 @@ export function UpNextRail({ items, onOpen }) {
               {item.video.title ? ` · ${item.video.title}` : ""}
             </span>
             {item.remaining > 1 && (
-              <small>{item.remaining} حلقات بانتظارك</small>
+              <small>{arabicCount(item.remaining, EPISODES)} بانتظارك</small>
             )}
           </button>
         ))}
