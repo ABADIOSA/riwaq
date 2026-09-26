@@ -19,6 +19,7 @@ import {
   Radio,
 } from "lucide-react";
 import { IconButton } from "./UI.jsx";
+import PlayerDock from "./PlayerDock.jsx";
 import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
 
@@ -29,10 +30,11 @@ export default function PlayerView({
   hidden,
   onSettings,
   onAdvance,
+  update,
+  dockRequest,
 }) {
   const surface = useRef(),
-    [subs, setSubs] = useState([]),
-    [subMenu, setSubMenu] = useState(false);
+    [dock, setDock] = useState(null);
   const mini = player.pip,
     // Full screen gives the whole window to the picture; MPV's own controller
     // draws over it, because HTML cannot paint above the native surface.
@@ -55,7 +57,7 @@ export default function PlayerView({
             width: r.width,
             height: r.height,
             viewportWidth: window.innerWidth,
-            visible: !hidden && !subMenu,
+            visible: !hidden,
           }).catch(() => {});
       });
     };
@@ -69,7 +71,7 @@ export default function PlayerView({
       window.removeEventListener("resize", report);
       call("videoBounds", { visible: false }).catch(() => {});
     };
-  }, [mini, hidden, subMenu, immersive]);
+  }, [mini, hidden, immersive, !!dock]);
   useEffect(() => {
     const onKey = (e) => {
       if (hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName))
@@ -79,6 +81,8 @@ export default function PlayerView({
         command("pause");
       }
       if (e.key.toLowerCase() === "f") command("fullscreen");
+      if (e.key.toLowerCase() === "c" && !mini)
+        setDock((open) => (open ? null : "subs"));
       if (e.key === "Escape" && player.fullscreen) {
         e.preventDefault();
         command("exitFullscreen");
@@ -91,23 +95,16 @@ export default function PlayerView({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [player.position, player.fullscreen, hidden, state.settings.seekStep]);
+  // A right click or C inside MPV asks for the panel; the mini player has none.
   useEffect(() => {
-    setSubs([]);
-    setSubMenu(false);
-  }, [player.videoId]);
-  const loadSubtitles = async () => {
-    setSubMenu(!subMenu);
-    if (!subMenu && player.mediaType !== "local") {
-      const result = await act("subtitles", {
-        type: player.mediaType,
-        id: player.videoId,
-      });
-      if (result) setSubs(result);
-    }
-  };
+    if (dockRequest && !mini) setDock((open) => (open ? null : "subs"));
+  }, [dockRequest]);
+  useEffect(() => {
+    if (mini) setDock(null);
+  }, [mini]);
   return (
     <section
-      className={`theater ${mini ? "mini-theater" : ""} ${immersive ? "immersive" : ""}`}
+      className={`theater ${mini ? "mini-theater" : ""} ${immersive ? "immersive" : ""} ${dock ? "docked" : ""}`}
       aria-label="المشغل المدمج"
     >
       <header className="theater-header">
@@ -177,41 +174,18 @@ export default function PlayerView({
             </div>
           </dl>
         )}
-        {subMenu && (
-          <div className="subtitle-picker">
-            <h3>ترجمات إضافاتك</h3>
-            <button className="secondary" onClick={() => act("localSubtitle")}>
-              فتح ملف ترجمة
-            </button>
-            <button
-              className="secondary"
-              onClick={() => {
-                command("sid", "no");
-                setSubMenu(false);
-              }}
-            >
-              إيقاف الترجمة
-            </button>
-            {subs.length === 0 && (
-              <p>
-                لا توجد ترجمات إضافية لهذا العنوان. يمكنك اختيار مسار مضمن من
-                إعدادات المشغل.
-              </p>
-            )}
-            {subs.map((s) => (
-              <button
-                key={s.key}
-                onClick={async () => {
-                  await act("subtitle", { key: s.key });
-                  setSubMenu(false);
-                }}
-              >
-                {s.lang} · {s.provider}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
+      {dock && (
+        <PlayerDock
+          player={player}
+          state={state}
+          act={act}
+          update={update}
+          tab={dock}
+          setTab={setDock}
+          onClose={() => setDock(null)}
+        />
+      )}
       <div className="theater-controls">
         <div className="seek-line" dir="ltr">
           <span>{player.live ? "مباشر" : clock(player.position)}</span>
@@ -250,6 +224,22 @@ export default function PlayerView({
           <span>
             {player.live ? <Radio size={14} /> : clock(player.duration)}
           </span>
+          {!player.live && player.duration > 0 && (
+            <small className="ends-at" dir="rtl">
+              ينتهي{" "}
+              {new Intl.DateTimeFormat("ar-SA", {
+                hour: "numeric",
+                minute: "2-digit",
+                calendar: "gregory",
+                numberingSystem: "latn",
+              }).format(
+                Date.now() +
+                  ((player.duration - (player.position || 0)) /
+                    (player.speed || 1)) *
+                    1000,
+              )}
+            </small>
+          )}
         </div>
         <div className="theater-actions">
           <div className="button-row">
@@ -357,7 +347,11 @@ export default function PlayerView({
                 </IconButton>
               </>
             )}
-            <IconButton title="ترجمات إضافاتك" onClick={loadSubtitles}>
+            <IconButton
+              title="الترجمة والصوت (C)"
+              className={dock ? "icon-button on" : "icon-button"}
+              onClick={() => setDock(dock ? null : "subs")}
+            >
               <Subtitles size={20} />
             </IconButton>
             <IconButton title="إعدادات المشغل" onClick={onSettings}>

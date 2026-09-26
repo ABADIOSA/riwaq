@@ -159,7 +159,9 @@ test("input.conf renders every action and the pointer gesture", () => {
   assert.ok(conf.includes("Ctrl+p cycle pause"));
   assert.ok(!conf.includes("SPACE cycle pause"));
   assert.ok(conf.includes("MBTN_LEFT_DBL script-message riwaq-fullscreen"));
-  assert.equal(conf.trim().split("\n").length, HOTKEY_ACTIONS.length + 2);
+  assert.ok(conf.includes("MBTN_RIGHT script-message riwaq-panel"));
+  // The header, every action, and the two pointer gestures.
+  assert.equal(conf.trim().split("\n").length, HOTKEY_ACTIONS.length + 3);
 });
 
 test("picture profiles add MPV scaler options and nothing else", () => {

@@ -20,7 +20,13 @@ import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
-import { Client } from "../core/client.mjs";
+import { Client, fetchText } from "../core/client.mjs";
+import {
+  automaticSubtitle,
+  cuesAround,
+  parseCues,
+  preferredLanguages,
+} from "../core/subtitles.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
@@ -37,6 +43,10 @@ let window, client, player, videoHost, loginServer, loginTimer, presence;
 // only ever holds the opaque token.
 let pendingBackup = null;
 let watching = { active: false, pip: false };
+// What is playing from an addon stream: subtitle requests need its stream key.
+let nowPlaying = null;
+// Parsed addon subtitles for quick sync, a few at a time.
+const cueCache = new Map();
 const emit = (name, data) => {
   if (window && !window.isDestroyed())
     window.webContents.send("riwaq:" + name, data);
@@ -252,6 +262,7 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     (!progress.duration || progress.position / progress.duration < 0.95)
       ? progress.position
       : 0;
+  nowPlaying = { key, type: meta.type, id: videoId };
   return player.start({
     executable: executable(),
     settings: client.state.settings,
@@ -266,6 +277,7 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
 }
 async function playChannel({ key, start = 0, stop = 0 }) {
   client.profiles.gate("live");
+  nowPlaying = null;
   const channel = client.live.resolve(key, { start, stop });
   await player.stop();
   return player.start({
@@ -285,13 +297,77 @@ async function playChannel({ key, start = 0, stop = 0 }) {
     screenshotDir: screenshotDir(),
   });
 }
+/**
+ * When the file carries no subtitle in the viewer's first language, load the
+ * best one an addon offers. Track lists arrive just after the file loads.
+ */
+function autoSubtitle(videoId) {
+  const settings = client.state.settings;
+  if (settings.autoSubtitles === "off" || nowPlaying?.id !== videoId) return;
+  setTimeout(async () => {
+    try {
+      if (player.videoId !== videoId || !player.state.active) return;
+      const list = await client.getSubtitles({
+        type: nowPlaying.type,
+        id: nowPlaying.id,
+        streamKey: nowPlaying.key,
+      });
+      if (player.videoId !== videoId || !player.state.active) return;
+      const pick = automaticSubtitle({
+        tracks: player.state.tracks || [],
+        addons: list,
+        languages: preferredLanguages(settings.subtitleLanguage),
+        kind: settings.subtitleKind,
+      });
+      if (!pick) return;
+      player.addSubtitle(client.subtitles.get(pick.key), {
+        key: pick.key,
+        ...client.subtitleInfo.get(pick.key),
+      });
+      emit(
+        "notice",
+        `اخترنا ترجمة ${pick.provider ? `من ${pick.provider}` : "من إضافاتك"}. غيّرها من لوحة الترجمة (C أو الزر الأيمن).`,
+      );
+    } catch {
+      /* Subtitles are a convenience; playback carries on without them. */
+    }
+  }, 1500);
+}
 const methods = {
   init: () => client.init(),
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
   metadata: (a) => client.metadata(a),
   streams: (a) => client.getStreams(a),
-  subtitles: (a) => client.getSubtitles(a),
+  subtitles: () => {
+    if (!player.state.active || !nowPlaying || nowPlaying.id !== player.videoId)
+      return [];
+    return client.getSubtitles({
+      type: nowPlaying.type,
+      id: nowPlaying.id,
+      streamKey: nowPlaying.key,
+    });
+  },
+  subtitleCues: async (a) => {
+    const url = client.subtitles.get(a?.key);
+    if (!url || !player.state.active) return { cues: [] };
+    let cues = cueCache.get(url);
+    if (!cues) {
+      const text = await fetchText(url, { timeout: 15000 });
+      if (text.length > 5_000_000) throw new Error("ملف الترجمة كبير جداً");
+      cues = parseCues(text);
+      if (cueCache.size >= 6) cueCache.delete(cueCache.keys().next().value);
+      cueCache.set(url, cues);
+    }
+    const position = player.state.position || 0;
+    const delay = player.state.subtitleDelay || 0;
+    return {
+      position,
+      delay,
+      total: cues.length,
+      cues: cuesAround(cues, position, delay, { before: 7, after: 7 }),
+    };
+  },
   install: (a) => client.install(a.url),
   updateAddon: (a) => client.updateAddon(a),
   settings: async (a) => {
@@ -449,9 +525,13 @@ const methods = {
     return true;
   },
   subtitle: (a) => {
-    const url = client.subtitles.get(a.key);
+    const url = client.subtitles.get(a?.key);
     if (!url) throw new Error("الترجمة غير متاحة");
-    player.subtitle(url);
+    player.addSubtitle(url, {
+      key: a.key,
+      ...client.subtitleInfo.get(a.key),
+      secondary: a.secondary === true,
+    });
     return true;
   },
   localSubtitle: async () => {
@@ -478,6 +558,7 @@ const methods = {
     });
     if (r.canceled) return false;
     const path = r.filePaths[0];
+    nowPlaying = null;
     return player.start({
       executable: executable(),
       settings: client.state.settings,
@@ -718,6 +799,7 @@ app
         onEvent: (event) => emit("playerRequest", event),
       });
       player.onLoaded = ({ meta, videoId }) => {
+        autoSubtitle(videoId);
         const key = JSON.stringify([meta.type, videoId]);
         if (client.state.queue?.some((item) => item.key === key)) {
           client.state.queue = client.state.queue.filter(

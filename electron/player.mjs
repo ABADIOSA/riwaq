@@ -1,3 +1,4 @@
+import { styleArgs, styleProperties } from "../core/subtitles.mjs";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import { randomUUID } from "node:crypto";
@@ -74,8 +75,7 @@ export function playerArgs({
     `--sub-font-size=${settings.subtitleSize}`,
     `--sub-delay=${settings.subtitleDelay}`,
     "--sub-font=Segoe UI",
-    "--sub-border-size=2",
-    "--sub-ass-override=scale",
+    ...styleArgs(settings.subtitleStyle),
     `--sub-pos=${settings.subtitlePosition ?? 95}`,
     `--start=${Math.max(0, Number(start) || 0)}`,
     `--panscan=${settings.videoFill ? "1.0" : "0.0"}`,
@@ -153,6 +153,8 @@ const PROPERTIES = [
   ["sub-visibility", "subtitleVisible"],
   ["audio-delay", "audioDelay"],
   ["video-zoom", "zoom"],
+  ["secondary-sid", "secondarySid"],
+  ["sub-pos", "subtitlePosition"],
   ["video-pan-x", "panX"],
   ["video-pan-y", "panY"],
   ["video-params/w", "width"],
@@ -180,6 +182,7 @@ export class Player {
     this.onFullscreen = onFullscreen;
     this.onEscape = onEscape;
     this.fullscreen = false;
+    this.externalSubs = new Map();
     this.onState = onState;
     this.onProgress = onProgress;
     this.onEnded = onEnded;
@@ -208,6 +211,9 @@ export class Player {
     this.videoId = videoId;
     this.settings = settings;
     this.lastSaved = 0;
+    this.externalSubs = new Map();
+    this.rawTracks = [];
+    this.pendingSecondary = null;
     const pipe = `\\\\.\\pipe\\riwaq-${randomUUID()}`;
     this.state = {
       active: true,
@@ -318,6 +324,69 @@ export class Player {
       this.send(["observe_property", id + 1, name]),
     );
   }
+  /**
+   * Tracks for the interface. An addon subtitle is recognised by the file MPV
+   * loaded and reported by its opaque key; the URL itself never leaves here.
+   */
+  mapTracks(list) {
+    const tracks = list.map((t) => ({
+      id: t.id,
+      type: t.type,
+      lang: t.lang,
+      selected: !!t.selected,
+      secondary: t["main-selection"] === 1,
+      codec: t.codec,
+      forced: !!t.forced,
+      default: !!t.default,
+      hearingImpaired: !!t["hearing-impaired"],
+      external: !!t.external,
+      channels: t["demux-channel-count"] || undefined,
+      addonKey: t["external-filename"]
+        ? this.externalSubs.get(t["external-filename"])?.key
+        : undefined,
+      title:
+        typeof t.title === "string" && !/https?:\/\//i.test(t.title)
+          ? t.title.slice(0, 160)
+          : undefined,
+    }));
+    // A subtitle added as the second line becomes secondary once MPV has it.
+    if (this.pendingSecondary) {
+      const found = list.find(
+        (t) => t["external-filename"] === this.pendingSecondary,
+      );
+      if (found) {
+        this.pendingSecondary = null;
+        this.send(["set_property", "secondary-sid", found.id]);
+      }
+    }
+    return tracks;
+  }
+  /**
+   * Loads an addon subtitle, or selects it if it is already loaded, as the
+   * main or the secondary line.
+   */
+  addSubtitle(url, { key, label = "", lang = "", secondary = false } = {}) {
+    const loaded = (this.rawTracks || []).find(
+      (t) => t.type === "sub" && t["external-filename"] === url,
+    );
+    this.externalSubs.set(url, { key });
+    if (loaded) {
+      this.send([
+        "set_property",
+        secondary ? "secondary-sid" : "sid",
+        loaded.id,
+      ]);
+      return;
+    }
+    if (secondary) this.pendingSecondary = url;
+    this.send([
+      "sub-add",
+      url,
+      secondary ? "auto" : "select",
+      String(label || "").slice(0, 120),
+      String(lang || "").slice(0, 12),
+    ]);
+  }
   /** Main reports the window's full screen state; the controller follows it. */
   setFullscreen(on) {
     this.fullscreen = !!on;
@@ -348,6 +417,7 @@ export class Player {
     else if (name === "riwaq-loop") this.command({ action: "abLoop" });
     else if (name === "riwaq-shader") this.command({ action: "cycleShader" });
     else if (name === "riwaq-mini") this.command({ action: "pip" });
+    else if (name === "riwaq-panel") this.onEvent({ type: "panel" });
     else if (name === "riwaq-next" || name === "riwaq-prev")
       this.onEvent({ type: name === "riwaq-next" ? "next" : "previous" });
   }
@@ -355,23 +425,12 @@ export class Player {
     if (event.event === "client-message" && typeof event.args?.[0] === "string")
       this.message(event.args[0]);
     if (event.event === "property-change") {
+      if (event.name === "track-list") this.rawTracks = event.data || [];
       const mapping = PROPERTIES.find(([name]) => name === event.name);
       if (mapping && event.data !== undefined) {
         this.state[mapping[1]] =
           event.name === "track-list"
-            ? (event.data || []).map(
-                ({ id, type, lang, title, selected, codec }) => ({
-                  id,
-                  type,
-                  lang,
-                  selected,
-                  codec,
-                  title:
-                    typeof title === "string" && !/https?:\/\//i.test(title)
-                      ? title
-                      : undefined,
-                }),
-              )
+            ? this.mapTracks(event.data || [])
             : event.name === "chapter-list"
               ? (event.data || []).map(({ time, title }) => ({
                   time,
@@ -514,6 +573,9 @@ export class Player {
         "sub-pos",
         Math.max(0, Math.min(150, number)),
       ]);
+    else if (action === "subtitleStyle" && value && typeof value === "object")
+      for (const [name, v] of styleProperties(value))
+        this.send(["set_property", name, v]);
     else if (action === "subtitleVisible")
       this.send(["set_property", "sub-visibility", value !== false]);
     else if (action === "audioDelay" && Number.isFinite(number))

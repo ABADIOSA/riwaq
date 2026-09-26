@@ -17,6 +17,10 @@ Three projects were read to decide what Riwaq 0.3 should do. Behavior was studie
 - Source read at commit `48e1ca3a8eb21708031d6dc9c690d6098e07133a` (2026-09-16), version `0.1.24-alpha` per `composeApp/Configuration/DesktopVersion.properties`.
 - The project describes itself as alpha and testers-only. What was studied: the separation of browse, library, player and settings, and the desktop player integration. Riwaq's mini player stays embedded; Nuvio's OS-level PiP is not claimed as implemented here.
 
+## Nuvio HTPC (UmbraProjects/NuvioDesktop), studied 2026-09-26
+
+GPL-3.0, Kotlin/Compose. Studied at `abdf9f0` for player behaviour only; no code was copied into this MIT application. Behaviours that informed Riwaq 0.6: subtitles grouped by language with built-in and addon tabs; a preferred subtitle kind (standard, SDH, forced) as a tiebreaker inside a language rather than a reason to change language; loading an addon subtitle at start in the preferred language; cue-based quick sync with an allowance for reaction time; subtitle styling (colour, outline, shadow, background, bold, ASS handling); a right-click route to quick options; and an "ends at" clock. Riwaq's version keeps the panel beside the picture because HTML cannot paint over its native video surface.
+
 ## Stremio Community v5
 
 - License: GPL-3.0. Stack: C++ with WebView2 and libmpv, wrapping the official Stremio web UI.

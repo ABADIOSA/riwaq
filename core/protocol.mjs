@@ -1,3 +1,4 @@
+import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
 import { createHash } from "node:crypto";
 
 export const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
@@ -42,6 +43,9 @@ export const DEFAULT_SETTINGS = {
   epgHours: 4,
   autoFullscreen: true,
   videoFill: false,
+  subtitleKind: "standard",
+  autoSubtitles: "preferred",
+  subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -263,8 +267,18 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     metadataLanguage: ["ar-SA", "en-US", "ja-JP", "fr-FR"],
     region: ["SA", "AE", "EG", "US", "GB"],
     seekStep: [5, 10, 30],
-    subtitlePosition: [80, 85, 90, 95, 100],
+    subtitleKind: ["standard", "sdh", "forced"],
+    autoSubtitles: ["off", "preferred"],
   }))
     if (values.includes(input[key])) next[key] = input[key];
+  if (Number.isFinite(input.subtitlePosition))
+    next.subtitlePosition = Math.round(
+      Math.max(50, Math.min(100, input.subtitlePosition)),
+    );
+  if (input.subtitleStyle && typeof input.subtitleStyle === "object")
+    next.subtitleStyle = safeSubtitleStyle(
+      input.subtitleStyle,
+      current.subtitleStyle || DEFAULT_SUBTITLE_STYLE,
+    );
   return next;
 }

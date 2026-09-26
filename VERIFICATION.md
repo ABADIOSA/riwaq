@@ -1,4 +1,18 @@
-# Verification — Riwaq 0.5.1
+# Verification — Riwaq 0.6.0
+
+## 0.6.0 — subtitles and audio
+
+The owner reported, with screenshots, that choosing subtitles was far harder than in Harbor, Stremio or Nuvio: the list covered the whole picture, and every row read only "· ara". The renderer showed a `provider` field the main process never sent, and the button background was the invalid colour `#fff05`. The owner asked for Nuvio HTPC's behaviour (UmbraProjects/NuvioDesktop); it is GPL-3.0, so it was studied for behaviour and nothing was copied (see docs/REFERENCE-REVIEW.md).
+
+Executed:
+
+- `npm test`: **195 passing, 0 failing** (180 + 15 new): language tags to one code and Arabic name; forced and SDH detection; ranking by language then kind without ever changing language for the kind; language groups; automatic addon subtitles only in the first language and only when the file has none; SRT and WebVTT cue parsing; cues around now with the current delay; the quick-sync delay including reaction time and clamping; style validation into MPV properties and options; the new settings; MPV starting with the saved style; addon subtitles labelled, deduplicated, cached and never carrying URLs to the interface; tracks reporting an addon subtitle only by key; loading once and reselecting as main or second line; live style changes; the panel opening from MPV by C or right click; audio labels.
+- `npm run check` and `npm run build` pass.
+- Rendered in headless Chromium at 980×680 and 1440×960 with realistic tracks and six addon subtitles: the panel opens beside the picture (surface 932×486 → 526×486 and 1392×766 → 958×766, still visible), Arabic is the starting filter with its four entries first, labels show release names with provider and format, SDH and forced are marked, the sync room turns a picked cue into a 1.7 s delay, the style room applies and saves colours, the audio room reads "الإنجليزية · Dolby Atmos · EAC3 · 7.1", and in full screen the picture shares the window with the panel. Zero page errors and zero horizontal overflow. Rendering caught a leftover 0.2 `.player-dock` rule that broke the layout and a language filter that started before addons answered; both fixed.
+
+Not executed:
+
+- Nothing in 0.6.0 has run on Windows. Unverified natively: `sub-add` with title and language, secondary subtitles, the right-click binding reaching Riwaq while MPV's controller is visible, `sub-border-style` on the pinned MPV build, and automatic subtitles against real addons.
 
 ## 0.5.1 — the first real Windows feedback
 
