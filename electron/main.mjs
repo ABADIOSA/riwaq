@@ -206,7 +206,13 @@ async function diagnostics() {
     video: videoHost?.inspect(),
   };
 }
-async function play({ key, meta, videoId, resume = true }) {
+async function play({ key, meta, videoId, resume = true, profileId }) {
+  const owner = profileId || client.profiles.store.active;
+  const checkOwner = () => {
+    if (owner !== client.profiles.store.active)
+      throw new Error("تغير الملف الشخصي؛ اختر المصدر مجدداً");
+  };
+  checkOwner();
   const stream = client.streams.get(key);
   if (!stream) throw new Error("أعد تحميل المصادر أولاً");
   if (!meta?.id || !meta?.type || !meta?.name || typeof videoId !== "string")
@@ -228,11 +234,14 @@ async function play({ key, meta, videoId, resume = true }) {
     url = torrentUrl(stream, client.state.settings.serverUrl);
   }
   if (!url) throw new Error("نوع المصدر غير مدعوم في هذه النسخة");
+  checkOwner();
   await player.stop();
+  checkOwner();
   const progress = client.state.progress[`${meta.type}:${videoId}`];
   const start =
     resume &&
     progress &&
+    !progress.completed &&
     (!progress.duration || progress.position / progress.duration < 0.95)
       ? progress.position
       : 0;
@@ -322,10 +331,29 @@ const methods = {
     return true;
   },
   favorite: (a) => client.favorite(a),
+  queueEdit: (a) => client.queueEdit(a),
+  historyEdit: (a) => {
+    if (
+      player.state.active &&
+      player.videoId === a.videoId &&
+      player.meta?.type === a.meta?.type
+    )
+      throw new Error("أوقف تشغيل هذا العنوان قبل تعديل سجله");
+    return client.historyEdit(a);
+  },
   profileCreate: (a) => client.profiles.create(a),
   profileUpdate: (a) => client.profiles.update(a),
-  profileRemove: (a) => client.profiles.remove(a),
-  profileSwitch: (a) => client.profiles.switch(a),
+  profileRemove: async (a) => {
+    if (client.profiles.store.active === a.id) await player.stop();
+    return client.profiles.remove(a);
+  },
+  profileSwitch: async (a) => {
+    // Save the outgoing viewer's last position before replacing their bucket.
+    await player.stop();
+    const result = client.profiles.switch(a);
+    await applyPresence().catch(() => {});
+    return result;
+  },
   profilePin: (a) => client.profiles.setPin(a),
   profileUnlock: (a) => client.profiles.unlock(a?.pin),
   profileLock: () => client.profiles.lock(),
@@ -564,6 +592,16 @@ app
         // episode comes next and which source plays it.
         onEvent: (event) => emit("playerRequest", event),
       });
+      player.onLoaded = ({ meta, videoId }) => {
+        const key = JSON.stringify([meta.type, videoId]);
+        if (client.state.queue?.some((item) => item.key === key)) {
+          client.state.queue = client.state.queue.filter(
+            (item) => item.key !== key,
+          );
+          client.persist();
+          broadcast();
+        }
+      };
       applyPresence().catch(() => {});
       window.on("minimize", () => {
         if (

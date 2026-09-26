@@ -41,6 +41,8 @@ React (sandboxed, RTL)
 
 ## Storage and network
 
+`core/library.mjs` contains pure queue, identity, Arabic search, completion and episode-release rules shared with React. `LibraryView.jsx` presents the saved/continue/queue/history/platform tabs. `queueEdit` and `historyEdit` are narrow IPC actions. Queue storage joins the profile bucket; old profiles migrate to an empty queue. History edits remain local and never generate tracker completion writes. MPV file-loaded consumes a queued entry; failures retain it. Profile switches stop/save playback before applying a new bucket. See `docs/RELEASE-0.4.md`.
+
 One profile file lives in `%APPDATA%/Riwaq/profile.bin`, encrypted for the Windows user. `RIWAQ_DATA_DIR` isolates development and tests. Provider keys, OAuth tokens, IPTV credentials and configured addon URLs stay in main. API credentials go only to their configured fixed official API hosts; redirect following is disabled for these requests. Addon requests follow normal HTTP behavior because the addon ecosystem can use redirects.
 
 Viewer profiles namespace favorites, progress, connected lists and settings. Addons, provider keys, platform accounts, live sources and hotkeys are shared across profiles on purpose: they are the installation's setup rather than one viewer's taste. The active profile's data is also written at the top level of the saved state so a file written by 0.3 still opens in 0.2.

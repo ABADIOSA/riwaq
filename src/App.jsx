@@ -36,6 +36,13 @@ import PlayerView from "./components/PlayerView.jsx";
 import PlayerPanel from "./components/PlayerPanel.jsx";
 import LiveTV from "./components/LiveTV.jsx";
 import Profiles from "./components/Profiles.jsx";
+import LibraryView from "./components/LibraryView.jsx";
+import {
+  continueWatching,
+  releasedEpisodes,
+  isCompleted,
+  titleKey,
+} from "../core/library.mjs";
 const initial = {
   addons: [],
   favorites: [],
@@ -80,48 +87,82 @@ export default function App() {
   const searchRef = useRef(),
     stateRef = useRef(state),
     playerRef = useRef(null),
-    toastTimer = useRef();
+    toastTimer = useRef(),
+    advancing = useRef(false),
+    advanceGeneration = useRef(0);
   stateRef.current = state;
   const notice = (message) => {
     setToast(message);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 6500);
   };
-  /** Moves to the neighbouring episode and plays the best available source. */
-  const advance = async (meta, videoId, direction) => {
-    if (!meta || meta.type === "local" || meta.type === "live") return;
+  /** Queue playback is opt-in through autoplay; explicit episode buttons stay episodic. */
+  const advance = async (meta, videoId, direction, fromEnd = false) => {
+    if (advancing.current || !meta || ["local", "live"].includes(meta.type))
+      return;
+    const profileId = stateRef.current.profiles?.active;
+    const generation = advanceGeneration.current;
+    advancing.current = true;
     try {
-      const details = await call("metadata", { type: meta.type, id: meta.id });
-      const videos = episodeList(details);
+      const queued = fromEnd ? stateRef.current.queue?.[0] : null;
+      const details = await call(
+        "metadata",
+        queued
+          ? { type: queued.meta.type, id: queued.meta.id }
+          : { type: meta.type, id: meta.id },
+      );
+      const videos = releasedEpisodes(details);
       const index = videos.findIndex((v) => v.id === videoId);
-      const target = videos[index + direction];
-      if (index < 0 || !target || target.id === videoId) {
-        notice(direction > 0 ? "هذه آخر حلقة متاحة" : "هذه أول حلقة");
+      const target = queued || (index >= 0 ? videos[index + direction] : null);
+      if (!target) {
+        if (!fromEnd)
+          notice(direction > 0 ? "هذه آخر حلقة متاحة" : "هذه أول حلقة");
         return;
       }
+      const targetId = queued ? queued.videoId : target.id;
       notice(
-        direction > 0
-          ? "جاري تجهيز الحلقة التالية…"
-          : "جاري تجهيز الحلقة السابقة…",
+        queued ? "جاري تجهيز العنوان التالي في الطابور…" : "جاري تجهيز الحلقة…",
       );
-      const result = await call("streams", { type: meta.type, id: target.id });
+      const result = await call("streams", {
+        type: details.type,
+        id: targetId,
+      });
+      if (
+        stateRef.current.profiles?.active !== profileId ||
+        advanceGeneration.current !== generation
+      )
+        return;
       const stream = result.streams.find((s) => s.supported && !s.external);
       if (!stream) {
-        setSelected({ meta: details, videoId: target.id });
-        notice("اختر مصدراً لهذه الحلقة");
+        setSelected({ meta: details, videoId: targetId });
+        notice("اختر مصدراً للمتابعة؛ بقي العنوان في الطابور");
         return;
       }
       await call("play", {
         key: stream.key,
         meta: details,
-        videoId: target.id,
+        videoId: targetId,
+        profileId,
       });
       setSelected(null);
     } catch (e) {
       notice(e.message);
+    } finally {
+      advancing.current = false;
     }
   };
   const act = async (method, args) => {
+    if (
+      [
+        "play",
+        "stop",
+        "profileSwitch",
+        "profileRemove",
+        "localVideo",
+        "playChannel",
+      ].includes(method)
+    )
+      advanceGeneration.current++;
     try {
       return await call(method, args);
     } catch (e) {
@@ -163,7 +204,7 @@ export default function App() {
           api.on("notice", notice),
           api.on("ended", ({ meta, videoId }) => {
             if (!stateRef.current.settings.autoplay) return;
-            advance(meta, videoId, 1);
+            advance(meta, videoId, 1, true);
           }),
           api.on("playerRequest", ({ type }) => {
             const current = playerRef.current;
@@ -189,6 +230,15 @@ export default function App() {
       setPlayerOpen(false);
     }
   }, [player.active, player.videoId]);
+  useEffect(() => {
+    setSelected(null);
+    setPlayerOpen(false);
+    setView("home");
+    setRows([]);
+    setQuery("");
+    setSearch("");
+    setCatalog("");
+  }, [state.profiles?.active]);
   const addonSignature = state.addons
     .map((a) => `${a.key}:${a.enabled}`)
     .join("|");
@@ -215,8 +265,8 @@ export default function App() {
                         (p) =>
                           p.meta.id === m.id &&
                           p.meta.type === m.type &&
-                          p.duration > 0 &&
-                          p.position / p.duration >= 0.95,
+                          m.type === "movie" &&
+                          isCompleted(p),
                       ),
                   )
                 : row.metas,
@@ -244,6 +294,7 @@ export default function App() {
     addonSignature,
     refresh,
     state.settings.hideWatched,
+    state.profiles?.active,
   ]);
   useEffect(() => {
     const handler = (e) => {
@@ -274,17 +325,7 @@ export default function App() {
     setFilter("");
   };
   const favorites = state.favorites;
-  const progress = Object.values(state.progress)
-    .filter(
-      (p) =>
-        p.meta.type !== "local" &&
-        p.position > 10 &&
-        (!p.duration || p.position / p.duration < 0.95),
-    )
-    .sort((a, b) => b.updated - a.updated);
-  const uniqueProgress = [
-    ...new Map(progress.map((p) => [p.meta.id, p]).reverse()).values(),
-  ].sort((a, b) => b.updated - a.updated);
+  const uniqueProgress = continueWatching(state.progress);
   const heroItems = rows
     .flatMap((r) => r.metas)
     .filter((m) => m.background)
@@ -420,7 +461,7 @@ export default function App() {
               if (search.trim()) {
                 setQuery(search.trim());
                 setFilter("");
-                setView("search");
+                navigate("search");
                 setCatalog("");
               }
             }}
@@ -609,7 +650,7 @@ export default function App() {
                       subtitle="متابعة المشاهدة"
                       metas={uniqueProgress.map((p) => p.meta)}
                       progressMap={Object.fromEntries(
-                        uniqueProgress.map((p) => [p.meta.id, p]),
+                        uniqueProgress.map((p) => [titleKey(p.meta), p]),
                       )}
                       onOpen={open}
                     />
@@ -692,61 +733,13 @@ export default function App() {
           </>
         )}
         {view === "library" && (
-          <div className="page-body">
-            <div className="page-heading">
-              <div>
-                <span className="eyebrow">مجموعتك الخاصة</span>
-                <h1>لكل حكاية، مكان.</h1>
-                <p>{favorites.length} عنوان في مكتبتك</p>
-              </div>
-              <Library size={30} />
-            </div>
-            {uniqueProgress.length > 0 && (
-              <Rail
-                title="متابعة المشاهدة"
-                metas={uniqueProgress.map((p) => p.meta)}
-                progressMap={Object.fromEntries(
-                  uniqueProgress.map((p) => [p.meta.id, p]),
-                )}
-                onOpen={open}
-              />
-            )}
-            {(state.connectedLists || [])
-              .filter((l) => l.metas.length)
-              .map((l) => (
-                <Rail
-                  key={l.key}
-                  title={l.name}
-                  metas={l.metas}
-                  onOpen={open}
-                />
-              ))}
-            <div className="section-heading">
-              <h2>قائمتي</h2>
-            </div>
-            {favorites.length ? (
-              <div className="poster-grid">
-                {favorites.map((m) => (
-                  <Poster key={`${m.type}:${m.id}`} meta={m} onOpen={open} />
-                ))}
-              </div>
-            ) : (
-              <Empty
-                icon={Heart}
-                title="مكتبتك تنتظر أول حكاية"
-                action={
-                  <button
-                    className="primary"
-                    onClick={() => navigate("discover")}
-                  >
-                    اكتشف العناوين
-                  </button>
-                }
-              >
-                احفظ ما يعجبك بزر «مكتبتي»، أو استورد مكتبتك من حساب ستريميو.
-              </Empty>
-            )}
-          </div>
+          <LibraryView
+            key={state.profiles?.active}
+            state={state}
+            update={update}
+            onOpen={open}
+            notice={notice}
+          />
         )}
         {view === "live" && (
           <LiveTV state={state} act={act} notice={notice} update={update} />
@@ -773,7 +766,7 @@ export default function App() {
           <span>
             رِواق <b>·</b> مساحة للحكايات
           </span>
-          <small>عميل مستقل لمنظومة Stremio · 0.3.0</small>
+          <small>عميل مستقل لمنظومة Stremio · 0.4.0</small>
         </footer>
       </main>
       {toast && (
@@ -824,6 +817,7 @@ export default function App() {
           state={state}
           onClose={() => setSelected(null)}
           onFavorite={favorite}
+          update={update}
           act={act}
           notice={notice}
           onPlayer={() => setPlayerOpen(true)}

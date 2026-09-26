@@ -17,6 +17,7 @@ import { Integrations } from "./integrations.mjs";
 import { LiveHub } from "./live-hub.mjs";
 import { Profiles } from "./profiles.mjs";
 import { Notifier } from "./notify.mjs";
+import { cleanMedia, editQueue } from "./library.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 
 export async function fetchJson(url, init = {}) {
@@ -144,6 +145,7 @@ export class Client {
       settings,
       favorites,
       progress,
+      queue: this.state.queue || [],
       lastSync,
       providers: this.dataHub.publicState(),
       integrations: this.integrations.publicState(),
@@ -384,6 +386,33 @@ export class Client {
       updated: Date.now(),
     };
     this.persist();
+  }
+  queueEdit(input) {
+    this.profiles.gate("library");
+    this.state.queue = editQueue(this.state.queue || [], input);
+    this.persist();
+    return this.publicState();
+  }
+  historyEdit({ action, meta, videoId }) {
+    this.profiles.gate("library");
+    const media = cleanMedia(meta);
+    if (typeof videoId !== "string" || !videoId || videoId.length > 1000)
+      throw new Error("معرّف المشاهدة غير صالح");
+    const key = `${media.type}:${videoId}`;
+    if (action === "remove") delete this.state.progress[key];
+    else if (action === "complete")
+      this.state.progress[key] = {
+        meta: media,
+        videoId,
+        position: 0,
+        duration: 0,
+        completed: true,
+        updated: Date.now(),
+      };
+    else throw new Error("إجراء السجل غير صالح");
+    // Manual history changes stay local; they never submit tracker history.
+    this.persist();
+    return this.publicState();
   }
   async cached(url) {
     const cached = this.cache.get(url);

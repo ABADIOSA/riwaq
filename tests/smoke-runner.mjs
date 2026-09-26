@@ -74,12 +74,24 @@ export async function runSmoke({ window, client, player, app, root }) {
       "save favorite",
     );
     await shot("details");
+    await click("أضف إلى الطابور", ".details-modal button");
+    await wait(
+      () => Promise.resolve(client.state.queue.length === 1),
+      "queue add through details",
+    );
     await js(`document.querySelector('.details-modal .modal-close').click()`);
     await click("مكتبتي", ".nav-item");
     await wait(
       () => js(`!!document.querySelector('.poster-grid .poster-card')`),
       "library",
     );
+    await click("طابور المشاهدة", ".library-tabs button");
+    await wait(
+      () => js(`document.querySelectorAll('.watch-row').length === 1`),
+      "queue view",
+    );
+    await shot("queue");
+    await click("قائمتي", ".library-tabs button");
     results.push({
       test: "Metadata, save favorite and library navigation",
       status: "passed",
@@ -217,6 +229,16 @@ export async function runSmoke({ window, client, player, app, root }) {
       }
       res.setHeader("Content-Type", "application/json");
       if (req.url === "/manifest.json") return res.end(JSON.stringify(fixture));
+      if (req.url.startsWith("/meta/movie/riwaq%3Anext"))
+        return res.end(
+          JSON.stringify({
+            meta: {
+              id: "riwaq:next",
+              type: "movie",
+              name: "العنوان التالي في الطابور",
+            },
+          }),
+        );
       if (req.url.startsWith("/stream/"))
         return res.end(
           JSON.stringify({
@@ -314,6 +336,68 @@ export async function runSmoke({ window, client, player, app, root }) {
       test: "Native player resumes persisted playback position",
       status: "passed",
     });
+    await js(
+      `window.riwaq.call('queueEdit',{action:'add',meta:{id:'riwaq:test',type:'movie',name:'اختبار الطابور'},videoId:'riwaq:test'})`,
+    );
+    await js(
+      `window.riwaq.call('play',{key:${JSON.stringify(streams.streams[0].key)},meta:{id:'riwaq:test',type:'movie',name:'اختبار الطابور'},videoId:'riwaq:test'})`,
+    );
+    await wait(
+      () =>
+        Promise.resolve(
+          player.state.position > 0 &&
+            !client.state.queue.some((q) => q.videoId === "riwaq:test"),
+        ),
+      "queue consumed only after loading",
+    );
+    for (const entry of [...client.state.queue])
+      client.queueEdit({ action: "remove", key: entry.key });
+    client.queueEdit({
+      action: "add",
+      meta: {
+        id: "riwaq:next",
+        type: "movie",
+        name: "العنوان التالي في الطابور",
+      },
+      videoId: "riwaq:next",
+    });
+    client.settings({ autoplay: true });
+    web.send("riwaq:state", client.publicState());
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    player.command({ action: "seek", value: 29 });
+    await wait(
+      () =>
+        Promise.resolve(
+          player.videoId === "riwaq:next" && player.state.position > 0,
+        ),
+      "actual EOF advances to queue title",
+      20000,
+    );
+    assert.equal(client.state.queue.length, 0);
+    client.settings({ autoplay: false });
+    web.send("riwaq:state", client.publicState());
+    results.push({
+      test: "Actual MPV EOF advances to queued title using addon metadata and stream; autoplay remains opt-in",
+      status: "passed",
+    });
+    const queueGuest = await js(
+      `window.riwaq.call('profileCreate',{name:'اختبار التقدم'})`,
+    );
+    const queueGuestId = queueGuest.profiles.list.find(
+      (p) => p.name === "اختبار التقدم",
+    ).id;
+    await js(
+      `window.riwaq.call('profileSwitch',{id:${JSON.stringify(queueGuestId)}})`,
+    );
+    assert.equal(player.state.active, false);
+    assert.deepEqual(client.state.progress, {});
+    assert.equal(client.state.queue.length, 0);
+    await js(`window.riwaq.call('profileSwitch',{id:'default'})`);
+    assert.ok(client.state.progress["movie:riwaq:test"].position > 0);
+    results.push({
+      test: "Queue UI persists; loaded item is consumed; switching viewers stops playback before saving into the next profile",
+      status: "passed",
+    });
 
     // The stream engine must publish its ranking, not just an order.
     assert.ok(streams.streams[0].tier);
@@ -328,6 +412,9 @@ export async function runSmoke({ window, client, player, app, root }) {
       `window.riwaq.call('liveAdd',{kind:'m3u',name:'اختبار',url:${JSON.stringify(base + "/live.m3u")}})`,
     );
     const channels = await js(`window.riwaq.call('liveChannels',{})`);
+    // Fixture setup calls IPC directly; mirror the state update that the UI's
+    // update() helper normally performs after liveAdd.
+    web.send("riwaq:state", client.publicState());
     assert.equal(channels.total, 1);
     assert.equal(channels.channels[0].name, "قناة رِواق");
     assert.equal(channels.channels[0].now?.title, "برنامج الاختبار");

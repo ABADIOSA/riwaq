@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds an unsigned portable Windows executable.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.2.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.4.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -32,11 +32,11 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 
 ## Good next contributions
 
-1. Run the 0.3.0 smoke additions on a real Windows desktop session. The stream-engine, Live TV and profile assertions in `tests/smoke-runner.mjs` are written but have never executed. See VERIFICATION.md.
+1. Extend the Windows native smoke suite and account/hardware coverage; the 0.3 Live TV and profile paths have now run on Windows. Read VERIFICATION.md for 0.4 results.
 2. Test real user-owned API credentials, OAuth accounts and an actual IPTV subscription; exercise expired/revoked sessions, provider rate limits and a catchup server without logging secrets.
 3. Extend Windows mixed-DPI, multi-monitor and HDR verification on real hardware, including the cost of the picture profiles on a real GPU.
 4. Turn Trakt history into a live scrobble (start/pause/stop) rather than a completion queue.
-5. Add trickplay seek previews, a queue UI with playlist ordering, and metadata-source precedence.
+5. Add trickplay seek previews and metadata-source precedence. The 0.4 queue and ordering are implemented in core/library.mjs and LibraryView.jsx; preserve per-profile storage, file-loaded consumption and opt-in autoplay.
 6. Add a full external OS PiP mode if desired; the current mini player stays inside Riwaq.
 7. Add installer/signing/update infrastructure and consider a bundled Stremio Service after reviewing distribution requirements.
 

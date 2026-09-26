@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { LoaderCircle, Film, X, Play, Star, ChevronLeft } from "lucide-react";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
+import { titleKey } from "../../core/library.mjs";
 export function IconButton({ title, children, ...props }) {
   return (
     <button className="icon-button" title={title} aria-label={title} {...props}>
@@ -100,7 +101,9 @@ export function Poster({ meta, onOpen, progress }) {
       <strong dir="auto">{meta.name}</strong>
       <span className="poster-sub">
         {progress
-          ? `متبقي ${Math.max(0, Math.round((progress.duration - progress.position) / 60))} دقيقة`
+          ? progress.duration > 0
+            ? `متبقي ${Math.max(0, Math.round((progress.duration - progress.position) / 60))} دقيقة`
+            : `وصلت إلى ${clock(progress.position)}`
           : meta.releaseInfo || meta.year || typeName(meta.type)}
       </span>
     </button>
@@ -130,7 +133,7 @@ export function Rail({ title, subtitle, metas, onOpen, onMore, progressMap }) {
             key={`${m.type}:${m.id}:${i}`}
             meta={m}
             onOpen={onOpen}
-            progress={progressMap?.[m.id]}
+            progress={progressMap?.[titleKey(m)]}
           />
         ))}
       </div>
