@@ -402,6 +402,16 @@ export default function SettingsStudio({ state, update, act, notice }) {
                       "استبعاد المصادر التي تحمل CAM أو Telesync.",
                     )}
                     {toggle(
+                      "autoFullscreen",
+                      "ملء الشاشة عند التشغيل",
+                      "تبدأ المشاهدة بملء الشاشة. Esc أو النقر المزدوج للخروج.",
+                    )}
+                    {toggle(
+                      "videoFill",
+                      "تعبئة الشاشة بالصورة",
+                      "تقص حواف الأفلام العريضة لتختفي الأشرطة السوداء. مغلق افتراضياً.",
+                    )}
+                    {toggle(
                       "hardwareDecoding",
                       "تسريع العتاد",
                       "فك الترميز باستخدام كرت الشاشة عند توفره.",

@@ -250,34 +250,72 @@ export default function App() {
     setLoading(true);
     setLoadError("");
     setRows([]);
-    call("catalog", {
+    setFailures([]);
+    setHeroIndex(0);
+    const args = {
       type: view === "home" ? "" : filter,
       search: view === "search" ? query : "",
       catalogKey: view !== "home" ? catalog : "",
-    })
-      .then((result) => {
-        if (current) {
-          setRows(
-            result.rows.map((row) => ({
-              ...row,
-              metas: stateRef.current.settings.hideWatched
-                ? row.metas.filter(
-                    (m) =>
-                      !Object.values(stateRef.current.progress).some(
-                        (p) =>
-                          p.meta.id === m.id &&
-                          p.meta.type === m.type &&
-                          m.type === "movie" &&
-                          isCompleted(p),
-                      ),
-                  )
-                : row.metas,
-            })),
-          );
-          setFailures(result.failures);
-          setHeroIndex(0);
+    };
+    const unwatched = (row) => ({
+      ...row,
+      metas: stateRef.current.settings.hideWatched
+        ? row.metas.filter(
+            (m) =>
+              !Object.values(stateRef.current.progress).some(
+                (p) =>
+                  p.meta.id === m.id &&
+                  p.meta.type === m.type &&
+                  m.type === "movie" &&
+                  isCompleted(p),
+              ),
+          )
+        : row.metas,
+    });
+    // Each catalog is its own request, so rows appear as addons answer
+    // instead of waiting for the slowest of dozens. Order follows the plan.
+    let flush = 0;
+    (async () => {
+      const plan = await call("catalogPlan", args);
+      if (!current) return;
+      const found = new Array(plan.length);
+      const failed = new Set();
+      const show = () => {
+        if (flush) return;
+        flush = setTimeout(() => {
+          flush = 0;
+          if (!current) return;
+          setRows(found.filter(Boolean));
+          setFailures([...failed]);
+        }, 120);
+      };
+      let next = 0;
+      const worker = async () => {
+        while (current && next < plan.length) {
+          const item = plan[next];
+          const index = next++;
+          try {
+            const result = await call("catalog", {
+              ...args,
+              catalogKey: item.key,
+            });
+            if (result.rows[0]) found[index] = unwatched(result.rows[0]);
+            result.failures.forEach((name) => failed.add(name));
+          } catch {
+            failed.add(item.provider);
+          }
+          show();
         }
-      })
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(8, plan.length) }, worker),
+      );
+      if (!current) return;
+      clearTimeout(flush);
+      flush = 0;
+      setRows(found.filter(Boolean));
+      setFailures([...failed]);
+    })()
       .catch((e) => {
         if (current) setLoadError(e.message);
       })
@@ -286,6 +324,7 @@ export default function App() {
       });
     return () => {
       current = false;
+      clearTimeout(flush);
     };
   }, [
     ready,
@@ -510,76 +549,72 @@ export default function App() {
         </header>
         {["home", "discover", "search"].includes(view) && (
           <>
-            {view === "home" &&
-              state.settings.showHero !== false &&
-              !loading &&
-              hero && (
-                <section
-                  className="hero"
-                  style={{
-                    backgroundImage: imgUrl(hero.background)
-                      ? `url("${imgUrl(hero.background)}")`
-                      : undefined,
-                  }}
-                >
-                  <div className="hero-gradient" />
-                  <div className="hero-content">
-                    <span className="eyebrow">
-                      <span /> من عالم السينما إلى رِواقك
-                    </span>
-                    <h1 dir="auto">{hero.name}</h1>
-                    <div className="hero-meta">
-                      {hero.imdbRating && (
-                        <span className="hero-rating">
-                          <Star size={15} fill="currentColor" />{" "}
-                          {hero.imdbRating}
-                        </span>
+            {view === "home" && state.settings.showHero !== false && hero && (
+              <section
+                className="hero"
+                style={{
+                  backgroundImage: imgUrl(hero.background)
+                    ? `url("${imgUrl(hero.background)}")`
+                    : undefined,
+                }}
+              >
+                <div className="hero-gradient" />
+                <div className="hero-content">
+                  <span className="eyebrow">
+                    <span /> من عالم السينما إلى رِواقك
+                  </span>
+                  <h1 dir="auto">{hero.name}</h1>
+                  <div className="hero-meta">
+                    {hero.imdbRating && (
+                      <span className="hero-rating">
+                        <Star size={15} fill="currentColor" /> {hero.imdbRating}
+                      </span>
+                    )}
+                    <span>{hero.releaseInfo}</span>
+                    <span>{typeName(hero.type)}</span>
+                    {hero.genres?.slice(0, 2).map((g) => (
+                      <span key={g}>{g}</span>
+                    ))}
+                  </div>
+                  <p dir="auto">
+                    {hero.description ||
+                      "اكتشف التفاصيل، واختر مصدر المشاهدة المناسب من إضافاتك."}
+                  </p>
+                  <div className="button-row">
+                    <button className="primary" onClick={() => open(hero)}>
+                      <Play fill="currentColor" size={18} />
+                      استكشف وشاهد
+                    </button>
+                    <button
+                      className="secondary"
+                      onClick={() => favorite(hero)}
+                    >
+                      {favorites.some((m) => m.id === hero.id) ? (
+                        <Check size={20} />
+                      ) : (
+                        <Plus size={20} />
                       )}
-                      <span>{hero.releaseInfo}</span>
-                      <span>{typeName(hero.type)}</span>
-                      {hero.genres?.slice(0, 2).map((g) => (
-                        <span key={g}>{g}</span>
-                      ))}
-                    </div>
-                    <p dir="auto">
-                      {hero.description ||
-                        "اكتشف التفاصيل، واختر مصدر المشاهدة المناسب من إضافاتك."}
-                    </p>
-                    <div className="button-row">
-                      <button className="primary" onClick={() => open(hero)}>
-                        <Play fill="currentColor" size={18} />
-                        استكشف وشاهد
-                      </button>
+                      مكتبتي
+                    </button>
+                  </div>
+                </div>
+                <div className="hero-footer">
+                  <span>
+                    اختيارات من إضافاتك <span className="hero-line" />
+                  </span>
+                  <div className="hero-pages">
+                    {heroItems.map((m, i) => (
                       <button
-                        className="secondary"
-                        onClick={() => favorite(hero)}
-                      >
-                        {favorites.some((m) => m.id === hero.id) ? (
-                          <Check size={20} />
-                        ) : (
-                          <Plus size={20} />
-                        )}
-                        مكتبتي
-                      </button>
-                    </div>
+                        key={i}
+                        aria-label={`عرض ${m.name}`}
+                        className={i === heroIndex ? "selected" : ""}
+                        onClick={() => setHeroIndex(i)}
+                      />
+                    ))}
                   </div>
-                  <div className="hero-footer">
-                    <span>
-                      اختيارات من إضافاتك <span className="hero-line" />
-                    </span>
-                    <div className="hero-pages">
-                      {heroItems.map((m, i) => (
-                        <button
-                          key={i}
-                          aria-label={`عرض ${m.name}`}
-                          className={i === heroIndex ? "selected" : ""}
-                          onClick={() => setHeroIndex(i)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </section>
-              )}
+                </div>
+              </section>
+            )}
             {view === "home" && !state.user && !loading && (
               <div className="connect-banner">
                 <span className="banner-icon">
@@ -645,7 +680,7 @@ export default function App() {
                   ))}
                 </div>
               )}
-              {loading ? (
+              {loading && rows.length === 0 ? (
                 <div className="skeleton-wrap">
                   <div className="skeleton-title" />
                   <div className="skeleton-row">
@@ -725,7 +760,8 @@ export default function App() {
                         />
                       ))
                   )}
-                  {!rows.some((r) => r.metas.length) && (
+                  {loading && <Busy text="نحمّل بقية الكتالوجات من إضافاتك…" />}
+                  {!loading && !rows.some((r) => r.metas.length) && (
                     <Empty
                       icon={view === "search" ? Search : Puzzle}
                       title={
@@ -876,6 +912,7 @@ export default function App() {
           player={player}
           state={state}
           act={act}
+          update={update}
           onClose={() => setPlayerOpen(false)}
         />
       )}

@@ -57,7 +57,11 @@ export function playerArgs({
     "--force-window=yes",
     "--keep-open=no",
     "--idle=yes",
-    "--osc=no",
+    // MPV's own controller draws over the picture, which HTML cannot do over a
+    // native surface. It stays hidden until the player goes full screen.
+    "--osc=yes",
+    "--script-opts=osc-visibility=never,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800",
+    "--osd-font=Segoe UI",
     "--osd-bar=yes",
     `--title=${title}`,
     `--force-media-title=${title}`,
@@ -74,6 +78,7 @@ export function playerArgs({
     "--sub-ass-override=scale",
     `--sub-pos=${settings.subtitlePosition ?? 95}`,
     `--start=${Math.max(0, Number(start) || 0)}`,
+    `--panscan=${settings.videoFill ? "1.0" : "0.0"}`,
   ];
   const profile = PICTURE_PROFILES[settings.shader] ? settings.shader : "none";
   args.push(...PICTURE_PROFILES[profile]);
@@ -168,10 +173,13 @@ export class Player {
     host,
     inputConf,
     onFullscreen,
+    onEscape,
   }) {
     this.host = host;
     this.inputConf = inputConf;
     this.onFullscreen = onFullscreen;
+    this.onEscape = onEscape;
+    this.fullscreen = false;
     this.onState = onState;
     this.onProgress = onProgress;
     this.onEnded = onEnded;
@@ -223,6 +231,8 @@ export class Player {
       segments: [],
       skip: null,
       pip: false,
+      fullscreen: this.fullscreen,
+      fill: !!settings.videoFill,
       live,
       abLoop: null,
       sleepAt: null,
@@ -308,9 +318,29 @@ export class Player {
       this.send(["observe_property", id + 1, name]),
     );
   }
+  /** Main reports the window's full screen state; the controller follows it. */
+  setFullscreen(on) {
+    this.fullscreen = !!on;
+    if (!this.state.active || this.state.fullscreen === this.fullscreen) return;
+    this.state.fullscreen = this.fullscreen;
+    this.applyController();
+    if (this.fullscreen && !this.state.pip)
+      this.send(["show-text", "Esc للخروج من ملء الشاشة", 2500]);
+    this.onState(this.state);
+  }
+  applyController() {
+    this.send([
+      "script-message",
+      "osc-visibility",
+      this.state.fullscreen && !this.state.pip ? "auto" : "never",
+      "no-osd",
+    ]);
+  }
   message(name) {
     if (name === "riwaq-fullscreen") this.onFullscreen?.();
-    else if (name === "riwaq-stop") this.stop();
+    // Escape leaves full screen before it closes anything.
+    else if (name === "riwaq-stop")
+      this.state.fullscreen && this.onEscape ? this.onEscape() : this.stop();
     else if (name === "riwaq-screenshot")
       this.command({ action: "screenshot" });
     else if (name === "riwaq-stats") this.command({ action: "stats" });
@@ -370,6 +400,9 @@ export class Player {
       this.onState(this.state);
     }
     if (event.event === "file-loaded") {
+      // The controller script may not have been listening when full screen
+      // began, so its visibility is stated again once the file is up.
+      this.applyController();
       this.state.loading = false;
       this.state.error = null;
       this.onLoaded?.({ meta: this.meta, videoId: this.videoId });
@@ -455,8 +488,13 @@ export class Player {
       this.send(["set_property", "volume", Math.max(0, Math.min(150, number))]);
     else if (action === "mute") this.send(["cycle", "mute"]);
     else if (action === "fullscreen") this.onFullscreen?.();
-    else if (action === "pip") {
+    else if (action === "exitFullscreen") this.onEscape?.();
+    else if (action === "fill") {
+      this.state.fill = value === true;
+      this.send(["set_property", "panscan", this.state.fill ? 1 : 0]);
+    } else if (action === "pip") {
       this.state.pip = !this.state.pip;
+      this.applyController();
       // The mini player remains embedded while browsing the app.
     } else if (action === "subtitleDelay" && Number.isFinite(number))
       this.send([

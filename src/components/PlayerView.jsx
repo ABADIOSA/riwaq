@@ -34,6 +34,9 @@ export default function PlayerView({
     [subs, setSubs] = useState([]),
     [subMenu, setSubMenu] = useState(false);
   const mini = player.pip,
+    // Full screen gives the whole window to the picture; MPV's own controller
+    // draws over it, because HTML cannot paint above the native surface.
+    immersive = !!player.fullscreen && !mini,
     command = (action, value) => act("playerCommand", { action, value });
   const series = player.mediaType === "series";
   const sleepLeft = player.sleepAt
@@ -66,7 +69,7 @@ export default function PlayerView({
       window.removeEventListener("resize", report);
       call("videoBounds", { visible: false }).catch(() => {});
     };
-  }, [mini, hidden, subMenu]);
+  }, [mini, hidden, subMenu, immersive]);
   useEffect(() => {
     const onKey = (e) => {
       if (hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName))
@@ -76,6 +79,10 @@ export default function PlayerView({
         command("pause");
       }
       if (e.key.toLowerCase() === "f") command("fullscreen");
+      if (e.key === "Escape" && player.fullscreen) {
+        e.preventDefault();
+        command("exitFullscreen");
+      }
       if (e.key === "ArrowRight")
         command("seek", (player.position || 0) + state.settings.seekStep);
       if (e.key === "ArrowLeft")
@@ -83,7 +90,7 @@ export default function PlayerView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [player.position, hidden, state.settings.seekStep]);
+  }, [player.position, player.fullscreen, hidden, state.settings.seekStep]);
   useEffect(() => {
     setSubs([]);
     setSubMenu(false);
@@ -100,7 +107,7 @@ export default function PlayerView({
   };
   return (
     <section
-      className={`theater ${mini ? "mini-theater" : ""}`}
+      className={`theater ${mini ? "mini-theater" : ""} ${immersive ? "immersive" : ""}`}
       aria-label="المشغل المدمج"
     >
       <header className="theater-header">
@@ -357,7 +364,7 @@ export default function PlayerView({
               <SlidersHorizontal size={20} />
             </IconButton>
             <IconButton
-              title="ملء الشاشة"
+              title={player.fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
               onClick={() => command("fullscreen")}
             >
               <Maximize size={20} />

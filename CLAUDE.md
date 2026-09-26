@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds an unsigned portable Windows executable.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.5.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.5.1-win-x64.exe`.
 
 ## Design and invariants
 
@@ -34,6 +34,8 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Library and Live TV search use `core/arabic.mjs`; counts shown to viewers use `arabicCount()`. Dates added from 0.5 use the Gregorian calendar with Latin digits.
 - Update checks only look. Never download or install an executable; open only release pages of this repository, from a URL main validated.
 - Version labels in the interface come from the running version, never a literal.
+- Listings load one catalog per request through `catalogPlan`, so rows appear as addons answer. Keep catalog requests pooled, never in lockstep batches, and keep addon URLs out of the plan.
+- HTML cannot paint over the native video surface. In full screen the surface takes the whole window and MPV's own controller (OSC) is the on-picture control; it is hidden otherwise. Escape leaves full screen before it closes the player.
 - No user account was authenticated in provider tests. Distinguish mocked tests, live catalog tests and actual native playback in reports.
 
 ## Good next contributions

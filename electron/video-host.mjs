@@ -77,6 +77,7 @@ export class VideoHost {
       return true;
     }
     const { x, y, width, height, viewportWidth } = input;
+    this.last = { x, y, width, height, viewportWidth };
     if (
       ![x, y, width, height, viewportWidth].every(Number.isFinite) ||
       width < 1 ||
@@ -114,6 +115,21 @@ export class VideoHost {
     if (this.handle) show(this.handle, 0);
     this.visible = false;
   }
+  /**
+   * Places the surface again from the last reported layout with a fresh
+   * client rectangle. During a full screen transition the client area keeps
+   * changing after React reported, and a scale taken mid-change leaves the
+   * picture smaller than its frame.
+   */
+  refresh() {
+    clearTimeout(this.settleTimer);
+    clearTimeout(this.lateTimer);
+    const again = () => {
+      if (this.visible && this.last) this.bounds(this.last);
+    };
+    this.settleTimer = setTimeout(again, 60);
+    this.lateTimer = setTimeout(again, 400);
+  }
   inspect() {
     let siblingsClipped = true;
     for (
@@ -133,6 +149,8 @@ export class VideoHost {
     };
   }
   dispose() {
+    clearTimeout(this.settleTimer);
+    clearTimeout(this.lateTimer);
     if (this.handle) destroy(this.handle);
     this.handle = null;
   }

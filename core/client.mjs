@@ -30,10 +30,11 @@ import {
 } from "./backup.mjs";
 
 export async function fetchJson(url, init = {}) {
+  const { timeout = 16000, ...rest } = init;
   try {
     const response = await fetch(url, {
-      ...init,
-      signal: AbortSignal.timeout(16000),
+      ...rest,
+      signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
@@ -544,23 +545,47 @@ export class Client {
       }),
     };
   }
-  async cached(url) {
+  /**
+   * A failure can be remembered for a while (failFor), so one dead addon does
+   * not cost its full timeout again on every screen that lists catalogs.
+   */
+  async cached(url, { ttl = 180000, failFor = 0, timeout } = {}) {
     const cached = this.cache.get(url);
-    if (cached && Date.now() - cached.at < 180000) return cached.data;
-    const data = await this.request(url);
-    if (this.cache.size > 300)
-      this.cache.delete(this.cache.keys().next().value);
-    this.cache.set(url, { at: Date.now(), data });
+    if (cached?.failed && Date.now() - cached.at < cached.failFor)
+      throw new Error(cached.message);
+    if (cached && !cached.failed && Date.now() - cached.at < ttl)
+      return cached.data;
+    let data;
+    try {
+      data = await this.request(url, timeout ? { timeout } : undefined);
+    } catch (error) {
+      if (failFor)
+        this.remember(url, {
+          at: Date.now(),
+          failed: true,
+          failFor,
+          message: error.message,
+        });
+      throw error;
+    }
+    this.remember(url, { at: Date.now(), data });
     return data;
   }
-  async catalog({
+  remember(url, entry) {
+    this.cache.delete(url);
+    if (this.cache.size >= 800)
+      this.cache.delete(this.cache.keys().next().value);
+    this.cache.set(url, entry);
+  }
+  /** The catalogs a listing would request, in the viewer's addon order. */
+  catalogTasks({
     type = "",
     search = "",
     genre = "",
     catalogKey = "",
     skip = 0,
   } = {}) {
-    const tasks = this.enabled()
+    return this.enabled()
       .flatMap((addon) =>
         (addon.manifest.catalogs || [])
           .filter(
@@ -578,49 +603,65 @@ export class Client {
         extras: catalogExtras(item.cat, search, genre, skip),
       }))
       .filter((item) => item.extras !== null);
-    const rows = [],
+  }
+  /**
+   * What the interface needs to load a listing one catalog at a time and show
+   * rows as they arrive: opaque keys and labels, never addon URLs.
+   */
+  catalogPlan(args = {}) {
+    return this.catalogTasks(args).map(({ addon, cat, key }) => ({
+      key,
+      name: cat.name || cat.id,
+      provider: addon.manifest.name,
+      type: cat.type,
+    }));
+  }
+  async catalog(args = {}) {
+    const tasks = this.catalogTasks(args);
+    const results = new Array(tasks.length),
       failures = [];
-    // Limit concurrent addon requests without truncating the user's addon list.
-    for (let offset = 0; offset < tasks.length; offset += 8) {
-      const batch = await Promise.all(
-        tasks
-          .slice(offset, offset + 8)
-          .map(async ({ addon, cat, key, extras }) => {
-            try {
-              const data = await this.cached(
-                resourceUrl(
-                  addon.transportUrl,
-                  "catalog",
-                  cat.type,
-                  cat.id,
-                  extras,
-                ),
-              );
-              const metas = (data.metas || [])
-                .filter((m) => m?.id && m.name)
-                .map((m) => ({ ...m, type: m.type || cat.type }));
-              return {
-                key,
-                name: cat.name || cat.id,
-                provider: addon.manifest.name,
-                type: cat.type,
-                metas,
-                genres:
-                  (cat.extra || []).find((e) => e.name === "genre")?.options ||
-                  [],
-                hasMore:
-                  (cat.extra || []).some((e) => e.name === "skip") &&
-                  metas.length > 0,
-              };
-            } catch {
-              failures.push(addon.manifest.name);
-              return null;
-            }
-          }),
-      );
-      rows.push(...batch.filter(Boolean));
-    }
-    return { rows, failures: [...new Set(failures)] };
+    const load = async ({ addon, cat, key, extras }) => {
+      try {
+        const data = await this.cached(
+          resourceUrl(addon.transportUrl, "catalog", cat.type, cat.id, extras),
+          { ttl: 600000, failFor: 120000, timeout: 10000 },
+        );
+        const metas = (data.metas || [])
+          .filter((m) => m?.id && m.name)
+          .map((m) => ({ ...m, type: m.type || cat.type }));
+        return {
+          key,
+          name: cat.name || cat.id,
+          provider: addon.manifest.name,
+          type: cat.type,
+          metas,
+          genres:
+            (cat.extra || []).find((e) => e.name === "genre")?.options || [],
+          hasMore:
+            (cat.extra || []).some((e) => e.name === "skip") &&
+            metas.length > 0,
+        };
+      } catch {
+        failures.push(addon.manifest.name);
+        return null;
+      }
+    };
+    // A pool rather than lockstep batches: one slow addon holds up only its
+    // own slot, never the seven requests that happened to share its batch.
+    let next = 0;
+    const worker = async () => {
+      while (next < tasks.length) {
+        const index = next++;
+        results[index] = await load(tasks[index]);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(10, tasks.length) }, worker),
+    );
+    return {
+      rows: results.filter(Boolean),
+      failures: [...new Set(failures)],
+    };
   }
   async metadata({ type, id }) {
     for (const addon of this.enabled().filter((a) =>

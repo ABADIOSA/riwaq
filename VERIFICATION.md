@@ -1,4 +1,28 @@
-# Verification — Riwaq 0.5.0
+# Verification — Riwaq 0.5.1
+
+## 0.5.1 — the first real Windows feedback
+
+The owner ran v0.5.0 on a Windows desktop and reported two problems with screenshots: the home screen took a very long time to show anything with 49 addons installed, and playback never filled the screen, the picture sitting small inside a frame.
+
+Causes found in the code:
+
+- Catalogs were requested in lockstep batches of eight, each batch waiting for its slowest addon (up to a 16-second timeout), and the interface rendered nothing until every catalog had answered.
+- The player always kept a 78 px header, a 116 px control bar and 24 px side padding around the video, because HTML cannot paint over the native surface; entering full screen did not change that layout.
+- The surface's scale is taken from the window's client area when React reports, and during a full screen transition that area keeps changing afterwards.
+
+The screenshot also shows the picture about 12% smaller than its frame and centred, which none of the causes above fully explains. It is not confirmed whether 0.5.1 removes that part; see below.
+
+Executed:
+
+- `npm test`: **180 passing, 0 failing** (169 + 11 new): one slow addon no longer holding up the catalogs behind it (this test fails on 0.5.0: it waits forever for the batch), bounded pooled concurrency with a 10-second catalog timeout, a plan made of opaque keys with no addon URL or secret in it, a failing addon remembered for two minutes, the two new settings and their validation, MPV starting with its controller hidden and the chosen fill mode, the controller shown in full screen and never in the mini player, Escape leaving full screen before closing, live fill toggling, and the Escape binding.
+- `npm run check` and `npm run build` pass.
+- Rendered in headless Chromium at 980×680 and 1440×960 with a stubbed bridge: with 24 catalogs, one of which fails after 4 s, the first rows appear after about 0.4–0.5 s in plan order and the rest fill in, with the failure listed once; the normal player surface covers 68%/77% of the window, and in full screen it covers the whole window at 0,0 with the header and controls hidden; Escape sends `exitFullscreen`. Zero page errors and zero horizontal overflow.
+
+Not executed:
+
+- Nothing in 0.5.1 has run on Windows. Unverified natively: automatic full screen, MPV's on-screen controller appearing over the picture (it needs the Lua build of MPV, which the pinned build is expected to include), the Arabic hint text in MPV's OSD, the surface being placed again after the transition, and whether the picture now fills its frame.
+
+## 0.5.0
 
 Date: 2026-09-26. Linux x64 container, Node.js 22 for the test run, Chromium 1194 (headless) for rendering. Built on pull request #3 (head `3068f05`), whose own Windows results are kept below because the paths they cover are unchanged or extended.
 
