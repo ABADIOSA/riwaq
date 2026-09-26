@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 const allowed = new Set([
   "init",
   "catalog",
+  "catalogPlan",
   "metadata",
   "streams",
   "subtitles",

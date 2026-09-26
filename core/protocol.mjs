@@ -40,6 +40,8 @@ export const DEFAULT_SETTINGS = {
   notifyOnFinish: false,
   liveBufferSeconds: 4,
   epgHours: 4,
+  autoFullscreen: true,
+  videoFill: false,
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -214,6 +216,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "preferCached",
     "discordPresence",
     "notifyOnFinish",
+    "autoFullscreen",
+    "videoFill",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (

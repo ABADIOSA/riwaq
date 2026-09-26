@@ -752,6 +752,16 @@ body:has(.theater:not(.mini-theater)) {
 .theater .icon-button:hover {
   background: #ffffff10;
 }
+/* Full screen: the picture takes the whole window, edge to edge. */
+.theater.immersive {
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0;
+  background: #000;
+}
+.theater.immersive .theater-header,
+.theater.immersive .theater-controls {
+  display: none;
+}
 .mini-theater {
   inset: auto auto 22px 24px;
   width: 440px;

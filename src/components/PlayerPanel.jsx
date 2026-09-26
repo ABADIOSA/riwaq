@@ -11,7 +11,7 @@ import {
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
-export default function PlayerPanel({ player, state, act, onClose }) {
+export default function PlayerPanel({ player, state, act, update, onClose }) {
   const [delay, setDelay] = useState(
     player.subtitleDelay ?? state.settings.subtitleDelay,
   );
@@ -194,6 +194,20 @@ export default function PlayerPanel({ player, state, act, onClose }) {
                 <option value="2.35:1">Cinema 2.35:1</option>
               </select>
             </label>
+            <label>
+              ملاءمة الصورة
+              <select
+                value={player.fill ? "fill" : "fit"}
+                onChange={(e) => {
+                  const fill = e.target.value === "fill";
+                  act("playerCommand", { action: "fill", value: fill });
+                  update?.("settings", { videoFill: fill });
+                }}
+              >
+                <option value="fit">الصورة كاملة</option>
+                <option value="fill">تعبئة الشاشة (قص الحواف)</option>
+              </select>
+            </label>
           </div>
           <details className="picture-settings">
             <summary>ضبط الصورة</summary>
@@ -222,8 +236,8 @@ export default function PlayerPanel({ player, state, act, onClose }) {
             ))}
           </details>
           <p className="subtle">
-            اختصارات المشغل: Space للإيقاف، F لملء الشاشة، J لتبديل الترجمة، #
-            للصوت، والأسهم للتقديم.
+            اختصارات المشغل: Space للإيقاف، F أو النقر المزدوج لملء الشاشة وEsc
+            للخروج منها، J لتبديل الترجمة، # للصوت، والأسهم للتقديم.
           </p>
         </>
       )}

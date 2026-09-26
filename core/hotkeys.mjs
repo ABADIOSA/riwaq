@@ -174,7 +174,7 @@ export const HOTKEY_ACTIONS = [
   },
   {
     id: "close",
-    label: "إغلاق المشغّل",
+    label: "الخروج من ملء الشاشة أو إغلاق المشغّل",
     command: "script-message riwaq-stop",
     binding: "ESC",
   },

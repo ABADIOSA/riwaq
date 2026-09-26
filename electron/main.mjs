@@ -36,6 +36,7 @@ let window, client, player, videoHost, loginServer, loginTimer, presence;
 // A picked backup stays in main between "preview" and "restore"; the renderer
 // only ever holds the opaque token.
 let pendingBackup = null;
+let watching = { active: false, pip: false };
 const emit = (name, data) => {
   if (window && !window.isDestroyed())
     window.webContents.send("riwaq:" + name, data);
@@ -287,6 +288,7 @@ async function playChannel({ key, start = 0, stop = 0 }) {
 const methods = {
   init: () => client.init(),
   catalog: (a) => client.catalog(a),
+  catalogPlan: (a) => client.catalogPlan(a),
   metadata: (a) => client.metadata(a),
   streams: (a) => client.getStreams(a),
   subtitles: (a) => client.getSubtitles(a),
@@ -651,17 +653,48 @@ app
         },
       });
       videoHost = new VideoHost(window);
+      // Full screen changes the client area after React measured it; the
+      // surface is placed again once the window has settled.
+      const settle = () => videoHost.refresh();
+      window.on("enter-full-screen", () => {
+        player?.setFullscreen(true);
+        settle();
+      });
+      window.on("leave-full-screen", () => {
+        player?.setFullscreen(false);
+        settle();
+      });
+      window.on("resize", settle);
       player = new Player({
         host: videoHost,
         inputConf: join(root, "assets", "player-input.conf"),
         onFullscreen: () => window.setFullScreen(!window.isFullScreen()),
+        onEscape: () => {
+          if (window.isFullScreen()) window.setFullScreen(false);
+        },
         onState: (s) => {
+          // A new viewing, or the mini player opening or closing, decides the
+          // window's full screen state; afterwards the viewer owns it.
+          const starting = s.active && !watching.active;
+          const pipChanged =
+            s.active && watching.active && s.pip !== watching.pip;
+          watching = { active: !!s.active, pip: !!s.pip };
           emit("player", s);
           updatePresence();
           client.integrations.observePlayback(s);
           if (!s.active) {
             videoHost.hide();
             if (window.isFullScreen()) window.setFullScreen(false);
+          } else if (starting || pipChanged) {
+            if (s.pip) {
+              if (window.isFullScreen()) window.setFullScreen(false);
+            } else if (
+              // Smoke runs measure the surface in a hidden, fixed-size window.
+              !process.env.RIWAQ_SMOKE &&
+              client.state.settings.autoFullscreen !== false &&
+              !window.isFullScreen()
+            )
+              window.setFullScreen(true);
           }
         },
         onProgress: (...args) => {
