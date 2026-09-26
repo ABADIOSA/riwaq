@@ -1,4 +1,5 @@
 import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
+import { safeAppearance } from "./appearance.mjs";
 import { createHash } from "node:crypto";
 
 export const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
@@ -46,6 +47,8 @@ export const DEFAULT_SETTINGS = {
   subtitleKind: "standard",
   autoSubtitles: "preferred",
   subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
+  // null until the viewer designs one; the older accent choice applies then.
+  appearance: null,
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -262,7 +265,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     shader: ["none", "sharp", "anime", "film", "custom"],
     toneMapping: ["auto", "bt.2446a", "hable", "mobius", "reinhard", "off"],
     epgHours: [2, 4, 6, 12],
-    cardStyle: ["glass", "flat"],
+    cardStyle: ["glass", "flat", "outline"],
     cardSize: ["compact", "comfortable", "large"],
     metadataLanguage: ["ar-SA", "en-US", "ja-JP", "fr-FR"],
     region: ["SA", "AE", "EG", "US", "GB"],
@@ -274,6 +277,11 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
   if (Number.isFinite(input.subtitlePosition))
     next.subtitlePosition = Math.round(
       Math.max(50, Math.min(100, input.subtitlePosition)),
+    );
+  if (input.appearance && typeof input.appearance === "object")
+    next.appearance = safeAppearance(
+      input.appearance,
+      current.appearance || undefined,
     );
   if (input.subtitleStyle && typeof input.subtitleStyle === "object")
     next.subtitleStyle = safeSubtitleStyle(

@@ -1,3 +1,4 @@
+import AppearanceStudio from "./AppearanceStudio.jsx";
 import React, { useState, useEffect } from "react";
 import {
   Palette,
@@ -63,7 +64,7 @@ const sections = [
   [
     "appearance",
     "المظهر والتخصيص",
-    "الثيم الألوان التخطيط الرئيسية البطاقات الحركة",
+    "الثيم الألوان التخطيط الرئيسية البطاقات الحركة خط حجم تدرج مشاركة تصميم",
     Palette,
   ],
   [
@@ -215,93 +216,9 @@ export default function SettingsStudio({ state, update, act, notice }) {
             <React.Fragment key={id}>
               {id === "appearance" && (
                 <>
+                  <AppearanceStudio state={state} update={update} />
                   <section className="settings-card">
-                    <div className="section-heading">
-                      <div>
-                        <h2>استوديو المظهر</h2>
-                        <p>لوحة ألوان لكل مزاج. التغيير يظهر مباشرة.</p>
-                      </div>
-                      <Palette size={22} />
-                    </div>
-                    <div className="theme-gallery">
-                      {[
-                        ["noir", "Noir", "أسود سينمائي"],
-                        ["amber", "Riwaq", "دفء ذهبي"],
-                        ["teal", "Harbor", "هدوء البحر"],
-                        ["violet", "Aurora", "ليل بنفسجي"],
-                        ["nord", "Nord", "شمال هادئ"],
-                        ["rose", "Velvet", "ورد مخملي"],
-                        ["forest", "Forest", "أخضر عميق"],
-                      ].map(([value, name, caption]) => (
-                        <button
-                          key={value}
-                          className={`theme-tile theme-${value} ${s.accent === value ? "selected" : ""}`}
-                          onClick={() => save("accent", value)}
-                        >
-                          <div className="theme-miniature">
-                            <i />
-                            <div>
-                              <span />
-                              <b />
-                              <em />
-                              <div>
-                                <i />
-                                <i />
-                                <i />
-                              </div>
-                            </div>
-                          </div>
-                          <div>
-                            <b>{name}</b>
-                            <small>{caption}</small>
-                            {s.accent === value && <Check size={16} />}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                  <section className="settings-card">
-                    <h2>مساحتك، بطريقتك</h2>
-                    <div className="layout-choices">
-                      {[
-                        ["cinematic", "سينمائي", "عرض واسع وبداية غامرة"],
-                        ["sidebar", "كلاسيكي", "قائمة جانبية وبطاقة رئيسية"],
-                        ["topbar", "شريط علوي", "مساحة أكبر للحكايات"],
-                      ].map(([value, title, caption]) => (
-                        <button
-                          className={s.layout === value ? "selected" : ""}
-                          key={value}
-                          onClick={() => save("layout", value)}
-                        >
-                          <span className={`layout-symbol ${value}`}>
-                            <i />
-                            <i />
-                            <i />
-                          </span>
-                          <b>{title}</b>
-                          <small>{caption}</small>
-                        </button>
-                      ))}
-                    </div>
-                    {select("cardStyle", "أسلوب البطاقات", [
-                      ["glass", "زجاجي"],
-                      ["flat", "بسيط"],
-                    ])}
-                    {select("cardSize", "حجم البطاقات", [
-                      ["compact", "صغير"],
-                      ["comfortable", "متوازن"],
-                      ["large", "كبير"],
-                    ])}
-                    {toggle(
-                      "showHero",
-                      "العرض السينمائي الرئيسي",
-                      "إظهار العمل المميز أعلى الصفحة الرئيسية.",
-                    )}
-                    {toggle(
-                      "showRatings",
-                      "التقييمات على البطاقات",
-                      "إظهار تقييمات العناوين أثناء التصفح.",
-                    )}
+                    <h2>السلوك</h2>
                     {toggle(
                       "hideWatched",
                       "إخفاء المكتمل من صفوف الاكتشاف",

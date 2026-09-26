@@ -63,6 +63,8 @@ export function playerArgs({
     "--osc=yes",
     "--script-opts=osc-visibility=never,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800",
     "--osd-font=Segoe UI",
+    // Main decides when the pointer hides; see setCursorHidden.
+    "--cursor-autohide=no",
     "--osd-bar=yes",
     `--title=${title}`,
     `--force-media-title=${title}`,
@@ -213,6 +215,7 @@ export class Player {
     this.lastSaved = 0;
     this.externalSubs = new Map();
     this.rawTracks = [];
+    this.cursorHidden = false;
     this.pendingSecondary = null;
     const pipe = `\\\\.\\pipe\\riwaq-${randomUUID()}`;
     this.state = {
@@ -385,6 +388,19 @@ export class Player {
       secondary ? "auto" : "select",
       String(label || "").slice(0, 120),
       String(lang || "").slice(0, 12),
+    ]);
+  }
+  /**
+   * Hides the pointer over the picture after it has been still, and shows it
+   * again on the first movement. Only changes are sent to MPV.
+   */
+  setCursorHidden(hidden) {
+    if (!this.state.active || this.cursorHidden === !!hidden) return;
+    this.cursorHidden = !!hidden;
+    this.send([
+      "set_property",
+      "cursor-autohide",
+      this.cursorHidden ? "always" : "no",
     ]);
   }
   /** Main reports the window's full screen state; the controller follows it. */

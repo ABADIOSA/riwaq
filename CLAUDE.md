@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds an unsigned portable Windows executable.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.6.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.7.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -36,6 +36,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Version labels in the interface come from the running version, never a literal.
 - Listings load one catalog per request through `catalogPlan`, so rows appear as addons answer. Keep catalog requests pooled, never in lockstep batches, and keep addon URLs out of the plan.
 - Subtitles and audio live in a side panel beside the picture (`PlayerDock.jsx`); the surface shrinks for it and is never hidden. Addon subtitle URLs stay in main: the interface sees opaque keys, and MPV tracks report an addon subtitle by that key. `core/subtitles.mjs` owns language names, ranking (language first, kind as tiebreaker), cue parsing, quick sync and style validation.
+- Appearance lives in `core/appearance.mjs`: validated palettes, type, scale, cards and pages become CSS variables and classes on the app root. Root classes must never reuse an element class (a test checks). The interface scale is applied by main and never shrinks the CSS viewport below 980×680. Shared design codes carry appearance only.
 - HTML cannot paint over the native video surface. In full screen the surface takes the whole window and MPV's own controller (OSC) is the on-picture control; it is hidden otherwise. Escape leaves full screen before it closes the player.
 - No user account was authenticated in provider tests. Distinguish mocked tests, live catalog tests and actual native playback in reports.
 

@@ -4,4 +4,5 @@ import App from "./App.jsx";
 import "./styles.css";
 import "./studio.css";
 import "./library.css";
+import "./appearance.css";
 createRoot(document.getElementById("root")).render(<App />);

@@ -21,6 +21,10 @@ Three projects were read to decide what Riwaq 0.3 should do. Behavior was studie
 
 GPL-3.0, Kotlin/Compose. Studied at `abdf9f0` for player behaviour only; no code was copied into this MIT application. Behaviours that informed Riwaq 0.6: subtitles grouped by language with built-in and addon tabs; a preferred subtitle kind (standard, SDH, forced) as a tiebreaker inside a language rather than a reason to change language; loading an addon subtitle at start in the preferred language; cue-based quick sync with an allowance for reaction time; subtitle styling (colour, outline, shadow, background, bold, ASS handling); a right-click route to quick options; and an "ends at" clock. Riwaq's version keeps the panel beside the picture because HTML cannot paint over its native video surface.
 
+## Harbor beta-branch (0.9.127) and Nuvio HTPC settings, studied 2026-09-26
+
+Harbor (MIT) at `a821e27` on `beta-branch`: a theme studio with a preset gallery, a ten-colour custom palette, font pairs, layout, card and button styles, a navigation editor, draft history and shareable themes. Nuvio HTPC (GPL-3.0) at `abdf9f0`: accent gradients with a direction, an AMOLED black option, an application UI scale, an application font, poster radius, width, depth and hover highlight, hidden poster labels, and a configurable details background. Riwaq 0.7's appearance studio was written from this behaviour; no code from either project was copied.
+
 ## Stremio Community v5
 
 - License: GPL-3.0. Stack: C++ with WebView2 and libmpv, wrapping the official Stremio web UI.

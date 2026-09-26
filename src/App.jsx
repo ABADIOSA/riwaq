@@ -1,3 +1,8 @@
+import {
+  resolveAppearance,
+  themeClasses,
+  themeVariables,
+} from "../core/appearance.mjs";
 import React, { useState, useEffect, useRef } from "react";
 import {
   Home,
@@ -430,9 +435,11 @@ export default function App() {
       setPaging(false);
     }
   };
+  const appearance = resolveAppearance(state.settings);
   return (
     <div
-      className={`app theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""}`}
+      style={themeVariables(appearance)}
+      className={`app ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""}`}
     >
       <aside className="sidebar">
         <div className="brand">
@@ -454,21 +461,25 @@ export default function App() {
             [Library, "library", "مكتبتي"],
             [Tv, "live", "بث مباشر"],
             [Puzzle, "addons", "الإضافات"],
-          ].map(([Icon, id, label]) => (
-            <button
-              key={id}
-              className={view === id ? "nav-item active" : "nav-item"}
-              onClick={() => navigate(id)}
-            >
-              <Icon size={20} />
-              <span>{label}</span>
-              {isLocked(id) && <Lock size={13} className="nav-lock" />}
-              {id === "library" && favorites.length > 0 && (
-                <small>{favorites.length}</small>
-              )}
-              {id === "addons" && <small>{state.addons.length}</small>}
-            </button>
-          ))}
+          ]
+            .filter(
+              ([, id]) => !appearance.navHidden.includes(id) || view === id,
+            )
+            .map(([Icon, id, label]) => (
+              <button
+                key={id}
+                className={view === id ? "nav-item active" : "nav-item"}
+                onClick={() => navigate(id)}
+              >
+                <Icon size={20} />
+                <span>{label}</span>
+                {isLocked(id) && <Lock size={13} className="nav-lock" />}
+                {id === "library" && favorites.length > 0 && (
+                  <small>{favorites.length}</small>
+                )}
+                {id === "addons" && <small>{state.addons.length}</small>}
+              </button>
+            ))}
         </nav>
         <div className="sidebar-note">
           <span className="status-dot" /> إضافاتك. اختياراتك. تجربتك.
