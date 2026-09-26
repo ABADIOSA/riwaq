@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Library,
   ListOrdered,
@@ -18,13 +18,27 @@ import {
   titleKey,
 } from "../../core/library.mjs";
 import { imgUrl, typeName, clock } from "../lib/helpers.js";
+import { call } from "../lib/api.js";
+import { EpisodeCalendar } from "./Episodes.jsx";
 
 export default function LibraryView({ state, update, onOpen, notice }) {
   const [tab, setTab] = useState("saved"),
     [search, setSearch] = useState(""),
     [type, setType] = useState(""),
     [sort, setSort] = useState("recent"),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [calendar, setCalendar] = useState(null);
+  useEffect(() => {
+    if (tab !== "calendar") return;
+    let current = true;
+    setCalendar(null);
+    call("episodes", { days: 30, pastDays: 7 })
+      .then((result) => current && setCalendar(result.calendar || []))
+      .catch(() => current && setCalendar([]));
+    return () => {
+      current = false;
+    };
+  }, [tab]);
   const latest = latestProgress(state.progress),
     resume = continueWatching(state.progress),
     queue = state.queue || [];
@@ -43,7 +57,9 @@ export default function LibraryView({ state, update, onOpen, notice }) {
     connected: sets.connected.length,
   };
   const options = { search, type, sort: tab === "queue" ? "recent" : sort };
-  const items = tab === "connected" ? [] : filterLibrary(sets[tab], options);
+  const items = ["connected", "calendar"].includes(tab)
+    ? []
+    : filterLibrary(sets[tab], options);
   const change = async (method, input) => {
     if (busy) return;
     setBusy(true);
@@ -98,6 +114,7 @@ export default function LibraryView({ state, update, onOpen, notice }) {
           ["queue", "طابور المشاهدة"],
           ["history", "سجل المشاهدة"],
           ["connected", "قوائم المنصات"],
+          ["calendar", "التقويم"],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -108,43 +125,51 @@ export default function LibraryView({ state, update, onOpen, notice }) {
             onClick={() => setTab(id)}
           >
             {label}
-            <small>{counts[id]}</small>
+            {id !== "calendar" && <small>{counts[id]}</small>}
           </button>
         ))}
       </div>
-      <div className="library-toolbar">
-        <label className="library-search">
-          <Search size={18} />
-          <input
-            aria-label="ابحث في مكتبتي"
-            placeholder="ابحث داخل مكتبتك…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
-        <select
-          aria-label="نوع عناوين المكتبة"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-        >
-          <option value="">كل الأنواع</option>
-          <option value="movie">أفلام</option>
-          <option value="series">مسلسلات</option>
-          <option value="anime">أنمي</option>
-        </select>
-        {tab !== "queue" && (
+      {tab !== "calendar" && (
+        <div className="library-toolbar">
+          <label className="library-search">
+            <Search size={18} />
+            <input
+              aria-label="ابحث في مكتبتي"
+              placeholder="ابحث داخل مكتبتك…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
           <select
-            aria-label="ترتيب المكتبة"
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
+            aria-label="نوع عناوين المكتبة"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
           >
-            <option value="recent">الأحدث إضافة</option>
-            <option value="name">الاسم</option>
-            <option value="year">سنة الإنتاج</option>
+            <option value="">كل الأنواع</option>
+            <option value="movie">أفلام</option>
+            <option value="series">مسلسلات</option>
+            <option value="anime">أنمي</option>
           </select>
-        )}
-      </div>
+          {tab !== "queue" && (
+            <select
+              aria-label="ترتيب المكتبة"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+            >
+              <option value="recent">الأحدث إضافة</option>
+              <option value="name">الاسم</option>
+              <option value="year">سنة الإنتاج</option>
+            </select>
+          )}
+        </div>
+      )}
       <div id="library-content" role="tabpanel">
+        {tab === "calendar" &&
+          (calendar === null ? (
+            <p className="subtle">نجمع مواعيد حلقات مسلسلاتك…</p>
+          ) : (
+            <EpisodeCalendar entries={calendar} onOpen={onOpen} />
+          ))}
         {tab === "queue" && (
           <p className="subtle">
             اختر المصدر عند التشغيل. يُزال العنوان بعد بدء المشاهدة. الترتيب
@@ -293,7 +318,7 @@ export default function LibraryView({ state, update, onOpen, notice }) {
               />
             ) : null;
           })}
-        {tab !== "connected" && items.length === 0 && (
+        {!["connected", "calendar"].includes(tab) && items.length === 0 && (
           <Empty
             icon={tab === "queue" ? ListOrdered : Library}
             title={

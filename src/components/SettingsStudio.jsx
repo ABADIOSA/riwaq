@@ -19,8 +19,12 @@ import {
   Bell,
   Keyboard,
   Sparkles,
+  Archive,
+  Upload,
+  LockKeyhole,
 } from "lucide-react";
 import { call } from "../lib/api.js";
+import { arabicCount } from "../../core/arabic.mjs";
 
 const NAMED_KEYS = {
   " ": "SPACE",
@@ -95,6 +99,12 @@ const sections = [
     Bell,
   ],
   [
+    "backup",
+    "النسخ الاحتياطي",
+    "نسخة احتياطية استعادة نقل جهاز جديد تصدير تشفير",
+    Archive,
+  ],
+  [
     "system",
     "الاتصال والتطبيق",
     "Stremio خدمة تشخيص MPV إصدار",
@@ -163,7 +173,9 @@ export default function SettingsStudio({ state, update, act, notice }) {
           <h1>تفاصيل تصنع تجربتك.</h1>
           <p>من أول بوستر… إلى آخر مشهد.</p>
         </div>
-        <span className="version-badge">BETA 0.3</span>
+        <span className="version-badge">
+          BETA {(state.update?.current || "").split(".").slice(0, 2).join(".")}
+        </span>
       </div>
       <div className="studio-layout">
         <aside className="studio-nav">
@@ -548,6 +560,9 @@ export default function SettingsStudio({ state, update, act, notice }) {
               {id === "hotkeys" && (
                 <HotkeyEditor state={state} update={update} notice={notice} />
               )}
+              {id === "backup" && (
+                <BackupRoom update={update} act={act} notice={notice} />
+              )}
               {id === "presence" && (
                 <PresenceAndAlerts
                   state={state}
@@ -634,6 +649,7 @@ export default function SettingsStudio({ state, update, act, notice }) {
               )}
               {id === "system" && (
                 <>
+                  <UpdatesCard state={state} update={update} act={act} />
                   <section className="settings-card">
                     <div className="section-heading">
                       <h2>الاتصال والتشخيص</h2>
@@ -694,7 +710,7 @@ export default function SettingsStudio({ state, update, act, notice }) {
                     </button>
                   </section>
                   <section className="settings-card">
-                    <h2>رِواق 0.2.0</h2>
+                    <h2>رِواق {state.update?.current || ""}</h2>
                     <p>
                       عميل مستقل لإضافات Stremio، بتصميم مستلهم من Harbor وتجربة
                       تشغيل تستفيد من Nuvio ونسخة المجتمع.
@@ -1031,11 +1047,7 @@ function IntegrationCard({ integration: s, update, act, notice }) {
           </button>
         )}
       </div>
-      {s.lastSync && (
-        <p className="subtle">
-          آخر مزامنة: {new Date(s.lastSync).toLocaleString("ar-SA")}
-        </p>
-      )}
+      {s.lastSync && <p className="subtle">آخر مزامنة: {when(s.lastSync)}</p>}
       {id === "trakt" && s.connected && (
         <div className="setting-row">
           <div>
@@ -1052,6 +1064,28 @@ function IntegrationCard({ integration: s, update, act, notice }) {
             aria-pressed={s.trackHistory}
             onClick={() =>
               update("integrationSave", { id, trackHistory: !s.trackHistory })
+            }
+          >
+            <span />
+          </button>
+        </div>
+      )}
+      {id === "trakt" && s.connected && s.trackHistory && (
+        <div className="setting-row">
+          <div>
+            <b>تسجيل لحظي (Scrobble)</b>
+            <p>
+              يُظهر في Trakt ما تشاهده الآن، ويسجّله عند الإيقاف إذا تجاوزت 80%،
+              ويحفظ موضعك إن توقفت قبل ذلك. بدونه يُرسل العمل فقط بعد اكتماله.
+              لا يُحسب العمل مرتين أبداً.
+            </p>
+          </div>
+          <button
+            className={`toggle ${s.scrobble ? "on" : ""}`}
+            aria-label="تسجيل لحظي في Trakt"
+            aria-pressed={!!s.scrobble}
+            onClick={() =>
+              update("integrationSave", { id, scrobble: !s.scrobble })
             }
           >
             <span />
@@ -1349,5 +1383,362 @@ function PresenceAndAlerts({ state, update, act, notice }) {
         ))}
       </section>
     </>
+  );
+}
+
+// ar-SA alone picks the Umm al-Qura calendar and Arabic-Indic digits. Release,
+// backup and episode dates are Gregorian, so they are shown that way everywhere.
+const when = (value) =>
+  value
+    ? new Date(value).toLocaleString("ar-SA", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        calendar: "gregory",
+        numberingSystem: "latn",
+      })
+    : "";
+
+/**
+ * Backup and restore. The profile file is sealed to this Windows account, so
+ * this room is how a viewer carries their library to a reinstall or a new PC.
+ */
+function BackupRoom({ update, act, notice }) {
+  const [pass, setPass] = useState({ one: "", two: "" });
+  const [secrets, setSecrets] = useState(false);
+  const [left, setLeft] = useState(null);
+  const [picked, setPicked] = useState(null);
+  const [openPass, setOpenPass] = useState("");
+  const [summary, setSummary] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const mismatch = pass.two && pass.one !== pass.two;
+  const leftCount = left
+    ? left.configuredAddons +
+      left.liveSources +
+      left.providers +
+      left.integrations +
+      left.notify +
+      (left.stremio ? 1 : 0)
+    : 0;
+  return (
+    <>
+      <section className="settings-card">
+        <h2>
+          <Archive size={17} /> حفظ نسخة احتياطية
+        </h2>
+        <p>
+          بيانات رِواق مشفّرة بحساب ويندوز الحالي، فإعادة تثبيت ويندوز أو
+          الانتقال لجهاز جديد تفقدك مكتبتك ومتابعتك وطابورك وملفاتك الشخصية.
+          النسخة الاحتياطية ملف واحد تحمله معك، مشفّر بعبارة مرور لا يعرفها غيرك
+          — لا نستطيع استعادتها إن نسيتها.
+        </p>
+        <form
+          className="stacked-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (pass.one !== pass.two) return;
+            setBusy(true);
+            const result = await act("backupExport", {
+              passphrase: pass.one,
+              includeSecrets: secrets,
+            });
+            setBusy(false);
+            if (result?.saved) {
+              setLeft(result.left);
+              setPass({ one: "", two: "" });
+              notice("تم حفظ النسخة الاحتياطية");
+            }
+          }}
+        >
+          <label>
+            عبارة المرور (8 أحرف على الأقل)
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={pass.one}
+              onChange={(event) =>
+                setPass({ ...pass, one: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            أعد كتابتها
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={pass.two}
+              onChange={(event) =>
+                setPass({ ...pass, two: event.target.value })
+              }
+            />
+          </label>
+          {mismatch && (
+            <p className="inline-warning">العبارتان غير متطابقتين</p>
+          )}
+          <label className="switch-row">
+            <input
+              type="checkbox"
+              checked={secrets}
+              onChange={(event) => setSecrets(event.target.checked)}
+            />
+            تضمين مفاتيحي وحساباتي
+          </label>
+          {secrets && (
+            <p className="inline-warning">
+              <LockKeyhole size={15} /> ستحمل النسخة مفاتيح الخدمات وجلسات Trakt
+              وSimkl وستريميو وبيانات اشتراكات القنوات وروابط الإضافات المهيأة.
+              أمانها بقدر عبارة المرور فقط؛ لا تشاركها ولا تحفظها في مكان عام.
+            </p>
+          )}
+          <button
+            className="primary"
+            type="submit"
+            disabled={busy || mismatch || [...pass.one].length < 8}
+          >
+            <Download size={16} />{" "}
+            {busy ? "جاري التشفير…" : "حفظ نسخة احتياطية"}
+          </button>
+        </form>
+        {left && leftCount > 0 && (
+          <p className="subtle">
+            لم تُضمَّن عمداً:{" "}
+            {[
+              left.configuredAddons &&
+                arabicCount(left.configuredAddons, {
+                  one: "إضافة مهيأة واحدة",
+                  two: "إضافتان مهيأتان",
+                  few: "{n} إضافات مهيأة",
+                  other: "{n} إضافة مهيأة",
+                }),
+              left.liveSources &&
+                arabicCount(left.liveSources, {
+                  one: "مصدر قنوات واحد",
+                  two: "مصدرا قنوات",
+                  few: "{n} مصادر قنوات",
+                  other: "{n} مصدر قنوات",
+                }),
+              left.providers &&
+                arabicCount(left.providers, {
+                  one: "مفتاح خدمة واحد",
+                  two: "مفتاحا خدمة",
+                  few: "{n} مفاتيح خدمات",
+                  other: "{n} مفتاح خدمة",
+                }),
+              left.integrations &&
+                arabicCount(left.integrations, {
+                  one: "حساب منصة واحد",
+                  two: "حسابا منصتين",
+                  few: "{n} حسابات منصات",
+                  other: "{n} حساب منصة",
+                }),
+              left.notify && "وجهات الإشعارات",
+              left.stremio && "تسجيل دخول ستريميو",
+            ]
+              .filter(Boolean)
+              .join("، ")}
+            . أعد إضافتها على الجهاز الجديد، أو احفظ نسخة تتضمن المفاتيح.
+          </p>
+        )}
+      </section>
+      <section className="settings-card">
+        <h2>
+          <Upload size={17} /> استعادة نسخة احتياطية
+        </h2>
+        <p>
+          تستبدل الاستعادة الملفات الشخصية ومكتباتها وإعداداتها بما في النسخة.
+          المفاتيح التي لا تحملها النسخة تبقى كما هي على هذا الجهاز، وتُحفظ
+          نسختك الحالية بجانبها ليمكن التراجع على هذا الجهاز.
+        </p>
+        {!picked ? (
+          <button
+            className="secondary"
+            onClick={async () => {
+              const result = await act("backupPick");
+              if (result) {
+                setPicked(result);
+                setSummary(null);
+                setOpenPass("");
+              }
+            }}
+          >
+            اختيار ملف .riwaq
+          </button>
+        ) : (
+          <form
+            className="stacked-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setBusy(true);
+              if (!summary) {
+                const result = await act("backupPreview", {
+                  token: picked.token,
+                  passphrase: openPass,
+                });
+                if (result) setSummary(result);
+              } else {
+                const result = await update("backupRestore", {
+                  token: picked.token,
+                  passphrase: openPass,
+                });
+                if (result) {
+                  notice("تمت استعادة النسخة الاحتياطية");
+                  setPicked(null);
+                  setSummary(null);
+                  setOpenPass("");
+                }
+              }
+              setBusy(false);
+            }}
+          >
+            <p className="backup-file">
+              <b dir="ltr">{picked.name}</b>
+              <span>
+                {when(picked.createdAt)}
+                {picked.app ? ` · رِواق ${picked.app}` : ""}
+                {picked.includesSecrets
+                  ? " · تتضمن المفاتيح"
+                  : " · بدون مفاتيح"}
+              </span>
+            </p>
+            <label>
+              عبارة المرور
+              <input
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                value={openPass}
+                onChange={(event) => {
+                  setOpenPass(event.target.value);
+                  setSummary(null);
+                }}
+              />
+            </label>
+            {summary && (
+              <dl className="backup-summary">
+                <div>
+                  <dt>الملفات الشخصية</dt>
+                  <dd>{summary.profiles.join("، ")}</dd>
+                </div>
+                <div>
+                  <dt>في المكتبات</dt>
+                  <dd>{summary.titles}</dd>
+                </div>
+                <div>
+                  <dt>سجل المشاهدة</dt>
+                  <dd>{summary.progress}</dd>
+                </div>
+                <div>
+                  <dt>في الطوابير</dt>
+                  <dd>{summary.queue}</dd>
+                </div>
+                <div>
+                  <dt>إضافات</dt>
+                  <dd>{summary.addons}</dd>
+                </div>
+                {summary.liveSources > 0 && (
+                  <div>
+                    <dt>مصادر قنوات</dt>
+                    <dd>{summary.liveSources}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
+            <div className="button-row">
+              <button
+                className="primary"
+                type="submit"
+                disabled={busy || !openPass}
+              >
+                {summary ? "استعادة الآن" : "فتح ومعاينة"}
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => {
+                  act("backupCancel");
+                  setPicked(null);
+                  setSummary(null);
+                  setOpenPass("");
+                }}
+              >
+                إلغاء
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+    </>
+  );
+}
+
+/**
+ * Update checks only look: Riwaq never downloads or replaces itself. An
+ * available release opens its GitHub page, where the viewer can read the notes
+ * and verify the checksum before running anything.
+ */
+function UpdatesCard({ state, update, act }) {
+  const [busy, setBusy] = useState(false);
+  const info = state.update || {};
+  return (
+    <section className="settings-card">
+      <div className="section-heading">
+        <h2>التحديثات</h2>
+        <button
+          className="secondary"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            await update("updatesCheck");
+            setBusy(false);
+          }}
+        >
+          <RefreshCw size={16} /> {busy ? "جاري التحقق…" : "تحقق الآن"}
+        </button>
+      </div>
+      <p>
+        الإصدار الحالي <b dir="ltr">{info.current || "—"}</b>
+        {info.latest && (
+          <>
+            {" "}
+            · أحدث إصدار <b dir="ltr">{info.latest.version}</b>
+            {info.latest.prerelease ? " (تجريبي)" : ""}
+          </>
+        )}
+        {info.checkedAt && (
+          <small className="subtle"> · آخر تحقق {when(info.checkedAt)}</small>
+        )}
+      </p>
+      {info.failed && (
+        <p className="inline-warning">
+          <AlertCircle size={15} /> تعذّر الوصول إلى GitHub عند آخر تحقق.
+        </p>
+      )}
+      {info.available ? (
+        <button className="primary" onClick={() => act("openUpdate")}>
+          <ArrowUpRight size={16} /> صفحة الإصدار {info.latest.version} على
+          GitHub
+        </button>
+      ) : (
+        info.latest && <p className="subtle">لديك أحدث إصدار.</p>
+      )}
+      <div className="setting-row">
+        <div>
+          <b>التحقق تلقائياً</b>
+          <p>
+            طلب واحد يومياً إلى واجهة GitHub العامة، بلا أي بيانات عنك. رِواق
+            يتحقق فقط ولا ينزّل أو يثبّت شيئاً بنفسه.
+          </p>
+        </div>
+        <button
+          className={`toggle ${info.enabled !== false ? "on" : ""}`}
+          aria-label="التحقق من التحديثات تلقائياً"
+          aria-pressed={info.enabled !== false}
+          onClick={() =>
+            update("updatesSetEnabled", { enabled: info.enabled === false })
+          }
+        >
+          <span />
+        </button>
+      </div>
+    </section>
   );
 }

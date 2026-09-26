@@ -13,6 +13,8 @@ import {
   mkdirSync,
   existsSync,
   renameSync,
+  copyFileSync,
+  statSync,
 } from "node:fs";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +23,7 @@ import { randomBytes } from "node:crypto";
 import { Client } from "../core/client.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
+import { readBackupHeader } from "../core/backup.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
 import { VideoHost } from "./video-host.mjs";
@@ -30,6 +33,9 @@ if (process.env.RIWAQ_DATA_DIR)
   app.setPath("userData", process.env.RIWAQ_DATA_DIR);
 app.setName("Riwaq");
 let window, client, player, videoHost, loginServer, loginTimer, presence;
+// A picked backup stays in main between "preview" and "restore"; the renderer
+// only ever holds the opaque token.
+let pendingBackup = null;
 const emit = (name, data) => {
   if (window && !window.isDestroyed())
     window.webContents.send("riwaq:" + name, data);
@@ -333,22 +339,27 @@ const methods = {
   favorite: (a) => client.favorite(a),
   queueEdit: (a) => client.queueEdit(a),
   historyEdit: (a) => {
+    const touched = Array.isArray(a?.videoIds) ? a.videoIds : [a?.videoId];
     if (
       player.state.active &&
-      player.videoId === a.videoId &&
-      player.meta?.type === a.meta?.type
+      player.meta?.type === a?.meta?.type &&
+      touched.includes(player.videoId)
     )
       throw new Error("أوقف تشغيل هذا العنوان قبل تعديل سجله");
     return client.historyEdit(a);
   },
+  episodes: (a) => client.episodes(a || {}),
   profileCreate: (a) => client.profiles.create(a),
   profileUpdate: (a) => client.profiles.update(a),
   profileRemove: async (a) => {
+    client.profiles.check({ ...a, intent: "remove" });
     if (client.profiles.store.active === a.id) await player.stop();
     return client.profiles.remove(a);
   },
   profileSwitch: async (a) => {
-    // Save the outgoing viewer's last position before replacing their bucket.
+    // A wrong PIN must be refused before playback is touched. Then save the
+    // outgoing viewer's last position before replacing their bucket.
+    client.profiles.check({ ...a, intent: "switch" });
     await player.stop();
     const result = client.profiles.switch(a);
     await applyPresence().catch(() => {});
@@ -487,6 +498,86 @@ const methods = {
     return client.publicState();
   },
   diagnostics,
+  updatesCheck: async () => {
+    await client.updates.check({ current: app.getVersion(), force: true });
+    return client.publicState();
+  },
+  updatesSetEnabled: (a) => client.updates.setEnabled(a?.enabled),
+  openUpdate: async () => {
+    // The page comes from the validated store, never from the renderer.
+    await shell.openExternal(client.updates.releaseUrl());
+    return true;
+  },
+  backupExport: async ({ passphrase, includeSecrets = false } = {}) => {
+    // Seal first: a bad passphrase should fail before a file dialog opens.
+    const { text, left } = client.exportBackup({
+      passphrase,
+      includeSecrets: includeSecrets === true,
+      app: app.getVersion(),
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    const r = await dialog.showSaveDialog(window, {
+      title: includeSecrets
+        ? "حفظ نسخة احتياطية — تتضمن مفاتيحك وحساباتك"
+        : "حفظ نسخة احتياطية من رِواق",
+      defaultPath: `riwaq-backup-${stamp}.riwaq`,
+      filters: [{ name: "Riwaq backup", extensions: ["riwaq"] }],
+    });
+    if (r.canceled) return null;
+    writeFileSync(r.filePath, text, "utf8");
+    return { saved: true, left };
+  },
+  backupPick: async () => {
+    const r = await dialog.showOpenDialog(window, {
+      title: "اختيار نسخة احتياطية من رِواق",
+      filters: [{ name: "Riwaq backup", extensions: ["riwaq"] }],
+      properties: ["openFile"],
+    });
+    if (r.canceled) return null;
+    if (statSync(r.filePaths[0]).size > 64 * 1024 * 1024)
+      throw new Error("ملف النسخة الاحتياطية كبير جداً");
+    const text = readFileSync(r.filePaths[0], "utf8");
+    const { header } = readBackupHeader(text);
+    pendingBackup = { token: randomBytes(16).toString("hex"), text };
+    return {
+      token: pendingBackup.token,
+      name: basename(r.filePaths[0]),
+      createdAt: header.createdAt,
+      app: header.app,
+      includesSecrets: header.includesSecrets,
+    };
+  },
+  backupPreview: ({ token, passphrase }) => {
+    if (!pendingBackup || pendingBackup.token !== token)
+      throw new Error("اختر ملف النسخة الاحتياطية من جديد");
+    return client.inspectBackup({ text: pendingBackup.text, passphrase });
+  },
+  backupRestore: async ({ token, passphrase }) => {
+    if (!pendingBackup || pendingBackup.token !== token)
+      throw new Error("اختر ملف النسخة الاحتياطية من جديد");
+    // Check the passphrase before touching playback or the profile file.
+    client.inspectBackup({ text: pendingBackup.text, passphrase });
+    await player.stop();
+    // Keep this machine's current profile beside the new one. It stays sealed
+    // with DPAPI, so it is an undo on this PC and useless anywhere else.
+    const file = join(app.getPath("userData"), "profile.bin");
+    if (existsSync(file))
+      copyFileSync(
+        file,
+        join(app.getPath("userData"), "profile.before-restore.bin"),
+      );
+    const state = client.restoreBackup({
+      text: pendingBackup.text,
+      passphrase,
+    });
+    pendingBackup = null;
+    await applyPresence().catch(() => {});
+    return state;
+  },
+  backupCancel: () => {
+    pendingBackup = null;
+    return true;
+  },
   exportAddons: async () => {
     const r = await dialog.showSaveDialog(window, {
       title: "حفظ روابط الإضافات — قد تتضمن مفاتيح خاصة",
@@ -535,7 +626,7 @@ app
   .then(async () => {
     mkdirSync(app.getPath("userData"), { recursive: true });
     try {
-      client = new Client({ load, save });
+      client = new Client({ load, save, version: app.getVersion() });
     } catch (error) {
       dialog.showErrorBox("Riwaq", error.message);
       app.exit(1);
@@ -567,6 +658,7 @@ app
         onState: (s) => {
           emit("player", s);
           updatePresence();
+          client.integrations.observePlayback(s);
           if (!s.active) {
             videoHost.hide();
             if (window.isFullScreen()) window.setFullScreen(false);
@@ -603,6 +695,25 @@ app
         }
       };
       applyPresence().catch(() => {});
+      // One anonymous check a day, after startup settles; never in smoke runs.
+      if (!process.env.RIWAQ_SMOKE)
+        setTimeout(async () => {
+          const update = await client.updates.check({
+            current: app.getVersion(),
+          });
+          if (
+            update.available &&
+            client.state.updates.notified !== update.latest.version
+          ) {
+            client.state.updates.notified = update.latest.version;
+            client.persist();
+            emit(
+              "notice",
+              `يتوفر إصدار جديد من رِواق: ${update.latest.version}. تجده في الإعدادات ← الاتصال والتطبيق.`,
+            );
+          }
+          broadcast();
+        }, 8000);
       window.on("minimize", () => {
         if (
           client.state.settings.pauseOnMinimize &&
@@ -660,5 +771,9 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   closing = true;
   cancelLogin();
-  Promise.resolve(player?.stop()).finally(() => app.quit());
+  // Stopping the player sends the final scrobble; give it a moment to land so
+  // a play finished just before closing is recorded rather than queued.
+  Promise.resolve(player?.stop())
+    .then(() => client?.integrations?.settle(3000))
+    .finally(() => app.quit());
 });

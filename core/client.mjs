@@ -17,8 +17,17 @@ import { Integrations } from "./integrations.mjs";
 import { LiveHub } from "./live-hub.mjs";
 import { Profiles } from "./profiles.mjs";
 import { Notifier } from "./notify.mjs";
-import { cleanMedia, editQueue } from "./library.mjs";
+import { Updates } from "./updates.mjs";
+import { cleanMedia, editQueue, isCompleted } from "./library.mjs";
+import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
+import {
+  collectBackup,
+  encryptBackup,
+  decryptBackup,
+  restoreState,
+  summarizeBackup,
+} from "./backup.mjs";
 
 export async function fetchJson(url, init = {}) {
   try {
@@ -75,7 +84,9 @@ export class Client {
     request = fetchJson,
     requestText = fetchText,
     api = stremioCall,
+    version = "",
   }) {
+    this.version = version;
     this.saveData = save;
     this.request = request;
     this.requestText = requestText;
@@ -99,6 +110,7 @@ export class Client {
     this.live = new LiveHub(this);
     this.profiles = new Profiles(this);
     this.notifier = new Notifier(this);
+    this.updates = new Updates(this);
     // The active profile owns favorites, progress, lists and settings, so the
     // client state has to point at its bucket before anything reads them.
     this.profiles.ensure();
@@ -153,6 +165,7 @@ export class Client {
       profiles: this.profiles.publicState(),
       notify: this.notifier.publicState(),
       hotkeys: publicHotkeys(this.state.hotkeys),
+      update: this.updates.publicState(this.version),
       connectedLists: this.state.connectedLists || [],
       user: auth ? { email: auth.email, name: auth.name } : null,
       addons: this.state.addons.map((a) => ({
@@ -393,11 +406,39 @@ export class Client {
     this.persist();
     return this.publicState();
   }
-  historyEdit({ action, meta, videoId }) {
+  historyEdit({ action, meta, videoId, videoIds }) {
     this.profiles.gate("library");
     const media = cleanMedia(meta);
-    if (typeof videoId !== "string" || !videoId || videoId.length > 1000)
-      throw new Error("معرّف المشاهدة غير صالح");
+    const validId = (value) =>
+      typeof value === "string" && !!value && value.length <= 1000;
+    if (action === "completeThrough") {
+      // "I watched up to here": the viewer saw earlier episodes somewhere else
+      // and wants up-next to start after this one.
+      if (
+        !Array.isArray(videoIds) ||
+        !videoIds.length ||
+        videoIds.length > 2000 ||
+        !videoIds.every(validId)
+      )
+        throw new Error("قائمة الحلقات غير صالحة");
+      for (const id of videoIds) {
+        const key = `${media.type}:${id}`;
+        const existing = this.state.progress[key];
+        if (isCompleted(existing)) continue;
+        this.state.progress[key] = {
+          meta: media,
+          videoId: id,
+          position: 0,
+          duration: 0,
+          completed: true,
+          updated: existing?.updated || 0,
+          markedAt: Date.now(),
+        };
+      }
+      this.persist();
+      return this.publicState();
+    }
+    if (!validId(videoId)) throw new Error("معرّف المشاهدة غير صالح");
     const key = `${media.type}:${videoId}`;
     if (action === "remove") delete this.state.progress[key];
     else if (action === "complete")
@@ -407,12 +448,101 @@ export class Client {
         position: 0,
         duration: 0,
         completed: true,
-        updated: Date.now(),
+        // Continue watching picks each title's most recent playback. A manual
+        // mark is not playback: stamping it "now" would let ticking off an
+        // earlier episode hide the one the viewer is halfway through.
+        updated: this.state.progress[key]?.updated || 0,
+        markedAt: Date.now(),
       };
     else throw new Error("إجراء السجل غير صالح");
     // Manual history changes stay local; they never submit tracker history.
     this.persist();
     return this.publicState();
+  }
+  /** Seals the installation into backup text. File dialogs live in main. */
+  exportBackup({ passphrase, includeSecrets = false, app = "" }) {
+    // Backups live in Settings. When a parent locks Settings the lock has to
+    // hold here too, not only in the interface: a full backup carries keys.
+    this.profiles.gate("settings");
+    this.profiles.capture();
+    const { payload, left } = collectBackup(this.state, {
+      includeSecrets: includeSecrets === true,
+    });
+    const text = encryptBackup(payload, passphrase, {
+      app,
+      includesSecrets: includeSecrets === true,
+    });
+    return { text, left };
+  }
+  inspectBackup({ text, passphrase }) {
+    this.profiles.gate("settings");
+    const { header, payload } = decryptBackup(text, passphrase);
+    return summarizeBackup(header, payload);
+  }
+  restoreBackup({ text, passphrase }) {
+    // A restore replaces every profile. Behind a locked Settings room it would
+    // let anyone holding an older backup strip the parental PINs.
+    this.profiles.gate("settings");
+    const { payload } = decryptBackup(text, passphrase);
+    this.state = restoreState(this.state, payload);
+    // A restored profile starts locked, and nothing derived from the old
+    // state may survive: stream keys, metadata and live listings all reset.
+    this.profiles.unlocked = false;
+    this.profiles.ensure();
+    this.streams.clear();
+    this.subtitles.clear();
+    this.metas.clear();
+    this.cache.clear();
+    this.live.loaded.clear();
+    this.dataHub.cache.clear();
+    this.dataHub.generation++;
+    this.integrations.devices.clear();
+    this.persist();
+    return this.publicState();
+  }
+  /** Addon metadata without provider enrichment: episode lists are enough here. */
+  async rawMeta({ type, id }) {
+    for (const addon of this.enabled().filter((a) =>
+      accepts(a.manifest, "meta", type, id),
+    )) {
+      try {
+        const result = await this.cached(
+          resourceUrl(addon.transportUrl, "meta", type, id),
+        );
+        if (result.meta?.id) return result.meta;
+      } catch {
+        /* Try the next addon that serves this title. */
+      }
+    }
+    return null;
+  }
+  /**
+   * Up next and the calendar for the series this viewer follows. A series
+   * whose metadata fails is left out rather than failing the whole view:
+   * providers are optional and this is a convenience, not playback.
+   */
+  async episodes({ days = 30, pastDays = 7 } = {}) {
+    const follow = followedSeries(this.state, 40);
+    const metas = [];
+    for (let offset = 0; offset < follow.length; offset += 4) {
+      const batch = await Promise.all(
+        follow
+          .slice(offset, offset + 4)
+          .map((meta) => this.rawMeta(meta).catch(() => null)),
+      );
+      metas.push(...batch.filter((meta) => meta?.videos?.length));
+    }
+    const now = Date.now();
+    return {
+      followed: follow.length,
+      loaded: metas.length,
+      upNext: upNextList(metas, this.state.progress, { now }),
+      calendar: calendarEntries(metas, this.state.progress, {
+        now,
+        days: Math.max(1, Math.min(90, Number(days) || 30)),
+        pastDays: Math.max(0, Math.min(30, Number(pastDays) || 0)),
+      }),
+    };
   }
   async cached(url) {
     const cached = this.cache.get(url);

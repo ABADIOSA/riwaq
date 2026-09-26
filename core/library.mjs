@@ -1,4 +1,5 @@
 // Shared by main and React. No network or platform dependencies.
+import { foldArabic } from "./arabic.mjs";
 export const titleKey = (meta) => JSON.stringify([meta?.type, meta?.id]);
 export const queueKey = (type, videoId) => JSON.stringify([type, videoId]);
 export const isCompleted = (p) =>
@@ -17,14 +18,8 @@ export function latestProgress(progress = {}) {
 }
 export const continueWatching = (progress) =>
   latestProgress(progress).filter((p) => !isCompleted(p) && p.position > 10);
-export function normalizeSearch(value) {
-  return String(value || "")
-    .toLocaleLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g, "")
-    .replace(/[أإآ]/g, "ا")
-    .replace(/ى/g, "ي");
-}
+// Library and Live TV search must agree on what counts as the same word.
+export const normalizeSearch = foldArabic;
 export function filterLibrary(
   items,
   { search = "", type = "", sort = "recent" } = {},

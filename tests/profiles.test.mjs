@@ -386,3 +386,35 @@ test("a disabled live source stops resolving its channels", async () => {
   instance.live.updateSource({ id, action: "toggle" });
   assert.throws(() => instance.live.resolve(channel.key), /القناة/);
 });
+
+test("check() answers a switch or removal without changing anything", () => {
+  const { instance } = client();
+  instance.profiles.create({ name: "الوالد" });
+  const parent = instance
+    .publicState()
+    .profiles.list.find((p) => p.name === "الوالد");
+  instance.profiles.setPin({ id: parent.id, pin: "4821" });
+  const before = JSON.stringify(instance.publicState().profiles);
+  assert.throws(
+    () => instance.profiles.check({ id: parent.id, pin: "0000" }),
+    /رمز الحماية/,
+  );
+  assert.throws(
+    () =>
+      instance.profiles.check({ id: parent.id, pin: "0000", intent: "remove" }),
+    /لحذف/,
+  );
+  assert.equal(instance.profiles.check({ id: parent.id, pin: "4821" }), true);
+  assert.equal(instance.profiles.check({ id: "default" }), true);
+  assert.throws(() => instance.profiles.check({ id: "missing" }), /غير موجود/);
+  // Nothing moved: main can call check() before stopping playback.
+  assert.equal(JSON.stringify(instance.publicState().profiles), before);
+});
+
+test("check() refuses to remove the last profile before anything stops", () => {
+  const { instance } = client();
+  assert.throws(
+    () => instance.profiles.check({ id: "default", intent: "remove" }),
+    /الوحيد/,
+  );
+});

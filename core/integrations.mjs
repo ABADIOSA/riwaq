@@ -21,6 +21,51 @@ function metaFrom(item, type) {
     poster: poster(m.ids.imdb),
   };
 }
+/** A /sync/history body for one movie or episode, or null for other ids. */
+export function historyBody(
+  meta,
+  videoId,
+  watched_at = new Date().toISOString(),
+) {
+  if (!/^tt\d+$/.test(meta?.id || "")) return null;
+  if (meta.type === "movie")
+    return { movies: [{ ids: { imdb: meta.id }, watched_at }] };
+  const match = String(videoId).match(/^tt\d+:(\d+):(\d+)$/);
+  if (!match) return null;
+  return {
+    shows: [
+      {
+        ids: { imdb: meta.id },
+        seasons: [
+          {
+            number: Number(match[1]),
+            episodes: [{ number: Number(match[2]), watched_at }],
+          },
+        ],
+      },
+    ],
+  };
+}
+/** A /scrobble body: movie, or show plus season/episode, with percent progress. */
+export function scrobbleBody(meta, videoId, progress) {
+  if (!/^tt\d+$/.test(meta?.id || "")) return null;
+  const percent =
+    Math.round(Math.min(100, Math.max(0, Number(progress) || 0)) * 100) / 100;
+  if (meta.type === "movie")
+    return { movie: { ids: { imdb: meta.id } }, progress: percent };
+  const match = String(videoId).match(/^tt\d+:(\d+):(\d+)$/);
+  if (!match) return null;
+  return {
+    show: { ids: { imdb: meta.id } },
+    episode: { season: Number(match[1]), number: Number(match[2]) },
+    progress: percent,
+  };
+}
+// Trakt records a play when a stop arrives at or above this percentage.
+export const SCROBBLE_WATCHED = 80;
+// A write-ahead history entry is held while its scrobble is in flight. A hold
+// older than this belonged to a session that never answered, so it is sent.
+const HOLD_MS = 60000;
 export function parseCsv(text) {
   if (typeof text !== "string" || text.length > 5_000_000)
     throw new Error("ملف CSV كبير جداً");
@@ -67,6 +112,8 @@ export class Integrations {
     this.devices = new Map();
     this.refreshing = null;
     this.flushing = null;
+    this.session = null;
+    this.inflight = new Set();
   }
   publicState() {
     return ["trakt", "letterboxd", "simkl"].map((id) => {
@@ -79,6 +126,7 @@ export class Integrations {
         username: s.username || "",
         lastSync: s.lastSync || null,
         trackHistory: !!s.trackHistory,
+        scrobble: !!s.scrobble,
         pending: (s.pending || []).length,
       };
     });
@@ -88,7 +136,7 @@ export class Integrations {
       throw new Error("منصة غير معروفة");
     return ((this.client.state.integrations ||= {})[id] ||= {});
   }
-  save({ id, clientId, clientSecret, username, trackHistory }) {
+  save({ id, clientId, clientSecret, username, trackHistory, scrobble }) {
     let s = this.get(id);
     for (const value of [clientId, clientSecret])
       if (
@@ -115,7 +163,16 @@ export class Integrations {
     if (username) s.username = username;
     if (id === "trakt" && typeof trackHistory === "boolean") {
       s.trackHistory = trackHistory;
-      if (!trackHistory) s.pending = [];
+      if (!trackHistory) {
+        s.pending = [];
+        s.scrobble = false;
+        this.session = null;
+      }
+    }
+    // Live scrobbling is a mode of history tracking, never a way around it.
+    if (id === "trakt" && typeof scrobble === "boolean") {
+      s.scrobble = scrobble && !!s.trackHistory;
+      if (!s.scrobble) this.session = null;
     }
     this.client.persist();
     return this.client.publicState();
@@ -123,6 +180,7 @@ export class Integrations {
   disconnect(id) {
     const s = this.get(id);
     this.devices.delete(id);
+    if (id === "trakt") this.session = null;
     if (s.addonKey)
       this.client.state.addons = this.client.state.addons.filter(
         (a) => keyFor(a.transportUrl) !== s.addonKey,
@@ -360,32 +418,135 @@ export class Integrations {
       !/^tt\d+$/.test(meta.id)
     )
       return;
-    const key = `${meta.type}:${videoId}`;
-    if (s.sent?.includes(key) || s.pending?.some((e) => e.key === key)) return;
-    const watched_at = new Date().toISOString();
-    let body;
-    if (meta.type === "movie")
-      body = { movies: [{ ids: { imdb: meta.id }, watched_at }] };
-    else {
-      const match = videoId.match(/^tt\d+:(\d+):(\d+)$/);
-      if (!match) return;
-      body = {
-        shows: [
-          {
-            ids: { imdb: meta.id },
-            seasons: [
-              {
-                number: Number(match[1]),
-                episodes: [{ number: Number(match[2]), watched_at }],
-              },
-            ],
-          },
-        ],
-      };
-    }
-    s.pending = [...(s.pending || []), { key, body }].slice(-500);
+    // In scrobble mode the stop event records the play. Queuing it here too
+    // would give the viewer two plays for one viewing.
+    if (s.scrobble) return;
+    const body = historyBody(meta, videoId);
+    if (body) this.enqueueHistory(`${meta.type}:${videoId}`, body);
+  }
+  enqueueHistory(key, body, { hold = false, flush = true } = {}) {
+    const s = this.get("trakt");
+    if (s.sent?.includes(key) || s.pending?.some((e) => e.key === key))
+      return null;
+    const entry = { key, body };
+    if (hold) entry.heldAt = Date.now();
+    s.pending = [...(s.pending || []), entry].slice(-500);
     this.client.persist();
-    this.flushHistory().catch(() => {});
+    if (flush) this.flushHistory().catch(() => {});
+    return entry;
+  }
+  /**
+   * Follows the player and turns its state into scrobble start, pause and
+   * stop. Called on every player update, so it only acts on transitions.
+   */
+  observePlayback(player) {
+    // Read, never create: this runs on every player frame.
+    const s = this.client.state.integrations?.trakt;
+    if (!s?.token || !s.trackHistory || !s.scrobble) {
+      this.session = null;
+      return;
+    }
+    const meta = player?.meta;
+    const eligible =
+      !!meta &&
+      !player.live &&
+      ["movie", "series"].includes(meta.type) &&
+      !!scrobbleBody(meta, player.videoId, 0);
+    const key = eligible ? `${meta.type}:${player.videoId}` : null;
+    const progress =
+      player?.duration > 0 ? (player.position / player.duration) * 100 : 0;
+    if (this.session && this.session.key !== key) {
+      if (this.session.state === "playing" || this.session.state === "paused")
+        this.sendScrobble("stop", { ...this.session });
+      this.session = null;
+    }
+    if (!key) return;
+    if (!this.session)
+      this.session = {
+        key,
+        meta,
+        videoId: player.videoId,
+        state: "idle",
+        progress: 0,
+      };
+    // The player keeps its last position when it stops, and that final frame
+    // is the one that says how far the viewer got. Skipping to the end and
+    // closing straight away must still count as watched.
+    if (player.duration > 0) this.session.progress = progress;
+    const want = !player.active
+      ? "stopped"
+      : player.loading || !(player.duration > 0)
+        ? null
+        : player.pause
+          ? "paused"
+          : "playing";
+    if (!want || want === this.session.state) return;
+    if (want === "stopped" && this.session.state === "idle") {
+      // Playback that never started has nothing to stop.
+      this.session.state = "stopped";
+      return;
+    }
+    if (want === "paused" && this.session.state === "idle") return;
+    this.session.state = want;
+    this.sendScrobble(
+      want === "playing" ? "start" : want === "paused" ? "pause" : "stop",
+      { ...this.session },
+    );
+  }
+  sendScrobble(event, session) {
+    const body = scrobbleBody(session.meta, session.videoId, session.progress);
+    if (!body) return Promise.resolve();
+    // History is account-scoped. A reply that arrives after the viewer
+    // disconnected or switched Trakt accounts must not write into the new one.
+    const account = this.client.state.integrations?.trakt;
+    const watched = event === "stop" && session.progress >= SCROBBLE_WATCHED;
+    // Write ahead: a play Trakt should record is queued before the request,
+    // held so the history queue does not send it too. If the request never
+    // lands, the hold lapses and the queue delivers it later.
+    const entry = watched
+      ? this.enqueueHistory(
+          session.key,
+          historyBody(session.meta, session.videoId),
+          {
+            hold: true,
+            flush: false,
+          },
+        )
+      : null;
+    const settle = (recorded) => {
+      const s = this.client.state.integrations?.trakt;
+      if (!s || s !== account) return;
+      if (recorded) {
+        s.pending = (s.pending || []).filter((e) => e !== entry);
+        if (!s.sent?.includes(session.key))
+          s.sent = [...(s.sent || []), session.key].slice(-5000);
+        this.client.persist();
+      } else if (entry) {
+        delete entry.heldAt;
+        this.client.persist();
+        this.flushHistory().catch(() => {});
+      }
+    };
+    const job = this.trakt(`/scrobble/${event}`, body).then(
+      () => watched && settle(true),
+      // 409 means Trakt already recorded this play moments ago.
+      (error) => watched && settle(error.message === "HTTP 409"),
+    );
+    this.inflight.add(job);
+    job.finally(() => this.inflight.delete(job));
+    return job;
+  }
+  /** Lets in-flight scrobbles finish before the app quits, within a limit. */
+  async settle(timeout = 3000) {
+    if (!this.inflight.size) return;
+    let timer;
+    await Promise.race([
+      Promise.allSettled([...this.inflight]),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, timeout);
+      }),
+    ]);
+    clearTimeout(timer);
   }
   async flushHistory() {
     if (this.flushing) return this.flushing;
@@ -394,6 +555,7 @@ export class Integrations {
     this.flushing = (async () => {
       for (const entry of [...(s.pending || [])]) {
         if (this.get("trakt") !== s || !s.trackHistory) break;
+        if (entry.heldAt && Date.now() - entry.heldAt < HOLD_MS) continue;
         const result = await this.trakt("/sync/history", entry.body);
         if (!(result.added?.movies || result.added?.episodes)) break;
         s.pending = s.pending.filter((e) => e !== entry);

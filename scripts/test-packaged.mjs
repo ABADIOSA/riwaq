@@ -1,11 +1,16 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import assert from "node:assert/strict";
 
 const executable = resolve(process.argv[2] || "release/win-unpacked/Riwaq.exe");
+// The build under test must report the version this checkout declares; a
+// literal here goes stale with every release.
+const expectedVersion = JSON.parse(
+  readFileSync(resolve("package.json"), "utf8"),
+).version;
 const output = resolve(".cache/packaged-test");
 mkdirSync(output, { recursive: true });
 const listener = createServer();
@@ -84,7 +89,7 @@ try {
   assert.equal(diagnostics.mpv, true);
   assert.equal(diagnostics.encryption, true);
   assert.equal(diagnostics.video.embedded, true);
-  assert.equal(diagnostics.version, "0.4.0");
+  assert.equal(diagnostics.version, expectedVersion);
   const state = await evaluate(`window.riwaq.call('init')`);
   assert.equal(state.user, null);
   assert.equal(state.addons.length, 1);
@@ -182,7 +187,7 @@ try {
     packagedFile: executable.split(/[\\/]/).pop(),
     checks: [
       "Portable application starts",
-      "Version 0.4.0 and per-profile queue are present",
+      `Version ${expectedVersion} and per-profile queue are present`,
       "Loaded queue entry is consumed by packaged player",
       "Live catalogs render",
       "Bundled MPV is found",

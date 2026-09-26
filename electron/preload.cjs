@@ -11,6 +11,7 @@ const allowed = new Set([
   "favorite",
   "queueEdit",
   "historyEdit",
+  "episodes",
   "login",
   "cancelLogin",
   "logout",
@@ -57,6 +58,14 @@ const allowed = new Set([
   "playChannel",
   "openScreenshots",
   "chooseShader",
+  "updatesCheck",
+  "updatesSetEnabled",
+  "openUpdate",
+  "backupExport",
+  "backupPick",
+  "backupPreview",
+  "backupRestore",
+  "backupCancel",
 ]);
 contextBridge.exposeInMainWorld("riwaq", {
   call: async (method, args) => {

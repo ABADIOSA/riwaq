@@ -37,6 +37,7 @@ import PlayerPanel from "./components/PlayerPanel.jsx";
 import LiveTV from "./components/LiveTV.jsx";
 import Profiles from "./components/Profiles.jsx";
 import LibraryView from "./components/LibraryView.jsx";
+import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
   releasedEpisodes,
@@ -83,7 +84,8 @@ export default function App() {
     [heroIndex, setHeroIndex] = useState(0),
     [paging, setPaging] = useState(false),
     [profilesOpen, setProfilesOpen] = useState(false),
-    [unlockRoom, setUnlockRoom] = useState("");
+    [unlockRoom, setUnlockRoom] = useState(""),
+    [upNext, setUpNext] = useState([]);
   const searchRef = useRef(),
     stateRef = useRef(state),
     playerRef = useRef(null),
@@ -326,6 +328,27 @@ export default function App() {
   };
   const favorites = state.favorites;
   const uniqueProgress = continueWatching(state.progress);
+  // Progress is saved every few seconds during playback. Up next only changes
+  // when an episode is finished or a series is saved, so refetch on those.
+  const finishedCount = Object.values(state.progress || {}).filter(
+    isCompleted,
+  ).length;
+  useEffect(() => {
+    if (!ready || view !== "home") return;
+    let current = true;
+    call("episodes", {})
+      .then((result) => current && setUpNext(result.upNext || []))
+      .catch(() => current && setUpNext([]));
+    return () => {
+      current = false;
+    };
+  }, [
+    ready,
+    view,
+    state.profiles?.active,
+    finishedCount,
+    state.favorites.length,
+  ]);
   const heroItems = rows
     .flatMap((r) => r.metas)
     .filter((m) => m.background)
@@ -417,6 +440,11 @@ export default function App() {
           >
             <Settings size={20} />
             الإعدادات
+            {state.update?.available && (
+              <small className="update-dot" title="يتوفر إصدار جديد">
+                جديد
+              </small>
+            )}
           </button>
           <button
             className="profile-button"
@@ -655,6 +683,9 @@ export default function App() {
                       onOpen={open}
                     />
                   )}
+                  {view === "home" && (
+                    <UpNextRail items={upNext} onOpen={open} />
+                  )}
                   {catalog ? (
                     <>
                       <div className="poster-grid">
@@ -766,7 +797,10 @@ export default function App() {
           <span>
             رِواق <b>·</b> مساحة للحكايات
           </span>
-          <small>عميل مستقل لمنظومة Stremio · 0.4.0</small>
+          <small>
+            عميل مستقل لمنظومة Stremio
+            {state.update?.current ? ` · ${state.update.current}` : ""}
+          </small>
         </footer>
       </main>
       {toast && (

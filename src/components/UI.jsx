@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { LoaderCircle, Film, X, Play, Star, ChevronLeft } from "lucide-react";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { titleKey } from "../../core/library.mjs";
+import { arabicCount, MINUTES } from "../../core/arabic.mjs";
 export function IconButton({ title, children, ...props }) {
   return (
     <button className="icon-button" title={title} aria-label={title} {...props}>
@@ -102,7 +103,7 @@ export function Poster({ meta, onOpen, progress }) {
       <span className="poster-sub">
         {progress
           ? progress.duration > 0
-            ? `متبقي ${Math.max(0, Math.round((progress.duration - progress.position) / 60))} دقيقة`
+            ? `متبقي ${arabicCount(Math.max(0, Math.round((progress.duration - progress.position) / 60)), MINUTES)}`
             : `وصلت إلى ${clock(progress.position)}`
           : meta.releaseInfo || meta.year || typeName(meta.type)}
       </span>
