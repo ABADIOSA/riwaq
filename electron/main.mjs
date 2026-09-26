@@ -648,6 +648,7 @@ app
         onState: (s) => {
           emit("player", s);
           updatePresence();
+          client.integrations.observePlayback(s);
           if (!s.active) {
             videoHost.hide();
             if (window.isFullScreen()) window.setFullScreen(false);
@@ -741,5 +742,9 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   closing = true;
   cancelLogin();
-  Promise.resolve(player?.stop()).finally(() => app.quit());
+  // Stopping the player sends the final scrobble; give it a moment to land so
+  // a play finished just before closing is recorded rather than queued.
+  Promise.resolve(player?.stop())
+    .then(() => client?.integrations.settle(3000))
+    .finally(() => app.quit());
 });

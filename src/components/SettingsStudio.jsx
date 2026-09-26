@@ -1070,6 +1070,28 @@ function IntegrationCard({ integration: s, update, act, notice }) {
           </button>
         </div>
       )}
+      {id === "trakt" && s.connected && s.trackHistory && (
+        <div className="setting-row">
+          <div>
+            <b>تسجيل لحظي (Scrobble)</b>
+            <p>
+              يُظهر في Trakt ما تشاهده الآن، ويسجّله عند الإيقاف إذا تجاوزت 80%،
+              ويحفظ موضعك إن توقفت قبل ذلك. بدونه يُرسل العمل فقط بعد اكتماله.
+              لا يُحسب العمل مرتين أبداً.
+            </p>
+          </div>
+          <button
+            className={`toggle ${s.scrobble ? "on" : ""}`}
+            aria-label="تسجيل لحظي في Trakt"
+            aria-pressed={!!s.scrobble}
+            onClick={() =>
+              update("integrationSave", { id, scrobble: !s.scrobble })
+            }
+          >
+            <span />
+          </button>
+        </div>
+      )}
     </section>
   );
 }
