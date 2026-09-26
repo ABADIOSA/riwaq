@@ -137,12 +137,20 @@ export class Updates {
     if (this.checking) return this.checking;
     this.checking = (async () => {
       try {
+        // GitHub asks API clients to name themselves. The version is the only
+        // thing sent, and GitHub sees the request either way.
         const releases = await this.client.request(RELEASES, {
-          headers: { Accept: "application/vnd.github+json" },
+          headers: {
+            Accept: "application/vnd.github+json",
+            "User-Agent": `Riwaq/${String(current || "").replace(/[^\w.-]/g, "") || "dev"}`,
+          },
         });
         store.latest = pickLatest(releases);
         store.failed = false;
       } catch {
+        // Unauthenticated GitHub API calls share a 60-per-hour limit per IP,
+        // which carrier-grade NAT can exhaust for a whole neighbourhood. A
+        // failed check waits for the next day rather than retrying.
         store.failed = true;
       }
       store.checkedAt = now;

@@ -109,8 +109,12 @@ test("a newer release is reported as available, and published through state", as
       "https://api.github.com/repos/ABADIOSA/riwaq/releases",
     ),
   );
-  // No credential or viewer data travels with the check.
-  assert.deepEqual(Object.keys(requests[0].init.headers), ["Accept"]);
+  // No credential or viewer data travels with the check: only the app's name.
+  assert.deepEqual(Object.keys(requests[0].init.headers).sort(), [
+    "Accept",
+    "User-Agent",
+  ]);
+  assert.equal(requests[0].init.headers["User-Agent"], "Riwaq/0.4.0");
 });
 
 test("being on the newest release is not an update", async () => {
@@ -181,4 +185,10 @@ test("the page main opens is always a validated release page", () => {
     updates.releaseUrl(),
     "https://github.com/ABADIOSA/riwaq/releases/tag/v0.5.0",
   );
+});
+
+test("a malformed version cannot inject into the User-Agent header", async () => {
+  const { client, requests } = rig([[]]);
+  await client.updates.check({ current: "0.4.0\r\nX-Evil: 1", force: true });
+  assert.equal(requests[0].init.headers["User-Agent"], "Riwaq/0.4.0X-Evil1");
 });
