@@ -29,6 +29,21 @@ import {
   summarizeBackup,
 } from "./backup.mjs";
 
+/** A readable name for an addon subtitle; never the URL. */
+function subtitleLabel(s) {
+  for (const value of [s.label, s.name, s.title, s.id]) {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (text && !/^https?:/i.test(text) && !/^\d+$/.test(text))
+      return text.replace(/[_]+/g, " ").slice(0, 120);
+  }
+  return "";
+}
+function subtitleFormat(url) {
+  const ext = String(url)
+    .split(/[?#]/)[0]
+    .match(/\.(srt|vtt|ass|ssa|sub)$/i);
+  return ext ? ext[1].toUpperCase() : "";
+}
 export async function fetchJson(url, init = {}) {
   const { timeout = 16000, ...rest } = init;
   try {
@@ -51,10 +66,11 @@ export async function fetchJson(url, init = {}) {
 }
 /** Playlists and XMLTV guides are text, and large: fetched separately from JSON. */
 export async function fetchText(url, init = {}) {
+  const { timeout = 45000, ...rest } = init;
   try {
     const response = await fetch(url, {
-      ...init,
-      signal: AbortSignal.timeout(45000),
+      ...rest,
+      signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
@@ -104,6 +120,8 @@ export class Client {
     this.state.settings = { ...DEFAULT_SETTINGS, ...this.state.settings };
     this.streams = new Map();
     this.subtitles = new Map();
+    this.subtitleInfo = new Map();
+    this.subtitleLists = new Map();
     this.metas = new Map();
     this.cache = new Map();
     this.dataHub = new DataHub(this);
@@ -492,6 +510,8 @@ export class Client {
     this.profiles.ensure();
     this.streams.clear();
     this.subtitles.clear();
+    this.subtitleInfo.clear();
+    this.subtitleLists.clear();
     this.metas.clear();
     this.cache.clear();
     this.live.loaded.clear();
@@ -803,7 +823,15 @@ export class Client {
       safety: analysis.safety,
     };
   }
+  /**
+   * Addon subtitles for what is playing, labelled for the interface. The URL
+   * stays in main behind an opaque key; the list is kept for ten minutes so
+   * reopening the panel does not ask every addon again.
+   */
   async getSubtitles({ type, id, streamKey }) {
+    const cacheKey = JSON.stringify([type, id, streamKey || ""]);
+    const hit = this.subtitleLists.get(cacheKey);
+    if (hit && Date.now() - hit.at < 600000) return hit.list;
     const selected = this.streams.get(streamKey);
     const extras = { videoID: id };
     if (selected?.behaviorHints?.videoHash)
@@ -816,35 +844,45 @@ export class Client {
     const results = await Promise.all(
       providers.map(async (a) => {
         try {
-          return (
+          const found =
             (
               await this.request(
                 resourceUrl(a.transportUrl, "subtitles", type, id, extras),
+                { timeout: 10000 },
               )
-            ).subtitles || []
-          );
+            ).subtitles || [];
+          return found.map((s) => ({ ...s, provider: a.manifest.name }));
         } catch {
           return [];
         }
       }),
     );
-    return [...(selected?.subtitles || []), ...results.flat()]
+    const seen = new Set();
+    const list = [
+      ...(selected?.subtitles || []).map((s) => ({ ...s, provider: "المصدر" })),
+      ...results.flat(),
+    ]
       .filter((s) => typeof s?.url === "string" && /^https?:\/\//i.test(s.url))
+      .filter((s) => !seen.has(s.url) && seen.add(s.url))
       .map((s) => {
         const key = keyFor(s.url);
+        const label = subtitleLabel(s);
         this.subtitles.set(key, s.url);
+        this.subtitleInfo.set(key, { lang: s.lang || "und", label });
         return {
           key,
           lang: s.lang || "und",
-          name: s.id || s.lang || "Subtitle",
+          label,
+          provider: String(s.provider || "").slice(0, 60),
+          format: subtitleFormat(s.url),
         };
-      })
-      .sort(
-        (a, b) =>
-          Number(/^(ar|ara)$/i.test(b.lang)) -
-          Number(/^(ar|ara)$/i.test(a.lang)),
-      );
+      });
+    if (this.subtitleLists.size > 20)
+      this.subtitleLists.delete(this.subtitleLists.keys().next().value);
+    this.subtitleLists.set(cacheKey, { at: Date.now(), list });
+    return list;
   }
+
   configureUrl(key) {
     const url = webUrl(this.addon(key).transportUrl);
     url.pathname = url.pathname.replace(/\/manifest\.json$/, "/configure");

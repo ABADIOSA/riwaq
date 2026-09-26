@@ -74,6 +74,7 @@ export default function App() {
     [rows, setRows] = useState([]),
     [failures, setFailures] = useState([]),
     [loading, setLoading] = useState(true),
+    [dockRequest, setDockRequest] = useState(0),
     [loadError, setLoadError] = useState(""),
     [selected, setSelected] = useState(null),
     [account, setAccount] = useState(false),
@@ -209,6 +210,7 @@ export default function App() {
             advance(meta, videoId, 1, true);
           }),
           api.on("playerRequest", ({ type }) => {
+            if (type === "panel") return setDockRequest((n) => n + 1);
             const current = playerRef.current;
             if (!current?.active || !current.meta) return;
             advance(
@@ -902,6 +904,8 @@ export default function App() {
             !!selected || account || playerOpen || profilesOpen || !!unlockRoom
           }
           onSettings={() => setPlayerOpen(true)}
+          update={update}
+          dockRequest={dockRequest}
           onAdvance={(direction) =>
             advance(player.meta, player.videoId, direction)
           }

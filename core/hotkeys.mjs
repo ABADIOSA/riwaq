@@ -173,6 +173,12 @@ export const HOTKEY_ACTIONS = [
     binding: "u",
   },
   {
+    id: "panel",
+    label: "لوحة الترجمة والصوت",
+    command: "script-message riwaq-panel",
+    binding: "c",
+  },
+  {
     id: "close",
     label: "الخروج من ملء الشاشة أو إغلاق المشغّل",
     command: "script-message riwaq-stop",
@@ -229,6 +235,8 @@ export function inputConf(custom = {}) {
     lines.push(`${bindings[action.id]} ${action.command}`);
   // The double click to fullscreen is not rebindable: it is a pointer gesture.
   lines.push("MBTN_LEFT_DBL script-message riwaq-fullscreen");
+  // A right click opens the subtitle and audio panel beside the picture.
+  lines.push("MBTN_RIGHT script-message riwaq-panel");
   return lines.join("\n") + "\n";
 }
 

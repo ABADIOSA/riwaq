@@ -3,6 +3,7 @@ const allowed = new Set([
   "init",
   "catalog",
   "catalogPlan",
+  "subtitleCues",
   "metadata",
   "streams",
   "subtitles",
