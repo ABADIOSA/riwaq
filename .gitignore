@@ -1,8 +1,12 @@
 node_modules/
 dist/
 release/
+release-final/
 vendor/mpv/
 .cache/
+*-private.pem
+*.pfx
+*.p12
 *.log
 *.bin
 .env

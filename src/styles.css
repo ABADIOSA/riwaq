@@ -2414,3 +2414,97 @@ button.secondary {
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   }
 }
+.update-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 0 22px;
+}
+.update-hero > div {
+  flex: 1;
+}
+.update-hero h2 {
+  margin: 8px 0;
+  font-size: 26px;
+}
+.update-emblem {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  flex-shrink: 0;
+  border: 1px solid var(--accent);
+  border-radius: 24px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.update-actions,
+.update-trust {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.update-actions {
+  margin: 16px 0;
+}
+.update-trust {
+  color: var(--accent);
+  font-size: 13px;
+}
+.update-progress-area {
+  margin: 20px 0;
+}
+.update-progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.update-progress-area progress {
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  accent-color: var(--accent);
+}
+.update-progress-area progress::-webkit-progress-bar {
+  background: #ffffff12;
+}
+.update-progress-area progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 10px;
+}
+.update-notes {
+  margin: 18px 0;
+  padding: 16px;
+  background: #ffffff05;
+  border: 1px solid #ffffff12;
+  border-radius: 14px;
+}
+.update-notes summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.update-notes pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.9;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.update-banner {
+  margin: 20px 46px 0;
+}
+@media (max-width: 1100px) {
+  .update-hero {
+    flex-wrap: wrap;
+  }
+  .update-hero h2 {
+    font-size: 22px;
+  }
+  .update-banner {
+    margin-inline: 24px;
+  }
+}

@@ -72,6 +72,7 @@ export default function App() {
   const [state, setState] = useState(initial),
     [ready, setReady] = useState(false),
     [view, setView] = useState("home"),
+    [settingsTab, setSettingsTab] = useState("appearance"),
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState(""),
@@ -530,6 +531,41 @@ export default function App() {
         </div>
       </aside>
       <main className={player.active ? "content with-player" : "content"}>
+        {!player.active &&
+          view !== "settings" &&
+          ["available", "downloading", "ready"].includes(
+            state.update?.status,
+          ) && (
+            <div className="connect-banner update-banner" role="status">
+              <span className="banner-icon">
+                <RefreshCw size={23} />
+              </span>
+              <div>
+                <b>
+                  {state.update.status === "ready"
+                    ? "تحديث رِواق جاهز"
+                    : state.update.status === "downloading"
+                      ? `جاري تنزيل التحديث · ${Math.floor(state.update.percent || 0)}%`
+                      : "جديد رِواق وصل"}
+                </b>
+                <p>
+                  الإصدار {state.update.packageVersion} ·{" "}
+                  {state.update.status === "ready"
+                    ? "واصل التصفح أو ثبّته في الوقت المناسب لك."
+                    : "تحديثاتك ومزاياك الجديدة في مكان واحد."}
+                </p>
+              </div>
+              <button
+                className="text-button"
+                onClick={() => {
+                  setSettingsTab("updates");
+                  setView("settings");
+                }}
+              >
+                عرض التحديث
+              </button>
+            </div>
+          )}
         <header className="topbar">
           <div className="topbar-title">
             <span className="tiny-dot" /> تجربة مشاهدة، على ذوقك
@@ -836,6 +872,8 @@ export default function App() {
         )}
         {view === "settings" && (
           <Preferences
+            key={settingsTab}
+            initialTab={settingsTab}
             state={state}
             update={update}
             act={act}
