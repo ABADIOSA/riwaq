@@ -887,9 +887,9 @@ body:has(.theater:not(.mini-theater)) {
 }
 .dock-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   flex: 1;
-  overflow-x: auto;
 }
 .dock-tabs button,
 .dock-chips button,
@@ -1223,4 +1223,9 @@ button.dock-row {
 }
 .mini-theater .ends-at {
   display: none;
+}
+
+.theater.pointer-still .video-surface,
+.theater.immersive.pointer-still {
+  cursor: none;
 }

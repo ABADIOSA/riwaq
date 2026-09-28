@@ -5,6 +5,10 @@ const allowed = new Set([
   "catalogPlan",
   "subtitleCues",
   "copyThemeCode",
+  "hudPanel",
+  "hudRequest",
+  "playerSources",
+  "switchSource",
   "metadata",
   "streams",
   "subtitles",
@@ -82,7 +86,16 @@ contextBridge.exposeInMainWorld("riwaq", {
     return r.value;
   },
   on: (name, fn) => {
-    if (!["state", "player", "notice", "ended", "playerRequest"].includes(name))
+    if (
+      ![
+        "state",
+        "player",
+        "notice",
+        "ended",
+        "playerRequest",
+        "hudCommand",
+      ].includes(name)
+    )
       return () => {};
     const handler = (_event, data) => fn(data);
     ipcRenderer.on("riwaq:" + name, handler);

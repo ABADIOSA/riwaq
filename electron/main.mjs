@@ -8,6 +8,7 @@ import {
   session,
   screen,
   clipboard,
+  globalShortcut,
   powerMonitor,
 } from "electron";
 import {
@@ -34,8 +35,15 @@ import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
 import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
+import {
+  HUD_METHODS,
+  HUD_REQUESTS,
+  hudRect,
+  hudVisible,
+} from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
+import { nextSource, playableKeys } from "../core/failover.mjs";
 import { VideoHost } from "./video-host.mjs";
 import { DesktopUpdates } from "./updater.mjs";
 
@@ -53,15 +61,161 @@ let window, client, player, videoHost, loginServer, loginTimer, presence;
 // A picked backup stays in main between "preview" and "restore"; the renderer
 // only ever holds the opaque token.
 let pendingBackup = null;
-let watching = { active: false, pip: false };
+let watching = { active: false, pip: false, error: false };
 // What is playing from an addon stream: subtitle requests need its stream key.
 let nowPlaying = null;
+// Playable sources per title in ranked order, for automatic failover.
+const ranked = new Map();
+function remember({ type, id }, result) {
+  const keys = playableKeys(result);
+  ranked.delete(`${type}:${id}`);
+  if (ranked.size >= 20) ranked.delete(ranked.keys().next().value);
+  ranked.set(`${type}:${id}`, keys);
+}
+// Sources already tried for the title that is failing over.
+let failover = { id: null, tried: new Set() };
+/**
+ * When a source fails, play the next ranked one from the same position.
+ * At most three attempts per title, and only for addon streams.
+ */
+async function tryNextSource() {
+  if (client.state.settings.autoFailover === false || !nowPlaying) return;
+  const current = nowPlaying;
+  if (failover.id !== current.id)
+    failover = { id: current.id, tried: new Set() };
+  failover.tried.add(current.key);
+  const next = nextSource(
+    ranked.get(`${current.type}:${current.id}`),
+    failover.tried,
+  );
+  if (!next || !player.meta) return;
+  emit("notice", "تعذّر هذا المصدر؛ نجرّب المصدر التالي تلقائياً…");
+  try {
+    await play({ key: next, meta: player.meta, videoId: current.id });
+  } catch {
+    /* The viewer can still pick a source by hand. */
+  }
+}
+// Media keys control playback only while something plays.
+let mediaKeys = false;
+function setMediaKeys(on) {
+  if (on === mediaKeys) return;
+  mediaKeys = on;
+  const keys = {
+    MediaPlayPause: () => player.command({ action: "pause" }),
+    MediaStop: () => player.stop(),
+    MediaNextTrack: () => emit("playerRequest", { type: "next" }),
+    MediaPreviousTrack: () => emit("playerRequest", { type: "previous" }),
+  };
+  for (const [key, run] of Object.entries(keys)) {
+    try {
+      if (on) globalShortcut.register(key, () => player.state.active && run());
+      else globalShortcut.unregister(key);
+    } catch {
+      /* Another application may own the key. */
+    }
+  }
+}
 // Parsed addon subtitles for quick sync, a few at a time.
 const cueCache = new Map();
+// The HUD: a transparent window over the video surface; see core/hud.mjs.
+let hud = null;
+let hudReady = false;
+let surfaceShown = false;
+const HUD_EVENTS = new Set(["player", "state", "notice", "hudCommand"]);
 const emit = (name, data) => {
-  if (window && !window.isDestroyed())
+  if (window && !window.isDestroyed() && name !== "hudCommand")
     window.webContents.send("riwaq:" + name, data);
+  if (hud && !hud.isDestroyed() && hudReady && HUD_EVENTS.has(name))
+    hud.webContents.send("riwaq:" + name, data);
 };
+const overlayEnabled = () =>
+  !process.env.RIWAQ_SMOKE && client?.state.settings.playerOverlay !== false;
+/** Creates the HUD once; it stays hidden until a viewing needs it. */
+function ensureHud() {
+  if (!overlayEnabled() || !window || window.isDestroyed()) return null;
+  if (hud && !hud.isDestroyed()) return hud;
+  hudReady = false;
+  try {
+    hud = new BrowserWindow({
+      parent: window,
+      show: false,
+      frame: false,
+      transparent: true,
+      backgroundColor: "#00000000",
+      hasShadow: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      // Clicks never take focus from the main window, which keeps the
+      // keyboard shortcuts working while the HUD handles the mouse.
+      focusable: false,
+      webPreferences: {
+        preload: join(root, "electron", "preload.cjs"),
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
+      },
+    });
+  } catch {
+    hud = null;
+    player?.setOverlay(false);
+    return null;
+  }
+  hud.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  hud.webContents.on("will-navigate", (event) => event.preventDefault());
+  hud.webContents.on("did-finish-load", () => {
+    hudReady = true;
+    player?.setOverlay(true);
+    placeHud();
+  });
+  hud.webContents.on("render-process-gone", () => closeHud());
+  hud.on("closed", () => {
+    hud = null;
+    hudReady = false;
+    player?.setOverlay(false);
+  });
+  hud
+    .loadFile(fileURLToPath(new URL("../dist/index.html", import.meta.url)), {
+      hash: "hud",
+    })
+    .catch(() => closeHud());
+  return hud;
+}
+function closeHud() {
+  if (hud && !hud.isDestroyed()) hud.destroy();
+  hud = null;
+  hudReady = false;
+  player?.setOverlay(false);
+}
+/** Lays the HUD exactly over the video surface, or hides it. */
+function placeHud() {
+  if (!hud || hud.isDestroyed() || !hudReady || !window || window.isDestroyed())
+    return;
+  const rect = hudRect({
+    content: window.getContentBounds(),
+    surface: videoHost?.last,
+    zoom: appliedZoom || 1,
+  });
+  const show =
+    rect &&
+    hudVisible({
+      enabled: overlayEnabled(),
+      player: player?.state,
+      surfaceVisible: surfaceShown,
+      minimized: window.isMinimized(),
+    });
+  if (!show) {
+    if (hud.isVisible()) hud.hide();
+    return;
+  }
+  hud.setBounds(rect);
+  if (!hud.isVisible()) hud.showInactive();
+}
 let appliedZoom = 1;
 /** The viewer's interface scale, never shrinking the layout below 980×680. */
 function applyZoom() {
@@ -374,7 +528,32 @@ const methods = {
     return true;
   },
   metadata: (a) => client.metadata(a),
-  streams: (a) => client.getStreams(a),
+  streams: async (a) => {
+    const result = await client.getStreams(a);
+    remember(a, result);
+    return result;
+  },
+  // The sources for what is playing, ranked as in Details, to switch inside
+  // the player without losing the position.
+  playerSources: async () => {
+    if (!nowPlaying || !player.state.active) return { streams: [] };
+    const result = await client.getStreams({
+      type: nowPlaying.type,
+      id: nowPlaying.id,
+    });
+    remember(nowPlaying, result);
+    return { ...result, current: nowPlaying.key };
+  },
+  switchSource: async (a) => {
+    if (!nowPlaying || !player.state.active || !player.meta)
+      throw new Error("لا توجد مشاهدة حالية");
+    return play({
+      key: a?.key,
+      meta: player.meta,
+      videoId: nowPlaying.id,
+      resume: true,
+    });
+  },
   subtitles: () => {
     if (!player.state.active || !nowPlaying || nowPlaying.id !== player.videoId)
       return [];
@@ -409,6 +588,8 @@ const methods = {
   settings: async (a) => {
     const state = client.settings(a);
     applyZoom();
+    if (overlayEnabled()) ensureHud();
+    else closeHud();
     // Presence and the key map are derived from settings, so they follow.
     await applyPresence().catch(() => {});
     return state;
@@ -555,8 +736,29 @@ const methods = {
     return true;
   },
   play,
-  videoBounds: (a) =>
-    player.state.active ? videoHost.bounds(a) : (videoHost.hide(), false),
+  videoBounds: (a) => {
+    surfaceShown = !!player.state.active && a?.visible !== false;
+    const placed = player.state.active
+      ? videoHost.bounds(a)
+      : (videoHost.hide(), false);
+    placeHud();
+    return placed;
+  },
+  // The main window asks the HUD to open or close its panel (C key).
+  hudPanel: () => {
+    emit("hudCommand", { type: "panel" });
+    return true;
+  },
+  // The HUD forwards a request the main interface owns.
+  hudRequest: (a) => {
+    if (!HUD_REQUESTS.has(a?.type)) throw new Error("الطلب غير مسموح");
+    if (a.type === "episode") {
+      if (typeof a.videoId !== "string" || !/^[\w:.-]{1,200}$/.test(a.videoId))
+        throw new Error("الحلقة غير صالحة");
+      emit("playerRequest", { type: "episode", videoId: a.videoId });
+    } else emit("playerRequest", { type: a.type });
+    return true;
+  },
   playerCommand: (a) => player.command(a),
   stop: async () => {
     await player.stop();
@@ -822,15 +1024,20 @@ app
       window.on("enter-full-screen", () => {
         player?.setFullscreen(true);
         settle();
+        placeHud();
       });
       window.on("leave-full-screen", () => {
         player?.setFullscreen(false);
         settle();
+        placeHud();
       });
       window.on("resize", () => {
         settle();
         applyZoom();
+        placeHud();
       });
+      window.on("move", () => placeHud());
+      window.on("restore", () => placeHud());
       window.webContents.on("did-finish-load", () => {
         appliedZoom = 0;
         applyZoom();
@@ -845,11 +1052,15 @@ app
         onState: (s) => {
           // A new viewing, or the mini player opening or closing, decides the
           // window's full screen state; afterwards the viewer owns it.
+          const failed = s.active && s.error && !watching.error;
           const starting = s.active && !watching.active;
           const pipChanged =
             s.active && watching.active && s.pip !== watching.pip;
-          watching = { active: !!s.active, pip: !!s.pip };
+          watching = { active: !!s.active, pip: !!s.pip, error: !!s.error };
+          setMediaKeys(!!s.active);
+          if (failed) tryNextSource();
           emit("player", s);
+          placeHud();
           updatePresence();
           client.integrations.observePlayback(s);
           if (!s.active) {
@@ -885,7 +1096,11 @@ app
         },
         // The in-player episode keys are requests: the interface owns which
         // episode comes next and which source plays it.
-        onEvent: (event) => emit("playerRequest", event),
+        // With the HUD on, the panel lives there; otherwise in the theater.
+        onEvent: (event) =>
+          event.type === "panel" && player.state.overlay
+            ? emit("hudCommand", event)
+            : emit("playerRequest", event),
       });
       // MPV's own cursor autohide does not fire reliably inside the embedded
       // surface, so main watches the pointer and tells MPV when to hide it.
@@ -916,6 +1131,7 @@ app
       applyPresence().catch(() => {});
       if (!process.env.RIWAQ_SMOKE) client.updates.start();
       window.on("minimize", () => {
+        placeHud();
         if (
           client.state.settings.pauseOnMinimize &&
           player.state.active &&
@@ -935,8 +1151,15 @@ app
         if (
           !window ||
           window.isDestroyed() ||
-          event.sender !== window.webContents ||
-          event.senderFrame !== window.webContents.mainFrame ||
+          !(
+            (event.sender === window.webContents &&
+              event.senderFrame === window.webContents.mainFrame) ||
+            (hud &&
+              !hud.isDestroyed() &&
+              event.sender === hud.webContents &&
+              event.senderFrame === hud.webContents.mainFrame &&
+              HUD_METHODS.has(method))
+          ) ||
           !Object.hasOwn(methods, method)
         )
           return { ok: false, error: "الطلب غير مسموح" };
@@ -949,6 +1172,7 @@ app
         }
       });
       await window.loadFile(page);
+      ensureHud();
       if (process.env.RIWAQ_SMOKE) {
         const { runSmoke } = await import("../tests/smoke-runner.mjs");
         await runSmoke({ window, client, player, app, root });
@@ -969,6 +1193,7 @@ function cleanError(error) {
 }
 app.on("window-all-closed", () => app.quit());
 let closing = false;
+app.on("will-quit", () => globalShortcut.unregisterAll());
 app.on("before-quit", (event) => {
   if (closing) return;
   event.preventDefault();

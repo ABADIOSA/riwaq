@@ -25,6 +25,10 @@ GPL-3.0, Kotlin/Compose. Studied at `abdf9f0` for player behaviour only; no code
 
 Harbor (MIT) at `a821e27` on `beta-branch`: a theme studio with a preset gallery, a ten-colour custom palette, font pairs, layout, card and button styles, a navigation editor, draft history and shareable themes. Nuvio HTPC (GPL-3.0) at `abdf9f0`: accent gradients with a direction, an AMOLED black option, an application UI scale, an application font, poster radius, width, depth and hover highlight, hidden poster labels, and a configurable details background. Riwaq 0.7's appearance studio was written from this behaviour; no code from either project was copied.
 
+## Harbor and Nuvio HTPC players, studied 2026-09-28
+
+Harbor beta (`src-tauri/src/mpv.rs`, MIT): MPV embedded with `input-cursor=no` and its child windows pushed to `HWND_BOTTOM` under a transparent WebView2, so the web controls draw over the picture and the page owns the pointer. Nuvio HTPC (`native/windows/player_bridge.cpp`, GPL-3.0): a container window with a transparent WebView2 HUD over MPV, the pointer hidden with `ShowCursor` from the HUD's thread, and system media controls. Riwaq 0.8 reaches the same outcome in Electron with a transparent owned window over the surface; no code was copied. Player behaviours taken as ideas: an in-player sources panel, an episodes panel, stream failover, a next-episode card and media keys.
+
 ## Stremio Community v5
 
 - License: GPL-3.0. Stack: C++ with WebView2 and libmpv, wrapping the official Stremio web UI.

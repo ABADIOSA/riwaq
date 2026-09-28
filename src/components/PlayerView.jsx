@@ -32,13 +32,19 @@ export default function PlayerView({
   onAdvance,
   update,
   dockRequest,
+  onEpisode,
 }) {
   const surface = useRef(),
-    [dock, setDock] = useState(null);
+    [dock, setDock] = useState(null),
+    [still, setStill] = useState(false),
+    stillTimer = useRef();
   const mini = player.pip,
     // Full screen gives the whole window to the picture; MPV's own controller
     // draws over it, because HTML cannot paint above the native surface.
     immersive = !!player.fullscreen && !mini,
+    // The HUD window draws the controls over the picture; the theater then
+    // only gives the whole window to the video.
+    hudMode = !!player.overlay && !mini,
     command = (action, value) => act("playerCommand", { action, value });
   const series = player.mediaType === "series";
   const sleepLeft = player.sleepAt
@@ -71,7 +77,7 @@ export default function PlayerView({
       window.removeEventListener("resize", report);
       call("videoBounds", { visible: false }).catch(() => {});
     };
-  }, [mini, hidden, immersive, !!dock]);
+  }, [mini, hidden, immersive, hudMode, !!dock]);
   useEffect(() => {
     const onKey = (e) => {
       if (hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName))
@@ -81,8 +87,10 @@ export default function PlayerView({
         command("pause");
       }
       if (e.key.toLowerCase() === "f") command("fullscreen");
-      if (e.key.toLowerCase() === "c" && !mini)
-        setDock((open) => (open ? null : "subs"));
+      if (e.key.toLowerCase() === "c" && !mini) {
+        if (hudMode) call("hudPanel").catch(() => {});
+        else setDock((open) => (open ? null : "subs"));
+      }
       if (e.key === "Escape" && player.fullscreen) {
         e.preventDefault();
         command("exitFullscreen");
@@ -94,7 +102,13 @@ export default function PlayerView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [player.position, player.fullscreen, hidden, state.settings.seekStep]);
+  }, [
+    player.position,
+    player.fullscreen,
+    player.overlay,
+    hidden,
+    state.settings.seekStep,
+  ]);
   // A right click or C inside MPV asks for the panel; the mini player has none.
   useEffect(() => {
     if (dockRequest && !mini) setDock((open) => (open ? null : "subs"));
@@ -104,7 +118,14 @@ export default function PlayerView({
   }, [mini]);
   return (
     <section
-      className={`theater ${mini ? "mini-theater" : ""} ${immersive ? "immersive" : ""} ${dock ? "docked" : ""}`}
+      onMouseMove={() => {
+        // Without the HUD, the page still hides the pointer when the picture
+        // is the thing under it and the pointer has been still.
+        setStill(false);
+        clearTimeout(stillTimer.current);
+        stillTimer.current = setTimeout(() => setStill(true), 2500);
+      }}
+      className={`theater ${still && !mini ? "pointer-still" : ""} ${mini ? "mini-theater" : ""} ${immersive || hudMode ? "immersive" : ""} ${dock && !hudMode ? "docked" : ""}`}
       aria-label="المشغل المدمج"
     >
       <header className="theater-header">
@@ -175,7 +196,7 @@ export default function PlayerView({
           </dl>
         )}
       </div>
-      {dock && (
+      {dock && !hudMode && (
         <PlayerDock
           player={player}
           state={state}
@@ -183,6 +204,7 @@ export default function PlayerView({
           update={update}
           tab={dock}
           setTab={setDock}
+          onEpisode={onEpisode}
           onClose={() => setDock(null)}
         />
       )}
