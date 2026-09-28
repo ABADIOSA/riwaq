@@ -105,7 +105,13 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(""), 6500);
   };
   /** Queue playback is opt-in through autoplay; explicit episode buttons stay episodic. */
-  const advance = async (meta, videoId, direction, fromEnd = false) => {
+  const advance = async (
+    meta,
+    videoId,
+    direction,
+    fromEnd = false,
+    jumpTo = null,
+  ) => {
     if (advancing.current || !meta || ["local", "live"].includes(meta.type))
       return;
     const profileId = stateRef.current.profiles?.active;
@@ -121,7 +127,13 @@ export default function App() {
       );
       const videos = releasedEpisodes(details);
       const index = videos.findIndex((v) => v.id === videoId);
-      const target = queued || (index >= 0 ? videos[index + direction] : null);
+      const target =
+        queued ||
+        (jumpTo
+          ? videos.find((v) => v.id === jumpTo)
+          : index >= 0
+            ? videos[index + direction]
+            : null);
       if (!target) {
         if (!fromEnd)
           notice(direction > 0 ? "هذه آخر حلقة متاحة" : "هذه أول حلقة");
@@ -214,10 +226,13 @@ export default function App() {
             if (!stateRef.current.settings.autoplay) return;
             advance(meta, videoId, 1, true);
           }),
-          api.on("playerRequest", ({ type }) => {
+          api.on("playerRequest", ({ type, videoId: jump }) => {
             if (type === "panel") return setDockRequest((n) => n + 1);
+            if (type === "settings") return setPlayerOpen(true);
             const current = playerRef.current;
             if (!current?.active || !current.meta) return;
+            if (type === "episode")
+              return advance(current.meta, current.videoId, 0, false, jump);
             advance(
               current.meta,
               current.videoId,
@@ -920,6 +935,7 @@ export default function App() {
           onAdvance={(direction) =>
             advance(player.meta, player.videoId, direction)
           }
+          onEpisode={(id) => advance(player.meta, player.videoId, 0, false, id)}
         />
       )}
       {playerOpen && (

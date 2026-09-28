@@ -241,6 +241,7 @@ export class Player {
       skip: null,
       pip: false,
       fullscreen: this.fullscreen,
+      overlay: !!this.overlay,
       fill: !!settings.videoFill,
       live,
       abLoop: null,
@@ -403,6 +404,14 @@ export class Player {
       this.cursorHidden ? "always" : "no",
     ]);
   }
+  /** Whether the HUD draws the controls; the theater layout follows it. */
+  setOverlay(on) {
+    this.overlay = !!on;
+    if (!this.state.active || this.state.overlay === this.overlay) return;
+    this.state.overlay = this.overlay;
+    this.applyController();
+    this.onState(this.state);
+  }
   /** Main reports the window's full screen state; the controller follows it. */
   setFullscreen(on) {
     this.fullscreen = !!on;
@@ -417,7 +426,9 @@ export class Player {
     this.send([
       "script-message",
       "osc-visibility",
-      this.state.fullscreen && !this.state.pip ? "auto" : "never",
+      this.state.fullscreen && !this.state.pip && !this.state.overlay
+        ? "auto"
+        : "never",
       "no-osd",
     ]);
   }

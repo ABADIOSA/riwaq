@@ -1,4 +1,18 @@
-# Verification — Riwaq 0.7.0
+# Verification — Riwaq 0.8.0
+
+## 0.8.0 — controls over the picture
+
+The owner reported that the pointer still did not hide in 0.7 and asked for a player like Harbor's and Nuvio's. Studying both showed the cause: they draw their controls in a transparent web layer over MPV, so their own page owns the pointer. Riwaq's MPV surface sits above the page, so the pointer over the picture belonged to MPV, and MPV did not honour `cursor-autohide` inside the embedded surface. 0.8 adds a transparent HUD window over the surface.
+
+Executed:
+
+- `npm test`: **210 passing, 0 failing** (204 + 6 new): the HUD rectangle in screen DIPs including page zoom and clipping, when the HUD shows (never for the mini player, a hidden surface or a minimised window), the HUD bridge being a subset of the preload allowlist that excludes backups, logins, installs, live sources, updates and profile switching, failover choosing the next ranked playable source and giving up after three failures, the new settings, and MPV's controller staying hidden while the HUD draws controls.
+- `npm run check` and `npm run build` pass.
+- Rendered the HUD page in headless Chromium at 980×552 and 1440×810 with a stubbed bridge: controls visible on movement and hidden with `cursor: none` after 3 s still; a click pausing, a double click toggling full screen without also pausing, the wheel raising volume, a right click opening the panel; the sources room listing ranked sources with the unsupported one disabled and switching to another; the episodes room jumping to an episode; the next-episode card appearing in the last 45 s with the skip button raised above it. Zero page errors.
+
+Not executed:
+
+- Nothing in 0.8.0 has run on Windows. Unverified natively and the main risk of this release: a transparent owned BrowserWindow compositing over the MPV child surface, its placement through moves, resizes, zoom and full screen, non-focusable clicks, media keys, and failover against real failing streams. The setting **أدوات التحكم فوق الصورة** turns the HUD off and restores the 0.7 player.
 
 ## 0.7.0 — appearance studio and the pointer
 

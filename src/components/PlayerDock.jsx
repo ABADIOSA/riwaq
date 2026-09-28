@@ -12,7 +12,11 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  ListVideo,
+  Server,
+  Play,
 } from "lucide-react";
+import { isCompleted, releasedEpisodes } from "../../core/library.mjs";
 import {
   DEFAULT_SUBTITLE_STYLE,
   KIND_LABELS,
@@ -31,6 +35,8 @@ const TABS = [
   ["sync", "المزامنة", Timer],
   ["style", "المظهر", Palette],
   ["audio", "الصوت", AudioLines],
+  ["episodes", "الحلقات", ListVideo],
+  ["sources", "المصادر", Server],
 ];
 const COLORS = ["#FFFFFF", "#FFE45C", "#7FE7FF", "#9CFF8F", "#FFB36B"];
 const EDGES = ["#000000", "#1F2937", "#3B0764", "#FFFFFF"];
@@ -62,12 +68,19 @@ export default function PlayerDock({
   tab,
   setTab,
   onClose,
+  onEpisode,
 }) {
+  const series = player.mediaType === "series";
+  const addon = !["local", "live"].includes(player.mediaType);
   return (
     <aside className="player-side" aria-label="الترجمة والصوت">
       <header className="dock-head">
         <div className="dock-tabs" role="tablist">
-          {TABS.map(([id, label, Icon]) => (
+          {TABS.filter(
+            ([id]) =>
+              (id !== "episodes" || (series && onEpisode)) &&
+              (id !== "sources" || addon),
+          ).map(([id, label, Icon]) => (
             <button
               key={id}
               role="tab"
@@ -92,6 +105,15 @@ export default function PlayerDock({
           <StyleRoom player={player} state={state} act={act} update={update} />
         )}
         {tab === "audio" && <AudioRoom player={player} act={act} />}
+        {tab === "episodes" && series && onEpisode && (
+          <EpisodesRoom
+            player={player}
+            state={state}
+            act={act}
+            onEpisode={onEpisode}
+          />
+        )}
+        {tab === "sources" && addon && <SourcesRoom act={act} />}
       </div>
     </aside>
   );
@@ -607,6 +629,154 @@ function AudioRoom({ player, act }) {
         />
       </label>
       <p className="dock-note">فوق 100% تضخيم للصوت للمصادر الهادئة.</p>
+    </div>
+  );
+}
+
+/** Every released episode of the series, by season, to jump to one. */
+function EpisodesRoom({ player, state, act, onEpisode }) {
+  const [meta, setMeta] = useState(null);
+  const [season, setSeason] = useState(null);
+  useEffect(() => {
+    let live = true;
+    act("metadata", { type: "series", id: player.meta?.id }).then(
+      (m) => live && setMeta(m || { videos: [] }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [player.meta?.id]);
+  const videos = meta ? releasedEpisodes(meta) : [];
+  const seasons = [...new Set(videos.map((v) => v.season ?? 1))].sort(
+    (a, b) => a - b,
+  );
+  const currentSeason =
+    videos.find((v) => v.id === player.videoId)?.season ?? seasons[0];
+  const shown = season ?? currentSeason;
+  if (!meta) return <p className="dock-note dock-room">نجلب الحلقات…</p>;
+  return (
+    <div className="dock-room">
+      {seasons.length > 1 && (
+        <div className="dock-chips">
+          {seasons.map((n) => (
+            <button
+              key={n}
+              className={n === shown ? "active" : ""}
+              onClick={() => setSeason(n)}
+            >
+              {n === 0 ? "خاصة" : `الموسم ${n}`}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="dock-list">
+        {videos
+          .filter((v) => (v.season ?? 1) === shown)
+          .map((v) => {
+            const current = v.id === player.videoId;
+            const done = isCompleted(state.progress?.[`series:${v.id}`] || {});
+            return (
+              <button
+                key={v.id}
+                className={`dock-row ${current ? "selected" : ""}`}
+                onClick={() => !current && onEpisode(v.id)}
+              >
+                <span className="dock-row-main">
+                  <span className="dock-index">{v.episode}</span>
+                  <span>
+                    <b dir="auto">
+                      {v.title || v.name || `الحلقة ${v.episode}`}
+                    </b>
+                    <small>
+                      {current ? "تشاهدها الآن" : done ? "شاهدتها" : ""}
+                    </small>
+                  </span>
+                </span>
+                {current ? (
+                  <Play size={15} />
+                ) : done ? (
+                  <Check size={15} />
+                ) : null}
+              </button>
+            );
+          })}
+        {videos.length === 0 && (
+          <p className="dock-note">لا تتوفر قائمة حلقات لهذا العمل.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The sources for what is playing, ranked as in Details. Switching keeps the
+ * position: the player saves it and the new source resumes there.
+ */
+function SourcesRoom({ act }) {
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    act("playerSources").then((r) => setResult(r || { streams: [] }));
+  }, []);
+  if (!result)
+    return <p className="dock-note dock-room">نجمع المصادر من إضافاتك…</p>;
+  const streams = result.streams.filter((s) => !s.external);
+  return (
+    <div className="dock-room">
+      <p className="dock-note">
+        بدّل المصدر إن تقطّع أو كانت جودته سيئة؛ تكمل من نفس اللحظة.
+      </p>
+      <div className="dock-list">
+        {streams.map((s) => {
+          const current = s.key === result.current;
+          return (
+            <button
+              key={s.key}
+              disabled={!s.supported || !!busy}
+              className={`dock-row ${current ? "selected" : ""}`}
+              onClick={async () => {
+                if (current) return;
+                setBusy(s.key);
+                await act("switchSource", { key: s.key });
+                setBusy("");
+              }}
+            >
+              <span className="dock-row-main">
+                <span className="dock-index">
+                  {s.resolution === 2160
+                    ? "4K"
+                    : s.resolution
+                      ? `${s.resolution}p`
+                      : "—"}
+                </span>
+                <span>
+                  <b dir="auto">{s.title || s.name}</b>
+                  <small>
+                    {[
+                      s.provider,
+                      s.hdr,
+                      s.codec,
+                      s.audio,
+                      s.sizeLabel,
+                      s.cached && "مخزّن",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </small>
+                </span>
+              </span>
+              {busy === s.key ? (
+                <RefreshCw size={15} />
+              ) : current ? (
+                <Check size={15} />
+              ) : null}
+            </button>
+          );
+        })}
+        {streams.length === 0 && (
+          <p className="dock-note">لم تجد إضافاتك مصادر أخرى لهذا العمل.</p>
+        )}
+      </div>
     </div>
   );
 }

@@ -43,6 +43,8 @@ export const DEFAULT_SETTINGS = {
   liveBufferSeconds: 4,
   epgHours: 4,
   autoFullscreen: true,
+  playerOverlay: true,
+  autoFailover: true,
   videoFill: false,
   subtitleKind: "standard",
   autoSubtitles: "preferred",
@@ -224,6 +226,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "discordPresence",
     "notifyOnFinish",
     "autoFullscreen",
+    "playerOverlay",
+    "autoFailover",
     "videoFill",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
