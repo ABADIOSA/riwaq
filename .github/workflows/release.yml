@@ -11,9 +11,19 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to publish, for example v0.3.0. Leave empty to build without releasing."
+        description: "Tag matching package.json, for example v0.8.0. Leave empty to build without releasing."
         required: false
         type: string
+      channel:
+        description: "Release channel (stable or beta)"
+        required: true
+        default: beta
+        type: choice
+        options: [beta, stable]
+
+concurrency:
+  group: riwaq-release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -33,12 +43,20 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: npm run package
+      - name: Sign the update package
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
+        env:
+          RIWAQ_UPDATE_PRIVATE_KEY: ${{ secrets.RIWAQ_UPDATE_PRIVATE_KEY }}
+          RIWAQ_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RIWAQ_RELEASE_CHANNEL: ${{ inputs.channel || 'beta' }}
+        run: node scripts/sign-release.mjs
       - name: Record the artifact checksum
         shell: pwsh
         run: |
-          $file = Get-ChildItem release/*.exe | Select-Object -First 1
-          $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
-          "$hash  $($file.Name)" | Out-File -Encoding ascii release/SHA256SUMS.txt
+          Get-ChildItem release/*.exe | ForEach-Object {
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)"
+          } | Out-File -Encoding ascii release/SHA256SUMS.txt
           Get-Content release/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
@@ -46,6 +64,7 @@ jobs:
           path: |
             release/*.exe
             release/SHA256SUMS.txt
+            release/riwaq-update.json
           retention-days: 14
       # gh creates the tag itself, which is how a release is cut when a tag
       # cannot be pushed directly to the remote.
@@ -55,11 +74,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag || github.ref_name }}
+          CHANNEL: ${{ inputs.channel || 'beta' }}
         run: |
-          gh release create "$env:TAG" `
-            (Get-ChildItem release/*.exe).FullName `
-            release/SHA256SUMS.txt `
-            --target "${{ github.sha }}" `
-            --title "رِواق $env:TAG" `
-            --notes-file .github/release-notes.md `
-            --prerelease
+          # Upload every artifact to a draft first; clients must never see a
+          # published release whose signed manifest or installer is missing.
+          $files = @(Get-ChildItem release/*.exe | ForEach-Object { $_.FullName })
+          gh release create "$env:TAG" @files release/SHA256SUMS.txt release/riwaq-update.json --draft --target "${{ github.sha }}" --title "رِواق $env:TAG" --notes-file .github/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed; nothing was published.' }
+          if ($env:CHANNEL -eq 'stable') {
+            gh release edit "$env:TAG" --draft=false --prerelease=false --latest
+          } else {
+            gh release edit "$env:TAG" --draft=false --prerelease
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed; inspect the draft.' }

@@ -13,7 +13,7 @@ React (sandboxed, RTL)
        -> Notifier / Discord and Telegram webhooks
        -> Backup / passphrase-sealed .riwaq export and validated restore
        -> Episodes / up next and the calendar from addon episode lists
-       -> Updates / daily GitHub release check, never an install
+       -> Updates / signed package download, cached verification and per-user NSIS install
        -> DiscordPresence / local IPC socket
        -> DPAPI encrypted profile.bin
        -> Player / MPV process, private named pipe, generated input.conf
@@ -64,4 +64,8 @@ A backup file is the only way data leaves the DPAPI seal, so it is always encryp
 
 ## Limits to preserve in product copy
 
-The player is embedded on Windows; the mini player is within the app, not an OS-wide PiP window. HDR is configurable but hardware results are not certified. Stremio Service is still required for infoHash playback. Stremio writes are not implemented. Trakt watchlists import up to 1,000 titles per media type per sync. Trakt history is a completion queue unless the viewer also opts into scrobbling, and one viewing is never recorded by both. Simkl imports items with IMDb IDs. CSV imports the first 500 rows with exact title/year matching. Skip segments come from chapters and a conservative heuristic, not from AniSkip or any external segment database. Picture profiles are MPV's own scalers; no third-party shader files are bundled. Riwaq supplies no channels, playlists or subscriptions. A forgotten backup passphrase cannot be recovered. Update checks only look; nothing is downloaded or installed. Scrobbling records a play at 80%, the completion queue at 90%.
+The player is embedded on Windows; the mini player is within the app, not an OS-wide PiP window. HDR is configurable but hardware results are not certified. Stremio Service is still required for infoHash playback. Stremio writes are not implemented. Trakt watchlists import up to 1,000 titles per media type per sync. Trakt history is a completion queue unless the viewer also opts into scrobbling, and one viewing is never recorded by both. Simkl imports items with IMDb IDs. CSV imports the first 500 rows with exact title/year matching. Skip segments come from chapters and a conservative heuristic, not from AniSkip or any external segment database. Picture profiles are MPV's own scalers; no third-party shader files are bundled. Riwaq supplies no channels, playlists or subscriptions. A forgotten backup passphrase cannot be recovered. Installed NSIS builds can download authenticated updates and install on ordinary app exit or explicit restart; portable/source copies only check. Ed25519 metadata and SHA-512 are verified before execution, and OS shutdown defers install. Windows Authenticode remains unconfigured. Scrobbling records a play at 80%, the completion queue at 90%.
+
+## Update delivery (0.8)
+
+`core/update-package.mjs` owns the signed manifest, canonical filenames, digest verification and restricted HTTPS redirects. `electron/updater.mjs` extends the metadata selector with download/cancel/recovery/installation states; main supplies the fixed installation directory and platform checks. Update preferences are installation-wide. React sees only public status, progress and text notes. The private signing key is an Actions secret; only the public key ships. See [UPDATES.md](UPDATES.md).

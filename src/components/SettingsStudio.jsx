@@ -1,3 +1,4 @@
+import UpdatesCard from "./UpdatesCard.jsx";
 import AppearanceStudio from "./AppearanceStudio.jsx";
 import React, { useState, useEffect } from "react";
 import {
@@ -106,14 +107,26 @@ const sections = [
     Archive,
   ],
   [
+    "updates",
+    "التحديثات",
+    "إصدار تحديث تنزيل تثبيت قناة بيتا تلقائي جديد",
+    RefreshCw,
+  ],
+  [
     "system",
     "الاتصال والتطبيق",
-    "Stremio خدمة تشخيص MPV إصدار",
+    "Stremio خدمة تشخيص MPV إصدار تحديث تنزيل تثبيت قناة بيتا",
     SlidersHorizontal,
   ],
 ];
-export default function SettingsStudio({ state, update, act, notice }) {
-  const [tab, setTab] = useState("appearance"),
+export default function SettingsStudio({
+  state,
+  update,
+  act,
+  notice,
+  initialTab = "appearance",
+}) {
+  const [tab, setTab] = useState(initialTab),
     [search, setSearch] = useState(""),
     [draft, setDraft] = useState(state.settings),
     [diag, setDiag] = useState(null);
@@ -490,6 +503,9 @@ export default function SettingsStudio({ state, update, act, notice }) {
               {id === "backup" && (
                 <BackupRoom update={update} act={act} notice={notice} />
               )}
+              {id === "updates" && (
+                <UpdatesCard state={state} update={update} act={act} />
+              )}
               {id === "presence" && (
                 <PresenceAndAlerts
                   state={state}
@@ -576,7 +592,6 @@ export default function SettingsStudio({ state, update, act, notice }) {
               )}
               {id === "system" && (
                 <>
-                  <UpdatesCard state={state} update={update} act={act} />
                   <section className="settings-card">
                     <div className="section-heading">
                       <h2>الاتصال والتشخيص</h2>
@@ -1594,78 +1609,5 @@ function BackupRoom({ update, act, notice }) {
         )}
       </section>
     </>
-  );
-}
-
-/**
- * Update checks only look: Riwaq never downloads or replaces itself. An
- * available release opens its GitHub page, where the viewer can read the notes
- * and verify the checksum before running anything.
- */
-function UpdatesCard({ state, update, act }) {
-  const [busy, setBusy] = useState(false);
-  const info = state.update || {};
-  return (
-    <section className="settings-card">
-      <div className="section-heading">
-        <h2>التحديثات</h2>
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            await update("updatesCheck");
-            setBusy(false);
-          }}
-        >
-          <RefreshCw size={16} /> {busy ? "جاري التحقق…" : "تحقق الآن"}
-        </button>
-      </div>
-      <p>
-        الإصدار الحالي <b dir="ltr">{info.current || "—"}</b>
-        {info.latest && (
-          <>
-            {" "}
-            · أحدث إصدار <b dir="ltr">{info.latest.version}</b>
-            {info.latest.prerelease ? " (تجريبي)" : ""}
-          </>
-        )}
-        {info.checkedAt && (
-          <small className="subtle"> · آخر تحقق {when(info.checkedAt)}</small>
-        )}
-      </p>
-      {info.failed && (
-        <p className="inline-warning">
-          <AlertCircle size={15} /> تعذّر الوصول إلى GitHub عند آخر تحقق.
-        </p>
-      )}
-      {info.available ? (
-        <button className="primary" onClick={() => act("openUpdate")}>
-          <ArrowUpRight size={16} /> صفحة الإصدار {info.latest.version} على
-          GitHub
-        </button>
-      ) : (
-        info.latest && <p className="subtle">لديك أحدث إصدار.</p>
-      )}
-      <div className="setting-row">
-        <div>
-          <b>التحقق تلقائياً</b>
-          <p>
-            طلب واحد يومياً إلى واجهة GitHub العامة، بلا أي بيانات عنك. رِواق
-            يتحقق فقط ولا ينزّل أو يثبّت شيئاً بنفسه.
-          </p>
-        </div>
-        <button
-          className={`toggle ${info.enabled !== false ? "on" : ""}`}
-          aria-label="التحقق من التحديثات تلقائياً"
-          aria-pressed={info.enabled !== false}
-          onClick={() =>
-            update("updatesSetEnabled", { enabled: info.enabled === false })
-          }
-        >
-          <span />
-        </button>
-      </div>
-    </section>
   );
 }

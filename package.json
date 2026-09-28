@@ -1,6 +1,6 @@
 {
   "name": "riwaq",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "Riwaq — an Arabic-first desktop client for the Stremio addon ecosystem",
@@ -14,7 +14,8 @@
     "test": "node --test tests/*.test.mjs",
     "format": "prettier --write src core electron tests scripts",
     "check": "prettier --check src core electron tests scripts",
-    "package": "npm run build && node node_modules/electron/install.js && electron-builder --win portable --x64"
+    "package": "npm run build && node node_modules/electron/install.js && electron-builder --win nsis portable --x64 --publish never",
+    "release:sign": "node scripts/sign-release.mjs"
   },
   "dependencies": {
     "koffi": "^3.3.0",
@@ -55,7 +56,10 @@
       }
     ],
     "win": {
-      "target": "portable",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "assets/icon.ico",
       "signAndEditExecutable": true
     },
@@ -64,6 +68,15 @@
     },
     "asarUnpack": [
       "node_modules/koffi/**"
-    ]
+    ],
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "artifactName": "Riwaq-Setup-${version}-win-x64.exe"
+    }
   }
 }

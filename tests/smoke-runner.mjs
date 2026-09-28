@@ -3,6 +3,9 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { safeStorage } from "electron";
+import { generateKeyPairSync, createHash, sign } from "node:crypto";
+import { DesktopUpdates } from "../electron/updater.mjs";
+import { installerName } from "../core/update-package.mjs";
 
 export async function runSmoke({ window, client, player, app, root }) {
   const output = join(root, ".cache", "smoke");
@@ -110,11 +113,115 @@ export async function runSmoke({ window, client, player, app, root }) {
     await click("هدوء البحر");
     await wait(
       () =>
-        js(`document.querySelector('.app').classList.contains('theme-teal')`),
+        js(
+          `getComputedStyle(document.querySelector('.app')).getPropertyValue('--accent').trim().toLowerCase() === '#5fc4c0'`,
+        ),
       "theme switch",
     );
     await click("دفء ذهبي");
     await shot("settings");
+    // Signed fixture through the actual updater and IPC/UI. It cannot execute:
+    // the launch hook is replaced and the fixture key is never a shipped key.
+    await click("التحديثات", ".studio-nav button");
+    await wait(
+      () => js(`!!document.querySelector('.updates-studio')`),
+      "update room",
+    );
+    const originalUpdates = client.updates,
+      originalRequest = client.request;
+    const originalPreferences = client.state.updates;
+    const fixtureKeys = generateKeyPairSync("ed25519");
+    const updateBytes = Buffer.alloc(128 * 1024, 42);
+    const version = "0.8.1";
+    const payload = Buffer.from(
+      JSON.stringify({
+        schema: 1,
+        repo: "ABADIOSA/riwaq",
+        version,
+        platform: "win32-x64",
+        channel: "beta",
+        publishedAt: new Date().toISOString(),
+        filename: installerName(version),
+        size: updateBytes.length,
+        sha512: createHash("sha512").update(updateBytes).digest("hex"),
+        notes:
+          "معاينة اختبارية لمسار التحديث الموقّع.\nتحديث من داخل التطبيق، مع الحفاظ على مكتبتك وإعداداتك.",
+      }),
+    );
+    const envelope = JSON.stringify({
+      payload: payload.toString("base64"),
+      signature: sign(null, payload, fixtureKeys.privateKey).toString("base64"),
+    });
+    try {
+      client.state.updates = { autoDownload: false, installOnExit: false };
+      client.request = async (url) => [
+        {
+          tag_name: `v${version}`,
+          name: "اختبار التحديث",
+          html_url: `https://github.com/ABADIOSA/riwaq/releases/tag/v${version}`,
+          prerelease: true,
+          assets: [{ name: "riwaq-update.json" }],
+        },
+      ];
+      client.updates = new DesktopUpdates(client, {
+        current: app.getVersion(),
+        directory: join(output, "update-fixture"),
+        publicKey: fixtureKeys.publicKey,
+        installed: true,
+        fetcher: async (url) =>
+          new Response(url.endsWith(".json") ? envelope : updateBytes),
+        launch: async () => {
+          throw new Error("Test cannot execute an installer");
+        },
+        onChange: () => web.send("riwaq:state", client.publicState()),
+      });
+      web.send("riwaq:state", client.publicState());
+      await click("تحقق الآن", ".updates-studio button");
+      await wait(
+        () => Promise.resolve(client.updates.runtime.status === "available"),
+        "signed update available",
+      );
+      await click("تنزيل التحديث", ".updates-studio button");
+      await wait(
+        () =>
+          js(
+            `document.querySelector('.updates-studio').textContent.includes('تحديثك جاهز')`,
+          ),
+        "update ready UI",
+      );
+      assert.equal(client.updates.runtime.verified, true);
+      assert.equal(
+        await js(`document.querySelector('.updates-studio progress').value`),
+        100,
+      );
+      await shot("updates-ready");
+      const originalSize = window.getSize();
+      window.setSize(980, 680);
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(
+        await js(`document.documentElement.scrollWidth > window.innerWidth`),
+        false,
+      );
+      await shot("updates-compact");
+      window.setSize(...originalSize);
+      await js(
+        `document.querySelector('[aria-label="التثبيت عند إغلاق رِواق"]').click()`,
+      );
+      await wait(
+        () => Promise.resolve(client.updates.store.installOnExit === true),
+        "install-on-exit preference",
+      );
+      results.push({
+        test: "Signed update IPC and Arabic UI: check, verified download, ready state, progress and compact layout",
+        status: "passed",
+      });
+    } finally {
+      client.request = originalRequest;
+      client.updates = originalUpdates;
+      client.state.updates = originalPreferences;
+      client.persist();
+      web.send("riwaq:state", client.publicState());
+    }
     await click("مكتبة البيانات", ".studio-nav button");
     await wait(
       () => js(`document.querySelectorAll('.provider-card').length === 4`),
