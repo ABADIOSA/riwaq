@@ -9,6 +9,7 @@ import {
   screen,
   clipboard,
   globalShortcut,
+  powerMonitor,
 } from "electron";
 import {
   readFileSync,
@@ -44,11 +45,18 @@ import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
 import { VideoHost } from "./video-host.mjs";
+import { DesktopUpdates } from "./updater.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 if (process.env.RIWAQ_DATA_DIR)
   app.setPath("userData", process.env.RIWAQ_DATA_DIR);
 app.setName("Riwaq");
+if (!app.requestSingleInstanceLock()) app.exit(0);
+app.on("second-instance", () => {
+  if (window?.isMinimized()) window.restore();
+  window?.show();
+  window?.focus();
+});
 let window, client, player, videoHost, loginServer, loginTimer, presence;
 // A picked backup stays in main between "preview" and "restore"; the renderer
 // only ever holds the opaque token.
@@ -814,10 +822,32 @@ const methods = {
   },
   diagnostics,
   updatesCheck: async () => {
+    client.profiles.gate("settings");
     await client.updates.check({ current: app.getVersion(), force: true });
     return client.publicState();
   },
   updatesSetEnabled: (a) => client.updates.setEnabled(a?.enabled),
+  updatesConfigure: (a) => client.updates.configure(a),
+  updatesDownload: async () => {
+    client.profiles.gate("settings");
+    await client.updates.download();
+    return client.publicState();
+  },
+  updatesCancel: () => {
+    client.profiles.gate("settings");
+    client.updates.cancel();
+    return client.publicState();
+  },
+  updatesInstall: async () => {
+    client.profiles.gate("settings");
+    if (client.updates.runtime.status !== "ready") return false;
+    await player.stop();
+    await client.integrations.settle(3000);
+    client.persist();
+    const started = await client.updates.install();
+    if (started) app.quit();
+    return started;
+  },
   openUpdate: async () => {
     // The page comes from the validated store, never from the renderer.
     await shell.openExternal(client.updates.releaseUrl());
@@ -947,6 +977,22 @@ app
       app.exit(1);
     }
     if (client) {
+      client.updates = new DesktopUpdates(client, {
+        current: app.getVersion(),
+        directory: join(app.getPath("userData"), "updates"),
+        publicKey: readFileSync(
+          join(root, "assets", "update-public-key.pem"),
+          "utf8",
+        ),
+        installed:
+          app.isPackaged &&
+          process.platform === "win32" &&
+          !process.env.PORTABLE_EXECUTABLE_FILE &&
+          existsSync(join(dirname(process.execPath), "Uninstall Riwaq.exe")),
+        installDirectory: dirname(process.execPath),
+        onChange: broadcast,
+      });
+      await client.updates.restore();
       window = new BrowserWindow({
         width: 1440,
         height: 960,
@@ -964,6 +1010,12 @@ app
           sandbox: true,
           webSecurity: true,
         },
+      });
+      window.on("query-session-end", () => {
+        client.updates.sessionEnding = true;
+      });
+      powerMonitor.on("shutdown", () => {
+        client.updates.sessionEnding = true;
       });
       videoHost = new VideoHost(window);
       // Full screen changes the client area after React measured it; the
@@ -1077,25 +1129,7 @@ app
         }
       };
       applyPresence().catch(() => {});
-      // One anonymous check a day, after startup settles; never in smoke runs.
-      if (!process.env.RIWAQ_SMOKE)
-        setTimeout(async () => {
-          const update = await client.updates.check({
-            current: app.getVersion(),
-          });
-          if (
-            update.available &&
-            client.state.updates.notified !== update.latest.version
-          ) {
-            client.state.updates.notified = update.latest.version;
-            client.persist();
-            emit(
-              "notice",
-              `يتوفر إصدار جديد من رِواق: ${update.latest.version}. تجده في الإعدادات ← الاتصال والتطبيق.`,
-            );
-          }
-          broadcast();
-        }, 8000);
+      if (!process.env.RIWAQ_SMOKE) client.updates.start();
       window.on("minimize", () => {
         placeHud();
         if (
@@ -1132,6 +1166,8 @@ app
         try {
           return { ok: true, value: await methods[method](args) };
         } catch (error) {
+          if (process.env.RIWAQ_SMOKE)
+            console.error(`Smoke IPC ${method}: ${error.stack}`);
           return { ok: false, error: cleanError(error) };
         }
       });
@@ -1162,10 +1198,16 @@ app.on("before-quit", (event) => {
   if (closing) return;
   event.preventDefault();
   closing = true;
+  client?.updates.stop();
   cancelLogin();
   // Stopping the player sends the final scrobble; give it a moment to land so
   // a play finished just before closing is recorded rather than queued.
   Promise.resolve(player?.stop())
     .then(() => client?.integrations?.settle(3000))
+    .then(async () => {
+      client?.persist();
+      await client?.updates.install({ automatic: true, relaunch: false });
+    })
+    .catch(() => {})
     .finally(() => app.quit());
 });

@@ -1,18 +1,35 @@
-# Verification — Riwaq 0.8.0
+# Verification — Riwaq 0.9.0
 
-## 0.8.0 — controls over the picture
+## 0.9.0 — controls over the picture
 
 The owner reported that the pointer still did not hide in 0.7 and asked for a player like Harbor's and Nuvio's. Studying both showed the cause: they draw their controls in a transparent web layer over MPV, so their own page owns the pointer. Riwaq's MPV surface sits above the page, so the pointer over the picture belonged to MPV, and MPV did not honour `cursor-autohide` inside the embedded surface. 0.8 adds a transparent HUD window over the surface.
 
 Executed:
 
-- `npm test`: **210 passing, 0 failing** (204 + 6 new): the HUD rectangle in screen DIPs including page zoom and clipping, when the HUD shows (never for the mini player, a hidden surface or a minimised window), the HUD bridge being a subset of the preload allowlist that excludes backups, logins, installs, live sources, updates and profile switching, failover choosing the next ranked playable source and giving up after three failures, the new settings, and MPV's controller staying hidden while the HUD draws controls.
+- `npm test`: **228 passing, 0 failing** after merging 0.8 (222 + 6 new): the HUD rectangle in screen DIPs including page zoom and clipping, when the HUD shows (never for the mini player, a hidden surface or a minimised window), the HUD bridge being a subset of the preload allowlist that excludes backups, logins, installs, live sources, updates and profile switching, failover choosing the next ranked playable source and giving up after three failures, the new settings, and MPV's controller staying hidden while the HUD draws controls.
 - `npm run check` and `npm run build` pass.
 - Rendered the HUD page in headless Chromium at 980×552 and 1440×810 with a stubbed bridge: controls visible on movement and hidden with `cursor: none` after 3 s still; a click pausing, a double click toggling full screen without also pausing, the wheel raising volume, a right click opening the panel; the sources room listing ranked sources with the unsupported one disabled and switching to another; the episodes room jumping to an episode; the next-episode card appearing in the last 45 s with the skip button raised above it. Zero page errors.
 
 Not executed:
 
-- Nothing in 0.8.0 has run on Windows. Unverified natively and the main risk of this release: a transparent owned BrowserWindow compositing over the MPV child surface, its placement through moves, resizes, zoom and full screen, non-focusable clicks, media keys, and failover against real failing streams. The setting **أدوات التحكم فوق الصورة** turns the HUD off and restores the 0.7 player.
+- Nothing in 0.9.0 has run on Windows. Unverified natively and the main risk of this release: a transparent owned BrowserWindow compositing over the MPV child surface, its placement through moves, resizes, zoom and full screen, non-focusable clicks, media keys, and failover against real failing streams. The setting **أدوات التحكم فوق الصورة** turns the HUD off and restores the 0.7 player.
+
+## 0.8.0 — signed in-app Windows updates
+
+Executed on Windows x64 with Node.js 24 and Electron 44.4.1:
+
+- **222 Node tests pass**, including 18 new update tests: pinned signatures, metadata identity, download bounds and hashes, cache tampering, downgrade prevention, stable/beta selection, cancellation/retry, opt-outs, portable restrictions, shutdown deferral, Settings protection and installer launch failure.
+- Formatting and production Vite build pass.
+- **13 Windows source smoke groups pass**, with no uncaught renderer errors. Includes live Cinemeta (84 posters), library/queue, settings, native MPV playback/pause/seek/Arabic subtitles, encrypted progress/resume, real EOF queue advancement, profile isolation, IPTV/EPG fixtures, PIN gates and native video geometry.
+- The new Arabic update room runs through real Electron IPC with a signed fixture: check, download, hash verification, ready state, progress and preferences. Screenshots at 1440×960 and 980×680 were inspected. The fixture version is not a published production release, and its installer hook cannot execute.
+- **A real isolated NSIS upgrade passed**, from `0.8.0-test.0` to `0.8.0-test.1`: the production updater downloaded and verified the fixture installer, NSIS replaced the running application, the new version relaunched, and DPAPI-encrypted library/settings/progress survived. The test uses a unique product/app ID, workspace installation and separate data directory, then uninstalls the fixture. It does not replace the user's Riwaq.
+- The final **0.8.0 packaged portable passed** launch/version, live catalogs, a clean isolated profile, DPAPI encryption, bundled Koffi/MPV, actual video decoding, native visibility/clipping and queue consumption. The final NSIS installer and portable were built on Windows in `release-final` (an earlier output directory could not be overwritten under the sandbox). Local release metadata was signed with the matching key.
+
+Final local artifacts: installer **149,737,676 bytes**, SHA-256 `a0fc6243f3aef32bbfc49e9ccc497c440de02eafe41e29c66a8bf189fcb09803`; portable **149,531,588 bytes**, SHA-256 `0b0cd169ae3c775e64768cae43e517bc4aa1b002a9458cba26ca0104283738a9`. CI rebuilds have their own checksums. These executables have no Authenticode publisher signature.
+
+Production rollout still requires the matching `RIWAQ_UPDATE_PRIVATE_KEY` Actions secret and a published signed release. Ed25519 authenticates update packages; Windows Authenticode is not configured. Real third-party account flows and hardware combinations listed below remain unverified. Earlier entries are historical reports; the Windows smoke above supersedes their shared smoke paths, not every untested feature they list.
+
+See [UPDATES.md](docs/UPDATES.md) for the update trust model, release process and repeatable NSIS test.
 
 ## 0.7.0 — appearance studio and the pointer
 
@@ -107,8 +124,8 @@ The final Windows-built portable passed launch/version 0.4.0, live catalogs, a c
 
 Executable: `Riwaq-0.4.0-win-x64.exe` (134,586,752 bytes), unsigned. SHA-256: `cbf1b1cc047f1e8aeec6a80a020da64da7d4d756d29536d3c937dddfccc5de15`. Final build used `electron-builder --win portable --x64 --config.directories.output=release-final` after a sandbox EPERM when replacing an earlier build directory; it used the final production assets and unmodified build configuration otherwise.
 
-## Remaining limits (0.4, still apply)
+## Remaining limits
 
-No real third-party accounts/API keys, IPTV subscriptions, Discord client/webhooks or torrent media were used. Authenticated flows, notification delivery and parsing use test fixtures; no messages were sent to real recipients. HDR output, mixed-DPI/multi-monitor behavior, picture profiles on varied GPUs and unusual audio devices remain unverified. The application remains unsigned, with no automatic updater. Torrent playback still requires a separate Stremio Service.
+No real third-party accounts/API keys, IPTV subscriptions, Discord client/webhooks or torrent media were used. Authenticated flows, notification delivery and parsing use test fixtures; no messages were sent to real recipients. HDR output, mixed-DPI/multi-monitor behavior, picture profiles on varied GPUs and unusual audio devices remain unverified. Windows Authenticode remains unconfigured; 0.8 adds separately authenticated automatic updates. Torrent playback still requires a separate Stremio Service.
 
 Queue and manual history edits are local per-profile data. Manual completion does not write tracker history. GitHub CI results are reported separately from local checks.

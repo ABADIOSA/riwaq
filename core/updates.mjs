@@ -1,10 +1,9 @@
 /**
  * Release update checks.
  *
- * Riwaq checks, it never downloads or installs: the binaries are unsigned, and
- * replacing an executable behind the viewer's back is exactly what an unsigned
- * app must not do. The check is one anonymous GET to GitHub's public API that
- * carries no viewer data, at most once a day, and the viewer can turn it off.
+ * Shared release/version metadata. DesktopUpdates extends this class with a
+ * signed-package download and NSIS installation coordinator in Electron main.
+ * This base class remains useful to headless clients and never executes files.
  *
  * Every Riwaq release so far is a prerelease, and GitHub's /releases/latest
  * skips prereleases, so the list endpoint is read and versions are compared
@@ -66,6 +65,8 @@ export function releaseUrlOk(value) {
     const url = new URL(value);
     return (
       url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
       url.host === "github.com" &&
       url.pathname.toLowerCase().startsWith(`/${REPO.toLowerCase()}/releases/`)
     );

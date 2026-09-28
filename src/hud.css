@@ -307,3 +307,23 @@ html.hud-root #root {
 .hud-skip.raised {
   bottom: 190px;
 }
+/* The gradients behind the bars are decoration: they must not swallow clicks
+   meant for the picture, the skip button or the next-episode card. */
+.hud-top,
+.hud-bottom {
+  pointer-events: none;
+  z-index: 1;
+}
+.hud-top > *,
+.hud-bottom > * {
+  pointer-events: auto;
+}
+.hud-stage.asleep .hud-top > *,
+.hud-stage.asleep .hud-bottom > * {
+  pointer-events: none;
+}
+.hud-skip,
+.hud-next,
+.hud-dock {
+  z-index: 3;
+}
