@@ -1083,9 +1083,14 @@ function FolderContent({
           )}
           {!titles.length && !data.rows.length && !data.error && (
             <Empty icon={Folders} title="المجلد فارغ">
-              {editing
-                ? "اختر كتالوجاً من الأعلى، أو افتح أي عمل واضغط «أضف لمجموعة»."
-                : "اضغط «تعديل» لتضيف كتالوجات، أو افتح أي عمل واضغط «أضف لمجموعة»."}
+              {folder.id.startsWith("nuvio-") &&
+              !folder.catalogs.length &&
+              !tmdb.length &&
+              !trakt.length
+                ? "هذا المجلد وصل من نوفيو بدون مصادر يقرؤها رِواق. افتح «الربط مع نوفيو»، واقرأ بياناته، ثم اضغط «نسخ تقرير التشخيص» وأرسله للمطوّر."
+                : editing
+                  ? "اختر كتالوجاً من الأعلى، أو افتح أي عمل واضغط «أضف لمجموعة»."
+                  : "اضغط «تعديل» لتضيف كتالوجات، أو افتح أي عمل واضغط «أضف لمجموعة»."}
             </Empty>
           )}
           {data.error && <p className="inline-warning">{data.error}</p>}
@@ -1351,11 +1356,54 @@ export function NuvioLink({ act, setState, notice, onClose }) {
               )}
             </div>
           )}
+          {chosen?.folderList?.length > 0 && (
+            <details className="nuvio-folders">
+              <summary>
+                مصادر كل مجلد قبل النقل
+                {chosen.folderList.some((f) => !f.sources) &&
+                  ` · ${n(
+                    chosen.folderList.filter((f) => !f.sources).length,
+                    FOLDERS,
+                  )} بلا مصادر`}
+              </summary>
+              <ul>
+                {chosen.folderList.map((f, i) => (
+                  <li key={i} className={f.sources ? "" : "none"}>
+                    <span dir="auto">
+                      {f.collection} ← {f.title}
+                    </span>
+                    <small>
+                      {f.sources
+                        ? n(f.sources, SOURCES)
+                        : "لا مصادر يقرؤها رِواق"}
+                      {f.unsupported
+                        ? ` · ${n(f.unsupported, SOURCES)} غير مدعوم`
+                        : ""}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+              <button
+                className="secondary small"
+                onClick={async () =>
+                  (await act("nuvioDiagnostics", {
+                    token: scan.token,
+                    profile,
+                  })) &&
+                  notice(
+                    "نُسخ تقرير التشخيص. الصقه للمطوّر؛ لا يحتوي روابط ولا مفاتيح.",
+                  )
+                }
+              >
+                <Copy size={15} /> نسخ تقرير التشخيص
+              </button>
+            </details>
+          )}
           <p className="subtle">
-            الإضافات تُثبّت بعد فحص ملفها كما لو أضفتها بيدك. مصادر TMDB وTrakt
-            داخل مجموعات نوفيو لا تنتقل لأنها لا تأتي من إضافة. الأدوات البرمجية
-            (Plugins) شيفرة JavaScript من أطراف أخرى: رِواق ينقل قائمة
-            مستودعاتها ليحفظها لك، ولا يشغّل شيفرتها.
+            الإضافات تُثبّت بعد فحص ملفها كما لو أضفتها بيدك. مصادر TMDB تحتاج
+            مفتاح TMDB، وقوائم Trakt تحتاج Client ID. الأدوات البرمجية (Plugins)
+            شيفرة JavaScript من أطراف أخرى: رِواق ينقل قائمة مستودعاتها ليحفظها
+            لك، ولا يشغّل شيفرتها.
           </p>
           <div className="button-row">
             <button

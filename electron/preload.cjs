@@ -20,6 +20,7 @@ const allowed = new Set([
   "nuvioScan",
   "nuvioPickBackup",
   "nuvioImport",
+  "nuvioDiagnostics",
   "removeNuvioPlugin",
   "openTrailer",
   "playerSources",

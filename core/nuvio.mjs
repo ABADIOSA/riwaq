@@ -242,6 +242,75 @@ export function nuvioProfile(stores, index) {
   return { addons, collections, plugins, library, tmdbKey, tmdbSources };
 }
 
+/**
+ * How Nuvio's collections are shaped on this PC, for a viewer to send when a
+ * folder comes across empty: store keys, and for every folder its field names
+ * and each source's field names, provider and kinds. No addresses, keys or
+ * titles beyond folder names are included.
+ */
+export function nuvioDiagnostics(stores, index) {
+  const lines = [];
+  const store = stores.nuvio_collections || {};
+  lines.push(`stores: ${Object.keys(stores).sort().join(", ") || "-"}`);
+  lines.push(`collection keys: ${Object.keys(store).sort().join(", ") || "-"}`);
+  const raw = store[`collections_${index}`];
+  lines.push(
+    `profile ${index}: ${raw ? `${raw.length} chars` : "no collections_" + index}`,
+  );
+  let data;
+  try {
+    data = JSON.parse(raw || "null");
+  } catch (e) {
+    lines.push(`json error: ${String(e.message).slice(0, 120)}`);
+  }
+  const keys = (o) =>
+    o && typeof o === "object" && !Array.isArray(o)
+      ? Object.keys(o).sort().join(",")
+      : Array.isArray(o)
+        ? `array(${o.length})`
+        : typeof o;
+  const kind = (v) =>
+    v === null ? "null" : Array.isArray(v) ? "array" : typeof v;
+  lines.push(
+    `root: ${kind(data)}${Array.isArray(data) ? `(${data.length})` : kind(data) === "object" ? ` {${keys(data)}}` : ""}`,
+  );
+  for (const [ci, c] of (Array.isArray(data) ? data : [])
+    .slice(0, 40)
+    .entries()) {
+    lines.push(`collection ${ci}: {${keys(c)}}`);
+    for (const [fi, f] of (Array.isArray(c?.folders) ? c.folders : [])
+      .slice(0, 60)
+      .entries()) {
+      const name = typeof f?.title === "string" ? f.title.slice(0, 40) : "?";
+      lines.push(`  folder ${fi} "${name}": {${keys(f)}}`);
+      for (const field of Object.keys(f || {})) {
+        const value = f[field];
+        if (
+          !Array.isArray(value) ||
+          !value.length ||
+          typeof value[0] !== "object"
+        )
+          continue;
+        lines.push(`    ${field}: ${value.length}`);
+        for (const item of value.slice(0, 12)) {
+          const tags = [
+            "provider",
+            "type",
+            "tmdbSourceType",
+            "mediaType",
+            "sortBy",
+          ]
+            .filter((k) => typeof item?.[k] === "string")
+            .map((k) => `${k}=${item[k].slice(0, 24)}`)
+            .join(" ");
+          lines.push(`      {${keys(item)}} ${tags}`);
+        }
+      }
+    }
+  }
+  return lines.join("\n").slice(0, 60000);
+}
+
 /** A summary the interface can show before anything is imported. */
 export function nuvioPreview(stores) {
   return profilesOf(stores).map(({ index, name }) => {
@@ -259,6 +328,17 @@ export function nuvioPreview(stores) {
       // Whether a key exists, never the key itself.
       tmdbKey: !!p.tmdbKey,
       tmdbSources: p.tmdbSources,
+      // What each folder will bring, so an empty one shows before import.
+      folderList: p.collections.collections
+        .flatMap((c) =>
+          c.folders.map((f) => ({
+            collection: c.title,
+            title: f.title,
+            sources: f.catalogs.length + f.tmdb.length + f.trakt.length,
+            unsupported: (f.unsupported || []).length,
+          })),
+        )
+        .slice(0, 200),
     };
   });
 }
