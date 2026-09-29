@@ -69,7 +69,11 @@ test("collections are validated field by field", () => {
   const [f] = c.folders;
   assert.equal(f.shape, "poster");
   assert.equal(f.cover, "", "no credentials in a cover");
-  assert.equal(f.catalogs.length, 1, "duplicates and junk sources dropped");
+  assert.deepEqual(
+    f.catalogs.map((c) => `${c.addon}|${c.type}|${c.catalog}`),
+    ["com.linvo.cinemeta|movie|top", "a||x"],
+    "duplicates and IDs with spaces dropped; a typeless source matches by ID",
+  );
   assert.deepEqual(
     f.titles.map((t) => t.id),
     ["tt1", "tt2"],

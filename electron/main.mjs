@@ -50,6 +50,7 @@ import { trailerOf } from "../core/credits.mjs";
 import { toNuvio } from "../core/collections.mjs";
 import {
   NUVIO_STORES,
+  nuvioDiagnostics,
   nuvioFolders,
   nuvioPreview,
   parseProperties,
@@ -954,20 +955,28 @@ const methods = {
     client.profiles.gate("settings");
     if (process.platform !== "win32")
       throw new Error("البحث عن نوفيو متاح على ويندوز فقط");
+    // Both Nuvio HTPC and the official Nuvio Desktop may be installed, and an
+    // old copy of either may linger: read the one written to most recently.
+    let best = null;
     for (const folder of nuvioFolders(process.env, app.getPath("home"))) {
       const stores = {};
+      let newest = 0;
       for (const name of NUVIO_STORES) {
         const file = join(folder.path, `${name}.properties`);
         try {
-          if (!existsSync(file) || statSync(file).size > 40 * 1024 * 1024)
-            continue;
+          if (!existsSync(file)) continue;
+          const info = statSync(file);
+          if (info.size > 40 * 1024 * 1024) continue;
           stores[name] = parseProperties(readFileSync(file, "latin1"));
+          newest = Math.max(newest, info.mtimeMs);
         } catch {
           /* An unreadable store is skipped. */
         }
       }
-      if (Object.keys(stores).length) return nuvioReply(stores, folder.label);
+      if (Object.keys(stores).length && (!best || newest > best.newest))
+        best = { stores, newest, label: folder.label };
     }
+    if (best) return nuvioReply(best.stores, best.label);
     throw new Error(
       "لم نجد نوفيو على هذا الجهاز. افتح نوفيو وسجّل دخولك مرة ليحفظ بياناتك، أو استخدم ملف النسخة الاحتياطية.",
     );
@@ -1006,6 +1015,18 @@ const methods = {
     pendingNuvio = null;
     broadcast();
     return reply;
+  },
+  // A shape-only report of Nuvio's collections for troubleshooting; the
+  // viewer chooses to copy it, and it carries no addresses or keys.
+  nuvioDiagnostics: (a) => {
+    client.profiles.gate("settings");
+    if (!pendingNuvio || pendingNuvio.token !== a?.token)
+      throw new Error("اقرأ بيانات نوفيو من جديد");
+    const index = Number(a?.profile);
+    if (!Number.isInteger(index) || index < 1)
+      throw new Error("اختر ملف نوفيو");
+    clipboard.writeText(nuvioDiagnostics(pendingNuvio.stores, index));
+    return true;
   },
   removeNuvioPlugin: (a) =>
     client.removeNuvioPlugin({ key: typeof a?.key === "string" ? a.key : "" }),

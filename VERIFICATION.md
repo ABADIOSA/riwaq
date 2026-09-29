@@ -1,4 +1,26 @@
-# Verification — Riwaq 0.12.2
+# Verification — Riwaq 0.12.3
+
+## 0.12.3 — Nuvio folders still empty for the owner
+
+On 0.12.2, after re-running the Nuvio link, the owner still saw folders with only «المجلد فارغ» and no source rows. That means those folders arrived with zero sources Riwaq could read. The owner's data was not available, so this release widens what is accepted and adds a way to see the exact shape:
+
+- Addon IDs and types were checked against strict patterns, which silently dropped sources. They are now refused only for whitespace, quotes or angle brackets. A source without a type matches its catalog by ID alone. A source that still fails is kept by name in `unsupported` instead of vanishing.
+- `nuvioScan` reads every known Nuvio folder and picks the one written most recently, instead of the first one found.
+- The preview lists every folder with its readable and unsupported source counts before import.
+- A «نسخ تقرير التشخيص» button copies a shape-only report: store names, field names, provider and kind tags, and folder names. It carries no URLs, addon IDs or keys. It is gated by the Settings room lock and needs the current scan token.
+- An imported folder with no sources says so and points to the report.
+
+Executed:
+
+- `npm test`: **276 passing, 0 failing**:
+  - the preview's `folderList`;
+  - a diagnostics report that contains no addon URL or key;
+  - a typeless addon source kept.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with mocked bridge data: the Nuvio dialog shows the per-folder list with no errors or overflow.
+
+Not executed: the owner's actual Nuvio data; the clipboard copy on Windows; Windows.
+
 
 ## 0.12.2 — some folders were still empty
 

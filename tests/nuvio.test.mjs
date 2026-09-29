@@ -180,6 +180,14 @@ test("a Nuvio profile is read and cleaned", () => {
       library: 2,
       tmdbKey: true,
       tmdbSources: 1,
+      folderList: [
+        {
+          collection: "أبطال مارفل",
+          title: "الأفلام",
+          sources: 2,
+          unsupported: 0,
+        },
+      ],
     },
   );
   assert.ok(
@@ -370,4 +378,19 @@ test("importing: addons through the manifest check, the rest merged", async () =
   );
   assert.equal(pasted.state.collections.length, 1);
   assert.throws(() => client.importNuvioCollections({ text: "" }), /الصق/);
+});
+
+test("a shape-only diagnostic report, with no addresses or keys", async () => {
+  const { nuvioDiagnostics } = await import("../core/nuvio.mjs");
+  const stores = Object.fromEntries(
+    Object.entries(asText()).map(([n, t]) => [n, parseProperties(t)]),
+  );
+  const report = nuvioDiagnostics(stores, 1);
+  assert.match(report, /collection keys: collections_1/);
+  assert.match(report, /folder 0 "الأفلام": \{/);
+  assert.match(report, /sources: 2/);
+  assert.match(report, /provider=tmdb tmdbSourceType=COLLECTION/);
+  for (const secret of ["a1b2c3d4", "https://", "torrentio"])
+    assert.ok(!report.includes(secret), `no ${secret} in the report`);
+  assert.match(nuvioDiagnostics({}, 3), /no collections_3/);
 });

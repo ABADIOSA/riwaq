@@ -713,3 +713,34 @@ button.danger,
   background: none;
   padding: 0;
 }
+.nuvio-folders {
+  margin: 4px 0 14px;
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.nuvio-folders summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+.nuvio-folders ul {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+  display: grid;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+.nuvio-folders li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+.nuvio-folders li small {
+  color: var(--muted, #8a9099);
+}
+.nuvio-folders li.none small {
+  color: #ff8a8a;
+}

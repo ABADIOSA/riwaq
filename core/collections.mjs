@@ -54,8 +54,12 @@ const emojiOf = (value) => {
   // One grapheme is the intent; a few code points allow flags and joiners.
   return text && [...text].length <= 8 ? text : "";
 };
-const ADDON_ID = /^[\w.:@/+-]{1,200}$/;
-const TYPE = /^[\w.-]{1,40}$/;
+// Addon IDs are only compared and shown as text, and a type is URL-encoded
+// where it is used, so the rules are loose on purpose: a strict pattern once
+// emptied folders imported from Nuvio without a word. Spaces, quotes and
+// angle brackets never appear in a real manifest ID and stay refused.
+const ADDON_ID = /^[^\s<>"'`]{1,200}$/;
+const TYPE = /^[^\s/?#<>"'`]{0,40}$/;
 
 function cleanCatalog(source) {
   if (!source || typeof source !== "object") return null;
@@ -599,14 +603,16 @@ export function fromNuvio(input) {
           });
           if (t) trakt.push(t);
           else skip(s);
-        } else if (s?.addonId && s?.catalogId)
-          catalogs.push({
-            addon: s.addonId,
-            type: s.type,
-            catalog: s.catalogId,
-            genre: s.genre && s.genre !== "none" ? s.genre : "",
+        } else {
+          const c = cleanCatalog({
+            addon: typeof s?.addonId === "string" ? s.addonId : "",
+            type: typeof s?.type === "string" ? s.type : "",
+            catalog: typeof s?.catalogId === "string" ? s.catalogId : "",
+            genre: s?.genre && s.genre !== "none" ? s.genre : "",
           });
-        else skip(s);
+          if (c && provider === "addon") catalogs.push(c);
+          else skip(s);
+        }
       }
       return {
         id: typeof f?.id === "string" ? `nuvio-${f.id}` : undefined,
@@ -704,12 +710,14 @@ export function mergeCollections(current, incoming) {
  * addons with their manifests.
  */
 export function resolveCatalog(addons, source) {
+  // A source without a type (some Nuvio exports) matches on the ID alone.
+  const sameType = (c) => !source.type || c.type === source.type;
   const find = (addon) =>
     (addon.manifest?.catalogs || []).find(
-      (c) => c.type === source.type && c.id === source.catalog,
+      (c) => sameType(c) && c.id === source.catalog,
     ) ||
     (addon.manifest?.catalogs || []).find(
-      (c) => c.type === source.type && c.id === source.catalog.split(",")[0],
+      (c) => sameType(c) && c.id === source.catalog.split(",")[0],
     );
   const declared = addons.find((a) => a.manifest?.id === source.addon);
   const cat = declared && find(declared);
