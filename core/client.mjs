@@ -28,6 +28,13 @@ import {
   resolveCatalog,
 } from "./collections.mjs";
 import { nuvioProfile } from "./nuvio.mjs";
+import {
+  sourceLabel,
+  tmdbItems,
+  tmdbRequest,
+  traktMetas,
+  traktRequest,
+} from "./collection-sources.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 import {
@@ -467,6 +474,7 @@ export class Client {
       skippedSources: 0,
       library: 0,
       plugins: 0,
+      tmdbKey: "",
     };
     if (parts.addons) {
       for (const addon of data.addons.slice(0, 100)) {
@@ -520,6 +528,14 @@ export class Client {
         result.plugins++;
       }
     }
+    if (parts.tmdbKey && data.tmdbKey) {
+      // The viewer's key in Riwaq wins; Nuvio's only fills an empty slot.
+      if (this.state.providers?.tmdb?.key) result.tmdbKey = "kept";
+      else {
+        this.dataHub.save({ id: "tmdb", key: data.tmdbKey, enabled: true });
+        result.tmdbKey = "imported";
+      }
+    }
     this.cache.clear();
     this.persist();
     return { result, state: this.publicState() };
@@ -567,68 +583,185 @@ export class Client {
     const folder = collection?.folders.find((f) => f.id === folderId);
     if (!folder) throw new Error("المجلد غير موجود");
     const addons = this.enabled();
-    const rows = new Array(folder.catalogs.length).fill(null);
     const missing = [];
     const failures = [];
+    const needs = new Set();
+    const offset = Math.max(0, Math.min(100000, Number(skip) || 0));
+    const tasks = [
+      ...folder.catalogs.map((source, i) => ({
+        key: `c${i}`,
+        run: () => this.catalogRow(addons, source, offset, missing, failures),
+      })),
+      ...(folder.tmdb || []).map((source, i) => ({
+        key: `t${i}`,
+        run: () => this.tmdbRow(source, needs, failures),
+      })),
+      ...(folder.trakt || []).map((source, i) => ({
+        key: `k${i}`,
+        run: () => this.traktRow(source, needs, failures),
+      })),
+    ];
+    const rows = new Array(tasks.length).fill(null);
     let next = 0;
     const worker = async () => {
-      while (next < folder.catalogs.length) {
+      while (next < tasks.length) {
         const index = next++;
-        const source = folder.catalogs[index];
-        const found = resolveCatalog(addons, source);
-        if (!found) {
-          missing.push(`${source.catalog} (${source.addon})`);
-          continue;
-        }
-        const extras = catalogExtras(
-          found.cat,
-          "",
-          source.genre || "",
-          Math.max(0, Math.min(100000, Number(skip) || 0)),
-        );
-        if (!extras) {
-          missing.push(found.cat.name || found.cat.id);
-          continue;
-        }
-        try {
-          const data = await this.cached(
-            resourceUrl(
-              found.addon.transportUrl,
-              "catalog",
-              found.cat.type,
-              found.cat.id,
-              extras,
-            ),
-            { ttl: 600000, failFor: 120000, timeout: 10000 },
-          );
-          rows[index] = {
-            index,
-            name:
-              (found.cat.name || found.cat.id) +
-              (source.genre ? ` · ${source.genre}` : ""),
-            provider: found.addon.manifest.name,
-            type: found.cat.type,
-            metas: (data.metas || [])
-              .filter((m) => m?.id && m.name)
-              .map((m) => ({ ...m, type: m.type || found.cat.type })),
-            hasMore:
-              (found.cat.extra || []).some((e) => e.name === "skip") &&
-              (data.metas || []).length > 0,
-          };
-        } catch {
-          failures.push(found.addon.manifest.name);
-        }
+        const row = await tasks[index].run().catch(() => null);
+        if (row) rows[index] = { ...row, index: tasks[index].key };
       }
     };
     await Promise.all(
-      Array.from({ length: Math.min(6, folder.catalogs.length) }, worker),
+      Array.from({ length: Math.min(4, tasks.length) }, worker),
     );
     return {
       titles: folder.titles,
       rows: rows.filter(Boolean),
       missing,
+      needs: [...needs],
       failures: [...new Set(failures)],
     };
+  }
+  async catalogRow(addons, source, skip, missing, failures) {
+    const found = resolveCatalog(addons, source);
+    if (!found) {
+      missing.push(`${source.catalog} (${source.addon})`);
+      return null;
+    }
+    const extras = catalogExtras(found.cat, "", source.genre || "", skip);
+    if (!extras) {
+      missing.push(found.cat.name || found.cat.id);
+      return null;
+    }
+    try {
+      const data = await this.cached(
+        resourceUrl(
+          found.addon.transportUrl,
+          "catalog",
+          found.cat.type,
+          found.cat.id,
+          extras,
+        ),
+        { ttl: 600000, failFor: 120000, timeout: 10000 },
+      );
+      return {
+        name:
+          (found.cat.name || found.cat.id) +
+          (source.genre ? ` · ${source.genre}` : ""),
+        provider: found.addon.manifest.name,
+        type: found.cat.type,
+        metas: (data.metas || [])
+          .filter((m) => m?.id && m.name)
+          .map((m) => ({ ...m, type: m.type || found.cat.type })),
+      };
+    } catch {
+      failures.push(found.addon.manifest.name);
+      return null;
+    }
+  }
+  /**
+   * A TMDB source with the viewer's key. Results are matched to IMDb IDs
+   * (cached), because Riwaq's addons open titles by IMDb ID; a title TMDB
+   * cannot match is left out rather than shown unopenable.
+   */
+  async tmdbRow(source, needs, failures) {
+    const entry = this.state.providers?.tmdb;
+    if (!entry?.key || entry.enabled === false) {
+      needs.add("tmdb");
+      return null;
+    }
+    let items;
+    try {
+      const { path, params } = tmdbRequest(source, {
+        language: this.state.settings.metadataLanguage || "ar-SA",
+      });
+      // Ten minutes per TMDB page, so opening a folder again is instant.
+      const tmdbCache = (this.tmdbPages ||= new Map());
+      const key = `${path}?${new URLSearchParams(params)}`;
+      let body = tmdbCache.get(key);
+      if (!body || Date.now() - body.at > 600000) {
+        body = {
+          at: Date.now(),
+          data: await this.dataHub.request("tmdb", path, params),
+        };
+        if (tmdbCache.size > 200)
+          tmdbCache.delete(tmdbCache.keys().next().value);
+        tmdbCache.set(key, body);
+      }
+      items = tmdbItems(body.data, source).slice(0, 40);
+    } catch {
+      failures.push("TMDB");
+      return null;
+    }
+    const cache = (this.tmdbImdb ||= new Map());
+    let next = 0;
+    const worker = async () => {
+      while (next < items.length) {
+        const item = items[next++];
+        const key = `${item.kind}:${item.tmdb}`;
+        if (!cache.has(key)) {
+          try {
+            const ids = await this.dataHub.request(
+              "tmdb",
+              `${item.kind}/${item.tmdb}/external_ids`,
+            );
+            if (cache.size > 5000) cache.delete(cache.keys().next().value);
+            cache.set(
+              key,
+              /^tt\d{5,12}$/.test(ids?.imdb_id || "") ? ids.imdb_id : "",
+            );
+          } catch {
+            /* Unmatched this time; asked again next time. */
+          }
+        }
+        item.imdb = cache.get(key) || "";
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(6, items.length) }, worker),
+    );
+    return {
+      name: sourceLabel(source),
+      provider: "TMDB",
+      type: source.media === "tv" ? "series" : "movie",
+      metas: items
+        .filter((item) => item.imdb)
+        .map((item) => ({
+          id: item.imdb,
+          type: item.kind === "tv" ? "series" : "movie",
+          name: item.name,
+          poster: `https://images.metahub.space/poster/medium/${item.imdb}/img`,
+          ...(item.released ? { releaseInfo: item.released.slice(0, 4) } : {}),
+          ...(item.rating ? { imdbRating: item.rating.toFixed(1) } : {}),
+        })),
+    };
+  }
+  /** A Trakt public list with the viewer's Trakt client ID (no sign-in needed). */
+  async traktRow(source, needs, failures) {
+    const clientId = this.state.integrations?.trakt?.clientId;
+    if (!clientId) {
+      needs.add("trakt");
+      return null;
+    }
+    try {
+      const body = await this.cached(traktRequest(source), {
+        ttl: 600000,
+        failFor: 120000,
+        timeout: 12000,
+        headers: {
+          "trakt-api-version": "2",
+          "trakt-api-key": clientId,
+        },
+      });
+      return {
+        name: sourceLabel(source, true),
+        provider: "Trakt",
+        type: source.media === "tv" ? "series" : "movie",
+        metas: traktMetas(body, source),
+      };
+    } catch {
+      failures.push("Trakt");
+      return null;
+    }
   }
   queueEdit(input) {
     this.profiles.gate("library");
@@ -780,7 +913,7 @@ export class Client {
    * A failure can be remembered for a while (failFor), so one dead addon does
    * not cost its full timeout again on every screen that lists catalogs.
    */
-  async cached(url, { ttl = 180000, failFor = 0, timeout } = {}) {
+  async cached(url, { ttl = 180000, failFor = 0, timeout, headers } = {}) {
     const cached = this.cache.get(url);
     if (cached?.failed && Date.now() - cached.at < cached.failFor)
       throw new Error(cached.message);
@@ -788,7 +921,15 @@ export class Client {
       return cached.data;
     let data;
     try {
-      data = await this.request(url, timeout ? { timeout } : undefined);
+      // A request carrying a credential header never follows a redirect.
+      data = await this.request(
+        url,
+        headers
+          ? { timeout, headers, redirect: "error" }
+          : timeout
+            ? { timeout }
+            : undefined,
+      );
     } catch (error) {
       if (failFor)
         this.remember(url, {

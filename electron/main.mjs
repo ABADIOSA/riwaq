@@ -991,7 +991,13 @@ const methods = {
     if (!pendingNuvio || pendingNuvio.token !== a?.token)
       throw new Error("اقرأ بيانات نوفيو من جديد");
     const parts = {};
-    for (const key of ["addons", "collections", "library", "plugins"])
+    for (const key of [
+      "addons",
+      "collections",
+      "library",
+      "plugins",
+      "tmdbKey",
+    ])
       parts[key] = a?.parts?.[key] === true;
     const reply = await client.importNuvio(pendingNuvio.stores, {
       profile: a?.profile,

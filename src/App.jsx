@@ -937,6 +937,10 @@ export default function App() {
             target={collectionTarget}
             setTarget={setCollectionTarget}
             onNuvio={() => setNuvioOpen(true)}
+            onSettings={(tab) => {
+              setSettingsTab(tab);
+              navigate("settings");
+            }}
           />
         )}
         {view === "live" && (
