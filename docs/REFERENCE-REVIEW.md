@@ -49,6 +49,28 @@ Nuvio HTPC (UmbraProjects/NuvioDesktop, GPL-3.0) at `b775bf5` (Release 1.15.0), 
 - **Backup.** Its settings backup is a zip of `preferences/*.properties`.
 - **Riwaq 0.12's Nuvio link.** It reads those stores directly and never keeps or runs plugin code.
 
+## Four betas compared, 2026-09-30 (0.14)
+
+The owner asked for the latest betas of four apps to be compared: the best feature they share, and the best of each, brought into Riwaq. Each was read for behaviour only; no code was copied. Harbor is MIT; the others are GPL-3.0.
+
+| App | Read at | Version |
+|---|---|---|
+| Harbor | `beta-branch` `ccd26f4` (2026-09-30) | 0.9.128 beta. Release notes 0.9.119–0.9.128 read. |
+| Nuvio (official) | NuvioMedia/NuvioDesktop `b1e0072` (2026-09-28) | 0.1.26-alpha, testers only. |
+| Nuvio HTPC, the "enhanced" Nuvio | UmbraProjects/NuvioDesktop `1389f50` (2026-09-29) | 1.15.0 plus unreleased work. CHANGELOG read. |
+| Stremio Community v5 | Zaarrg/stremio-community-v5 `3e96a6f` (2026-08-01) | 5.0.0-beta.22, still the newest tag. |
+
+- **Shared: seek-bar thumbnails.** Harbor has trickplay; Nuvio HTPC 1.15 has seek thumbnail modes (Off, Local for this PC and the home network, Streaming); Stremio Community ships thumbfast. Riwaq 0.14 adds previews with Nuvio HTPC's reach modes, because every preview is a request against the source and debrid hosts rate-limit. The frames come from a separate, silent MPV grabbing one scaled JPEG per slice.
+- **Harbor: hold the picture for 2× speed** (0.9.121). Riwaq makes the speed a setting and makes sure the click ending a hold does not pause.
+- **Nuvio (official): episode shuffle** (`features/shuffle`). It picks unwatched, released episodes, never repeating until each has come up. Riwaq's version is in `core/shuffle.mjs`.
+- **Nuvio HTPC: hide watched content** (1.15.0). It works almost everywhere, spares search, the library, continue watching and up next, and titles leave as soon as they are finished. Riwaq's earlier setting only filtered finished films at load time in discover; it now filters live across home, discover, collections and folder pages.
+- **Stremio Community: drag and drop.** A video file plays, and a subtitle file joins the playing video. Riwaq takes drops through Chromium's own file navigation, which both windows already refused, so paths never come from page scripts.
+- **Already present in Riwaq and therefore not re-done:** pause on minimize (Stremio Community), sleep timer, screensaver-like idle handling, Discord presence, failover and skip segments.
+- **Seen but not taken this round:**
+  - Harbor: eBooks, manga, music, sports, and Plex/Jellyfin/Emby.
+  - Nuvio HTPC: gamepad, smart lights, AI recaps and P2P engines.
+  - Stremio Community: Chromecast and bundled upscaler shaders. Riwaq ships no third-party shaders.
+
 ## Stremio Community v5
 
 - License: GPL-3.0. Stack: C++ with WebView2 and libmpv, wrapping the official Stremio web UI.

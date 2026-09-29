@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  FastForward,
   Play,
   Pause,
   RotateCcw,
@@ -57,10 +58,15 @@ export default function Hud() {
   const [dock, setDock] = useState(null);
   const [notice, setNotice] = useState("");
   const [seekHover, setSeekHover] = useState(null);
+  const [thumb, setThumb] = useState(null);
+  const thumbAsk = useRef(0);
   const [flash, setFlash] = useState(null);
   const [skipNext, setSkipNext] = useState("");
   const idle = useRef();
   const click = useRef();
+  // Holding the picture plays faster until it is let go (Harbor's gesture).
+  const hold = useRef({ timer: 0, active: false, previous: 1, swallow: false });
+  const [holding, setHolding] = useState(false);
   const overControls = useRef(false);
 
   const act = (method, args) =>
@@ -108,7 +114,26 @@ export default function Hud() {
   }, [notice]);
   useEffect(() => {
     setDock(null);
+    setThumb(null);
   }, [player.videoId]);
+  // A preview is asked for only once the pointer rests on the timeline, so
+  // sweeping across it does not send a request per pixel.
+  const thumbMode = state?.settings.seekThumbnails || "local";
+  useEffect(() => {
+    if (!seekHover || thumbMode === "off" || player.live) {
+      thumbAsk.current++;
+      if (!seekHover) setThumb(null);
+      return;
+    }
+    const ask = ++thumbAsk.current;
+    const timer = setTimeout(async () => {
+      const image = await call("trickplay", { at: seekHover.t }).catch(
+        () => null,
+      );
+      if (ask === thumbAsk.current) setThumb(image ? { image } : null);
+    }, 220);
+    return () => clearTimeout(timer);
+  }, [seekHover?.t, thumbMode, player.live]);
 
   const shown = awake || player.pause || !!dock || player.loading;
   const series = player.mediaType === "series";
@@ -133,8 +158,35 @@ export default function Hud() {
     player.duration - (player.position || 0) <= 45 &&
     skipNext !== player.videoId &&
     !player.error;
+  const holdRate = Number(state?.settings.holdSpeed ?? 2);
+  const onStageDown = (e) => {
+    if (e.button !== 0 || e.target !== e.currentTarget) return;
+    if (!holdRate || player.live || player.pause || dock) return;
+    clearTimeout(hold.current.timer);
+    hold.current.timer = setTimeout(() => {
+      hold.current = {
+        ...hold.current,
+        active: true,
+        previous: Number(player.speed) || 1,
+      };
+      command("speed", holdRate);
+      setHolding(true);
+    }, 350);
+  };
+  const onStageUp = () => {
+    clearTimeout(hold.current.timer);
+    if (!hold.current.active) return;
+    // The click that ends a hold must not also pause.
+    hold.current = { ...hold.current, active: false, swallow: true };
+    command("speed", hold.current.previous);
+    setHolding(false);
+  };
   const onStageClick = (e) => {
     if (e.target !== e.currentTarget) return;
+    if (hold.current.swallow) {
+      hold.current.swallow = false;
+      return;
+    }
     clearTimeout(click.current);
     click.current = setTimeout(() => {
       if (dock) return setDock(null);
@@ -174,6 +226,10 @@ export default function Hud() {
           : undefined
       }
       onMouseMove={wake}
+      onPointerDown={onStageDown}
+      onPointerUp={onStageUp}
+      onPointerLeave={onStageUp}
+      onPointerCancel={onStageUp}
       onClick={onStageClick}
       onDoubleClick={onStageDouble}
       onContextMenu={(e) => {
@@ -222,6 +278,11 @@ export default function Hud() {
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
+      {holding && (
+        <div className="hud-hold" aria-live="polite">
+          <FastForward size={18} fill="currentColor" /> {holdRate}×
+        </div>
+      )}
       {player.stats && (
         <dl className="hud-stats" dir="ltr">
           <div>
@@ -320,6 +381,7 @@ export default function Hud() {
               !player.live &&
               setSeekHover({
                 x: e.clientX - e.currentTarget.getBoundingClientRect().left,
+                w: e.currentTarget.getBoundingClientRect().width,
                 t: seekTo(e),
               })
             }
@@ -349,6 +411,19 @@ export default function Hud() {
                   }}
                 />
               ))}
+            {seekHover && thumb && (
+              <img
+                className="hud-seek-thumb"
+                src={thumb.image}
+                alt=""
+                style={{
+                  left: Math.max(
+                    100,
+                    Math.min((seekHover.w || 0) - 100, seekHover.x),
+                  ),
+                }}
+              />
+            )}
             {seekHover && (
               <b className="hud-seek-time" style={{ left: seekHover.x }}>
                 {clock(seekHover.t)}

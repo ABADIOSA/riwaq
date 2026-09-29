@@ -56,6 +56,8 @@ import {
   releasedEpisodes,
   isCompleted,
   titleKey,
+  watchedTitles,
+  withoutWatched,
 } from "../core/library.mjs";
 const initial = {
   addons: [],
@@ -293,21 +295,6 @@ export default function App() {
       search: view === "search" ? query : "",
       catalogKey: view !== "home" ? catalog : "",
     };
-    const unwatched = (row) => ({
-      ...row,
-      metas: stateRef.current.settings.hideWatched
-        ? row.metas.filter(
-            (m) =>
-              !Object.values(stateRef.current.progress).some(
-                (p) =>
-                  p.meta.id === m.id &&
-                  p.meta.type === m.type &&
-                  m.type === "movie" &&
-                  isCompleted(p),
-              ),
-          )
-        : row.metas,
-    });
     // Each catalog is its own request, so rows appear as addons answer
     // instead of waiting for the slowest of dozens. Order follows the plan.
     let flush = 0;
@@ -335,7 +322,7 @@ export default function App() {
               ...args,
               catalogKey: item.key,
             });
-            if (result.rows[0]) found[index] = unwatched(result.rows[0]);
+            if (result.rows[0]) found[index] = result.rows[0];
             result.failures.forEach((name) => failed.add(name));
           } catch {
             failed.add(item.provider);
@@ -370,7 +357,6 @@ export default function App() {
     catalog,
     addonSignature,
     refresh,
-    state.settings.hideWatched,
     state.profiles?.active,
   ]);
   useEffect(() => {
@@ -428,14 +414,23 @@ export default function App() {
     state.favorites.length,
   ]);
   const homeSections = safeHomeSections(state.settings.homeSections);
+  // Finished films leave the rows the moment they are finished, without a
+  // reload. Search keeps them, as Nuvio HTPC does.
+  const watched = state.settings.hideWatched
+    ? watchedTitles(state.progress)
+    : null;
+  const liveRows =
+    watched?.size && view !== "search"
+      ? rows.map((r) => ({ ...r, metas: withoutWatched(r.metas, watched) }))
+      : rows;
   // Home rows as the viewer arranged them; other listings keep addon order.
   const shownRows =
     view === "home"
-      ? arrangeRows(rows, {
+      ? arrangeRows(liveRows, {
           order: state.settings.homeOrder || [],
           hidden: state.settings.homeHidden || [],
         })
-      : rows;
+      : liveRows;
   const catalogRails = shownRows
     .filter((r) => r.metas.length)
     .map((row) => (
@@ -654,7 +649,10 @@ export default function App() {
             />
             <kbd>Ctrl K</kbd>
           </form>
-          <IconButton title="فتح ملف فيديو" onClick={() => act("localVideo")}>
+          <IconButton
+            title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
+            onClick={() => act("localVideo")}
+          >
             <FolderOpen size={20} />
           </IconButton>
         </header>
@@ -828,7 +826,7 @@ export default function App() {
                   {catalog ? (
                     <>
                       <div className="poster-grid">
-                        {rows
+                        {liveRows
                           .flatMap((r) => r.metas)
                           .map((m, i) => (
                             <Poster

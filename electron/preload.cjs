@@ -53,6 +53,7 @@ const allowed = new Set([
   "letterboxdImport",
   "openService",
   "playerCommand",
+  "trickplay",
   "stop",
   "subtitle",
   "localSubtitle",

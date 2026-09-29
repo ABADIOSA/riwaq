@@ -209,6 +209,8 @@ export class Player {
     if (!existsSync(executable))
       throw new Error("لم يتم العثور على MPV. اختر ملف mpv.exe من الإعدادات.");
     await this.stop();
+    // Kept in main only, for seek previews; never part of the HUD's state.
+    this.source = { url, headers, local, live };
     this.meta = meta;
     this.videoId = videoId;
     this.settings = settings;
