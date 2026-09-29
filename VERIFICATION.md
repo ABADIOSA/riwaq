@@ -1,4 +1,51 @@
-# Verification — Riwaq 0.11.0
+# Verification — Riwaq 0.12.0
+
+## 0.12.0 — collections, Nuvio linking, home editor
+
+The owner asked for the largest interface and settings update yet, including Nuvio-style collections and linking with Nuvio so collections, addons and plugins move over. Nuvio HTPC (GPL-3.0) was studied at `b775bf5` for behaviour and file formats only (see docs/REFERENCE-REVIEW.md).
+
+Executed:
+
+- `npm test`: **266 passing, 0 failing** (253 + 13 new).
+  - Collections:
+    - field-by-field validation: IDs, HTTPS-only covers without credentials, shapes, views, deduplicated catalogs and titles, and limits;
+    - every edit action, including hand-picked order and an empty rename keeping the name;
+    - catalog resolution by manifest ID, falling back to a forked addon;
+    - available catalogs, with no search-only catalogs and no addon URLs;
+    - Nuvio JSON in both directions: TMDB/Trakt sources counted, legacy `catalogSources`, round trip;
+    - a re-import updating by ID;
+    - per-profile storage;
+    - backups carrying collections and re-validating them on restore;
+    - home arrangement, and the settings validation for it;
+    - the new actions staying off the HUD bridge.
+  - Nuvio:
+    - `.properties` text written like `java.util.Properties.store` (escapes and `\uXXXX` surrogate pairs for Arabic and emoji) parsing back exactly, plus continuations and escaped keys;
+    - profile discovery and preview counts;
+    - addon URLs deduplicated, completed with `/manifest.json` and refused when not HTTP(S), keeping their enabled state;
+    - plugin repositories kept without their scraper code;
+    - the backup zip reader (deflated and stored entries) opening only the known stores and never an auth store;
+    - Windows folder candidates;
+    - an import through `Client.importNuvio`: addons installed via the manifest check, with a failing addon reported, Nuvio's disabled state kept, library and collections merged, and plugin repository URLs kept out of `publicState`.
+  - The run caught three defects before release, all fixed:
+    - an empty rename threw instead of keeping the name;
+    - two test fixture mistakes.
+- `npm run check` and `npm run build` pass.
+- Rendered in headless Chromium at 980×680 and 1440×960. The stub bridge ran the real `editCollections`, `availableCatalogs`, `fromNuvio`, `mergeCollections`, `nuvioPreview`, `nuvioProfile` and `safeSettings` in Node. Covered:
+  - a collection created from a template;
+  - a catalog with a genre added and a folder added;
+  - two titles added from Details through "أضف لمجموعة" and reordered;
+  - the Nuvio dialog: scan, profile and parts preview with Arabic counts, import, result;
+  - pinned collections on home;
+  - the home editor moving pinned collections to the top and hiding a catalog, with home following that order;
+  - the Nuvio plugin list on the Addons page.
+
+  There were zero page errors and zero horizontal overflow. Rendering caught a real defect: after switching folders in edit mode, the previous folder's editor stayed on screen, because two siblings shared a React key. It was fixed.
+
+Not executed:
+
+- **No real Nuvio installation, backup or export was read.** The formats come from Nuvio's open source; the fixtures are built to match it.
+- Nuvio's servers are not contacted and no Nuvio account is used. Plugins are listed, never run.
+- Nothing in 0.12.0 has run on Windows: real file dialogs, clipboard, the `%LOCALAPPDATA%`/`%APPDATA%` scan, and live addon catalogs inside folders.
 
 ## 0.11.0 — makers above sources, series rows, people search, trailers
 

@@ -1,0 +1,643 @@
+/* Collections (0.12): the room, a collection, folders, and Nuvio linking. */
+.collections-lead {
+  max-width: 560px;
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.collection-create {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0 0 24px;
+  padding: 14px;
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: var(--radius, 12px);
+  background: var(--panel, #ffffff06);
+}
+.collection-create input,
+.collection-field input,
+.collection-field select,
+.catalog-picker select,
+.folder-new input {
+  flex: 1;
+  min-width: 140px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line, #ffffff1c);
+  border-radius: 10px;
+  background: #0000002e;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+.collection-create .emoji-input,
+.collection-field .emoji-input {
+  flex: 0 0 64px;
+  min-width: 0;
+  width: 64px;
+  text-align: center;
+  font-size: 18px;
+}
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
+}
+.collection-card {
+  position: relative;
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: var(--radius-lg, 16px);
+  background: var(--panel, #ffffff06);
+  overflow: hidden;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+.collection-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+.collection-open {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: right;
+}
+.collection-open > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 16px;
+}
+.collection-open strong {
+  font-size: 15px;
+}
+.collection-open small {
+  color: var(--muted, #8a9099);
+  font-size: 11.5px;
+}
+.collection-face {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 30% 20%,
+      var(--accent-soft, #e7b66e33),
+      transparent 70%
+    ),
+    linear-gradient(135deg, #ffffff12, #ffffff03);
+  color: var(--accent);
+}
+.collection-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.collection-face b {
+  font-size: 34px;
+  line-height: 1;
+}
+.collection-face.large {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+}
+.collection-face.large b {
+  font-size: 54px;
+}
+.collection-tools {
+  position: absolute;
+  top: 10px;
+  inset-inline-start: 10px;
+  display: flex;
+  gap: 5px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.collection-card:hover .collection-tools,
+.collection-card:focus-within .collection-tools {
+  opacity: 1;
+}
+.collection-tools button,
+.pick-tools button,
+.folder-sources li button,
+.folder-new button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #ffffff24;
+  border-radius: 8px;
+  background: #000000b3;
+  color: #eee;
+}
+.collection-tools button.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.collection-tools button:disabled,
+.pick-tools button:disabled {
+  opacity: 0.35;
+}
+.collection-share {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 26px;
+  color: var(--muted, #8a9099);
+  font-size: 12.5px;
+}
+.collection-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+.collection-hero {
+  position: relative;
+  margin: -6px 0 22px;
+  border-radius: var(--radius-lg, 16px);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+  border: 1px solid var(--line, #ffffff12);
+}
+.collection-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(0deg, var(--bg, #111418) 5%, #000000a0 60%, #0000005c),
+    radial-gradient(
+      circle at 85% 0%,
+      var(--accent-soft, #e7b66e22),
+      transparent 60%
+    );
+}
+.collection-hero-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 26px 24px;
+}
+.collection-hero h1 {
+  margin: 0;
+  font-size: 34px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pinned-emoji {
+  margin-inline-end: 8px;
+}
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line, #ffffff1c);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.segmented button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: var(--muted, #aaa);
+}
+.segmented button.selected {
+  background: var(--accent-soft, #e7b66e22);
+  color: var(--accent);
+}
+button.danger,
+.secondary.danger {
+  color: #ff8a8a;
+  border-color: #ff8a8a55;
+}
+.collection-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+}
+.collection-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 150px;
+}
+.collection-field:has(.emoji-input) {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.collection-field > span {
+  color: var(--muted, #8a9099);
+  font-size: 11px;
+}
+.folder-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 22px;
+}
+.folder-tabs > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--line, #ffffff1c);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+}
+.folder-tabs > button.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft, #e7b66e22);
+  color: var(--accent);
+}
+.folder-new {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.folder-new input {
+  flex: 0 0 150px;
+  min-width: 0;
+  height: 34px;
+}
+.folder-new button {
+  width: 34px;
+  height: 34px;
+  background: var(--accent-soft, #e7b66e22);
+  color: var(--accent);
+}
+.folder-new button:disabled {
+  opacity: 0.4;
+}
+.folder-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 26px;
+  padding: 18px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius, 12px);
+  background: var(--panel, #ffffff05);
+}
+.folder-sources h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.folder-sources ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.folder-sources li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line, #ffffff12);
+  border-radius: 10px;
+}
+.folder-sources li span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.folder-sources li small {
+  color: var(--muted, #8a9099);
+  font-size: 11px;
+}
+.catalog-picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.folder-section {
+  margin-bottom: 20px;
+}
+.folder-section > h2 {
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+.folder-picks {
+  margin-bottom: 30px;
+}
+.pick {
+  position: relative;
+}
+.pick .collection-index,
+.collection-work .collection-index {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  inset-inline-start: 8px;
+}
+.pick-tools {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+.folder-row {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 3px 1px 14px;
+  scrollbar-width: thin;
+}
+.folder-tile {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: right;
+}
+.folder-tile .collection-face {
+  border-radius: var(--poster-radius, 12px);
+  border: 1px solid var(--line, #ffffff14);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+.folder-tile:hover .collection-face {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+.folder-tile.shape-poster .collection-face {
+  width: 150px;
+  aspect-ratio: 2 / 3;
+}
+.folder-tile.shape-landscape .collection-face {
+  width: 260px;
+  aspect-ratio: 16 / 9;
+}
+.folder-tile.shape-square .collection-face {
+  width: 170px;
+  aspect-ratio: 1;
+}
+.folder-tile strong {
+  font-size: 13px;
+  max-width: 260px;
+}
+.add-collection-modal {
+  width: 520px;
+}
+.add-collection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 46vh;
+  overflow: auto;
+  margin: 16px 0;
+}
+.add-collection-list fieldset {
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: 12px;
+  padding: 8px 12px 12px;
+  margin: 0;
+}
+.add-collection-list legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+.add-folder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  text-align: right;
+}
+.add-folder:hover {
+  background: #ffffff0a;
+}
+.add-folder > span:nth-child(2) {
+  flex: 1;
+}
+.add-folder small {
+  color: var(--muted, #8a9099);
+  font-size: 11px;
+}
+.add-check {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid var(--line, #ffffff2a);
+}
+.add-folder.inside .add-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink, #111);
+}
+.nuvio-modal {
+  width: 640px;
+}
+.nuvio-options {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+}
+.nuvio-options button,
+.nuvio-profiles button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--line, #ffffff1c);
+  border-radius: 12px;
+  background: var(--panel, #ffffff06);
+  color: inherit;
+  text-align: right;
+}
+.nuvio-options button svg {
+  grid-row: span 2;
+  color: var(--accent);
+}
+.nuvio-options button:hover,
+.nuvio-profiles button.selected {
+  border-color: var(--accent);
+}
+.nuvio-options small,
+.nuvio-profiles small,
+.nuvio-parts small {
+  color: var(--muted, #8a9099);
+  font-size: 11.5px;
+}
+.nuvio-profiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.nuvio-profiles button {
+  grid-template-columns: 1fr;
+}
+.nuvio-parts {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.nuvio-parts label {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #ffffff12);
+  border-radius: 10px;
+}
+.nuvio-parts label.empty {
+  opacity: 0.45;
+}
+.nuvio-parts span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nuvio-paste {
+  width: 100%;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line, #ffffff1c);
+  border-radius: 10px;
+  background: #0000002e;
+  color: inherit;
+  font:
+    12px/1.6 Consolas,
+    monospace;
+}
+.nuvio-result {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0;
+  display: grid;
+  gap: 8px;
+}
+.nuvio-result li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.nuvio-result svg {
+  color: var(--accent);
+}
+.nuvio-plugins {
+  margin-top: 28px;
+}
+.nuvio-sync {
+  margin-top: 30px;
+}
+.home-editor {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0;
+  display: grid;
+  gap: 6px;
+  counter-reset: home;
+}
+.home-editor li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line, #ffffff12);
+  border-radius: 10px;
+  background: var(--panel, #ffffff04);
+  counter-increment: home;
+}
+.home-editor li::before {
+  content: counter(home);
+  min-width: 22px;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12px;
+}
+.home-editor li > span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home-editor li small {
+  color: var(--muted, #8a9099);
+  font-size: 11px;
+}
+.home-editor li.off {
+  opacity: 0.5;
+}
+.home-editor li.off::before {
+  content: "–";
+}
+.home-editor button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line, #ffffff1c);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted, #aaa);
+}
+.home-editor button.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.home-editor button:disabled {
+  opacity: 0.3;
+}
+.nuvio-plugins ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.nuvio-plugins li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line, #ffffff12);
+  border-radius: 10px;
+}
+.nuvio-plugins li span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nuvio-plugins li small {
+  color: var(--muted, #8a9099);
+  font-size: 11px;
+}

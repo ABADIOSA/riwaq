@@ -1,5 +1,10 @@
 import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
 import { safeAppearance } from "./appearance.mjs";
+import {
+  DEFAULT_HOME_SECTIONS,
+  safeCatalogKeys,
+  safeHomeSections,
+} from "./home.mjs";
 import { createHash } from "node:crypto";
 
 export const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
@@ -51,6 +56,9 @@ export const DEFAULT_SETTINGS = {
   subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
   // null until the viewer designs one; the older accent choice applies then.
   appearance: null,
+  homeSections: [...DEFAULT_HOME_SECTIONS],
+  homeOrder: [],
+  homeHidden: [],
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -287,6 +295,10 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
       input.appearance,
       current.appearance || undefined,
     );
+  if (Array.isArray(input.homeSections))
+    next.homeSections = safeHomeSections(input.homeSections);
+  for (const key of ["homeOrder", "homeHidden"])
+    if (Array.isArray(input[key])) next[key] = safeCatalogKeys(input[key]);
   if (input.subtitleStyle && typeof input.subtitleStyle === "object")
     next.subtitleStyle = safeSubtitleStyle(
       input.subtitleStyle,

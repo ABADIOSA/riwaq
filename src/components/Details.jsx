@@ -19,7 +19,10 @@ import {
   CheckCheck,
   Undo2,
   Clapperboard,
+  Folders,
 } from "lucide-react";
+import { AddToCollection } from "./Collections.jsx";
+import { titlePlaces } from "../../core/collections.mjs";
 import { trailerOf } from "../../core/credits.mjs";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
@@ -62,7 +65,8 @@ export default function Details({
     [subs, setSubs] = useState([]),
     [subLoading, setSubLoading] = useState(false),
     [request, setRequest] = useState(0),
-    [explore, setExplore] = useState(null);
+    [explore, setExplore] = useState(null),
+    [collecting, setCollecting] = useState(false);
   // Credits wait for the addon's metadata so its IMDb ID is settled.
   const { credits, error: creditsError } = useCredits(meta, !loading);
   useEffect(() => {
@@ -237,6 +241,12 @@ export default function Details({
         <button className="secondary" onClick={() => onFavorite(meta)}>
           {isFavorite ? <Check size={18} /> : <Plus size={18} />}{" "}
           {isFavorite ? "في مكتبتي" : "أضف إلى مكتبتي"}
+        </button>
+        <button className="secondary" onClick={() => setCollecting(true)}>
+          <Folders size={18} />
+          {titlePlaces(state.collections, meta).length
+            ? "في مجموعاتك"
+            : "أضف لمجموعة"}
         </button>
         {trailerOf(meta) && (
           <button
@@ -560,6 +570,14 @@ export default function Details({
           </section>
         )}
       </div>
+      {collecting && (
+        <AddToCollection
+          meta={meta}
+          state={state}
+          update={update}
+          onClose={() => setCollecting(false)}
+        />
+      )}
       {explore && (
         <ExploreModal
           start={explore}

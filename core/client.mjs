@@ -20,6 +20,14 @@ import { Profiles } from "./profiles.mjs";
 import { Notifier } from "./notify.mjs";
 import { Updates } from "./updates.mjs";
 import { cleanMedia, editQueue, isCompleted } from "./library.mjs";
+import {
+  availableCatalogs,
+  editCollections,
+  fromNuvio,
+  mergeCollections,
+  resolveCatalog,
+} from "./collections.mjs";
+import { nuvioProfile } from "./nuvio.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 import {
@@ -179,6 +187,14 @@ export class Client {
       favorites,
       progress,
       queue: this.state.queue || [],
+      collections: this.state.collections || [],
+      // Plugin repository addresses stay in main, like addon URLs.
+      nuvioPlugins: (this.state.nuvioPlugins || []).map((p) => ({
+        key: keyFor(p.url),
+        name: p.name,
+        host: new URL(p.url).host,
+        scrapers: p.scrapers,
+      })),
       lastSync,
       providers: this.dataHub.publicState(),
       integrations: this.integrations.publicState(),
@@ -191,6 +207,7 @@ export class Client {
       user: auth ? { email: auth.email, name: auth.name } : null,
       addons: this.state.addons.map((a) => ({
         key: keyFor(a.transportUrl),
+        id: String(a.manifest.id || "").slice(0, 200),
         enabled: a.enabled !== false,
         name: a.manifest.name,
         version: a.manifest.version,
@@ -420,6 +437,198 @@ export class Client {
       updated: Date.now(),
     };
     this.persist();
+  }
+  collectionsEdit(input) {
+    this.profiles.gate("library");
+    this.state.collections = editCollections(
+      this.state.collections || [],
+      input,
+    );
+    this.persist();
+    return this.publicState();
+  }
+  /**
+   * Imports what the viewer chose from one Nuvio profile. Addons are
+   * installed through the normal manifest check, so a dead or unconfigured
+   * addon is reported rather than stored; collections join the active
+   * profile's; library titles join its library; plugin repositories are
+   * listed, never run.
+   */
+  async importNuvio(stores, { profile, parts = {} } = {}) {
+    this.profiles.gate("settings");
+    const index = Number(profile);
+    if (!Number.isInteger(index) || index < 1)
+      throw new Error("اختر ملف نوفيو");
+    const data = nuvioProfile(stores, index);
+    const result = {
+      addons: 0,
+      addonFailures: [],
+      collections: 0,
+      skippedSources: 0,
+      library: 0,
+      plugins: 0,
+    };
+    if (parts.addons) {
+      for (const addon of data.addons.slice(0, 100)) {
+        let key;
+        try {
+          key = keyFor(normalizeAddon(addon.url));
+        } catch {
+          result.addonFailures.push(new URL(addon.url).host);
+          continue;
+        }
+        if (this.state.addons.some((a) => keyFor(a.transportUrl) === key))
+          continue;
+        try {
+          await this.install(addon.url);
+          const added = this.state.addons.find(
+            (a) => keyFor(a.transportUrl) === key,
+          );
+          if (added && !addon.enabled) added.enabled = false;
+          result.addons++;
+        } catch {
+          result.addonFailures.push(new URL(addon.url).host);
+        }
+      }
+    }
+    if (parts.collections) {
+      const merged = mergeCollections(
+        this.state.collections || [],
+        data.collections.collections,
+      );
+      this.state.collections = merged.collections;
+      result.collections = merged.added;
+      result.skippedSources = data.collections.skipped;
+    }
+    if (parts.library) {
+      for (const media of data.library) {
+        if (
+          this.state.favorites.some(
+            (m) => m.id === media.id && m.type === media.type,
+          )
+        )
+          continue;
+        this.state.favorites.unshift(media);
+        result.library++;
+      }
+    }
+    if (parts.plugins) {
+      const list = (this.state.nuvioPlugins ||= []);
+      for (const repo of data.plugins) {
+        if (list.some((p) => p.url === repo.url)) continue;
+        list.push({ ...repo, added: Date.now() });
+        result.plugins++;
+      }
+    }
+    this.cache.clear();
+    this.persist();
+    return { result, state: this.publicState() };
+  }
+  removeNuvioPlugin({ key }) {
+    this.state.nuvioPlugins = (this.state.nuvioPlugins || []).filter(
+      (p) => keyFor(p.url) !== key,
+    );
+    this.persist();
+    return this.publicState();
+  }
+  /** Nuvio's collections JSON pasted from any Nuvio app (phone, TV, desktop). */
+  importNuvioCollections({ text } = {}) {
+    this.profiles.gate("library");
+    if (typeof text !== "string" || !text.trim() || text.length > 4_000_000)
+      throw new Error("الصق نص مجموعات نوفيو أولاً");
+    const converted = fromNuvio(text);
+    const merged = mergeCollections(
+      this.state.collections || [],
+      converted.collections,
+    );
+    this.state.collections = merged.collections;
+    this.persist();
+    return {
+      result: {
+        collections: merged.added,
+        folders: converted.folders,
+        skippedSources: converted.skipped,
+      },
+      state: this.publicState(),
+    };
+  }
+  collectionCatalogs() {
+    return availableCatalogs(this.enabled());
+  }
+  /**
+   * One folder's content: the hand-picked titles in the viewer's order, then
+   * one row per catalog as the addons answer. Sources whose addon is gone are
+   * named so the interface can say what is missing.
+   */
+  async collectionFolder({ collectionId, folderId, skip = 0 } = {}) {
+    const collection = (this.state.collections || []).find(
+      (c) => c.id === collectionId,
+    );
+    const folder = collection?.folders.find((f) => f.id === folderId);
+    if (!folder) throw new Error("المجلد غير موجود");
+    const addons = this.enabled();
+    const rows = new Array(folder.catalogs.length).fill(null);
+    const missing = [];
+    const failures = [];
+    let next = 0;
+    const worker = async () => {
+      while (next < folder.catalogs.length) {
+        const index = next++;
+        const source = folder.catalogs[index];
+        const found = resolveCatalog(addons, source);
+        if (!found) {
+          missing.push(`${source.catalog} (${source.addon})`);
+          continue;
+        }
+        const extras = catalogExtras(
+          found.cat,
+          "",
+          source.genre || "",
+          Math.max(0, Math.min(100000, Number(skip) || 0)),
+        );
+        if (!extras) {
+          missing.push(found.cat.name || found.cat.id);
+          continue;
+        }
+        try {
+          const data = await this.cached(
+            resourceUrl(
+              found.addon.transportUrl,
+              "catalog",
+              found.cat.type,
+              found.cat.id,
+              extras,
+            ),
+            { ttl: 600000, failFor: 120000, timeout: 10000 },
+          );
+          rows[index] = {
+            index,
+            name:
+              (found.cat.name || found.cat.id) +
+              (source.genre ? ` · ${source.genre}` : ""),
+            provider: found.addon.manifest.name,
+            type: found.cat.type,
+            metas: (data.metas || [])
+              .filter((m) => m?.id && m.name)
+              .map((m) => ({ ...m, type: m.type || found.cat.type })),
+            hasMore:
+              (found.cat.extra || []).some((e) => e.name === "skip") &&
+              (data.metas || []).length > 0,
+          };
+        } catch {
+          failures.push(found.addon.manifest.name);
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(6, folder.catalogs.length) }, worker),
+    );
+    return {
+      titles: folder.titles,
+      rows: rows.filter(Boolean),
+      missing,
+      failures: [...new Set(failures)],
+    };
   }
   queueEdit(input) {
     this.profiles.gate("library");

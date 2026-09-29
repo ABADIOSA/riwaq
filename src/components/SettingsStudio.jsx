@@ -24,9 +24,188 @@ import {
   Archive,
   Upload,
   LockKeyhole,
+  LayoutDashboard,
+  ArrowUp,
+  ArrowDown,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { call } from "../lib/api.js";
+import { typeName } from "../lib/helpers.js";
 import { arabicCount } from "../../core/arabic.mjs";
+import {
+  HOME_SECTIONS,
+  arrangeRows,
+  moveCatalog,
+  safeHomeSections,
+} from "../../core/home.mjs";
+
+/**
+ * The home page editor: which sections show and in what order, and every
+ * addon catalog row, which can be moved or hidden. Rows are named by opaque
+ * plan keys, never by addon URLs.
+ */
+function HomeEditor({ state, update, notice }) {
+  const s = state.settings;
+  const [plan, setPlan] = useState(null);
+  useEffect(() => {
+    call("catalogPlan", {})
+      .then(setPlan)
+      .catch(() => setPlan([]));
+  }, [state.addons.map((a) => `${a.key}:${a.enabled}`).join("|")]);
+  const visible = safeHomeSections(s.homeSections);
+  const sections = [
+    ...visible,
+    ...HOME_SECTIONS.map(([id]) => id).filter((id) => !visible.includes(id)),
+  ];
+  const label = Object.fromEntries(HOME_SECTIONS);
+  const saveSections = (next) => update("settings", { homeSections: next });
+  const moveSection = (id, direction) => {
+    const list = [...visible];
+    const i = list.indexOf(id);
+    const j = i + (direction === "up" ? -1 : 1);
+    if (i < 0 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    saveSections(list);
+  };
+  const hidden = new Set(s.homeHidden || []);
+  const ordered = plan ? arrangeRows(plan, { order: s.homeOrder || [] }) : [];
+  return (
+    <>
+      <section className="settings-card">
+        <h2>أقسام الرئيسية</h2>
+        <p>رتّب الأقسام كما تحب، وأخفِ ما لا تحتاجه.</p>
+        <ol className="home-editor">
+          {sections.map((id) => {
+            const on = visible.includes(id);
+            const index = visible.indexOf(id);
+            return (
+              <li key={id} className={on ? "" : "off"}>
+                <span>{label[id]}</span>
+                <div className="button-row">
+                  <button
+                    title="أعلى"
+                    disabled={!on || index === 0}
+                    onClick={() => moveSection(id, "up")}
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+                  <button
+                    title="أسفل"
+                    disabled={!on || index === visible.length - 1}
+                    onClick={() => moveSection(id, "down")}
+                  >
+                    <ArrowDown size={15} />
+                  </button>
+                  <button
+                    title={on ? "إخفاء" : "إظهار"}
+                    className={on ? "on" : ""}
+                    onClick={() =>
+                      saveSections(
+                        on ? visible.filter((x) => x !== id) : [...visible, id],
+                      )
+                    }
+                  >
+                    {on ? <Eye size={15} /> : <EyeOff size={15} />}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+      <section className="settings-card">
+        <h2>صفوف الكتالوجات</h2>
+        <p>
+          ترتيب صفوف إضافاتك في الرئيسية. الكتالوج الجديد يظهر في الآخر حتى
+          ترتّبه.
+        </p>
+        {plan === null ? (
+          <p className="subtle">نجهز كتالوجاتك…</p>
+        ) : !plan.length ? (
+          <p className="subtle">
+            لا توجد كتالوجات بعد. أضف إضافة تقدم كتالوجاً.
+          </p>
+        ) : (
+          <ol className="home-editor">
+            {ordered.map((row, i) => {
+              const off = hidden.has(row.key);
+              return (
+                <li key={row.key} className={off ? "off" : ""}>
+                  <span dir="auto">
+                    <b>{row.name}</b>
+                    <small>
+                      {row.provider} · {typeName(row.type)}
+                    </small>
+                  </span>
+                  <div className="button-row">
+                    <button
+                      title="أعلى"
+                      disabled={i === 0}
+                      onClick={() =>
+                        update("settings", {
+                          homeOrder: moveCatalog(
+                            plan,
+                            s.homeOrder || [],
+                            row.key,
+                            "up",
+                          ),
+                        })
+                      }
+                    >
+                      <ArrowUp size={15} />
+                    </button>
+                    <button
+                      title="أسفل"
+                      disabled={i === ordered.length - 1}
+                      onClick={() =>
+                        update("settings", {
+                          homeOrder: moveCatalog(
+                            plan,
+                            s.homeOrder || [],
+                            row.key,
+                            "down",
+                          ),
+                        })
+                      }
+                    >
+                      <ArrowDown size={15} />
+                    </button>
+                    <button
+                      title={off ? "إظهار" : "إخفاء"}
+                      className={off ? "" : "on"}
+                      onClick={() =>
+                        update("settings", {
+                          homeHidden: off
+                            ? [...hidden].filter((k) => k !== row.key)
+                            : [...hidden, row.key],
+                        })
+                      }
+                    >
+                      {off ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        <button
+          className="secondary small"
+          onClick={async () =>
+            (await update("settings", {
+              homeOrder: [],
+              homeHidden: [],
+              homeSections: HOME_SECTIONS.map(([id]) => id),
+            })) && notice("عادت الرئيسية لترتيبها الأصلي")
+          }
+        >
+          الترتيب الأصلي
+        </button>
+      </section>
+    </>
+  );
+}
 
 const NAMED_KEYS = {
   " ": "SPACE",
@@ -69,6 +248,12 @@ const sections = [
     Palette,
   ],
   [
+    "home",
+    "الصفحة الرئيسية",
+    "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام واجهة مجموعات مثبتة",
+    LayoutDashboard,
+  ],
+  [
     "data",
     "مكتبة البيانات",
     "API TMDB OMDb MDBList Fanart تقييمات صور لغة",
@@ -77,7 +262,7 @@ const sections = [
   [
     "connections",
     "الحسابات والربط",
-    "Trakt Letterboxd Simkl مزامنة قوائم",
+    "Trakt Letterboxd Simkl Nuvio نوفيو مزامنة قوائم نقل مجموعات",
     Link2,
   ],
   [
@@ -125,6 +310,7 @@ export default function SettingsStudio({
   act,
   notice,
   initialTab = "appearance",
+  onNuvio,
 }) {
   const [tab, setTab] = useState(initialTab),
     [search, setSearch] = useState(""),
@@ -245,6 +431,9 @@ export default function SettingsStudio({
                   </section>
                 </>
               )}
+              {id === "home" && (
+                <HomeEditor state={state} update={update} notice={notice} />
+              )}
               {id === "data" && (
                 <>
                   <div className="feature-banner">
@@ -302,6 +491,17 @@ export default function SettingsStudio({
                       </p>
                     </div>
                   </div>
+                  <section className="settings-card nuvio-card">
+                    <h2>نوفيو</h2>
+                    <p>
+                      انقل إضافاتك ومجموعاتك ومكتبتك ومستودعات أدواتك من Nuvio
+                      Desktop على هذا الجهاز أو من نسخته الاحتياطية، أو الصق
+                      مجموعاتك من أي تطبيق نوفيو.
+                    </p>
+                    <button className="primary" onClick={onNuvio}>
+                      <Link2 size={17} /> الربط مع نوفيو
+                    </button>
+                  </section>
                   {(state.integrations || []).map((integration) => (
                     <IntegrationCard
                       key={integration.id}

@@ -29,6 +29,7 @@ import {
   webUrl,
 } from "./protocol.mjs";
 import { cleanMedia, queueKey } from "./library.mjs";
+import { cleanCollections } from "./collections.mjs";
 import { HOTKEY_ACTIONS, validBinding } from "./hotkeys.mjs";
 import { LOCKABLE_ROOMS } from "./profiles.mjs";
 import {
@@ -91,6 +92,7 @@ export function collectBackup(state, { includeSecrets = false } = {}) {
       progress: bucket.progress || {},
       queue: bucket.queue || [],
       connectedLists: bucket.connectedLists || [],
+      collections: bucket.collections || [],
       settings: withoutMachinePaths(bucket.settings),
     };
   }
@@ -353,6 +355,7 @@ function cleanBucket(bucket) {
     progress,
     queue,
     connectedLists,
+    collections: cleanCollections(source.collections),
     settings,
   };
 }
@@ -542,6 +545,7 @@ export function summarizeBackup(header, payload) {
     titles: count("favorites"),
     progress: count("progress"),
     queue: count("queue"),
+    collections: count("collections"),
     addons: Array.isArray(payload.addons) ? payload.addons.length : 0,
     liveSources: Array.isArray(payload.live?.sources)
       ? payload.live.sources.length
