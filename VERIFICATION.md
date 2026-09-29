@@ -2,7 +2,11 @@
 
 ## 0.12.4 — parity with Nuvio's collection sources
 
-The owner said problems remain and pointed at the community collection they use (U.N.E, "Ultimate Nuvio Experience" on nuvio.tv). nuvio.tv is blocked by this build environment's network policy, so the collection itself was NOT read. Instead, Riwaq's importer and TMDB request builder were compared against Nuvio's own collection model and TMDB resolver (GPL-3.0, read for behaviour only, nothing copied). Differences found and fixed:
+**Root cause found from the owner's shape-only diagnostic report.** In U.N.E, every addon source's `type` is a catalog name, such as "Trending Movies on Trakt", "IMDb's Top Drama Movies" or "Top Fantasy/Sci-Fi Movies". List addons such as AIOLists give each catalog its own custom type. Riwaq's `TYPE` pattern refused spaces, apostrophes and slashes, and capped the length at 40. As a result, nearly every source in every U.N.E folder was dropped into `unsupported`, and folders came across empty. A type is now any printable text up to 200 characters, and it is URL-encoded in the catalog request (a test checks `Top%20Fantasy%2FSci-Fi%20Movies`). Imported IDs are now stable (`nuvio-` plus Nuvio's ID with unsafe characters removed), so importing again replaces the earlier copy instead of duplicating it.
+
+Further differences, found by comparing against Nuvio's model:
+
+The owner uses the community collection U.N.E ("Ultimate Nuvio Experience"). nuvio.tv is blocked by this build environment's network policy, so the page was not read. Riwaq's importer was also compared against Nuvio's own collection model and TMDB resolver (GPL-3.0, read for behaviour only, nothing copied). Those differences, fixed:
 
 - **Exclusion filters were dropped.** `withoutGenres`, `withoutKeywords`, `withoutCompanies` and `withoutWatchProviders` were dropped, so a discover folder fell back to generic popular titles. They are now sent as `without_*`.
 - **The provider filter was ignored without a region.** A watch-provider filter with no `watchRegion` was ignored. Like Nuvio, Riwaq now assumes `US` and sends the monetization types.
@@ -13,7 +17,8 @@ The owner said problems remain and pointed at the community collection they use 
 
 Executed:
 
-- `npm test`: **278 passing, 0 failing** (276 + 2 new), mocked:
+- `npm test`: **279 passing, 0 failing** (276 + 3 new), mocked:
+  - U.N.E-shaped custom catalog types kept, resolved and encoded;
   - the Nuvio discover filters reach the TMDB query;
   - a nameless folder is kept with a cover fallback;
   - a single pasted collection is accepted;
@@ -22,7 +27,7 @@ Executed:
 
 Not executed:
 
-- the U.N.E collection itself (host blocked);
+- the U.N.E collection itself: only its shape report was seen, and the page host is blocked;
 - live TMDB, Trakt or addon requests;
 - Windows.
 

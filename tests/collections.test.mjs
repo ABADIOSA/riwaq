@@ -486,3 +486,55 @@ test("collections and Nuvio actions are main-window only", () => {
   );
   assert.match(scan, /NUVIO_STORES/, "only the known stores are read");
 });
+
+test("list-addon catalogs with their own type, as in U.N.E, are kept and found", async () => {
+  const { resourceUrl } = await import("../core/protocol.mjs");
+  const types = [
+    "Trending Movies on Trakt",
+    "IMDb's Top Drama Movies",
+    "Top Fantasy/Sci-Fi Movies",
+    "New Streaming Releases: Netflix",
+  ];
+  const { collections, skipped } = fromNuvio([
+    {
+      id: "une",
+      title: "U.N.E",
+      folders: [
+        {
+          id: "f",
+          title: "Mixed",
+          sources: types.map((type, i) => ({
+            provider: "addon",
+            addonId: "com.aiolists.user",
+            type,
+            catalogId: `aiolists-${i}`,
+            genre: null,
+          })),
+        },
+      ],
+    },
+  ]);
+  assert.equal(skipped, 0);
+  const [folder] = collections[0].folders;
+  assert.deepEqual(
+    folder.catalogs.map((c) => c.type),
+    types,
+  );
+  const addon = {
+    transportUrl: "https://lists.example/cfg/manifest.json",
+    manifest: {
+      id: "com.aiolists.user",
+      catalogs: types.map((type, i) => ({
+        type,
+        id: `aiolists-${i}`,
+        name: type,
+      })),
+    },
+  };
+  const found = resolveCatalog([addon], folder.catalogs[2]);
+  assert.equal(found.cat.id, "aiolists-2");
+  assert.equal(
+    resourceUrl(addon.transportUrl, "catalog", found.cat.type, found.cat.id),
+    "https://lists.example/cfg/catalog/Top%20Fantasy%2FSci-Fi%20Movies/aiolists-2.json",
+  );
+});

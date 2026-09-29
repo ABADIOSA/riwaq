@@ -56,15 +56,18 @@ const emojiOf = (value) => {
 };
 // Addon IDs are only compared and shown as text, and a type is URL-encoded
 // where it is used, so the rules are loose on purpose: a strict pattern once
-// emptied folders imported from Nuvio without a word. Spaces, quotes and
-// angle brackets never appear in a real manifest ID and stay refused.
-const ADDON_ID = /^[^\s<>"'`]{1,200}$/;
-const TYPE = /^[^\s/?#<>"'`]{0,40}$/;
+// emptied folders imported from Nuvio without a word. Spaces, double quotes
+// and angle brackets never appear in a real manifest ID and stay refused.
+const ADDON_ID = /^[^\s<>"`]{1,200}$/;
+// A type is not only "movie" or "series": list addons such as AIOLists give
+// every catalog its own type, e.g. "IMDb's Top Drama Movies" or "Top
+// Fantasy/Sci-Fi Movies", so any printable text is a valid type.
+const TYPE = /^[^\u0000-\u001f\u007f]{0,200}$/;
 
 function cleanCatalog(source) {
   if (!source || typeof source !== "object") return null;
   const addon = line(source.addon, 200);
-  const type = line(source.type, 40);
+  const type = line(source.type, 200);
   const catalog = line(source.catalog, 200);
   if (!ADDON_ID.test(addon) || !TYPE.test(type) || !catalog) return null;
   const genre = line(source.genre, 100);
@@ -557,6 +560,18 @@ export function titlePlaces(collections, meta) {
  * sources and Trakt public lists all carry over. Only sources Riwaq cannot
  * read (malformed, or an unknown provider) are counted as skipped.
  */
+// A stable ID for anything imported from Nuvio, so importing again replaces
+// it instead of adding a copy, even when Nuvio's own ID is long or unusual.
+const nuvioId = (id) => {
+  const safe =
+    typeof id === "string" || typeof id === "number"
+      ? String(id)
+          .replace(/[^\w-]/g, "")
+          .slice(-58)
+      : "";
+  return safe ? `nuvio-${safe}` : undefined;
+};
+
 export function fromNuvio(input) {
   let data = input;
   if (typeof data === "string") {
@@ -577,7 +592,7 @@ export function fromNuvio(input) {
   if (!Array.isArray(data)) throw new Error("ملف مجموعات نوفيو غير صالح");
   let skipped = 0;
   const collections = data.map((c) => ({
-    id: typeof c?.id === "string" ? `nuvio-${c.id}` : undefined,
+    id: nuvioId(c?.id),
     title: c?.title,
     cover: c?.backdropImageUrl,
     pinned: c?.pinToTop === true,
@@ -645,7 +660,7 @@ export function fromNuvio(input) {
           ?.title ||
         `مجلد ${fi + 1}`;
       return {
-        id: typeof f?.id === "string" ? `nuvio-${f.id}` : undefined,
+        id: nuvioId(f?.id),
         title: named,
         emoji: f?.coverEmoji,
         cover: [f?.coverImageUrl, f?.heroBackdropUrl, f?.focusGifUrl]
