@@ -18,9 +18,9 @@
 import { cleanMedia } from "./library.mjs";
 
 export const LIMITS = {
-  collections: 40,
-  folders: 40,
-  catalogs: 20,
+  collections: 60,
+  folders: 100,
+  catalogs: 40,
   titles: 500,
 };
 export const SHAPES = ["poster", "landscape", "square"];
@@ -56,15 +56,18 @@ const emojiOf = (value) => {
 };
 // Addon IDs are only compared and shown as text, and a type is URL-encoded
 // where it is used, so the rules are loose on purpose: a strict pattern once
-// emptied folders imported from Nuvio without a word. Spaces, quotes and
-// angle brackets never appear in a real manifest ID and stay refused.
-const ADDON_ID = /^[^\s<>"'`]{1,200}$/;
-const TYPE = /^[^\s/?#<>"'`]{0,40}$/;
+// emptied folders imported from Nuvio without a word. Spaces, double quotes
+// and angle brackets never appear in a real manifest ID and stay refused.
+const ADDON_ID = /^[^\s<>"`]{1,200}$/;
+// A type is not only "movie" or "series": list addons such as AIOLists give
+// every catalog its own type, e.g. "IMDb's Top Drama Movies" or "Top
+// Fantasy/Sci-Fi Movies", so any printable text is a valid type.
+const TYPE = /^[^\u0000-\u001f\u007f]{0,200}$/;
 
 function cleanCatalog(source) {
   if (!source || typeof source !== "object") return null;
   const addon = line(source.addon, 200);
-  const type = line(source.type, 40);
+  const type = line(source.type, 200);
   const catalog = line(source.catalog, 200);
   if (!ADDON_ID.test(addon) || !TYPE.test(type) || !catalog) return null;
   const genre = line(source.genre, 100);
@@ -104,16 +107,25 @@ const positive = (value, max = 2_000_000_000) => {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 && n <= max ? n : null;
 };
-/** Discover filters Riwaq passes on to TMDB, each checked by its own rule. */
+/**
+ * Discover filters Riwaq passes on to TMDB, each checked by its own rule.
+ * These are the filters Nuvio's collections carry; a filter dropped here
+ * would quietly turn a folder into TMDB's generic popular titles.
+ */
+const IDS = /^[\d,|]{1,400}$/;
 const FILTERS = {
-  withGenres: /^[\d,|]{1,200}$/,
-  withKeywords: /^[\d,|]{1,400}$/,
-  withCompanies: /^[\d,|]{1,200}$/,
-  withNetworks: /^[\d,|]{1,200}$/,
-  withPeople: /^[\d,|]{1,200}$/,
-  withWatchProviders: /^[\d,|]{1,200}$/,
-  withOriginalLanguage: /^[a-z]{2,3}$/,
-  withOriginCountry: /^[A-Z]{2}(\|[A-Z]{2})*$/,
+  withGenres: IDS,
+  withoutGenres: IDS,
+  withKeywords: IDS,
+  withoutKeywords: IDS,
+  withCompanies: IDS,
+  withoutCompanies: IDS,
+  withNetworks: IDS,
+  withPeople: IDS,
+  withWatchProviders: IDS,
+  withoutWatchProviders: IDS,
+  withOriginalLanguage: /^[a-z]{2,3}([|,][a-z]{2,3}){0,30}$/,
+  withOriginCountry: /^[A-Z]{2}([|,][A-Z]{2}){0,60}$/,
   watchRegion: /^[A-Z]{2}$/,
   releaseDateGte: /^\d{4}-\d{2}-\d{2}$/,
   releaseDateLte: /^\d{4}-\d{2}-\d{2}$/,
@@ -129,9 +141,15 @@ const NUMBER_FILTERS = {
 function cleanFilters(input) {
   if (!input || typeof input !== "object") return undefined;
   const out = {};
-  for (const [key, rule] of Object.entries(FILTERS))
-    if (typeof input[key] === "string" && rule.test(input[key]))
-      out[key] = input[key];
+  for (const [key, rule] of Object.entries(FILTERS)) {
+    if (typeof input[key] !== "string") continue;
+    // Written by hand in Nuvio, so spaces and letter case vary.
+    let value = input[key].replace(/\s+/g, "");
+    if (key === "withOriginalLanguage") value = value.toLowerCase();
+    if (key === "withOriginCountry" || key === "watchRegion")
+      value = value.toUpperCase();
+    if (rule.test(value)) out[key] = value;
+  }
   for (const [key, [min, max]] of Object.entries(NUMBER_FILTERS)) {
     const n = Number(input[key]);
     if (
@@ -542,6 +560,18 @@ export function titlePlaces(collections, meta) {
  * sources and Trakt public lists all carry over. Only sources Riwaq cannot
  * read (malformed, or an unknown provider) are counted as skipped.
  */
+// A stable ID for anything imported from Nuvio, so importing again replaces
+// it instead of adding a copy, even when Nuvio's own ID is long or unusual.
+const nuvioId = (id) => {
+  const safe =
+    typeof id === "string" || typeof id === "number"
+      ? String(id)
+          .replace(/[^\w-]/g, "")
+          .slice(-58)
+      : "";
+  return safe ? `nuvio-${safe}` : undefined;
+};
+
 export function fromNuvio(input) {
   let data = input;
   if (typeof data === "string") {
@@ -551,15 +581,23 @@ export function fromNuvio(input) {
       throw new Error("ملف مجموعات نوفيو غير صالح");
     }
   }
+  // Nuvio exports a list; a single shared collection, or a list wrapped in an
+  // object, is accepted too.
+  if (data && !Array.isArray(data) && typeof data === "object")
+    data = Array.isArray(data.collections)
+      ? data.collections
+      : Array.isArray(data.folders)
+        ? [data]
+        : data;
   if (!Array.isArray(data)) throw new Error("ملف مجموعات نوفيو غير صالح");
   let skipped = 0;
   const collections = data.map((c) => ({
-    id: typeof c?.id === "string" ? `nuvio-${c.id}` : undefined,
+    id: nuvioId(c?.id),
     title: c?.title,
     cover: c?.backdropImageUrl,
     pinned: c?.pinToTop === true,
     view: String(c?.viewMode || "").toUpperCase() === "ROWS" ? "rows" : "tabs",
-    folders: (Array.isArray(c?.folders) ? c.folders : []).map((f) => {
+    folders: (Array.isArray(c?.folders) ? c.folders : []).map((f, fi) => {
       const sources =
         Array.isArray(f?.sources) && f.sources.length
           ? f.sources
@@ -614,11 +652,20 @@ export function fromNuvio(input) {
           else skip(s);
         }
       }
+      // Nuvio lets a folder hide its name behind a cover or logo, and such a
+      // folder may have none at all; it still needs a name here to be kept.
+      const named =
+        (typeof f?.title === "string" && f.title.trim()) ||
+        sources.find((s) => typeof s?.title === "string" && s.title.trim())
+          ?.title ||
+        `مجلد ${fi + 1}`;
       return {
-        id: typeof f?.id === "string" ? `nuvio-${f.id}` : undefined,
-        title: f?.title,
+        id: nuvioId(f?.id),
+        title: named,
         emoji: f?.coverEmoji,
-        cover: f?.coverImageUrl,
+        cover: [f?.coverImageUrl, f?.heroBackdropUrl, f?.focusGifUrl]
+          .map(coverUrl)
+          .find(Boolean),
         shape:
           String(f?.tileShape || "poster").toLowerCase() === "wide"
             ? "landscape"

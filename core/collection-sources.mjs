@@ -46,8 +46,11 @@ export function tmdbRequest(source, { page = 1, language = "ar-SA" } = {}) {
         "with_networks",
         source.kind === "network" ? source.id : f.withNetworks,
       );
+      set("without_companies", f.withoutCompanies);
       set("with_genres", f.withGenres);
+      set("without_genres", f.withoutGenres);
       set("with_keywords", f.withKeywords);
+      set("without_keywords", f.withoutKeywords);
       set("with_original_language", f.withOriginalLanguage);
       set("with_origin_country", f.withOriginCountry);
       set("vote_average.gte", f.voteAverageGte);
@@ -57,9 +60,14 @@ export function tmdbRequest(source, { page = 1, language = "ar-SA" } = {}) {
       set("with_runtime.lte", f.withRuntimeLte);
       // TMDB's television discover has no people filter.
       if (!tv) set("with_people", f.withPeople);
-      if (f.watchRegion && f.withWatchProviders) {
-        set("watch_region", f.watchRegion);
+      // A provider filter needs a region; like Nuvio, assume the US when the
+      // source names none, rather than dropping the filter.
+      if (f.withWatchProviders || f.withoutWatchProviders) {
+        set("watch_region", f.watchRegion || "US");
         set("with_watch_providers", f.withWatchProviders);
+        set("without_watch_providers", f.withoutWatchProviders);
+        if (f.withWatchProviders)
+          set("with_watch_monetization_types", "flatrate|free|ads|rent|buy");
       }
       const gte = tv ? "first_air_date.gte" : "primary_release_date.gte";
       const lte = tv ? "first_air_date.lte" : "primary_release_date.lte";

@@ -1,4 +1,35 @@
-# Verification — Riwaq 0.12.3
+# Verification — Riwaq 0.12.4
+
+## 0.12.4 — parity with Nuvio's collection sources
+
+**Root cause found from the owner's shape-only diagnostic report.** In U.N.E, every addon source's `type` is a catalog name, such as "Trending Movies on Trakt", "IMDb's Top Drama Movies" or "Top Fantasy/Sci-Fi Movies". List addons such as AIOLists give each catalog its own custom type. Riwaq's `TYPE` pattern refused spaces, apostrophes and slashes, and capped the length at 40. As a result, nearly every source in every U.N.E folder was dropped into `unsupported`, and folders came across empty. A type is now any printable text up to 200 characters, and it is URL-encoded in the catalog request (a test checks `Top%20Fantasy%2FSci-Fi%20Movies`). Imported IDs are now stable (`nuvio-` plus Nuvio's ID with unsafe characters removed), so importing again replaces the earlier copy instead of duplicating it.
+
+Further differences, found by comparing against Nuvio's model:
+
+The owner uses the community collection U.N.E ("Ultimate Nuvio Experience"). nuvio.tv is blocked by this build environment's network policy, so the page was not read. Riwaq's importer was also compared against Nuvio's own collection model and TMDB resolver (GPL-3.0, read for behaviour only, nothing copied). Those differences, fixed:
+
+- **Exclusion filters were dropped.** `withoutGenres`, `withoutKeywords`, `withoutCompanies` and `withoutWatchProviders` were dropped, so a discover folder fell back to generic popular titles. They are now sent as `without_*`.
+- **The provider filter was ignored without a region.** A watch-provider filter with no `watchRegion` was ignored. Like Nuvio, Riwaq now assumes `US` and sends the monetization types.
+- **Language and country were too strict.** Several original languages or origin countries, spaces, or unusual letter case were refused. They are now normalized and accepted.
+- **Folders with an empty title were discarded.** Nuvio allows such a folder, with its name hidden behind a cover. It now takes the first source's title, or a numbered name. A missing cover falls back to `heroBackdropUrl` or `focusGifUrl`.
+- **Limits were lower than community collections need.** They rise to 60 collections, 100 folders and 40 sources per kind.
+- **The pasted JSON had to be a list.** A single collection, or `{collections: [...]}`, is now accepted as well.
+
+Executed:
+
+- `npm test`: **279 passing, 0 failing** (276 + 3 new), mocked:
+  - U.N.E-shaped custom catalog types kept, resolved and encoded;
+  - the Nuvio discover filters reach the TMDB query;
+  - a nameless folder is kept with a cover fallback;
+  - a single pasted collection is accepted;
+  - 70 folders survive import.
+- `npm run check` and `npm run build` pass.
+
+Not executed:
+
+- the U.N.E collection itself: only its shape report was seen, and the page host is blocked;
+- live TMDB, Trakt or addon requests;
+- Windows.
 
 ## 0.12.3 — Nuvio folders still empty for the owner
 
