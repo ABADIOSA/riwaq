@@ -49,6 +49,7 @@ import CollectionsPage, {
   NuvioLink,
   PinnedCollections,
 } from "./components/Collections.jsx";
+import FolderPage from "./components/FolderPage.jsx";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -92,6 +93,8 @@ export default function App() {
     [selected, setSelected] = useState(null),
     [explore, setExplore] = useState(null),
     [collectionTarget, setCollectionTarget] = useState(null),
+    [folderTarget, setFolderTarget] = useState(null),
+    [folderFrom, setFolderFrom] = useState("home"),
     [nuvioOpen, setNuvioOpen] = useState(false),
     [account, setAccount] = useState(false),
     [toast, setToast] = useState(""),
@@ -390,8 +393,9 @@ export default function App() {
     !!activeProfile.lockedRooms?.includes(room) &&
     state.profiles?.unlocked === false;
   const navigate = (v) => {
-    // Collections live with the library, behind the same lock.
-    const room = v === "collections" ? "library" : v;
+    // Collections and their folder pages live with the library, behind the
+    // same lock.
+    const room = v === "collections" || v === "folder" ? "library" : v;
     if (isLocked(room)) {
       setUnlockRoom(room);
       return;
@@ -518,7 +522,11 @@ export default function App() {
             .map(([Icon, id, label]) => (
               <button
                 key={id}
-                className={view === id ? "nav-item active" : "nav-item"}
+                className={
+                  view === id || (view === "folder" && folderFrom === id)
+                    ? "nav-item active"
+                    : "nav-item"
+                }
                 onClick={() => navigate(id)}
               >
                 <Icon size={20} />
@@ -867,7 +875,18 @@ export default function App() {
                             <PinnedCollections
                               state={state}
                               onOpen={(cid, folderId) => {
-                                setCollectionTarget({ id: cid, folderId });
+                                // A folder opens on its own page; the
+                                // collection's heading opens the collection.
+                                if (folderId) {
+                                  setFolderTarget({
+                                    collectionId: cid,
+                                    folderId,
+                                  });
+                                  setFolderFrom("home");
+                                  navigate("folder");
+                                  return;
+                                }
+                                setCollectionTarget({ id: cid });
                                 navigate("collections");
                               }}
                             />
@@ -936,7 +955,30 @@ export default function App() {
             onOpen={open}
             target={collectionTarget}
             setTarget={setCollectionTarget}
+            onFolderPage={(cid, folderId) => {
+              setFolderTarget({ collectionId: cid, folderId });
+              setFolderFrom("collections");
+              navigate("folder");
+            }}
             onNuvio={() => setNuvioOpen(true)}
+            onSettings={(tab) => {
+              setSettingsTab(tab);
+              navigate("settings");
+            }}
+          />
+        )}
+        {view === "folder" && (
+          <FolderPage
+            key={state.profiles?.active}
+            state={state}
+            target={folderTarget}
+            onTarget={setFolderTarget}
+            onOpen={open}
+            onBack={() => navigate(folderFrom)}
+            onEdit={(cid, folderId) => {
+              setCollectionTarget({ id: cid, folderId });
+              navigate("collections");
+            }}
             onSettings={(tab) => {
               setSettingsTab(tab);
               navigate("settings");

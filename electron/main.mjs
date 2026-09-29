@@ -922,6 +922,14 @@ const methods = {
       folderId: String(a?.folderId || ""),
       skip: Number(a?.skip) || 0,
     }),
+  collectionSource: (a) =>
+    client.collectionSource({
+      collectionId: String(a?.collectionId || ""),
+      folderId: String(a?.folderId || ""),
+      index: String(a?.index || ""),
+      skip: Number(a?.skip) || 0,
+      page: Number(a?.page) || 2,
+    }),
   // Collections as Nuvio JSON: to the clipboard, or to a file the viewer names.
   collectionsCopyNuvio: () => {
     clipboard.writeText(

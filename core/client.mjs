@@ -583,6 +583,7 @@ export class Client {
    * key, nothing matched), so a folder never looks empty without a reason.
    */
   async collectionFolder({ collectionId, folderId, skip = 0 } = {}) {
+    this.profiles.gate("library");
     const collection = (this.state.collections || []).find(
       (c) => c.id === collectionId,
     );
@@ -668,10 +669,55 @@ export class Client {
       const metas = (data.metas || [])
         .filter((m) => m?.id && m.name)
         .map((m) => ({ ...m, type: m.type || found.cat.type }));
-      return { ...base, metas, ...(metas.length ? {} : { note: "empty" }) };
+      // A catalog that takes "skip" can be read further on the folder page.
+      const pages = (found.cat.extra || []).some((e) => e?.name === "skip");
+      return {
+        ...base,
+        metas,
+        ...(metas.length ? {} : { note: "empty" }),
+        more: pages && metas.length > 0,
+      };
     } catch {
       return { ...base, metas: [], note: "failed" };
     }
+  }
+  /**
+   * A further page of one folder source, for the folder page's "more":
+   * an addon catalog by `skip`, TMDB and Trakt by page number.
+   */
+  async collectionSource({
+    collectionId,
+    folderId,
+    index,
+    skip = 0,
+    page = 2,
+  }) {
+    this.profiles.gate("library");
+    const collection = (this.state.collections || []).find(
+      (c) => c.id === collectionId,
+    );
+    const folder = collection?.folders.find((f) => f.id === folderId);
+    if (!folder) throw new Error("المجلد غير موجود");
+    const m = /^([ctk])(\d{1,3})$/.exec(String(index || ""));
+    if (!m) throw new Error("المصدر غير موجود");
+    const i = Number(m[2]);
+    const offset = Math.max(0, Math.min(100000, Number(skip) || 0));
+    const number = Math.max(1, Math.min(500, Math.floor(Number(page)) || 1));
+    let row;
+    if (m[1] === "c") {
+      const source = folder.catalogs[i];
+      if (!source) throw new Error("المصدر غير موجود");
+      row = await this.catalogRow(this.enabled(), source, offset);
+    } else if (m[1] === "t") {
+      const source = folder.tmdb?.[i];
+      if (!source) throw new Error("المصدر غير موجود");
+      row = await this.tmdbRow(source, this.enabled(), number);
+    } else {
+      const source = folder.trakt?.[i];
+      if (!source) throw new Error("المصدر غير موجود");
+      row = await this.traktRow(source, number);
+    }
+    return { type: "movie", ...row, index: m[0], page: number };
   }
   /**
    * TMDB with the viewer's key, at most four requests at a time across the
@@ -701,7 +747,7 @@ export class Client {
    * most addons open titles by IMDb ID. A title without one is kept when an
    * enabled addon opens TMDB IDs itself (TMDB Addon, AIOMetadata...).
    */
-  async tmdbRow(source, addons = this.enabled()) {
+  async tmdbRow(source, addons = this.enabled(), page = 1) {
     const base = {
       name: sourceLabel(source),
       provider: "TMDB",
@@ -711,9 +757,11 @@ export class Client {
     if (!entry?.key || entry.enabled === false)
       return { ...base, metas: [], note: "needs-tmdb" };
     let items;
+    let more = false;
     try {
       const { path, params } = tmdbRequest(source, {
         language: this.state.settings.metadataLanguage || "ar-SA",
+        page,
       });
       // Ten minutes per TMDB page, so opening a folder again is instant.
       const pages = (this.tmdbPages ||= new Map());
@@ -725,6 +773,9 @@ export class Client {
         pages.set(key, body);
       }
       items = tmdbItems(body.data, source).slice(0, 40);
+      // Lists and discover queries are paged; a film series or a filmography
+      // arrives whole.
+      more = "page" in params && Number(body.data?.total_pages) > Number(page);
     } catch {
       return { ...base, metas: [], note: "failed" };
     }
@@ -785,10 +836,11 @@ export class Client {
       ...(metas.length < items.length
         ? { hidden: items.length - metas.length }
         : {}),
+      more,
     };
   }
   /** A Trakt public list with the viewer's Trakt client ID (no sign-in needed). */
-  async traktRow(source) {
+  async traktRow(source, page = 1) {
     const base = {
       name: sourceLabel(source, true),
       provider: "Trakt",
@@ -797,7 +849,7 @@ export class Client {
     const clientId = this.state.integrations?.trakt?.clientId;
     if (!clientId) return { ...base, metas: [], note: "needs-trakt" };
     try {
-      const body = await this.cached(traktRequest(source), {
+      const body = await this.cached(traktRequest(source, { page }), {
         ttl: 600000,
         failFor: 120000,
         timeout: 12000,
@@ -807,7 +859,13 @@ export class Client {
         },
       });
       const metas = traktMetas(body, source);
-      return { ...base, metas, ...(metas.length ? {} : { note: "empty" }) };
+      return {
+        ...base,
+        metas,
+        ...(metas.length ? {} : { note: "empty" }),
+        // Trakt pages hold 50 items; a full page may have another behind it.
+        more: Array.isArray(body) && body.length >= 50,
+      };
     } catch {
       return { ...base, metas: [], note: "failed" };
     }

@@ -1,4 +1,28 @@
-# Verification — Riwaq 0.12.4
+# Verification — Riwaq 0.13.0
+
+## 0.13.0 — a page of its own for every folder
+
+The owner confirmed the U.N.E folders now work, and asked for a standalone page when a folder is opened from the home page.
+
+Executed:
+
+- `npm test`: **284 passing, 0 failing** (279 + 5 new in `tests/folder-view.test.mjs`), mocked:
+  - round-robin "all" without repeats;
+  - tab, type, Arabic-folded search and every sort;
+  - further pages appended once, and a page adding nothing ends the source;
+  - random pick bounds;
+  - `collectionSource`: a catalog with `skip` offers more and one without does not; the custom type is encoded in the skip URL; TMDB discover stops at the last page; an unknown row key is refused.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge at 980×680 and 1440×960:
+  - a pinned U.N.E-style collection on home, whose folder tile opens the folder page;
+  - the tabs, where a series tab plus two "load more" presses end the button;
+  - the type filter, search and an empty-search state, "newest" sort and the rows layout;
+  - sibling folder switching, which returns to the top;
+  - the random pick opening details;
+  - "back" returning home, and the page opened from the collection view with "back" returning there.
+  - Zero page errors, zero horizontal overflow.
+
+Not executed: live addon, TMDB or Trakt paging; Windows.
 
 ## 0.12.4 — parity with Nuvio's collection sources
 
