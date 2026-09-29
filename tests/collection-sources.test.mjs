@@ -492,3 +492,91 @@ test("an unknown Nuvio source is kept by name, not dropped silently", async () =
     { provider: "mdblist", title: "Top 250" },
   ]);
 });
+
+test("Nuvio discover filters reach TMDB as Nuvio sends them", async () => {
+  const { fromNuvio } = await import("../core/collections.mjs");
+  const { collections } = fromNuvio([
+    {
+      id: "c",
+      title: "U.N.E",
+      folders: [
+        {
+          id: "f",
+          title: "",
+          heroBackdropUrl: "https://image.tmdb.org/t/p/original/x.jpg",
+          sources: [
+            {
+              provider: "TMDB",
+              tmdbSourceType: "DISCOVER",
+              mediaType: "TV",
+              title: "Korean dramas, no animation",
+              filters: {
+                withGenres: "18",
+                withoutGenres: "16, 10764",
+                withoutKeywords: "210024",
+                withOriginalLanguage: "KO|ja",
+                withOriginCountry: "kr",
+                withWatchProviders: "8|337",
+                withoutCompanies: "1",
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ]);
+  const folder = collections[0].folders[0];
+  assert.equal(
+    folder.title,
+    "Korean dramas, no animation",
+    "a nameless folder is kept",
+  );
+  assert.equal(folder.cover, "https://image.tmdb.org/t/p/original/x.jpg");
+  const [source] = folder.tmdb;
+  assert.equal(source.media, "tv");
+  const { path, params } = tmdbRequest(source);
+  assert.equal(path, "discover/tv");
+  assert.equal(params.without_genres, "16,10764");
+  assert.equal(params.without_keywords, "210024");
+  assert.equal(params.without_companies, "1");
+  assert.equal(params.with_original_language, "ko|ja");
+  assert.equal(params.with_origin_country, "KR");
+  assert.equal(params.with_watch_providers, "8|337");
+  assert.equal(params.watch_region, "US", "a provider filter without a region");
+  assert.equal(
+    params.with_watch_monetization_types,
+    "flatrate|free|ads|rent|buy",
+  );
+});
+
+test("a shared Nuvio collection pasted on its own is accepted", async () => {
+  const { fromNuvio } = await import("../core/collections.mjs");
+  const one = {
+    id: "shared",
+    title: "Shared",
+    folders: [
+      {
+        id: "f",
+        title: "Top",
+        sources: [
+          { provider: "addon", addonId: "a", type: "movie", catalogId: "top" },
+        ],
+      },
+    ],
+  };
+  assert.equal(fromNuvio(JSON.stringify(one)).folders, 1);
+  assert.equal(fromNuvio({ collections: [one] }).folders, 1);
+  const many = {
+    ...one,
+    folders: Array.from({ length: 70 }, (_, i) => ({
+      ...one.folders[0],
+      id: `f${i}`,
+      title: `F${i}`,
+    })),
+  };
+  assert.equal(
+    fromNuvio([many]).folders,
+    70,
+    "large community collections are not cut at 40 folders",
+  );
+});

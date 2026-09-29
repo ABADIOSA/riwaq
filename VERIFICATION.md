@@ -1,4 +1,30 @@
-# Verification — Riwaq 0.12.3
+# Verification — Riwaq 0.12.4
+
+## 0.12.4 — parity with Nuvio's collection sources
+
+The owner said problems remain and pointed at the community collection they use (U.N.E, "Ultimate Nuvio Experience" on nuvio.tv). nuvio.tv is blocked by this build environment's network policy, so the collection itself was NOT read. Instead, Riwaq's importer and TMDB request builder were compared against Nuvio's own collection model and TMDB resolver (GPL-3.0, read for behaviour only, nothing copied). Differences found and fixed:
+
+- **Exclusion filters were dropped.** `withoutGenres`, `withoutKeywords`, `withoutCompanies` and `withoutWatchProviders` were dropped, so a discover folder fell back to generic popular titles. They are now sent as `without_*`.
+- **The provider filter was ignored without a region.** A watch-provider filter with no `watchRegion` was ignored. Like Nuvio, Riwaq now assumes `US` and sends the monetization types.
+- **Language and country were too strict.** Several original languages or origin countries, spaces, or unusual letter case were refused. They are now normalized and accepted.
+- **Folders with an empty title were discarded.** Nuvio allows such a folder, with its name hidden behind a cover. It now takes the first source's title, or a numbered name. A missing cover falls back to `heroBackdropUrl` or `focusGifUrl`.
+- **Limits were lower than community collections need.** They rise to 60 collections, 100 folders and 40 sources per kind.
+- **The pasted JSON had to be a list.** A single collection, or `{collections: [...]}`, is now accepted as well.
+
+Executed:
+
+- `npm test`: **278 passing, 0 failing** (276 + 2 new), mocked:
+  - the Nuvio discover filters reach the TMDB query;
+  - a nameless folder is kept with a cover fallback;
+  - a single pasted collection is accepted;
+  - 70 folders survive import.
+- `npm run check` and `npm run build` pass.
+
+Not executed:
+
+- the U.N.E collection itself (host blocked);
+- live TMDB, Trakt or addon requests;
+- Windows.
 
 ## 0.12.3 — Nuvio folders still empty for the owner
 

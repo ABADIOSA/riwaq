@@ -18,9 +18,9 @@
 import { cleanMedia } from "./library.mjs";
 
 export const LIMITS = {
-  collections: 40,
-  folders: 40,
-  catalogs: 20,
+  collections: 60,
+  folders: 100,
+  catalogs: 40,
   titles: 500,
 };
 export const SHAPES = ["poster", "landscape", "square"];
@@ -104,16 +104,25 @@ const positive = (value, max = 2_000_000_000) => {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 && n <= max ? n : null;
 };
-/** Discover filters Riwaq passes on to TMDB, each checked by its own rule. */
+/**
+ * Discover filters Riwaq passes on to TMDB, each checked by its own rule.
+ * These are the filters Nuvio's collections carry; a filter dropped here
+ * would quietly turn a folder into TMDB's generic popular titles.
+ */
+const IDS = /^[\d,|]{1,400}$/;
 const FILTERS = {
-  withGenres: /^[\d,|]{1,200}$/,
-  withKeywords: /^[\d,|]{1,400}$/,
-  withCompanies: /^[\d,|]{1,200}$/,
-  withNetworks: /^[\d,|]{1,200}$/,
-  withPeople: /^[\d,|]{1,200}$/,
-  withWatchProviders: /^[\d,|]{1,200}$/,
-  withOriginalLanguage: /^[a-z]{2,3}$/,
-  withOriginCountry: /^[A-Z]{2}(\|[A-Z]{2})*$/,
+  withGenres: IDS,
+  withoutGenres: IDS,
+  withKeywords: IDS,
+  withoutKeywords: IDS,
+  withCompanies: IDS,
+  withoutCompanies: IDS,
+  withNetworks: IDS,
+  withPeople: IDS,
+  withWatchProviders: IDS,
+  withoutWatchProviders: IDS,
+  withOriginalLanguage: /^[a-z]{2,3}([|,][a-z]{2,3}){0,30}$/,
+  withOriginCountry: /^[A-Z]{2}([|,][A-Z]{2}){0,60}$/,
   watchRegion: /^[A-Z]{2}$/,
   releaseDateGte: /^\d{4}-\d{2}-\d{2}$/,
   releaseDateLte: /^\d{4}-\d{2}-\d{2}$/,
@@ -129,9 +138,15 @@ const NUMBER_FILTERS = {
 function cleanFilters(input) {
   if (!input || typeof input !== "object") return undefined;
   const out = {};
-  for (const [key, rule] of Object.entries(FILTERS))
-    if (typeof input[key] === "string" && rule.test(input[key]))
-      out[key] = input[key];
+  for (const [key, rule] of Object.entries(FILTERS)) {
+    if (typeof input[key] !== "string") continue;
+    // Written by hand in Nuvio, so spaces and letter case vary.
+    let value = input[key].replace(/\s+/g, "");
+    if (key === "withOriginalLanguage") value = value.toLowerCase();
+    if (key === "withOriginCountry" || key === "watchRegion")
+      value = value.toUpperCase();
+    if (rule.test(value)) out[key] = value;
+  }
   for (const [key, [min, max]] of Object.entries(NUMBER_FILTERS)) {
     const n = Number(input[key]);
     if (
@@ -551,6 +566,14 @@ export function fromNuvio(input) {
       throw new Error("ملف مجموعات نوفيو غير صالح");
     }
   }
+  // Nuvio exports a list; a single shared collection, or a list wrapped in an
+  // object, is accepted too.
+  if (data && !Array.isArray(data) && typeof data === "object")
+    data = Array.isArray(data.collections)
+      ? data.collections
+      : Array.isArray(data.folders)
+        ? [data]
+        : data;
   if (!Array.isArray(data)) throw new Error("ملف مجموعات نوفيو غير صالح");
   let skipped = 0;
   const collections = data.map((c) => ({
@@ -559,7 +582,7 @@ export function fromNuvio(input) {
     cover: c?.backdropImageUrl,
     pinned: c?.pinToTop === true,
     view: String(c?.viewMode || "").toUpperCase() === "ROWS" ? "rows" : "tabs",
-    folders: (Array.isArray(c?.folders) ? c.folders : []).map((f) => {
+    folders: (Array.isArray(c?.folders) ? c.folders : []).map((f, fi) => {
       const sources =
         Array.isArray(f?.sources) && f.sources.length
           ? f.sources
@@ -614,11 +637,20 @@ export function fromNuvio(input) {
           else skip(s);
         }
       }
+      // Nuvio lets a folder hide its name behind a cover or logo, and such a
+      // folder may have none at all; it still needs a name here to be kept.
+      const named =
+        (typeof f?.title === "string" && f.title.trim()) ||
+        sources.find((s) => typeof s?.title === "string" && s.title.trim())
+          ?.title ||
+        `مجلد ${fi + 1}`;
       return {
         id: typeof f?.id === "string" ? `nuvio-${f.id}` : undefined,
-        title: f?.title,
+        title: named,
         emoji: f?.coverEmoji,
-        cover: f?.coverImageUrl,
+        cover: [f?.coverImageUrl, f?.heroBackdropUrl, f?.focusGifUrl]
+          .map(coverUrl)
+          .find(Boolean),
         shape:
           String(f?.tileShape || "poster").toLowerCase() === "wide"
             ? "landscape"
