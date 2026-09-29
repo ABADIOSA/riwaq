@@ -497,7 +497,7 @@ function CollectionView({
           <>
             {editing && (
               <FolderEditor
-                key={folder.id}
+                key={`editor-${folder.id}`}
                 collection={collection}
                 folder={folder}
                 edit={edit}
@@ -505,7 +505,7 @@ function CollectionView({
               />
             )}
             <FolderContent
-              key={folder.id}
+              key={`content-${folder.id}`}
               collection={collection}
               folder={folder}
               update={update}
