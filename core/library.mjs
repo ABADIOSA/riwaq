@@ -16,6 +16,23 @@ export function latestProgress(progress = {}) {
   }
   return [...latest.values()];
 }
+/**
+ * Films the viewer has finished, by watching to the end or marking them
+ * watched, as "movie:ID". A series would need every episode, which a
+ * catalog row does not know, so series are never counted here.
+ */
+export function watchedTitles(progress = {}) {
+  const out = new Set();
+  for (const p of Object.values(progress || {}))
+    if (p?.meta?.type === "movie" && p.meta.id && isCompleted(p))
+      out.add(`movie:${p.meta.id}`);
+  return out;
+}
+/** A row without the titles in `watched`. */
+export const withoutWatched = (metas, watched) =>
+  watched?.size
+    ? (metas || []).filter((m) => !watched.has(`${m?.type}:${m?.id}`))
+    : metas || [];
 export const continueWatching = (progress) =>
   latestProgress(progress).filter((p) => !isCompleted(p) && p.position > 10);
 // Library and Live TV search must agree on what counts as the same word.

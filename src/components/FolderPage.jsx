@@ -14,6 +14,7 @@ import { typeName } from "../lib/helpers.js";
 import { Busy, Empty, Poster, Rail } from "./UI.jsx";
 import { Face, FOLDERS, SOURCES, TITLES, n, noteText } from "./Collections.jsx";
 import { folderItems, mergePage, randomPick } from "../../core/folder-view.mjs";
+import { watchedTitles, withoutWatched } from "../../core/library.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
 
 const SORTS = [
@@ -86,7 +87,18 @@ export default function FolderPage({
 
   const titles = folder?.titles || [];
   const rows = data?.rows || [];
-  const filled = rows.filter((row) => row.metas.length);
+  // Finished films leave the folder too when the viewer hides them; the
+  // viewer's own picks stay, like the library.
+  const watched = state.settings.hideWatched
+    ? watchedTitles(state.progress)
+    : null;
+  const filled = rows
+    .map((row) =>
+      watched?.size
+        ? { ...row, metas: withoutWatched(row.metas, watched) }
+        : row,
+    )
+    .filter((row) => row.metas.length);
   const quiet = rows.filter((row) => !row.metas.length);
   const view = { titles, rows: filled };
   const items = useMemo(
@@ -119,7 +131,8 @@ export default function FolderPage({
         collectionId: collection.id,
         folderId: folder.id,
         index: row.index,
-        skip: row.metas.length,
+        // Skip counts what the source sent, hidden titles included.
+        skip: (rows.find((r) => r.index === row.index) || row).metas.length,
         page: (row.page || 1) + 1,
       });
       setData((d) => ({

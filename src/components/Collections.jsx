@@ -32,6 +32,7 @@ import {
 } from "../../core/collections.mjs";
 import { sourceLabel } from "../../core/collection-sources.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
+import { watchedTitles, withoutWatched } from "../../core/library.mjs";
 
 export const FOLDERS = {
   zero: "لا مجلدات",
@@ -402,6 +403,9 @@ function CollectionView({
   const [newFolder, setNewFolder] = useState("");
   const folder =
     collection.folders.find((f) => f.id === folderId) || collection.folders[0];
+  const watched = state.settings.hideWatched
+    ? watchedTitles(state.progress)
+    : null;
   const edit = (input) =>
     update("collectionsEdit", { collectionId: collection.id, ...input });
   const addFolder = async () => {
@@ -542,6 +546,7 @@ function CollectionView({
               notice={notice}
               onOpen={onOpen}
               onSettings={onSettings}
+              watched={watched}
               compact
             />
           </section>
@@ -574,6 +579,7 @@ function CollectionView({
               notice={notice}
               onOpen={onOpen}
               onSettings={onSettings}
+              watched={watched}
               editing={editing}
             />
           </>
@@ -931,6 +937,7 @@ function FolderContent({
   onSettings,
   editing = false,
   compact = false,
+  watched = null,
 }) {
   const [data, setData] = useState(null);
   const [reload, setReload] = useState(0);
@@ -1035,6 +1042,11 @@ function FolderContent({
       ) : (
         <>
           {data.rows
+            .map((row) =>
+              watched?.size
+                ? { ...row, metas: withoutWatched(row.metas, watched) }
+                : row,
+            )
             .filter((row) => row.metas.length)
             .map((row) => (
               <Rail

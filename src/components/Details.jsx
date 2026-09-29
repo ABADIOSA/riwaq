@@ -20,10 +20,15 @@ import {
   Undo2,
   Clapperboard,
   Folders,
+  Shuffle,
 } from "lucide-react";
 import { AddToCollection } from "./Collections.jsx";
 import { titlePlaces } from "../../core/collections.mjs";
 import { trailerOf } from "../../core/credits.mjs";
+import { shuffleCandidates, shufflePick } from "../../core/shuffle.mjs";
+
+/** Episodes already shuffled to, per series, for this session. */
+const shuffled = new Map();
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
@@ -56,6 +61,7 @@ export default function Details({
     [error, setError] = useState(""),
     [videoId, setVideoId] = useState(selection.videoId || ""),
     [season, setSeason] = useState(1),
+    [shuffleAll, setShuffleAll] = useState(false),
     [result, setResult] = useState(null),
     [streamsLoading, setStreamsLoading] = useState(false),
     [quality, setQuality] = useState(""),
@@ -306,6 +312,58 @@ export default function Details({
             <section className="episodes">
               <div className="section-heading">
                 <h2>الحلقات</h2>
+                <div className="episode-shuffle">
+                  <button
+                    className="secondary small"
+                    title="اختر حلقة عشوائية لم تشاهدها"
+                    onClick={() => {
+                      const candidates = shuffleCandidates(
+                        meta,
+                        state.progress,
+                        { includeWatched: shuffleAll },
+                      );
+                      if (!shuffled.has(meta.id))
+                        shuffled.set(meta.id, new Set());
+                      const pick = shufflePick(candidates, {
+                        current: videoId,
+                        history: shuffled.get(meta.id),
+                      });
+                      if (!pick) {
+                        notice(
+                          shuffleAll
+                            ? "لا توجد حلقات أخرى متاحة"
+                            : "شاهدت كل الحلقات المتاحة. فعّل «تشمل المشاهدة» لتختار منها.",
+                        );
+                        return;
+                      }
+                      setSeason(pick.season ?? 1);
+                      setVideoId(pick.id);
+                      setTimeout(
+                        () =>
+                          document
+                            .querySelector(".episode.selected")
+                            ?.scrollIntoView({
+                              block: "nearest",
+                              inline: "center",
+                            }),
+                        60,
+                      );
+                      notice(
+                        `اخترنا لك الموسم ${pick.season ?? 1} · الحلقة ${pick.episode}`,
+                      );
+                    }}
+                  >
+                    <Shuffle size={15} /> حلقة عشوائية
+                  </button>
+                  <label className="episode-shuffle-all">
+                    <input
+                      type="checkbox"
+                      checked={shuffleAll}
+                      onChange={(e) => setShuffleAll(e.target.checked)}
+                    />
+                    تشمل المشاهدة
+                  </label>
+                </div>
                 <select
                   aria-label="الموسم"
                   value={season}

@@ -132,6 +132,19 @@ html.hud-root #root {
   white-space: nowrap;
   pointer-events: none;
 }
+.hud-seek-thumb {
+  position: absolute;
+  bottom: 44px;
+  width: 200px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  transform: translateX(-50%);
+  border-radius: 8px;
+  border: 2px solid #ffffff2e;
+  background: #000;
+  box-shadow: 0 10px 30px #000a;
+  pointer-events: none;
+}
 .hud-actions {
   display: flex;
   justify-content: space-between;
@@ -326,4 +339,20 @@ html.hud-root #root {
 .hud-next,
 .hud-dock {
   z-index: 3;
+}
+.hud-hold {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: #000b;
+  color: var(--hud-accent, #e7b66e);
+  font-weight: 700;
+  font-size: 15px;
+  pointer-events: none;
 }

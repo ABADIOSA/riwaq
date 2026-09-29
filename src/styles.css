@@ -2840,3 +2840,17 @@ button.secondary {
 .people-row {
   margin: 4px 0 26px;
 }
+.episode-shuffle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-inline-start: auto;
+}
+.episode-shuffle-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted, #9aa0a8);
+  white-space: nowrap;
+}

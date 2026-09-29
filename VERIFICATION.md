@@ -1,4 +1,31 @@
-# Verification — Riwaq 0.13.0
+# Verification — Riwaq 0.14.0
+
+## 0.14.0 — the best of Harbor, Nuvio, Nuvio HTPC and Stremio Community
+
+The owner asked for a comparison of the latest betas and the best shared feature plus the best of each. Sources were read at:
+
+- Harbor `beta-branch` `ccd26f4` (0.9.128);
+- NuvioMedia/NuvioDesktop `b1e0072` (0.1.26-alpha);
+- UmbraProjects/NuvioDesktop `1389f50` (1.15.0 plus unreleased work);
+- Zaarrg/stremio-community-v5 `3e96a6f` (5.0.0-beta.22).
+
+All were read for behaviour only; see docs/REFERENCE-REVIEW.md.
+
+Executed:
+
+- `npm test`: **296 passing, 0 failing** (284 + 12 new, mocked):
+  - `tests/trickplay.test.mjs` covers home-host detection, the three modes (torrents through the local server and live excluded), slices, safe MPV arguments and headers, the HUD method and setting, a fake-MPV grab returning a data URL with caching and temp-file cleanup, a newer request cancelling an older one, and three failures stopping previews.
+  - `tests/best-of.test.mjs` covers the shuffle candidates (no specials, duplicates, future or watched episodes) and no repeats; finished films only for hide-watched, with search exempt; drop kinds with both windows routing navigation to the drop handler; and hold-speed validation with the swallowed click.
+- **Real MPV frame grabs (Linux mpv 0.37 in the build container):** the actual `Thumbnailer` grabbed 320×180 JPEGs from a generated two-minute video in 80–115 ms each. Distinct frames came from 5 s, 61 s and 110 s, both from the local file and over HTTP with Range requests. Against an unreachable host it failed three times, then stopped.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge at 980×552/1440×810 (HUD) and 980×680/1440×960 (main):
+  - no thumbnail while the pointer moves; one request and a preview after it rests, clamped inside the window at the edge;
+  - holding the picture shows "2×" and sends speed 2, then 1 on release, with no pause; a short click still pauses;
+  - with hide-watched on, a finished film is gone from home while an unfinished one stays;
+  - the random episode picks an unwatched episode, switches the season, announces it and scrolls it into view.
+  - No page errors, no horizontal overflow.
+
+Not executed: previews through Windows mpv.exe, against real debrid, NAS or torrent streams; drag and drop on Windows; any of this in a Windows session.
 
 ## 0.13.0 — a page of its own for every folder
 

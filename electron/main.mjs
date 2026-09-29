@@ -43,6 +43,8 @@ import {
 } from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
+import { Thumbnailer } from "./thumbnails.mjs";
+import { dropKind } from "../core/drop.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
 import { VideoHost, showSystemCursor } from "./video-host.mjs";
 import { CursorGate, cursorHidden } from "../core/cursor.mjs";
@@ -192,7 +194,7 @@ function ensureHud() {
     return null;
   }
   hud.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  hud.webContents.on("will-navigate", (event) => event.preventDefault());
+  hud.webContents.on("will-navigate", onDropNavigate);
   hud.webContents.on("did-finish-load", () => {
     hudReady = true;
     player?.setOverlay(true);
@@ -408,6 +410,62 @@ async function applyPresence() {
   await presence.enable(client.state.discordAppId || "");
   updatePresence();
   return true;
+}
+/** A video file on this PC, chosen in a dialog or dropped on the window. */
+function playLocalFile(path) {
+  nowPlaying = null;
+  return player.start({
+    executable: executable(),
+    settings: client.state.settings,
+    url: path,
+    local: true,
+    meta: { id: path, type: "local", name: basename(path) },
+    videoId: path,
+  });
+}
+/**
+ * Every navigation away from the app page is refused. A file dropped on the
+ * window arrives as one: a video plays and a subtitle joins the viewing.
+ * The path comes from Chromium's navigation, never from the page's scripts.
+ */
+function onDropNavigate(event, legacyUrl) {
+  event.preventDefault();
+  const url = event.url || legacyUrl;
+  const kind = dropKind(url);
+  if (!kind) return;
+  let path;
+  try {
+    path = fileURLToPath(url);
+    if (!statSync(path).isFile()) return;
+  } catch {
+    return;
+  }
+  if (kind === "subtitle") {
+    if (!player?.state.active) {
+      emit("notice", "شغّل عملاً أولاً، ثم اسحب ملف الترجمة إلى الصورة.");
+      return;
+    }
+    player.subtitle(path);
+    emit("notice", `أُضيفت الترجمة «${basename(path)}»`);
+    return;
+  }
+  playLocalFile(path).catch((error) => emit("notice", cleanError(error)));
+}
+let thumbnails = null;
+/** Seek previews for the current viewing; main keeps the source address. */
+async function trickplay(a) {
+  if (!player?.state.active || !player.source) return null;
+  thumbnails ||= new Thumbnailer({
+    tmpDir: join(app.getPath("temp"), "riwaq-thumbs"),
+  });
+  if (thumbnails.source !== player.source) thumbnails.reset(player.source);
+  return thumbnails.frame({
+    at: Number(a?.at) || 0,
+    duration: Number(player.state.duration) || 0,
+    executable: executable(),
+    mode: client.state.settings.seekThumbnails || "local",
+    serverUrl: client.state.settings.serverUrl,
+  });
 }
 function executable() {
   return (
@@ -821,6 +879,7 @@ const methods = {
     return true;
   },
   playerCommand: (a) => player.command(a),
+  trickplay,
   stop: async () => {
     await player.stop();
     return true;
@@ -858,16 +917,7 @@ const methods = {
       properties: ["openFile"],
     });
     if (r.canceled) return false;
-    const path = r.filePaths[0];
-    nowPlaying = null;
-    return player.start({
-      executable: executable(),
-      settings: client.state.settings,
-      url: path,
-      local: true,
-      meta: { id: path, type: "local", name: basename(path) },
-      videoId: path,
-    });
+    return playLocalFile(r.filePaths[0]);
   },
   choosePlayer: async () => {
     const r = await dialog.showOpenDialog(window, {
@@ -1354,7 +1404,7 @@ app
         new URL("../dist/index.html", import.meta.url),
       );
       window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-      window.webContents.on("will-navigate", (event) => event.preventDefault());
+      window.webContents.on("will-navigate", onDropNavigate);
       session.defaultSession.setPermissionRequestHandler(
         (_contents, _permission, callback) => callback(false),
       );
@@ -1406,6 +1456,7 @@ app.on("window-all-closed", () => app.quit());
 let closing = false;
 app.on("will-quit", () => {
   cursorGate.release();
+  thumbnails?.reset();
   globalShortcut.unregisterAll();
 });
 app.on("before-quit", (event) => {

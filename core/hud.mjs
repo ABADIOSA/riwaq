@@ -55,6 +55,7 @@ export function hudVisible({
 export const HUD_METHODS = new Set([
   "init",
   "playerCommand",
+  "trickplay",
   "stop",
   "subtitles",
   "subtitle",
