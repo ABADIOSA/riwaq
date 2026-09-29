@@ -24,6 +24,8 @@ export const NUVIO_STORES = [
   "nuvio_addons",
   "nuvio_collections",
   "nuvio_plugins",
+  // Read only for the TMDB key, and only imported when the viewer asks.
+  "nuvio_tmdb_settings",
   "nuvio_library",
 ];
 const MAX_STORE = 40 * 1024 * 1024;
@@ -226,7 +228,18 @@ export function nuvioProfile(stores, index) {
       /* skip */
     }
   }
-  return { addons, collections, plugins, library };
+  // Nuvio's TMDB sources need a TMDB key; the viewer's own key may come
+  // across with them. It never leaves main and is stored encrypted.
+  const rawKey = stores.nuvio_tmdb_settings?.[`tmdb_api_key_${index}`];
+  const tmdbKey =
+    typeof rawKey === "string" && /^[\w.-]{16,600}$/.test(rawKey.trim())
+      ? rawKey.trim()
+      : "";
+  const tmdbSources = collections.collections.reduce(
+    (n, c) => n + c.folders.reduce((m, f) => m + f.tmdb.length, 0),
+    0,
+  );
+  return { addons, collections, plugins, library, tmdbKey, tmdbSources };
 }
 
 /** A summary the interface can show before anything is imported. */
@@ -243,6 +256,9 @@ export function nuvioPreview(stores) {
       plugins: p.plugins.length,
       scrapers: p.plugins.reduce((n, r) => n + r.scrapers, 0),
       library: p.library.length,
+      // Whether a key exists, never the key itself.
+      tmdbKey: !!p.tmdbKey,
+      tmdbSources: p.tmdbSources,
     };
   });
 }

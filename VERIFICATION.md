@@ -1,4 +1,35 @@
-# Verification — Riwaq 0.12.0
+# Verification — Riwaq 0.12.1
+
+## 0.12.1 — Nuvio folders were empty
+
+The owner reported that folders came across from Nuvio but showed empty. The cause was Riwaq's own import: it kept only addon-catalog sources and counted TMDB and Trakt sources as skipped. Nuvio builds most folders from TMDB collections, studios, networks, discover queries and people, or from Trakt public lists.
+
+Executed:
+
+- `npm test`: **271 passing, 0 failing**. Five new tests, and the Nuvio tests updated now that those sources carry over:
+  - TMDB requests for every Nuvio source kind, including the TV date sort, discover filters and no people filter on TV;
+  - result parsing: a film collection in release order, a director's directing credits only, mixed lists, network kind;
+  - Trakt public list requests and IMDb-carrying metas;
+  - pasted TMDB and Trakt addresses; add, duplicate and remove source edits; a discover source without filters;
+  - `Client.collectionFolder`:
+    - reports `needs` without sending anything when no key exists;
+    - reads TMDB with the key and matches IMDb IDs, dropping an unmatched title;
+    - caches matches;
+    - sends Trakt with the client ID and `redirect: "error"`;
+  - the Nuvio TMDB key: the preview says only that a key exists, the key goes to the encrypted provider store, and it never reaches the interface state;
+  - a Nuvio round trip keeping TMDB and Trakt sources.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium at 980×680 and 1440×960, with the real core logic behind the stub bridge:
+  - an imported Nuvio folder with a TMDB source shows the "needs a TMDB key" message and its settings button;
+  - the folder editor lists the TMDB source, adds a network preset and a pasted Trakt list;
+  - every 0.12.0 scenario still passes.
+
+  There were zero page errors and zero overflow. The render also caught a second gap before release: a Nuvio discover source without filters was refused. It is now accepted as TMDB's popular titles.
+
+Not executed:
+
+- No live TMDB or Trakt request, since the environment's proxy refuses them. The endpoints follow TMDB's and Trakt's public APIs and Nuvio's resolvers, and are verified against fixtures only.
+- No real Nuvio data and no Windows run.
 
 ## 0.12.0 — collections, Nuvio linking, home editor
 

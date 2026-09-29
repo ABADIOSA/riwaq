@@ -22,7 +22,14 @@ import {
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
 import { Busy, Empty, Modal, Poster, Rail } from "./UI.jsx";
-import { SHAPES, titlePlaces } from "../../core/collections.mjs";
+import {
+  SHAPES,
+  TMDB_PRESETS,
+  parseTmdbSource,
+  parseTraktSource,
+  titlePlaces,
+} from "../../core/collections.mjs";
+import { sourceLabel } from "../../core/collection-sources.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
 
 const FOLDERS = {
@@ -64,6 +71,15 @@ const TOOLS = forms("أداة", "أداتان", "أدوات", "أداة");
 TOOLS.one = "أداة واحدة";
 const SOURCES = forms("مصدر", "مصدران", "مصادر", "مصدراً", "مصدر");
 const n = (count, f) => arabicCount(Number(count) || 0, f);
+const TMDB_KIND_LABELS = {
+  list: "قائمة",
+  collection: "سلسلة أفلام",
+  company: "استوديو",
+  network: "شبكة",
+  discover: "اكتشف",
+  person: "ممثل",
+  director: "مخرج",
+};
 const SHAPE_LABELS = { poster: "ملصق", landscape: "عريض", square: "مربّع" };
 const TEMPLATES = [
   { emoji: "🍿", title: "سهرة الويكند", folders: ["أفلام", "مسلسلات"] },
@@ -138,6 +154,7 @@ export default function CollectionsPage({
   target,
   setTarget,
   onNuvio,
+  onSettings,
 }) {
   const collections = state.collections || [];
   const open = collections.find((c) => c.id === target?.id);
@@ -154,6 +171,7 @@ export default function CollectionsPage({
         act={act}
         notice={notice}
         onOpen={onOpen}
+        onSettings={onSettings}
         onBack={() => setTarget(null)}
       />
     );
@@ -345,6 +363,7 @@ function CollectionView({
   act,
   notice,
   onOpen,
+  onSettings,
   onBack,
 }) {
   const [folderId, setFolderId] = useState(
@@ -488,6 +507,7 @@ function CollectionView({
               update={update}
               notice={notice}
               onOpen={onOpen}
+              onSettings={onSettings}
               compact
             />
           </section>
@@ -511,6 +531,7 @@ function CollectionView({
               update={update}
               notice={notice}
               onOpen={onOpen}
+              onSettings={onSettings}
               editing={editing}
             />
           </>
@@ -567,6 +588,12 @@ function CollectionFields({ collection, edit }) {
 
 function FolderEditor({ collection, folder, edit, onRemoved }) {
   const [catalogs, setCatalogs] = useState(null);
+  const [link, setLink] = useState("");
+  const [linkMedia, setLinkMedia] = useState("movie");
+  // Trakt addresses are tried first: they carry "trakt.tv" and a list number.
+  const parsedLink = /trakt\.tv/i.test(link)
+    ? parseTraktSource(link) && { trakt: true, source: parseTraktSource(link) }
+    : parseTmdbSource(link) && { trakt: false, source: parseTmdbSource(link) };
   const [choice, setChoice] = useState("");
   const [genre, setGenre] = useState("");
   const index = collection.folders.findIndex((f) => f.id === folder.id);
@@ -631,7 +658,7 @@ function FolderEditor({ collection, folder, edit, onRemoved }) {
         </label>
       </div>
       <div className="folder-sources">
-        <h3>كتالوجات المجلد</h3>
+        <h3>مصادر المجلد</h3>
         {folder.catalogs.length ? (
           <ul>
             {folder.catalogs.map((s, i) => {
@@ -662,6 +689,105 @@ function FolderEditor({ collection, folder, edit, onRemoved }) {
             لا كتالوجات بعد. العناوين التي تضيفها بيدك تظهر أيضاً هنا.
           </p>
         )}
+        {(folder.tmdb?.length > 0 || folder.trakt?.length > 0) && (
+          <ul>
+            {(folder.tmdb || []).map((t, i) => (
+              <li key={`t${i}`}>
+                <span dir="auto">
+                  <b>{sourceLabel(t)}</b>
+                  <small>
+                    TMDB · {TMDB_KIND_LABELS[t.kind]}
+                    {t.id ? ` #${t.id}` : ""} ·{" "}
+                    {t.media === "tv" ? "مسلسلات" : "أفلام"}
+                  </small>
+                </span>
+                <button
+                  title="أزل المصدر"
+                  onClick={() => folderEdit({ action: "tmdbRemove", index: i })}
+                >
+                  <X size={15} />
+                </button>
+              </li>
+            ))}
+            {(folder.trakt || []).map((t, i) => (
+              <li key={`k${i}`}>
+                <span dir="auto">
+                  <b>{sourceLabel(t, true)}</b>
+                  <small>
+                    Trakt #{t.list} · {t.media === "tv" ? "مسلسلات" : "أفلام"}
+                  </small>
+                </span>
+                <button
+                  title="أزل القائمة"
+                  onClick={() =>
+                    folderEdit({ action: "traktRemove", index: i })
+                  }
+                >
+                  <X size={15} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="catalog-picker">
+          <select
+            aria-label="استوديو أو شبكة من TMDB"
+            value=""
+            onChange={(e) => {
+              const preset = TMDB_PRESETS[Number(e.target.value)];
+              if (preset) folderEdit({ action: "tmdbAdd", source: preset });
+            }}
+          >
+            <option value="">أضف استوديو أو شبكة من TMDB…</option>
+            {TMDB_PRESETS.map((p, i) => (
+              <option key={`${p.kind}${p.id}`} value={i}>
+                {p.title} · {p.kind === "network" ? "مسلسلات" : "أفلام"}
+              </option>
+            ))}
+          </select>
+          <input
+            dir="ltr"
+            aria-label="رابط من TMDB أو Trakt"
+            placeholder="الصق رابط TMDB أو Trakt"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+          />
+          <select
+            aria-label="النوع"
+            value={linkMedia}
+            onChange={(e) => setLinkMedia(e.target.value)}
+          >
+            <option value="movie">أفلام</option>
+            <option value="tv">مسلسلات</option>
+          </select>
+          <button
+            className="secondary"
+            disabled={!parsedLink}
+            onClick={async () => {
+              const ok = await folderEdit(
+                parsedLink.trakt
+                  ? {
+                      action: "traktAdd",
+                      source: { ...parsedLink.source, media: linkMedia },
+                    }
+                  : {
+                      action: "tmdbAdd",
+                      source: {
+                        ...parsedLink.source,
+                        media:
+                          parsedLink.source.kind === "network" ||
+                          parsedLink.source.kind === "collection"
+                            ? parsedLink.source.media
+                            : linkMedia,
+                      },
+                    },
+              );
+              if (ok) setLink("");
+            }}
+          >
+            <Plus size={16} /> أضف الرابط
+          </button>
+        </div>
         {catalogs === null ? (
           <Busy text="نجهز كتالوجات إضافاتك…" />
         ) : (
@@ -760,15 +886,16 @@ function FolderContent({
   update,
   notice,
   onOpen,
+  onSettings,
   editing = false,
   compact = false,
 }) {
   const [data, setData] = useState(null);
-  const signature = folder.catalogs
-    .map((c) => `${c.addon}|${c.type}|${c.catalog}|${c.genre || ""}`)
-    .join(",");
+  const tmdb = folder.tmdb || [];
+  const trakt = folder.trakt || [];
+  const signature = JSON.stringify([folder.catalogs, tmdb, trakt]);
   useEffect(() => {
-    if (!folder.catalogs.length) {
+    if (!folder.catalogs.length && !tmdb.length && !trakt.length) {
       setData({ rows: [], missing: [], failures: [] });
       return;
     }
@@ -863,13 +990,45 @@ function FolderContent({
               onOpen={onOpen}
             />
           ))}
-          {!titles.length && !data.rows.length && !data.error && (
-            <Empty icon={Folders} title="المجلد فارغ">
-              {editing
-                ? "اختر كتالوجاً من الأعلى، أو افتح أي عمل واضغط «أضف لمجموعة»."
-                : "اضغط «تعديل» لتضيف كتالوجات، أو افتح أي عمل واضغط «أضف لمجموعة»."}
-            </Empty>
+          {data.needs?.includes("tmdb") && (
+            <div className="folder-needs">
+              <p>
+                في هذا المجلد {n(tmdb.length, SOURCES)} من TMDB، وتحتاج مفتاح
+                TMDB مجانياً لتظهر. أضفه من الإعدادات، أو انقله من نوفيو مع
+                مجموعاتك.
+              </p>
+              <button
+                className="primary small"
+                onClick={() => onSettings?.("data")}
+              >
+                أضف مفتاح TMDB
+              </button>
+            </div>
           )}
+          {data.needs?.includes("trakt") && (
+            <div className="folder-needs">
+              <p>
+                في هذا المجلد {n(trakt.length, SOURCES)} من قوائم Trakt العامة،
+                وتحتاج Client ID من تطبيقك في Trakt لتظهر. لا يلزم تسجيل الدخول.
+              </p>
+              <button
+                className="primary small"
+                onClick={() => onSettings?.("connections")}
+              >
+                أضف Client ID لـ Trakt
+              </button>
+            </div>
+          )}
+          {!titles.length &&
+            !data.rows.length &&
+            !data.error &&
+            !data.needs?.length && (
+              <Empty icon={Folders} title="المجلد فارغ">
+                {editing
+                  ? "اختر كتالوجاً من الأعلى، أو افتح أي عمل واضغط «أضف لمجموعة»."
+                  : "اضغط «تعديل» لتضيف كتالوجات، أو افتح أي عمل واضغط «أضف لمجموعة»."}
+              </Empty>
+            )}
           {data.missing?.length > 0 && (
             <p className="inline-warning">
               كتالوجات لم نجد إضافتها: {data.missing.join("، ")}. ثبّت الإضافة
@@ -990,6 +1149,14 @@ const PARTS = [
     "مستودعات الأدوات البرمجية (Plugins)",
     (p) => `${n(p.plugins, REPOS)} · ${n(p.scrapers, TOOLS)}`,
   ],
+  [
+    "tmdbKey",
+    "مفتاح TMDB من نوفيو",
+    (p) =>
+      p.tmdbSources
+        ? `تحتاجه ${n(p.tmdbSources, SOURCES)} من TMDB في مجموعاتك · يُحفظ مشفّراً`
+        : "يُحفظ مشفّراً على جهازك",
+  ],
 ];
 
 /**
@@ -1005,6 +1172,7 @@ export function NuvioLink({ act, setState, notice, onClose }) {
     addons: true,
     library: true,
     plugins: true,
+    tmdbKey: true,
   });
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1115,22 +1283,24 @@ export function NuvioLink({ act, setState, notice, onClose }) {
           </div>
           {chosen && (
             <div className="nuvio-parts">
-              {PARTS.map(([key, label, count]) => (
-                <label key={key} className={chosen[key] ? "" : "empty"}>
-                  <input
-                    type="checkbox"
-                    checked={parts[key] && !!chosen[key]}
-                    disabled={!chosen[key]}
-                    onChange={(e) =>
-                      setParts({ ...parts, [key]: e.target.checked })
-                    }
-                  />
-                  <span>
-                    <b>{label}</b>
-                    <small>{count(chosen)}</small>
-                  </span>
-                </label>
-              ))}
+              {PARTS.filter(([key]) => key !== "tmdbKey" || chosen.tmdbKey).map(
+                ([key, label, count]) => (
+                  <label key={key} className={chosen[key] ? "" : "empty"}>
+                    <input
+                      type="checkbox"
+                      checked={parts[key] && !!chosen[key]}
+                      disabled={!chosen[key]}
+                      onChange={(e) =>
+                        setParts({ ...parts, [key]: e.target.checked })
+                      }
+                    />
+                    <span>
+                      <b>{label}</b>
+                      <small>{count(chosen)}</small>
+                    </span>
+                  </label>
+                ),
+              )}
             </div>
           )}
           <p className="subtle">
@@ -1172,6 +1342,16 @@ export function NuvioLink({ act, setState, notice, onClose }) {
             {result.library !== undefined && (
               <li>
                 <Check size={16} /> {n(result.library, TITLES)} في مكتبتك
+              </li>
+            )}
+            {result.tmdbKey === "imported" && (
+              <li>
+                <Check size={16} /> مفتاح TMDB، فتظهر مصادر TMDB في مجلداتك
+              </li>
+            )}
+            {result.tmdbKey === "kept" && (
+              <li>
+                <Check size={16} /> أبقينا مفتاح TMDB الموجود في رِواق
               </li>
             )}
             {result.plugins !== undefined && (

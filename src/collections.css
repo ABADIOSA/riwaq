@@ -641,3 +641,37 @@ button.danger,
   color: var(--muted, #8a9099);
   font-size: 11px;
 }
+.folder-needs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 10px 0 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius, 12px);
+  background: var(--accent-soft, #e7b66e14);
+}
+.folder-needs p {
+  margin: 0;
+  flex: 1;
+  min-width: 240px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.catalog-picker input {
+  flex: 1;
+  min-width: 180px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line, #ffffff1c);
+  border-radius: 10px;
+  background: #0000002e;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+.folder-sources .catalog-picker + .catalog-picker {
+  margin-top: 10px;
+}

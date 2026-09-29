@@ -101,6 +101,10 @@ const STORES = {
       scrapers: [{ id: "s1", code: "fetch('https://x').then(steal)" }],
     }),
   },
+  nuvio_tmdb_settings: {
+    tmdb_api_key_1: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+    tmdb_language_1: "ar",
+  },
   nuvio_library: {
     library_1: JSON.stringify({
       items: [
@@ -170,11 +174,17 @@ test("a Nuvio profile is read and cleaned", () => {
       addons: 3,
       collections: 1,
       folders: 1,
-      skippedSources: 1,
+      skippedSources: 0,
       plugins: 1,
       scrapers: 12,
       library: 2,
+      tmdbKey: true,
+      tmdbSources: 1,
     },
+  );
+  assert.ok(
+    !JSON.stringify(preview).includes("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"),
+    "the preview says a key exists, never what it is",
   );
   const p = nuvioProfile(stores, 1);
   assert.deepEqual(
@@ -304,17 +314,33 @@ test("importing: addons through the manifest check, the rest merged", async () =
   });
   const { result, state } = await client.importNuvio(stores, {
     profile: 1,
-    parts: { addons: true, collections: true, library: true, plugins: true },
+    parts: {
+      addons: true,
+      collections: true,
+      library: true,
+      plugins: true,
+      tmdbKey: true,
+    },
   });
   assert.equal(result.addons, 1, "cinemeta was already installed");
   assert.deepEqual(result.addonFailures, ["opensubtitles.strem.io"]);
   const torrentio = state.addons.find((a) => a.id === "com.stremio.torrentio");
   assert.equal(torrentio.enabled, false, "Nuvio's disabled state carries over");
   assert.equal(result.collections, 1);
-  assert.equal(result.skippedSources, 1);
+  assert.equal(result.skippedSources, 0, "the TMDB source carried over");
   assert.equal(result.library, 1, "Inception was already saved");
   assert.equal(result.plugins, 1);
   assert.deepEqual(state.nuvioPlugins[0].name, "Repo");
+  assert.equal(result.tmdbKey, "imported");
+  assert.equal(
+    client.state.providers.tmdb.key,
+    "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+    "the key goes to the encrypted provider store",
+  );
+  assert.ok(
+    !JSON.stringify(state).includes("a1b2c3d4e5f6"),
+    "and never into the interface state",
+  );
   assert.ok(
     !JSON.stringify(state).includes("plugins.example/repo"),
     "repo URLs stay in main",
@@ -330,6 +356,7 @@ test("importing: addons through the manifest check, the rest merged", async () =
       skippedSources: 0,
       library: 0,
       plugins: 0,
+      tmdbKey: "",
     },
   );
   await assert.rejects(client.importNuvio(stores, { profile: 0 }), /اختر/);

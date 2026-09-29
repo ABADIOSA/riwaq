@@ -307,7 +307,7 @@ test("Nuvio collections come across, and go back", () => {
   const { collections, folders, skipped } = fromNuvio(JSON.stringify(NUVIO));
   assert.equal(collections.length, 1);
   assert.equal(folders, 2);
-  assert.equal(skipped, 2, "TMDB and Trakt sources are counted, not kept");
+  assert.equal(skipped, 0, "addon, TMDB and Trakt sources all carry over");
   const [c] = collections;
   assert.equal(c.id, "nuvio-c1");
   assert.equal(c.pinned, true);
@@ -349,10 +349,19 @@ test("Nuvio collections come across, and go back", () => {
     "hand-picked titles have no Nuvio form",
   );
   // A round trip keeps the arrangement.
-  assert.deepEqual(
-    fromNuvio(back).collections[0].folders[0].catalogs,
-    c.folders[0].catalogs,
-  );
+  assert.deepEqual(back[0].folders[0].sources[1], {
+    provider: "tmdb",
+    tmdbSourceType: "COLLECTION",
+    tmdbId: 86311,
+    mediaType: "MOVIE",
+    sortBy: "original",
+    title: null,
+    filters: null,
+  });
+  const again = fromNuvio(back).collections[0].folders[0];
+  assert.deepEqual(again.catalogs, c.folders[0].catalogs);
+  assert.deepEqual(again.tmdb, c.folders[0].tmdb);
+  assert.deepEqual(again.trakt, c.folders[0].trakt);
 });
 
 test("a re-import updates by ID instead of duplicating", () => {

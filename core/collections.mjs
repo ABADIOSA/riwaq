@@ -3,8 +3,11 @@
  *
  * A collection holds folders. A folder gathers addon catalogs (referenced by
  * the addon's manifest ID, type and catalog ID, so a reconfigured addon or a
- * restored backup still finds them) and titles the viewer picked by hand, in
- * the order they chose. Pinned collections appear on the home page.
+ * restored backup still finds them), TMDB sources (a list, a film collection,
+ * a studio, a network, a person or a discover query, read with the viewer's
+ * TMDB key), Trakt public lists (read with the viewer's Trakt client ID) and
+ * titles the viewer picked by hand, in the order they chose. Pinned
+ * collections appear on the home page.
  *
  * The shape follows Nuvio's collections closely enough to read its JSON
  * export and write one back; folders of hand-picked titles are Riwaq's own
@@ -65,6 +68,176 @@ function cleanCatalog(source) {
 }
 const catalogKey = (c) => `${c.addon}|${c.type}|${c.catalog}|${c.genre || ""}`;
 
+export const TMDB_KINDS = [
+  "list",
+  "collection",
+  "company",
+  "network",
+  "discover",
+  "person",
+  "director",
+];
+export const TMDB_SORTS = [
+  "original",
+  "popularity.desc",
+  "vote_average.desc",
+  "vote_count.desc",
+  "primary_release_date.desc",
+  "first_air_date.desc",
+];
+export const TRAKT_SORTS = [
+  "rank",
+  "added",
+  "title",
+  "released",
+  "runtime",
+  "popularity",
+  "percentage",
+  "votes",
+];
+const MEDIA = ["movie", "tv"];
+const positive = (value, max = 2_000_000_000) => {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 && n <= max ? n : null;
+};
+/** Discover filters Riwaq passes on to TMDB, each checked by its own rule. */
+const FILTERS = {
+  withGenres: /^[\d,|]{1,200}$/,
+  withKeywords: /^[\d,|]{1,400}$/,
+  withCompanies: /^[\d,|]{1,200}$/,
+  withNetworks: /^[\d,|]{1,200}$/,
+  withPeople: /^[\d,|]{1,200}$/,
+  withWatchProviders: /^[\d,|]{1,200}$/,
+  withOriginalLanguage: /^[a-z]{2,3}$/,
+  withOriginCountry: /^[A-Z]{2}(\|[A-Z]{2})*$/,
+  watchRegion: /^[A-Z]{2}$/,
+  releaseDateGte: /^\d{4}-\d{2}-\d{2}$/,
+  releaseDateLte: /^\d{4}-\d{2}-\d{2}$/,
+};
+const NUMBER_FILTERS = {
+  voteAverageGte: [0, 10],
+  voteAverageLte: [0, 10],
+  voteCountGte: [0, 1_000_000],
+  year: [1870, 2200],
+  withRuntimeGte: [0, 1000],
+  withRuntimeLte: [0, 1000],
+};
+function cleanFilters(input) {
+  if (!input || typeof input !== "object") return undefined;
+  const out = {};
+  for (const [key, rule] of Object.entries(FILTERS))
+    if (typeof input[key] === "string" && rule.test(input[key]))
+      out[key] = input[key];
+  for (const [key, [min, max]] of Object.entries(NUMBER_FILTERS)) {
+    const n = Number(input[key]);
+    if (
+      input[key] !== null &&
+      input[key] !== undefined &&
+      Number.isFinite(n) &&
+      n >= min &&
+      n <= max
+    )
+      out[key] = n;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+function cleanTmdb(source) {
+  if (!source || typeof source !== "object") return null;
+  const kind = String(source.kind || "").toLowerCase();
+  if (!TMDB_KINDS.includes(kind)) return null;
+  const id = positive(source.id);
+  // Every kind but discover points at one TMDB object.
+  if (kind !== "discover" && !id) return null;
+  const media =
+    kind === "network"
+      ? "tv"
+      : kind === "collection"
+        ? "movie"
+        : MEDIA.includes(source.media)
+          ? source.media
+          : "movie";
+  const filters =
+    kind === "discover" ? cleanFilters(source.filters) : undefined;
+  // A discover source without filters is simply TMDB's popular titles.
+  const title = line(source.title, 80);
+  return {
+    kind,
+    ...(id ? { id } : {}),
+    media,
+    // A list, a collection or a filmography keeps TMDB's own order unless
+    // asked otherwise; a studio, network or discover query is by popularity.
+    sort: TMDB_SORTS.includes(source.sort)
+      ? source.sort
+      : ["list", "collection", "person", "director"].includes(kind)
+        ? "original"
+        : "popularity.desc",
+    ...(title ? { title } : {}),
+    ...(filters ? { filters } : {}),
+  };
+}
+const tmdbKey = (t) =>
+  `${t.kind}|${t.id || JSON.stringify(t.filters)}|${t.media}`;
+function cleanTrakt(source) {
+  if (!source || typeof source !== "object") return null;
+  const list = positive(source.list, 1e15);
+  if (!list) return null;
+  const title = line(source.title, 80);
+  return {
+    list,
+    media: MEDIA.includes(source.media) ? source.media : "movie",
+    sort: TRAKT_SORTS.includes(source.sort) ? source.sort : "rank",
+    how: source.how === "desc" ? "desc" : "asc",
+    ...(title ? { title } : {}),
+  };
+}
+const traktKey = (t) => `${t.list}|${t.media}`;
+/** Adds cleaned, unique entries up to the per-folder limit. */
+function collect(input, clean, key) {
+  const out = [];
+  for (const source of Array.isArray(input) ? input : []) {
+    const c = clean(source);
+    if (c && !out.some((x) => key(x) === key(c))) out.push(c);
+    if (out.length >= LIMITS.catalogs) break;
+  }
+  return out;
+}
+
+/** Well-known TMDB studios and networks, by their public TMDB IDs. */
+export const TMDB_PRESETS = [
+  { kind: "company", id: 420, media: "movie", title: "Marvel Studios" },
+  { kind: "company", id: 2, media: "movie", title: "Walt Disney Pictures" },
+  { kind: "company", id: 3, media: "movie", title: "Pixar" },
+  { kind: "company", id: 1, media: "movie", title: "Lucasfilm" },
+  { kind: "company", id: 174, media: "movie", title: "Warner Bros." },
+  { kind: "network", id: 213, media: "tv", title: "Netflix" },
+  { kind: "network", id: 49, media: "tv", title: "HBO" },
+  { kind: "network", id: 2739, media: "tv", title: "Disney+" },
+  { kind: "network", id: 1024, media: "tv", title: "Prime Video" },
+  { kind: "network", id: 2552, media: "tv", title: "Apple TV+" },
+];
+
+/**
+ * A TMDB page address or "kind/id" pasted by the viewer into a source, e.g.
+ * https://www.themoviedb.org/collection/10-star-wars-collection.
+ */
+export function parseTmdbSource(input) {
+  const m = String(input || "").match(
+    /(list|collection|company|network|person)\/(\d{1,10})/,
+  );
+  if (!m) return null;
+  return cleanTmdb({
+    kind: m[1],
+    id: Number(m[2]),
+    media: m[1] === "network" ? "tv" : "movie",
+  });
+}
+/** A Trakt list address or number, e.g. https://trakt.tv/lists/123456. */
+export function parseTraktSource(input) {
+  const text = String(input || "").trim();
+  const m = text.match(/(?:lists\/)?(\d{1,15})\b/);
+  return m ? cleanTrakt({ list: Number(m[1]) }) : null;
+}
+
 function cleanFolder(folder) {
   if (!folder || typeof folder !== "object") return null;
   const title = line(folder.title, 80);
@@ -76,6 +249,8 @@ function cleanFolder(folder) {
       catalogs.push(clean);
     if (catalogs.length >= LIMITS.catalogs) break;
   }
+  const tmdb = collect(folder.tmdb, cleanTmdb, tmdbKey);
+  const trakt = collect(folder.trakt, cleanTrakt, traktKey);
   const titles = [];
   for (const meta of Array.isArray(folder.titles) ? folder.titles : []) {
     try {
@@ -94,6 +269,8 @@ function cleanFolder(folder) {
     cover: coverUrl(folder.cover),
     shape: SHAPES.includes(folder.shape) ? folder.shape : "poster",
     catalogs,
+    tmdb,
+    trakt,
     titles,
   };
 }
@@ -265,6 +442,35 @@ export function editCollections(list, input = {}) {
         folder.catalogs = [...folder.catalogs, clean];
         return folder;
       });
+    case "tmdbAdd":
+      return withFolder((folder) => {
+        const clean = cleanTmdb(input.source);
+        if (!clean) fail("مصدر TMDB غير صالح");
+        if (folder.tmdb.some((t) => tmdbKey(t) === tmdbKey(clean)))
+          return folder;
+        if (folder.tmdb.length >= LIMITS.catalogs)
+          fail("وصلت إلى الحد الأقصى من مصادر TMDB في المجلد");
+        folder.tmdb = [...folder.tmdb, clean];
+        return folder;
+      });
+    case "traktAdd":
+      return withFolder((folder) => {
+        const clean = cleanTrakt(input.source);
+        if (!clean) fail("قائمة Trakt غير صالحة");
+        if (folder.trakt.some((t) => traktKey(t) === traktKey(clean)))
+          return folder;
+        if (folder.trakt.length >= LIMITS.catalogs)
+          fail("وصلت إلى الحد الأقصى من قوائم Trakt في المجلد");
+        folder.trakt = [...folder.trakt, clean];
+        return folder;
+      });
+    case "tmdbRemove":
+    case "traktRemove":
+      return withFolder((folder) => {
+        const key = action === "tmdbRemove" ? "tmdb" : "trakt";
+        folder[key] = folder[key].filter((_, i) => i !== Number(input.index));
+        return folder;
+      });
     case "catalogRemove":
       return withFolder((folder) => {
         folder.catalogs = folder.catalogs.filter(
@@ -317,9 +523,9 @@ export function titlePlaces(collections, meta) {
 }
 
 /**
- * Nuvio's collections JSON into Riwaq collections. Addon catalogs carry over;
- * TMDB and Trakt sources have no addon to read from here and are counted so
- * the viewer knows what did not come across.
+ * Nuvio's collections JSON into Riwaq collections: addon catalogs, TMDB
+ * sources and Trakt public lists all carry over. Only sources Riwaq cannot
+ * read (malformed, or an unknown provider) are counted as skipped.
  */
 export function fromNuvio(input) {
   let data = input;
@@ -346,18 +552,42 @@ export function fromNuvio(input) {
               (s) => ({ ...s, provider: "addon" }),
             );
       const catalogs = [];
+      const tmdb = [];
+      const trakt = [];
       for (const s of sources) {
         const provider = String(s?.provider || "addon").toLowerCase();
-        if (provider !== "addon" || !s?.addonId || !s?.catalogId) {
-          skipped++;
-          continue;
-        }
-        catalogs.push({
-          addon: s.addonId,
-          type: s.type,
-          catalog: s.catalogId,
-          genre: s.genre && s.genre !== "none" ? s.genre : "",
-        });
+        const media = /^(tv|series)$/i.test(String(s?.mediaType || ""))
+          ? "tv"
+          : "movie";
+        if (provider === "tmdb") {
+          const t = cleanTmdb({
+            kind: String(s?.tmdbSourceType || "discover").toLowerCase(),
+            id: s?.tmdbId,
+            media,
+            sort: s?.sortBy,
+            title: s?.title,
+            filters: s?.filters,
+          });
+          if (t) tmdb.push(t);
+          else skipped++;
+        } else if (provider === "trakt") {
+          const t = cleanTrakt({
+            list: s?.traktListId,
+            media,
+            sort: s?.sortBy,
+            how: s?.sortHow,
+            title: s?.title,
+          });
+          if (t) trakt.push(t);
+          else skipped++;
+        } else if (s?.addonId && s?.catalogId)
+          catalogs.push({
+            addon: s.addonId,
+            type: s.type,
+            catalog: s.catalogId,
+            genre: s.genre && s.genre !== "none" ? s.genre : "",
+          });
+        else skipped++;
       }
       return {
         id: typeof f?.id === "string" ? `nuvio-${f.id}` : undefined,
@@ -369,6 +599,8 @@ export function fromNuvio(input) {
             ? "landscape"
             : String(f?.tileShape || "poster").toLowerCase(),
         catalogs,
+        tmdb,
+        trakt,
       };
     }),
   }));
@@ -393,7 +625,7 @@ export function toNuvio(collections) {
     viewMode: c.view === "rows" ? "ROWS" : "TABBED_GRID",
     showAllTab: true,
     folders: c.folders
-      .filter((f) => f.catalogs.length)
+      .filter((f) => f.catalogs.length || f.tmdb.length || f.trakt.length)
       .map((f) => ({
         id: f.id,
         title: f.title,
@@ -401,13 +633,32 @@ export function toNuvio(collections) {
         coverEmoji: f.emoji || null,
         tileShape: f.shape,
         hideTitle: false,
-        sources: f.catalogs.map((s) => ({
-          provider: "addon",
-          addonId: s.addon,
-          type: s.type,
-          catalogId: s.catalog,
-          genre: s.genre || null,
-        })),
+        sources: [
+          ...f.catalogs.map((s) => ({
+            provider: "addon",
+            addonId: s.addon,
+            type: s.type,
+            catalogId: s.catalog,
+            genre: s.genre || null,
+          })),
+          ...f.tmdb.map((t) => ({
+            provider: "tmdb",
+            tmdbSourceType: t.kind.toUpperCase(),
+            tmdbId: t.id ?? null,
+            mediaType: t.media === "tv" ? "TV" : "MOVIE",
+            sortBy: t.sort,
+            title: t.title || null,
+            filters: t.filters || null,
+          })),
+          ...f.trakt.map((t) => ({
+            provider: "trakt",
+            traktListId: t.list,
+            mediaType: t.media === "tv" ? "TV" : "MOVIE",
+            sortBy: t.sort,
+            sortHow: t.how,
+            title: t.title || null,
+          })),
+        ],
       })),
   }));
 }
