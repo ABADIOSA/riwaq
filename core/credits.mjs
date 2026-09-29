@@ -9,6 +9,7 @@
  */
 
 const SPARQL = "https://query.wikidata.org/sparql";
+const WIKIDATA_API = "https://www.wikidata.org/w/api.php";
 export const QID = /^Q\d{1,12}$/;
 export const IMDB = /^tt\d{5,12}$/;
 const TTL = 3600000;
@@ -140,6 +141,42 @@ SELECT ?work ?workLabel ?imdb ?date ?kind ?role WHERE {
   OPTIONAL { ?work wdt:P31 ?kind. }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
 } LIMIT 600`;
+
+/**
+ * Every title in the same series (P179) as this one, e.g. each film of a
+ * trilogy. Episodes and seasons are left out: a TV episode's series is the
+ * show itself, not a franchise.
+ */
+export const collectionQuery = (imdb) => `
+SELECT ?series ?seriesLabel ?work ?workLabel ?imdb ?date ?kind ?ordinal WHERE {
+  ?item wdt:P345 "${imdb}".
+  ?item wdt:P179 ?series.
+  ?work wdt:P179 ?series.
+  ?work wdt:P345 ?imdb.
+  FILTER(STRSTARTS(?imdb, "tt"))
+  FILTER NOT EXISTS { ?work wdt:P31 wd:Q21191270. }
+  FILTER NOT EXISTS { ?work wdt:P31 wd:Q3464665. }
+  OPTIONAL { ?work wdt:P577 ?date. }
+  OPTIONAL { ?work wdt:P31 ?kind. }
+  OPTIONAL {
+    ?work p:P179 ?part.
+    ?part ps:P179 ?series.
+    ?part pq:P1545 ?ordinal.
+  }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+} LIMIT 300`;
+
+/** Search hits narrowed to people with an IMDb name ID: film people. */
+export const peopleQuery = (qids) => `
+SELECT ?item ?itemLabel ?itemDescription ?image ?tmdb WHERE {
+  VALUES ?item { ${qids.map((q) => `wd:${q}`).join(" ")} }
+  ?item wdt:P31 wd:Q5.
+  ?item wdt:P345 ?imdb.
+  FILTER(STRSTARTS(?imdb, "nm"))
+  OPTIONAL { ?item wdt:P18 ?image. }
+  OPTIONAL { ?item wdt:P4985 ?tmdb. }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+}`;
 
 const rows = (result) =>
   Array.isArray(result?.results?.bindings) ? result.results.bindings : [];
@@ -476,17 +513,96 @@ async function pooled(items, size, fn) {
   return out;
 }
 
+/**
+ * Series this title belongs to, each with its titles in order (the series
+ * ordinal when Wikidata records it, else release date). A series needs a
+ * second title to be worth a row; the most specific series comes first.
+ */
+export function parseCollections(result, current) {
+  const series = new Map();
+  for (const row of rows(result)) {
+    const qid = qidOf(row.series?.value);
+    const name = label(row.seriesLabel);
+    const imdb = text(row.imdb);
+    const title = label(row.workLabel);
+    if (!QID.test(qid) || !name || !IMDB.test(imdb) || !title) continue;
+    const entry = series.get(qid) || { qid, name, works: new Map() };
+    const work = entry.works.get(imdb) || {
+      id: imdb,
+      name: title,
+      poster: posterOf(imdb),
+      year: null,
+      type: "movie",
+      ordinal: null,
+      current: imdb === current,
+    };
+    const y = year(text(row.date));
+    if (y && (!work.year || y < work.year)) work.year = y;
+    if (SERIES.has(qidOf(row.kind?.value))) work.type = "series";
+    const n = Number(text(row.ordinal));
+    if (Number.isFinite(n) && n > 0 && work.ordinal === null) work.ordinal = n;
+    entry.works.set(imdb, work);
+    series.set(qid, entry);
+  }
+  return [...series.values()]
+    .map((s) => ({
+      qid: s.qid,
+      name: s.name,
+      works: [...s.works.values()].sort(
+        (a, b) =>
+          (a.ordinal ?? Infinity) - (b.ordinal ?? Infinity) ||
+          (a.year || 9999) - (b.year || 9999) ||
+          a.name.localeCompare(b.name),
+      ),
+    }))
+    .filter((s) => s.works.length >= 2 && s.works.some((w) => w.current))
+    .sort((a, b) => a.works.length - b.works.length)
+    .slice(0, 2);
+}
+
+/** People from a search, in the search's order, one each. */
+export function parsePeople(result, order) {
+  const byQid = new Map();
+  for (const row of rows(result)) {
+    const qid = qidOf(row.item?.value);
+    const name = label(row.itemLabel);
+    if (!QID.test(qid) || !name || byQid.has(qid)) continue;
+    byQid.set(qid, {
+      qid,
+      tmdb: tmdbOf(row.tmdb),
+      name,
+      description: text(row.itemDescription),
+      image: commonsImage(row.image?.value),
+    });
+  }
+  return order.map((q) => byQid.get(q)).filter(Boolean);
+}
+
+/** A search phrase safe to send: one line, trimmed, at most 80 characters. */
+export function searchPhrase(value) {
+  return String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
 export class Credits {
   constructor(client) {
     this.client = client;
     this.cache = new Map();
   }
-  async sparql(query) {
-    const cached = this.cache.get(query);
+  sparql(query) {
+    return this.cached(
+      `${SPARQL}?format=json&query=${encodeURIComponent(query)}`,
+      20000,
+    );
+  }
+  async cached(url, timeout) {
+    const cached = this.cache.get(url);
     if (cached && Date.now() - cached.at < TTL) return cached.data;
-    const url = `${SPARQL}?format=json&query=${encodeURIComponent(query)}`;
     const data = await this.client.request(url, {
-      timeout: 20000,
+      timeout,
       redirect: "error",
       headers: {
         Accept: "application/sparql-results+json",
@@ -496,8 +612,35 @@ export class Credits {
     });
     if (this.cache.size > 200)
       this.cache.delete(this.cache.keys().next().value);
-    this.cache.set(query, { at: Date.now(), data });
+    this.cache.set(url, { at: Date.now(), data });
     return data;
+  }
+  /**
+   * People by name, in Arabic or Latin script: Wikidata's own search in both
+   * languages, then only the humans with an IMDb name ID.
+   */
+  async searchPeople({ query } = {}) {
+    const phrase = searchPhrase(query);
+    if (phrase.length < 2) return [];
+    const search = (lang) =>
+      this.cached(
+        `${WIKIDATA_API}?action=wbsearchentities&format=json&type=item&limit=20` +
+          `&language=${lang}&uselang=${lang}&search=${encodeURIComponent(phrase)}`,
+        12000,
+      );
+    const replies = await Promise.all(
+      ["ar", "en"].map((lang) => search(lang).catch(() => null)),
+    );
+    if (replies.every((r) => !r))
+      throw new Error("تعذّر البحث عن الأشخاص الآن");
+    const order = [];
+    for (const reply of replies)
+      for (const hit of Array.isArray(reply?.search) ? reply.search : [])
+        if (QID.test(hit?.id || "") && !order.includes(hit.id))
+          order.push(hit.id);
+    if (!order.length) return [];
+    const ids = order.slice(0, 40);
+    return parsePeople(await this.sparql(peopleQuery(ids)), ids).slice(0, 12);
   }
   tmdbKey() {
     const entry = this.client.state.providers?.tmdb;
@@ -511,20 +654,23 @@ export class Credits {
     if (!IMDB.test(id)) throw new Error("لا يتوفر فريق العمل لهذا العنوان");
     let result;
     try {
-      const [facts, cast] = await Promise.all([
+      const [facts, cast, collections] = await Promise.all([
         this.sparql(titleQuery(id)).then(parseTitle),
         this.sparql(castQuery(id))
           .then(parseCast)
           .catch(() => []),
+        this.sparql(collectionQuery(id))
+          .then((r) => parseCollections(r, id))
+          .catch(() => []),
       ]);
-      result = { ...facts, cast, sources: ["Wikidata"] };
+      result = { ...facts, cast, collections, sources: ["Wikidata"] };
     } catch (error) {
       // Wikidata's query service is sometimes overloaded; TMDB still knows
       // who made the title, though not where it was filmed.
       if (!this.tmdbKey()) throw error;
       const detail = await this.tmdbDetail({ type, id });
       if (!detail) throw error;
-      return { ...parseTmdbTitle(detail), sources: ["TMDB"] };
+      return { ...parseTmdbTitle(detail), collections: [], sources: ["TMDB"] };
     }
     if (this.tmdbKey()) {
       try {
@@ -698,4 +844,21 @@ export function mapTiles(coord, zoom = 6) {
     left: ((xf - x0) / 2) * 100,
     top: ((yf - y0) / 2) * 100,
   };
+}
+
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+/**
+ * The YouTube ID of a title's trailer from its addon metadata: Stremio's
+ * `trailerStreams` first, then the older `trailers` list. Browser-safe; main
+ * reads it again from its own copy of the metadata before opening anything.
+ */
+export function trailerOf(meta) {
+  for (const s of Array.isArray(meta?.trailerStreams)
+    ? meta.trailerStreams
+    : [])
+    if (YOUTUBE_ID.test(s?.ytId || "")) return s.ytId;
+  for (const t of Array.isArray(meta?.trailers) ? meta.trailers : [])
+    if (YOUTUBE_ID.test(t?.source || "") && (!t.type || t.type === "Trailer"))
+      return t.source;
+  return "";
 }

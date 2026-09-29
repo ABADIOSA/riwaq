@@ -46,6 +46,7 @@ import { Player } from "./player.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
 import { VideoHost, showSystemCursor } from "./video-host.mjs";
 import { CursorGate, cursorHidden } from "../core/cursor.mjs";
+import { trailerOf } from "../core/credits.mjs";
 import { DesktopUpdates } from "./updater.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -547,6 +548,19 @@ const methods = {
       type: a?.type === "series" ? "series" : "movie",
       id: typeof a?.id === "string" ? a.id : "",
     }),
+  searchPeople: (a) =>
+    client.credits.searchPeople({
+      query: typeof a?.query === "string" ? a.query : "",
+    }),
+  // The trailer ID comes from main's own copy of the metadata, never the
+  // interface, and only a YouTube watch page on the fixed host is opened.
+  openTrailer: async (a) => {
+    const meta = client.metas.get(`${a?.type}:${a?.id}`);
+    const id = trailerOf(meta);
+    if (!id) throw new Error("لا يتوفر إعلان لهذا العمل");
+    await shell.openExternal(`https://www.youtube.com/watch?v=${id}`);
+    return true;
+  },
   creditsEntity: (a) =>
     client.credits.entity({
       qid: typeof a?.qid === "string" ? a.qid : "",

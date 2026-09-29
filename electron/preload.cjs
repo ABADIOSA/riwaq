@@ -10,6 +10,8 @@ const allowed = new Set([
   "hudIdle",
   "titleCredits",
   "creditsEntity",
+  "searchPeople",
+  "openTrailer",
   "playerSources",
   "switchSource",
   "metadata",

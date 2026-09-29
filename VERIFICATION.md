@@ -1,4 +1,35 @@
-# Verification — Riwaq 0.10.0
+# Verification — Riwaq 0.11.0
+
+## 0.11.0 — makers above sources, series rows, people search, trailers
+
+The owner confirmed on Windows that 0.10's pointer hiding and credits page work, and asked for the makers above the sources and for more development.
+
+Executed:
+
+- `npm test`: **253 passing, 0 failing** (244 + 9 new):
+  - series rows in part order with the current title marked, keeping the earliest year and preferring the most specific series; rows without the title, single-title series and unresolved labels dropped;
+  - series queries excluding episodes and seasons;
+  - search phrases cut to one line of at most 80 characters;
+  - people search in Arabic and English merged in search order, only validated QIDs reaching the VALUES query, only people with an IMDb name ID, one-letter searches sending nothing, caching, and an error only when both searches fail;
+  - series rows joining a title's credits;
+  - trailer IDs read from the metadata's `trailerStreams` and `trailers`, junk refused, and main reading its own cached metadata before opening a fixed youtube.com watch page;
+  - the new actions staying off the HUD bridge;
+  - the makers and series rows placed above the sources in Details.
+- `npm run check` and `npm run build` pass.
+- Rendered in headless Chromium at 980×680 and 1440×960 with a stubbed bridge. Checked:
+  - the Details order: cast, makers, series row, sources;
+  - the trailer button calling `openTrailer` with the title's type and ID;
+  - a series row with numbered parts and the current one marked; another part opening its own Details with `flexible` metadata;
+  - a search showing a people row above the catalog results; a person opening the explore dialog, and one of their works opening Details.
+
+  There were zero page errors and zero horizontal overflow.
+
+Native Windows verification of 0.10 by the owner (reported, not re-run here): the pointer hides over the picture, and the credits page shows cast, makers and filming locations.
+
+Not executed:
+
+- No live Wikidata, TMDB or YouTube request from this environment; the egress proxy refuses them. `wbsearchentities` and the P179 query are verified against fixtures only.
+- Nothing in 0.11.0 has run on Windows.
 
 ## 0.10.0 — credits and the pointer, again
 
