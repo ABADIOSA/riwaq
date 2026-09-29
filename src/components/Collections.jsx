@@ -11,6 +11,7 @@ import {
   Folders,
   LayoutGrid,
   Link2,
+  Maximize2,
   Pencil,
   Pin,
   PinOff,
@@ -32,7 +33,7 @@ import {
 import { sourceLabel } from "../../core/collection-sources.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
 
-const FOLDERS = {
+export const FOLDERS = {
   zero: "لا مجلدات",
   one: "مجلد واحد",
   two: "مجلدان",
@@ -40,7 +41,7 @@ const FOLDERS = {
   many: "{n} مجلداً",
   other: "{n} مجلد",
 };
-const TITLES = {
+export const TITLES = {
   zero: "لا عناوين",
   one: "عنوان واحد",
   two: "عنوانان",
@@ -69,8 +70,8 @@ ADDONS.one = "إضافة واحدة";
 const REPOS = forms("مستودع", "مستودعان", "مستودعات", "مستودعاً", "مستودع");
 const TOOLS = forms("أداة", "أداتان", "أدوات", "أداة");
 TOOLS.one = "أداة واحدة";
-const SOURCES = forms("مصدر", "مصدران", "مصادر", "مصدراً", "مصدر");
-const n = (count, f) => arabicCount(Number(count) || 0, f);
+export const SOURCES = forms("مصدر", "مصدران", "مصادر", "مصدراً", "مصدر");
+export const n = (count, f) => arabicCount(Number(count) || 0, f);
 const TMDB_KIND_LABELS = {
   list: "قائمة",
   collection: "سلسلة أفلام",
@@ -81,7 +82,7 @@ const TMDB_KIND_LABELS = {
   director: "مخرج",
 };
 /** Why a source shows nothing, in words the viewer can act on. */
-function noteText(row) {
+export function noteText(row) {
   switch (row.note) {
     case "missing":
       return `إضافة «${row.provider}» غير مثبتة أو معطّلة في رِواق. ثبّتها، أو انقل إضافاتك من نوفيو.`;
@@ -113,7 +114,7 @@ const titleCount = (c) =>
   c.folders.reduce((n, f) => n + (f.titles?.length || 0), 0);
 
 /** A folder or collection face: its cover, or its emoji on the accent. */
-function Face({ item, className = "" }) {
+export function Face({ item, className = "" }) {
   const [broken, setBroken] = useState(false);
   return (
     <span className={`collection-face ${className}`}>
@@ -178,6 +179,7 @@ export default function CollectionsPage({
   setTarget,
   onNuvio,
   onSettings,
+  onFolderPage,
 }) {
   const collections = state.collections || [];
   const open = collections.find((c) => c.id === target?.id);
@@ -195,6 +197,7 @@ export default function CollectionsPage({
         notice={notice}
         onOpen={onOpen}
         onSettings={onSettings}
+        onFolderPage={onFolderPage}
         onBack={() => setTarget(null)}
       />
     );
@@ -387,6 +390,7 @@ function CollectionView({
   notice,
   onOpen,
   onSettings,
+  onFolderPage,
   onBack,
 }) {
   const [folderId, setFolderId] = useState(
@@ -522,7 +526,14 @@ function CollectionView({
         collection.folders.map((f) => (
           <section key={f.id} className="folder-section">
             <h2 dir="auto">
-              {f.emoji} {f.title}
+              <button
+                className="folder-section-link"
+                title="افتح صفحة المجلد"
+                onClick={() => onFolderPage?.(collection.id, f.id)}
+              >
+                {f.emoji} {f.title}
+                <Maximize2 size={16} />
+              </button>
             </h2>
             <FolderContent
               collection={collection}
@@ -538,6 +549,14 @@ function CollectionView({
       ) : (
         folder && (
           <>
+            {!editing && onFolderPage && (
+              <button
+                className="text-button folder-page-link"
+                onClick={() => onFolderPage(collection.id, folder.id)}
+              >
+                <Maximize2 size={15} /> افتح «{folder.title}» في صفحة مستقلة
+              </button>
+            )}
             {editing && (
               <FolderEditor
                 key={`editor-${folder.id}`}

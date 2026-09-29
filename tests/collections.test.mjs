@@ -462,6 +462,7 @@ test("collections and Nuvio actions are main-window only", () => {
     "collectionsEdit",
     "collectionCatalogs",
     "collectionFolder",
+    "collectionSource",
     "collectionsCopyNuvio",
     "collectionsSaveNuvio",
     "importNuvioCollections",

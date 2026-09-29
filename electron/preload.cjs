@@ -14,6 +14,7 @@ const allowed = new Set([
   "collectionsEdit",
   "collectionCatalogs",
   "collectionFolder",
+  "collectionSource",
   "collectionsCopyNuvio",
   "collectionsSaveNuvio",
   "importNuvioCollections",
