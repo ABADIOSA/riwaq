@@ -59,3 +59,27 @@ export const MINUTES = {
   many: "{n} دقيقة",
   other: "{n} دقيقة",
 };
+export const WORKS = {
+  zero: "لا أعمال",
+  one: "عمل واحد",
+  two: "عملان",
+  few: "{n} أعمال",
+  many: "{n} عملاً",
+  other: "{n} عمل",
+};
+export const ACTORS = {
+  zero: "لا ممثلين",
+  one: "ممثل واحد",
+  two: "ممثلان",
+  few: "{n} ممثلين",
+  many: "{n} ممثلاً",
+  other: "{n} ممثل",
+};
+export const AWARDS = {
+  zero: "لا جوائز",
+  one: "جائزة واحدة",
+  two: "جائزتان",
+  few: "{n} جوائز",
+  many: "{n} جائزة",
+  other: "{n} جائزة",
+};

@@ -13,6 +13,7 @@ import {
 } from "./protocol.mjs";
 import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
 import { DataHub } from "./data-hub.mjs";
+import { Credits } from "./credits.mjs";
 import { Integrations } from "./integrations.mjs";
 import { LiveHub } from "./live-hub.mjs";
 import { Profiles } from "./profiles.mjs";
@@ -125,6 +126,7 @@ export class Client {
     this.metas = new Map();
     this.cache = new Map();
     this.dataHub = new DataHub(this);
+    this.credits = new Credits(this);
     this.integrations = new Integrations(this);
     this.live = new LiveHub(this);
     this.profiles = new Profiles(this);
@@ -683,7 +685,22 @@ export class Client {
       failures: [...new Set(failures)],
     };
   }
-  async metadata({ type, id }) {
+  async metadata({ type, id, flexible = false }) {
+    try {
+      return await this.metadataOf(type, id);
+    } catch (error) {
+      // A title opened from credits carries a film/series kind read from
+      // Wikidata, which is sometimes wrong; try the other kind once.
+      if (
+        flexible !== true ||
+        !/^tt\d+$/.test(id) ||
+        !["movie", "series"].includes(type)
+      )
+        throw error;
+      return this.metadataOf(type === "movie" ? "series" : "movie", id);
+    }
+  }
+  async metadataOf(type, id) {
     for (const addon of this.enabled().filter((a) =>
       accepts(a.manifest, "meta", type, id),
     )) {

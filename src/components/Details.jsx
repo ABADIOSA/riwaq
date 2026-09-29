@@ -28,6 +28,12 @@ import {
   isCompleted,
 } from "../../core/library.mjs";
 import { arabicCount, EPISODES } from "../../core/arabic.mjs";
+import {
+  CastRail,
+  CreditsFacts,
+  ExploreModal,
+  useCredits,
+} from "./Credits.jsx";
 export default function Details({
   selection,
   state,
@@ -37,6 +43,7 @@ export default function Details({
   act,
   notice,
   onPlayer,
+  onOpenTitle,
 }) {
   const [meta, setMeta] = useState(selection.meta),
     [loading, setLoading] = useState(true),
@@ -51,10 +58,17 @@ export default function Details({
     [playing, setPlaying] = useState(""),
     [subs, setSubs] = useState([]),
     [subLoading, setSubLoading] = useState(false),
-    [request, setRequest] = useState(0);
+    [request, setRequest] = useState(0),
+    [explore, setExplore] = useState(null);
+  // Credits wait for the addon's metadata so its IMDb ID is settled.
+  const { credits, error: creditsError } = useCredits(meta, !loading);
   useEffect(() => {
     let current = true;
-    call("metadata", { type: selection.meta.type, id: selection.meta.id })
+    call("metadata", {
+      type: selection.meta.type,
+      id: selection.meta.id,
+      flexible: selection.meta.guessed === true,
+    })
       .then((data) => {
         if (!current) return;
         setMeta(data);
@@ -212,7 +226,7 @@ export default function Details({
         <p className="synopsis" dir="auto">
           {meta.description}
         </p>
-        {meta.cast?.length > 0 && (
+        {meta.cast?.length > 0 && !credits?.cast?.length && (
           <p className="cast" dir="auto">
             {meta.cast.slice(0, 5).join(" · ")}
           </p>
@@ -253,6 +267,7 @@ export default function Details({
             : "أضف إلى الطابور"}
         </button>
         {error && <p className="inline-warning">{error}</p>}
+        <CastRail credits={credits} onExplore={setExplore} />
         {loading ? (
           <Busy text="جاري تحميل التفاصيل…" />
         ) : (
@@ -523,7 +538,22 @@ export default function Details({
             )}
           </section>
         )}
+        <CreditsFacts
+          credits={credits}
+          error={creditsError}
+          onExplore={setExplore}
+        />
       </div>
+      {explore && (
+        <ExploreModal
+          start={explore}
+          onClose={() => setExplore(null)}
+          onOpenTitle={(title) => {
+            setExplore(null);
+            onOpenTitle?.(title);
+          }}
+        />
+      )}
     </Modal>
   );
 }
