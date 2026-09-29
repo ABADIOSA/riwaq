@@ -124,6 +124,11 @@ export function tmdbItems(body, source) {
           : null,
       votes: Number(r?.vote_count) || 0,
       popularity: Number(r?.popularity) || 0,
+      poster:
+        typeof r?.poster_path === "string" &&
+        /^\/[\w.-]{1,120}$/.test(r.poster_path)
+          ? r.poster_path
+          : "",
     });
   }
   const by = {

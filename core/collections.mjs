@@ -251,6 +251,16 @@ function cleanFolder(folder) {
   }
   const tmdb = collect(folder.tmdb, cleanTmdb, tmdbKey);
   const trakt = collect(folder.trakt, cleanTrakt, traktKey);
+  // Sources Riwaq cannot read yet, kept by name so the folder can say so.
+  const unsupported = (
+    Array.isArray(folder.unsupported) ? folder.unsupported : []
+  )
+    .map((u) => ({
+      provider: line(u?.provider, 30),
+      title: line(u?.title, 80),
+    }))
+    .filter((u) => u.provider)
+    .slice(0, LIMITS.catalogs);
   const titles = [];
   for (const meta of Array.isArray(folder.titles) ? folder.titles : []) {
     try {
@@ -271,6 +281,7 @@ function cleanFolder(folder) {
     catalogs,
     tmdb,
     trakt,
+    ...(unsupported.length ? { unsupported } : {}),
     titles,
   };
 }
@@ -554,6 +565,14 @@ export function fromNuvio(input) {
       const catalogs = [];
       const tmdb = [];
       const trakt = [];
+      const unsupported = [];
+      const skip = (s) => {
+        skipped++;
+        unsupported.push({
+          provider: String(s?.provider || "addon").toLowerCase(),
+          title: s?.title || s?.catalogId || "",
+        });
+      };
       for (const s of sources) {
         const provider = String(s?.provider || "addon").toLowerCase();
         const media = /^(tv|series)$/i.test(String(s?.mediaType || ""))
@@ -569,7 +588,7 @@ export function fromNuvio(input) {
             filters: s?.filters,
           });
           if (t) tmdb.push(t);
-          else skipped++;
+          else skip(s);
         } else if (provider === "trakt") {
           const t = cleanTrakt({
             list: s?.traktListId,
@@ -579,7 +598,7 @@ export function fromNuvio(input) {
             title: s?.title,
           });
           if (t) trakt.push(t);
-          else skipped++;
+          else skip(s);
         } else if (s?.addonId && s?.catalogId)
           catalogs.push({
             addon: s.addonId,
@@ -587,7 +606,7 @@ export function fromNuvio(input) {
             catalog: s.catalogId,
             genre: s.genre && s.genre !== "none" ? s.genre : "",
           });
-        else skipped++;
+        else skip(s);
       }
       return {
         id: typeof f?.id === "string" ? `nuvio-${f.id}` : undefined,
@@ -601,6 +620,7 @@ export function fromNuvio(input) {
         catalogs,
         tmdb,
         trakt,
+        unsupported,
       };
     }),
   }));

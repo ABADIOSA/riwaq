@@ -314,3 +314,181 @@ test("a folder reads TMDB with the key and matches IMDb IDs, or says what it nee
     1,
   );
 });
+
+const manifest = (id, extra = {}) => ({
+  id,
+  name: id,
+  version: "1.0.0",
+  resources: ["catalog", "meta"],
+  types: ["movie", "series"],
+  catalogs: [],
+  ...extra,
+});
+
+test("every source answers with a row, and an empty one says why", async () => {
+  let failCatalog = true;
+  const client = new Client({
+    load: () => ({
+      addons: [
+        {
+          transportUrl: "https://cinemeta.example/manifest.json",
+          manifest: manifest("com.linvo.cinemeta", {
+            catalogs: [
+              { type: "movie", id: "top", name: "Popular" },
+              { type: "movie", id: "empty", name: "Empty" },
+              { type: "movie", id: "broken", name: "Broken" },
+              {
+                type: "movie",
+                id: "needs",
+                name: "Needs",
+                extra: [{ name: "search", isRequired: true }],
+              },
+            ],
+          }),
+        },
+      ],
+    }),
+    save: () => {},
+    request: async (url) => {
+      if (url.includes("/catalog/movie/top.json"))
+        return { metas: [{ id: "tt1", name: "One" }] };
+      if (url.includes("/catalog/movie/empty.json")) return { metas: [] };
+      if (url.includes("/catalog/movie/broken.json") && failCatalog)
+        throw new Error("HTTP 500");
+      throw new Error("HTTP 404");
+    },
+  });
+  client.state.collections = editCollections([], {
+    action: "create",
+    title: "A",
+    folders: [
+      {
+        title: "f",
+        catalogs: [
+          { addon: "com.linvo.cinemeta", type: "movie", catalog: "top" },
+          { addon: "com.linvo.cinemeta", type: "movie", catalog: "empty" },
+          { addon: "com.linvo.cinemeta", type: "movie", catalog: "broken" },
+          { addon: "com.linvo.cinemeta", type: "movie", catalog: "needs" },
+          { addon: "org.gone", type: "movie", catalog: "gone" },
+        ],
+        tmdb: [{ kind: "company", id: 420 }],
+        trakt: [{ list: 7 }],
+        unsupported: [{ provider: "mdblist", title: "My list" }],
+      },
+    ],
+  });
+  const c = client.state.collections[0];
+  const folder = await client.collectionFolder({
+    collectionId: c.id,
+    folderId: c.folders[0].id,
+  });
+  assert.deepEqual(
+    folder.rows.map((r) => [r.name, r.metas.length, r.note || ""]),
+    [
+      ["Popular", 1, ""],
+      ["Empty", 0, "empty"],
+      ["Broken", 0, "failed"],
+      ["Needs", 0, "input"],
+      ["gone", 0, "missing"],
+      ["استوديو", 0, "needs-tmdb"],
+      ["قائمة Trakt 7", 0, "needs-trakt"],
+      ["My list", 0, "unsupported"],
+    ],
+  );
+  assert.deepEqual(folder.needs.sort(), ["tmdb", "trakt"]);
+});
+
+test("TMDB titles without IMDb show through an addon that opens TMDB IDs", async () => {
+  const load = (addons) => () => ({
+    addons,
+    providers: { tmdb: { key: "b".repeat(32) } },
+  });
+  const request = async (url) => {
+    if (url.includes("discover/movie"))
+      return {
+        results: [
+          { id: 1, title: "Matched", poster_path: "/one.jpg" },
+          { id: 2, title: "Only TMDB", poster_path: "/two.jpg" },
+        ],
+      };
+    if (url.includes("movie/1/external_ids")) return { imdb_id: "tt0000001" };
+    if (url.includes("movie/2/external_ids")) return { imdb_id: null };
+    throw new Error("HTTP 404");
+  };
+  const source = {
+    kind: "company",
+    id: 420,
+    media: "movie",
+    sort: "popularity.desc",
+  };
+  const plain = new Client({ load: load([]), save: () => {}, request });
+  const row = await plain.tmdbRow(source);
+  assert.deepEqual(
+    row.metas.map((m) => m.id),
+    ["tt0000001"],
+  );
+  assert.equal(row.hidden, 1, "the hidden title is counted, not silently lost");
+  assert.equal(row.metas[0].poster, "https://image.tmdb.org/t/p/w342/one.jpg");
+  const withTmdbAddon = new Client({
+    load: load([
+      {
+        transportUrl: "https://tmdb-addon.example/manifest.json",
+        manifest: manifest("org.tmdb", { idPrefixes: ["tmdb:"] }),
+      },
+    ]),
+    save: () => {},
+    request,
+  });
+  const both = await withTmdbAddon.tmdbRow(source, withTmdbAddon.enabled());
+  assert.deepEqual(
+    both.metas.map((m) => m.id),
+    ["tt0000001", "tmdb:2"],
+  );
+  assert.equal(both.hidden, undefined);
+});
+
+test("TMDB calls queue four at a time and retry once", async () => {
+  let running = 0;
+  let peak = 0;
+  let calls = 0;
+  const client = new Client({
+    load: () => ({ providers: { tmdb: { key: "c".repeat(32) } } }),
+    save: () => {},
+    request: async (url) => {
+      calls++;
+      running++;
+      peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+      if (url.includes("flaky") && calls === 1) throw new Error("HTTP 429");
+      return { ok: true };
+    },
+  });
+  client.tmdbRetryMs = 1;
+  assert.deepEqual(await client.tmdbCall("flaky"), { ok: true }, "one retry");
+  await Promise.all(
+    Array.from({ length: 12 }, (_, i) => client.tmdbCall(`movie/${i}`)),
+  );
+  assert.ok(peak <= 4, `at most four at once (saw ${peak})`);
+});
+
+test("an unknown Nuvio source is kept by name, not dropped silently", async () => {
+  const { fromNuvio } = await import("../core/collections.mjs");
+  const { collections, skipped } = fromNuvio([
+    {
+      id: "c",
+      title: "C",
+      folders: [
+        {
+          id: "f",
+          title: "F",
+          sources: [{ provider: "mdblist", title: "Top 250" }],
+        },
+      ],
+    },
+  ]);
+  assert.equal(skipped, 1);
+  assert.deepEqual(collections[0].folders[0].unsupported, [
+    { provider: "mdblist", title: "Top 250" },
+  ]);
+});

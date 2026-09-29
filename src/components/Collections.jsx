@@ -80,6 +80,29 @@ const TMDB_KIND_LABELS = {
   person: "ممثل",
   director: "مخرج",
 };
+/** Why a source shows nothing, in words the viewer can act on. */
+function noteText(row) {
+  switch (row.note) {
+    case "missing":
+      return `إضافة «${row.provider}» غير مثبتة أو معطّلة في رِواق. ثبّتها، أو انقل إضافاتك من نوفيو.`;
+    case "input":
+      return "هذا الكتالوج يحتاج بحثاً أو تصنيفاً لا يحدده المجلد.";
+    case "failed":
+      return "لم يستجب المصدر الآن.";
+    case "empty":
+      return "المصدر لم يرجع أي عنوان.";
+    case "unmatched":
+      return "وجد TMDB عناوين ليس لها معرّف IMDb تفتحه إضافاتك. إضافة تفتح معرّفات TMDB (مثل TMDB Addon أو AIOMetadata) تُظهرها.";
+    case "needs-tmdb":
+      return "يحتاج مفتاح TMDB.";
+    case "needs-trakt":
+      return "يحتاج Client ID لـ Trakt.";
+    case "unsupported":
+      return `مصدر من نوع «${row.provider}» في نوفيو لا يقرؤه رِواق بعد.`;
+    default:
+      return "لا عناوين الآن.";
+  }
+}
 const SHAPE_LABELS = { poster: "ملصق", landscape: "عريض", square: "مربّع" };
 const TEMPLATES = [
   { emoji: "🍿", title: "سهرة الويكند", folders: ["أفلام", "مسلسلات"] },
@@ -891,11 +914,22 @@ function FolderContent({
   compact = false,
 }) {
   const [data, setData] = useState(null);
+  const [reload, setReload] = useState(0);
   const tmdb = folder.tmdb || [];
   const trakt = folder.trakt || [];
-  const signature = JSON.stringify([folder.catalogs, tmdb, trakt]);
+  const signature = JSON.stringify([
+    folder.catalogs,
+    tmdb,
+    trakt,
+    folder.unsupported || [],
+  ]);
   useEffect(() => {
-    if (!folder.catalogs.length && !tmdb.length && !trakt.length) {
+    if (
+      !folder.catalogs.length &&
+      !tmdb.length &&
+      !trakt.length &&
+      !folder.unsupported?.length
+    ) {
       setData({ rows: [], missing: [], failures: [] });
       return;
     }
@@ -914,7 +948,7 @@ function FolderContent({
     return () => {
       live = false;
     };
-  }, [folder.id, signature]);
+  }, [folder.id, signature, reload]);
   const titleEdit = (action, meta, extra = {}) =>
     update("collectionsEdit", {
       action,
@@ -981,15 +1015,43 @@ function FolderContent({
         <Busy text="نحمّل كتالوجات المجلد…" />
       ) : (
         <>
-          {data.rows.map((row) => (
-            <Rail
-              key={row.index}
-              title={row.name}
-              subtitle={`${typeName(row.type)} · ${row.provider}`}
-              metas={row.metas}
-              onOpen={onOpen}
-            />
-          ))}
+          {data.rows
+            .filter((row) => row.metas.length)
+            .map((row) => (
+              <Rail
+                key={row.index}
+                title={row.name}
+                subtitle={`${typeName(row.type)} · ${row.provider}${
+                  row.hidden
+                    ? ` · ${n(row.hidden, TITLES)} بلا معرّف يفتحه رِواق`
+                    : ""
+                }`}
+                metas={row.metas}
+                onOpen={onOpen}
+              />
+            ))}
+          {data.rows.some((row) => !row.metas.length) && (
+            <ul className="source-notes">
+              {data.rows
+                .filter((row) => !row.metas.length)
+                .map((row) => (
+                  <li key={row.index} className={`note-${row.note}`}>
+                    <b dir="auto">{row.name || row.provider}</b>
+                    <span>{noteText(row)}</span>
+                  </li>
+                ))}
+              {data.rows.some((row) => row.note === "failed") && (
+                <li className="source-retry">
+                  <button
+                    className="secondary small"
+                    onClick={() => setReload((x) => x + 1)}
+                  >
+                    أعد المحاولة
+                  </button>
+                </li>
+              )}
+            </ul>
+          )}
           {data.needs?.includes("tmdb") && (
             <div className="folder-needs">
               <p>
@@ -1019,26 +1081,12 @@ function FolderContent({
               </button>
             </div>
           )}
-          {!titles.length &&
-            !data.rows.length &&
-            !data.error &&
-            !data.needs?.length && (
-              <Empty icon={Folders} title="المجلد فارغ">
-                {editing
-                  ? "اختر كتالوجاً من الأعلى، أو افتح أي عمل واضغط «أضف لمجموعة»."
-                  : "اضغط «تعديل» لتضيف كتالوجات، أو افتح أي عمل واضغط «أضف لمجموعة»."}
-              </Empty>
-            )}
-          {data.missing?.length > 0 && (
-            <p className="inline-warning">
-              كتالوجات لم نجد إضافتها: {data.missing.join("، ")}. ثبّت الإضافة
-              أو أزل الكتالوج من المجلد.
-            </p>
-          )}
-          {data.failures?.length > 0 && (
-            <p className="inline-warning">
-              لم تستجب: {data.failures.join("، ")}
-            </p>
+          {!titles.length && !data.rows.length && !data.error && (
+            <Empty icon={Folders} title="المجلد فارغ">
+              {editing
+                ? "اختر كتالوجاً من الأعلى، أو افتح أي عمل واضغط «أضف لمجموعة»."
+                : "اضغط «تعديل» لتضيف كتالوجات، أو افتح أي عمل واضغط «أضف لمجموعة»."}
+            </Empty>
           )}
           {data.error && <p className="inline-warning">{data.error}</p>}
         </>
