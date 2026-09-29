@@ -675,3 +675,41 @@ button.danger,
 .folder-sources .catalog-picker + .catalog-picker {
   margin-top: 10px;
 }
+.source-notes {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 20px;
+  display: grid;
+  gap: 8px;
+}
+.source-notes li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--line, #ffffff14);
+  border-inline-start: 3px solid var(--muted, #8a9099);
+  border-radius: 10px;
+  background: var(--panel, #ffffff05);
+  font-size: 12.5px;
+}
+.source-notes li span {
+  color: var(--muted, #aab0b8);
+  line-height: 1.7;
+}
+.source-notes li.note-missing,
+.source-notes li.note-failed,
+.source-notes li.note-unsupported {
+  border-inline-start-color: #ff8a8a;
+}
+.source-notes li.note-needs-tmdb,
+.source-notes li.note-needs-trakt,
+.source-notes li.note-unmatched {
+  border-inline-start-color: var(--accent);
+}
+.source-notes li.source-retry {
+  border: 0;
+  background: none;
+  padding: 0;
+}

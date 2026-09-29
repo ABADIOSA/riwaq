@@ -1,4 +1,25 @@
-# Verification — Riwaq 0.12.1
+# Verification — Riwaq 0.12.2
+
+## 0.12.2 — some folders were still empty
+
+The owner reported that some Nuvio folders were still empty after 0.12.1. No screenshot was available, so every silent path to an empty folder was closed and made to explain itself:
+
+- Rows with no titles rendered as nothing.
+- Unknown Nuvio source providers were dropped.
+- TMDB titles without an IMDb ID vanished.
+- A folder with many TMDB sources could exceed TMDB's rate limit, since every external-ID lookup ran unthrottled, which lost titles quietly.
+
+Executed:
+
+- `npm test`: **275 passing, 0 failing** (271 + 4 new):
+  - one row per source with its note: working, empty, failed, needs a search, addon missing, needs a TMDB key, needs a Trakt client ID, unsupported Nuvio source;
+  - TMDB titles without IMDb hidden and counted, or shown as `tmdb:ID` through an addon that accepts that prefix, with TMDB posters;
+  - TMDB calls never more than four in flight, with one retry;
+  - an unknown Nuvio provider kept by name.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium at 980×680 and 1440×960: a folder with a working row, a TMDB source needing a key, an unsupported Nuvio source and a failed source shows each reason and a retry button. Every earlier scenario still passes. Zero page errors, zero overflow.
+
+Not executed: live TMDB, Trakt or addon requests; the owner's actual Nuvio data; Windows.
 
 ## 0.12.1 — Nuvio folders were empty
 
