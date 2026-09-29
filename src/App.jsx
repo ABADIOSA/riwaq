@@ -34,6 +34,7 @@ import { api, call } from "./lib/api.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
 import { IconButton, Busy, Empty, Poster, Rail } from "./components/UI.jsx";
 import Details from "./components/Details.jsx";
+import { ExploreModal, PeopleRow } from "./components/Credits.jsx";
 import Account from "./components/Account.jsx";
 import Addons from "./components/Addons.jsx";
 import Preferences from "./components/SettingsStudio.jsx";
@@ -83,6 +84,7 @@ export default function App() {
     [dockRequest, setDockRequest] = useState(0),
     [loadError, setLoadError] = useState(""),
     [selected, setSelected] = useState(null),
+    [explore, setExplore] = useState(null),
     [account, setAccount] = useState(false),
     [toast, setToast] = useState(""),
     [player, setPlayer] = useState({ active: false }),
@@ -744,6 +746,9 @@ export default function App() {
                   ))}
                 </div>
               )}
+              {view === "search" && query && !catalog && (
+                <PeopleRow query={query} onExplore={setExplore} />
+              )}
               {loading && rows.length === 0 ? (
                 <div className="skeleton-wrap">
                   <div className="skeleton-title" />
@@ -958,6 +963,17 @@ export default function App() {
           notice={notice}
           onPlayer={() => setPlayerOpen(true)}
           onOpenTitle={(meta) => setSelected({ meta })}
+        />
+      )}
+      {explore && (
+        <ExploreModal
+          key={explore.qid || explore.tmdb}
+          start={explore}
+          onClose={() => setExplore(null)}
+          onOpenTitle={(meta) => {
+            setExplore(null);
+            setSelected({ meta });
+          }}
         />
       )}
       {player.active && (

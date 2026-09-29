@@ -218,6 +218,83 @@ export function CreditsFacts({ credits, error, onExplore }) {
   );
 }
 
+/** Every film of a trilogy or franchise, in order, from Wikidata's P179. */
+export function CollectionRails({ credits, onOpenTitle }) {
+  const collections = credits?.collections || [];
+  if (!collections.length) return null;
+  return collections.map((c) => (
+    <section key={c.qid} className="credits-collection">
+      <div className="section-heading">
+        <h2>
+          من نفس السلسلة · <span dir="auto">{c.name}</span>
+        </h2>
+        <span>{arabicCount(c.works.length, WORKS)}</span>
+      </div>
+      <div className="poster-row">
+        {c.works.map((work, i) => (
+          <div
+            key={work.id}
+            className={`collection-work ${work.current ? "collection-current" : ""}`}
+          >
+            <span className="collection-index">{work.ordinal ?? i + 1}</span>
+            <Poster
+              meta={{
+                id: work.id,
+                type: work.type,
+                name: work.name,
+                poster: work.poster,
+                releaseInfo: work.year ? String(work.year) : "",
+                guessed: true,
+              }}
+              onOpen={(meta) => !work.current && onOpenTitle(meta)}
+            />
+            {work.current && <small>تتصفحه الآن</small>}
+          </div>
+        ))}
+      </div>
+    </section>
+  ));
+}
+
+/** People found by name in the search page; each opens the explore dialog. */
+export function PeopleRow({ query, onExplore }) {
+  const [people, setPeople] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setPeople(null);
+    call("searchPeople", { query })
+      .then((list) => live && setPeople(list))
+      .catch(() => live && setPeople([]));
+    return () => {
+      live = false;
+    };
+  }, [query]);
+  if (!people?.length) return null;
+  return (
+    <section className="credits-cast people-row" aria-label="أشخاص">
+      <div className="section-heading">
+        <h2>أشخاص</h2>
+        <span>من Wikidata</span>
+      </div>
+      <div className="credits-cast-row">
+        {people.map((person) => (
+          <button
+            key={person.qid}
+            className="credit-person"
+            onClick={() => onExplore({ ...person, kind: "person" })}
+          >
+            <Face image={person.image} name={person.name} />
+            <b dir="auto">{person.name}</b>
+            {person.description && (
+              <small dir="auto">{person.description}</small>
+            )}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function PlaceMap({ coord }) {
   const map = mapTiles(coord);
   if (!map) return null;

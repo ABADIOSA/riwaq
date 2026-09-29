@@ -18,7 +18,9 @@ import {
   ListPlus,
   CheckCheck,
   Undo2,
+  Clapperboard,
 } from "lucide-react";
+import { trailerOf } from "../../core/credits.mjs";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
@@ -30,6 +32,7 @@ import {
 import { arabicCount, EPISODES } from "../../core/arabic.mjs";
 import {
   CastRail,
+  CollectionRails,
   CreditsFacts,
   ExploreModal,
   useCredits,
@@ -235,6 +238,14 @@ export default function Details({
           {isFavorite ? <Check size={18} /> : <Plus size={18} />}{" "}
           {isFavorite ? "في مكتبتي" : "أضف إلى مكتبتي"}
         </button>
+        {trailerOf(meta) && (
+          <button
+            className="secondary"
+            onClick={() => act("openTrailer", { type: meta.type, id: meta.id })}
+          >
+            <Clapperboard size={18} /> الإعلان
+          </button>
+        )}
         <button
           className="secondary queue-add"
           disabled={
@@ -268,6 +279,16 @@ export default function Details({
         </button>
         {error && <p className="inline-warning">{error}</p>}
         <CastRail credits={credits} onExplore={setExplore} />
+        {/* The makers sit above the sources, as the owner asked. */}
+        <CreditsFacts
+          credits={credits}
+          error={creditsError}
+          onExplore={setExplore}
+        />
+        <CollectionRails
+          credits={credits}
+          onOpenTitle={(title) => onOpenTitle?.(title)}
+        />
         {loading ? (
           <Busy text="جاري تحميل التفاصيل…" />
         ) : (
@@ -538,11 +559,6 @@ export default function Details({
             )}
           </section>
         )}
-        <CreditsFacts
-          credits={credits}
-          error={creditsError}
-          onExplore={setExplore}
-        />
       </div>
       {explore && (
         <ExploreModal
