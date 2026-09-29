@@ -7,6 +7,7 @@ React (sandboxed, RTL)
        -> Client / addon HTTP protocol
        -> StreamEngine / parse, trust, score, rank
        -> DataHub / TMDB, OMDb, MDBList, Fanart
+       -> Credits / Wikidata cast, crew, companies, filming locations, other works (+ TMDB)
        -> Integrations / Trakt history queue and scrobbling, Simkl, Letterboxd bridge + CSV
        -> LiveHub / M3U, Xtream, XMLTV, catchup
        -> Profiles / per-viewer data and the parental PIN
@@ -26,6 +27,8 @@ React (sandboxed, RTL)
 - `core/stream-engine.mjs`: the four-stage source pipeline. `parseStream` reads the free text an addon supplies; `trustStream` rejects what cannot be the requested title; `scoreStream` returns points with a named reason for each; `analyzeStreams` ranks and groups into tiers. Arabic subtitle and Arabic dub are separate parsed fields, not one keyword bonus.
 - `core/client.mjs`: addon requests and cache, Stremio import, favorites/progress, opaque stream/subtitle identifiers, hotkey storage.
 - `core/data-hub.mjs`: private API keys; optional detail enrichment; exact title/year matching for CSV.
+- `core/credits.mjs` (0.10): Wikidata SPARQL queries and parsers for a title's cast, crew, companies, filming locations, settings, countries and awards, and for one person, company or place with its other works; TMDB merging and fallback; OpenStreetMap tile maths for a location map. `src/components/Credits.jsx` draws the cast rail, the makers section and the explore dialog.
+- `core/cursor.mjs` (0.10): when the pointer over the picture should hide, and a balanced gate over Win32 `ShowCursor`.
 - `core/integrations.mjs`: device authorization, single-flight token refresh, watchlist import, account-scoped opt-in history queue, Letterboxd bridge and CSV parsing. `observePlayback()` turns player transitions into scrobble start/pause/stop; a stop that should record a play is written ahead to the history queue and held while in flight, and replies are bound to the account that sent them.
 - `core/arabic.mjs`: the one Arabic search folding used by library and Live TV search, and `arabicCount()` for number agreement. Browser-safe.
 - `core/backup.mjs`: collects, seals (scrypt then AES-256-GCM, header as authenticated data), opens and validates backups. Secrets are excluded unless requested; restore keeps secrets the backup does not carry and machine paths from the current installation. Main-only (node:crypto, node:zlib).

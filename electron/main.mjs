@@ -44,7 +44,8 @@ import {
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
-import { VideoHost } from "./video-host.mjs";
+import { VideoHost, showSystemCursor } from "./video-host.mjs";
+import { CursorGate, cursorHidden } from "../core/cursor.mjs";
 import { DesktopUpdates } from "./updater.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -122,6 +123,12 @@ const cueCache = new Map();
 let hud = null;
 let hudReady = false;
 let surfaceShown = false;
+// Whether the HUD's controls are asleep, reported by the HUD page.
+let hudIdle = false;
+let cursorCheck = () => {};
+const cursorGate = new CursorGate((visible) => {
+  if (process.platform === "win32") showSystemCursor(visible);
+});
 const HUD_EVENTS = new Set(["player", "state", "notice", "hudCommand"]);
 const emit = (name, data) => {
   if (window && !window.isDestroyed() && name !== "hudCommand")
@@ -177,6 +184,8 @@ function ensureHud() {
   hud.on("closed", () => {
     hud = null;
     hudReady = false;
+    hudIdle = false;
+    cursorGate.release();
     player?.setOverlay(false);
   });
   hud
@@ -187,6 +196,8 @@ function ensureHud() {
   return hud;
 }
 function closeHud() {
+  hudIdle = false;
+  cursorGate.release();
   if (hud && !hud.isDestroyed()) hud.destroy();
   hud = null;
   hudReady = false;
@@ -211,6 +222,8 @@ function placeHud() {
     });
   if (!show) {
     if (hud.isVisible()) hud.hide();
+    hudIdle = false;
+    cursorGate.release();
     return;
   }
   hud.setBounds(rect);
@@ -528,6 +541,17 @@ const methods = {
     return true;
   },
   metadata: (a) => client.metadata(a),
+  // Credits and the people, companies and places behind a title.
+  titleCredits: (a) =>
+    client.credits.title({
+      type: a?.type === "series" ? "series" : "movie",
+      id: typeof a?.id === "string" ? a.id : "",
+    }),
+  creditsEntity: (a) =>
+    client.credits.entity({
+      qid: typeof a?.qid === "string" ? a.qid : "",
+      tmdb: typeof a?.tmdb === "string" ? a.tmdb : "",
+    }),
   streams: async (a) => {
     const result = await client.getStreams(a);
     remember(a, result);
@@ -747,6 +771,12 @@ const methods = {
   // The main window asks the HUD to open or close its panel (C key).
   hudPanel: () => {
     emit("hudCommand", { type: "panel" });
+    return true;
+  },
+  // The HUD reports when its controls fall asleep or wake.
+  hudIdle: (a) => {
+    hudIdle = a?.idle === true;
+    cursorCheck();
     return true;
   },
   // The HUD forwards a request the main interface owns.
@@ -1102,21 +1132,47 @@ app
             ? emit("hudCommand", event)
             : emit("playerRequest", event),
       });
-      // MPV's own cursor autohide does not fire reliably inside the embedded
-      // surface, so main watches the pointer and tells MPV when to hide it.
+      // The pointer hides over a still picture; see core/cursor.mjs.
       let lastPoint = null;
       let stillSince = Date.now();
-      setInterval(() => {
-        if (!player.state.active || window.isDestroyed()) return;
+      const checkCursor = () => {
+        if (window.isDestroyed()) return cursorGate.release();
+        const state = player.state;
+        if (!state.active) {
+          lastPoint = null;
+          return cursorGate.release();
+        }
         const point = screen.getCursorScreenPoint();
-        const moved =
-          !lastPoint || point.x !== lastPoint.x || point.y !== lastPoint.y;
+        if (!lastPoint || point.x !== lastPoint.x || point.y !== lastPoint.y)
+          stillSince = Date.now();
         lastPoint = point;
-        if (moved) stillSince = Date.now();
-        player.setCursorHidden(
-          !moved && window.isFocused() && Date.now() - stillSince > 2000,
-        );
-      }, 250);
+        const onHud = !!(hud && !hud.isDestroyed() && hud.isVisible());
+        const region = onHud
+          ? hud.getBounds()
+          : surfaceShown &&
+            hudRect({
+              content: window.getContentBounds(),
+              surface: videoHost?.last,
+              zoom: appliedZoom || 1,
+            });
+        const hidden = cursorHidden({
+          active: state.active,
+          pip: state.pip,
+          minimized: window.isMinimized(),
+          region,
+          point,
+          stillFor: Date.now() - stillSince,
+          hud: onHud,
+          hudIdle,
+          focused: window.isFocused(),
+          paused: state.pause,
+        });
+        cursorGate.set(hidden);
+        // MPV's own property as well, for the surface without the HUD.
+        player.setCursorHidden(hidden && !onHud);
+      };
+      cursorCheck = checkCursor;
+      setInterval(checkCursor, 150);
       player.onLoaded = ({ meta, videoId }) => {
         autoSubtitle(videoId);
         const key = JSON.stringify([meta.type, videoId]);
@@ -1193,7 +1249,10 @@ function cleanError(error) {
 }
 app.on("window-all-closed", () => app.quit());
 let closing = false;
-app.on("will-quit", () => globalShortcut.unregisterAll());
+app.on("will-quit", () => {
+  cursorGate.release();
+  globalShortcut.unregisterAll();
+});
 app.on("before-quit", (event) => {
   if (closing) return;
   event.preventDefault();

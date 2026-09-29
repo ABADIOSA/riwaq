@@ -33,6 +33,10 @@ const setStyle = user32.func(
 const getWindow = user32.func(
   "void * __stdcall GetWindow(void *h, uint32 command)",
 );
+// Win32 BOOL is an int. Called on the Electron UI thread, which owns the main
+// window and the HUD, so the counter applies over the picture; see core/cursor.mjs.
+const showCursorApi = user32.func("int __stdcall ShowCursor(int show)");
+export const showSystemCursor = (visible) => showCursorApi(visible ? 1 : 0);
 const rect = koffi.struct("RiwaqRect", {
   left: "long",
   top: "long",

@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.9.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.10.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -38,6 +38,8 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Subtitles and audio live in a side panel beside the picture (`PlayerDock.jsx`); the surface shrinks for it and is never hidden. Addon subtitle URLs stay in main: the interface sees opaque keys, and MPV tracks report an addon subtitle by that key. `core/subtitles.mjs` owns language names, ranking (language first, kind as tiebreaker), cue parsing, quick sync and style validation.
 - Appearance lives in `core/appearance.mjs`: validated palettes, type, scale, cards and pages become CSS variables and classes on the app root. Root classes must never reuse an element class (a test checks). The interface scale is applied by main and never shrinks the CSS viewport below 980×680. Shared design codes carry appearance only.
 - HTML cannot paint over the native video surface inside the main window. The player HUD (`core/hud.mjs`, `Hud.jsx`) is therefore a transparent, non-focusable BrowserWindow owned by the main window and laid exactly over the surface; it draws the controls and owns the pointer, which is why the pointer can hide. The HUD page gets a narrower bridge (`HUD_METHODS`) than the main window, and may only forward `HUD_REQUESTS` to it. With the HUD off (a setting), the theater layout and MPV's OSC in full screen are the fallback. Escape leaves full screen before it closes the player.
+- The pointer over the picture is hidden by main with Win32 `ShowCursor` (`core/cursor.mjs`, `showSystemCursor` in `video-host.mjs`), on the UI thread that owns the main window and the HUD. CSS `cursor: none` in the non-focusable HUD and MPV's `cursor-autohide` in the embedded surface both failed on real Windows. `CursorGate` keeps the counter balanced; the pointer is given back when the HUD hides or closes, the viewing stops, the pointer leaves the picture, or the app quits. The HUD reports only whether its controls are asleep (`hudIdle`).
+- Credits (`core/credits.mjs`) come from keyless Wikidata SPARQL (IMDb IDs, filming locations) with the viewer's optional TMDB key for portraits, biographies and an outage fallback. Queries embed only IDs that passed `IMDB`, `QID` or a numeric TMDB check; SPARQL requests carry an identifying User-Agent and refuse redirects. Images come only from Wikimedia Commons, image.tmdb.org, metahub and OpenStreetMap tiles. `titleCredits` and `creditsEntity` are main-window actions, never HUD ones. A work opened from credits carries `guessed`, so `metadata` may try the other film/series kind once.
 - Source failover (`core/failover.mjs`) replays the next ranked playable source from the same position, at most three times per title.
 - No user account was authenticated in provider tests. Distinguish mocked tests, live catalog tests and actual native playback in reports.
 

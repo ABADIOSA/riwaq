@@ -62,6 +62,7 @@ export const HUD_METHODS = new Set([
   "localSubtitle",
   "settings",
   "hudRequest",
+  "hudIdle",
   "metadata",
   "playerSources",
   "switchSource",

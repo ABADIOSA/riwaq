@@ -43,6 +43,8 @@ export function Modal({ children, onClose, className = "" }) {
       className={`modal ${className}`}
       onCancel={(e) => {
         e.preventDefault();
+        // A dialog opened from another closes alone.
+        e.stopPropagation();
         onClose();
       }}
       onClick={(e) => {

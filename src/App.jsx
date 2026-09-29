@@ -957,6 +957,7 @@ export default function App() {
           act={act}
           notice={notice}
           onPlayer={() => setPlayerOpen(true)}
+          onOpenTitle={(meta) => setSelected({ meta })}
         />
       )}
       {player.active && (

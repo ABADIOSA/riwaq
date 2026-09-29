@@ -1,4 +1,23 @@
-# Verification — Riwaq 0.9.0
+# Verification — Riwaq 0.10.0
+
+## 0.10.0 — credits and the pointer, again
+
+The owner reported that the pointer still did not hide in 0.9 (HUD clicks worked, so the HUD was on screen), and asked for a title page with cast, directors, production companies and filming locations that open to each one's details and other works.
+
+The pointer: CSS `cursor: none` in the HUD did not hide it on Windows. The HUD window is non-focusable, and Windows applies a new cursor on the next mouse message, which is the very movement that should wake the controls. 0.10 hides it from main with Win32 `ShowCursor` on the Electron UI thread that owns the main window and the HUD (`core/cursor.mjs`).
+
+Executed:
+
+- `npm test`: **244 passing, 0 failing** (228 + 16 new).
+  - Pointer: hides only when still for 2.5 s over the picture; the HUD's asleep state decides with the HUD on, focus and pause without it; never for the mini player, a minimised window or outside the picture; the Win32 display counter stays balanced across repeated calls and failures; closing the HUD, the HUD closing and quitting all give the pointer back.
+  - Credits: parsers for fixture SPARQL replies shaped like query.wikidata.org's (crew by role, one entry per person and role, unresolved labels dropped, companies and distributors, filming locations with coordinates, settings, countries, awards, cast in billing order, entity facts, works newest first with series detected and non-title IDs dropped); injection-shaped IMDb, QID and TMDB IDs refused before any request; image URLs limited to their hosts; map tiles and pin, including the antimeridian; TMDB covering a Wikidata outage, filling a short cast and matching Arabic Wikidata names to TMDB by TMDB ID; a TMDB-only person opened through Wikidata or TMDB alone with works resolved to IMDb IDs; an hour's cache; SPARQL requests carrying a User-Agent and refusing redirects; credits kept off the HUD bridge; a work opened from credits trying the other film/series kind once.
+- `npm run check` and `npm run build` pass.
+- Rendered the Details page in headless Chromium at 980×680 and 1440×960 with a stubbed bridge whose credits came from the real parsers over fixture SPARQL: a cast rail of eight, six crew roles, companies, four filming locations, setting, countries and awards; a person opening with birth date and place, occupations, citizenship, awards and twelve works; Escape closing only the explore dialog; a place opening with a four-tile map; a work opening its own Details; a credits failure shown as one line without disturbing the page. Zero page errors and zero horizontal overflow. Rendering caught a nested-dialog padding defect before release.
+
+Not executed:
+
+- **No live Wikidata or TMDB request was made**: this build environment's egress proxy refuses query.wikidata.org and www.wikidata.org (CONNECT 403), and TMDB too. The SPARQL queries are unverified against the live service; the parsers were verified only against fixtures shaped like its replies. Images (Commons, TMDB, metahub, OpenStreetMap) did not load in the render; initials and poster placeholders showed.
+- Nothing in 0.10.0 has run on Windows. `ShowCursor` hiding the pointer over the HUD and over the bare MPV surface is unverified natively.
 
 ## 0.9.0 — controls over the picture
 

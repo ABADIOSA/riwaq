@@ -112,6 +112,10 @@ export default function Hud() {
 
   const shown = awake || player.pause || !!dock || player.loading;
   const series = player.mediaType === "series";
+  // Main hides the pointer itself (CSS cursor alone does not in this window).
+  useEffect(() => {
+    call("hudIdle", { idle: !!player.active && !shown }).catch(() => {});
+  }, [shown, player.active]);
   const pulse = (kind) => {
     setFlash({ kind, at: Date.now() });
   };
