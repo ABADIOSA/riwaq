@@ -239,6 +239,7 @@ const number = (value, min, max, fallback) =>
 export const HIDEABLE_NAV = [
   ["discover", "اكتشف"],
   ["library", "مكتبتي"],
+  ["collections", "المجموعات"],
   ["live", "بث مباشر"],
   ["addons", "الإضافات"],
 ];

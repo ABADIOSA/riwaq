@@ -28,6 +28,7 @@ const emptyBucket = () => ({
   progress: {},
   queue: [],
   connectedLists: [],
+  collections: [],
   settings: { ...DEFAULT_SETTINGS },
 });
 
@@ -81,6 +82,9 @@ export class Profiles {
         queue: Array.isArray(this.client.state.queue)
           ? this.client.state.queue
           : [],
+        collections: Array.isArray(this.client.state.collections)
+          ? this.client.state.collections
+          : [],
         settings: {
           ...DEFAULT_SETTINGS,
           ...(this.client.state.settings || {}),
@@ -107,6 +111,7 @@ export class Profiles {
     bucket.progress ||= {};
     bucket.queue ||= [];
     bucket.connectedLists ||= [];
+    bucket.collections ||= [];
     bucket.settings = { ...DEFAULT_SETTINGS, ...(bucket.settings || {}) };
     return bucket;
   }
@@ -118,6 +123,7 @@ export class Profiles {
     state.progress = bucket.progress;
     state.queue = bucket.queue;
     state.connectedLists = bucket.connectedLists;
+    state.collections = bucket.collections;
     state.settings = bucket.settings;
   }
   /** Writes the live references back before the profile is serialised. */
@@ -129,6 +135,7 @@ export class Profiles {
     if (state.progress) bucket.progress = state.progress;
     if (state.queue) bucket.queue = state.queue;
     if (state.connectedLists) bucket.connectedLists = state.connectedLists;
+    if (state.collections) bucket.collections = state.collections;
     if (state.settings) bucket.settings = state.settings;
   }
   publicState() {

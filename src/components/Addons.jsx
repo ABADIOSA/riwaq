@@ -11,10 +11,12 @@ import {
   Settings,
   X,
   LoaderCircle,
+  Link2,
 } from "lucide-react";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
+import { arabicCount } from "../../core/arabic.mjs";
 export default function Addons({
   state,
   update,
@@ -22,6 +24,7 @@ export default function Addons({
   notice,
   setState,
   onAccount,
+  onNuvio,
 }) {
   const [url, setUrl] = useState(""),
     [busy, setBusy] = useState(false),
@@ -237,6 +240,56 @@ export default function Addons({
         الترتيب والتعطيل والحذف تخص رِواق. استخدم «استيراد التغييرات» بعد تعديل
         إضافاتك في ستريميو.
       </p>
+      <div className="addon-sync nuvio-sync">
+        <div className="sync-art">
+          <Link2 size={30} />
+        </div>
+        <div>
+          <h2>تستخدم نوفيو؟</h2>
+          <p>انقل إضافاتك ومجموعاتك ومكتبتك ومستودعات أدواتك إلى رِواق.</p>
+        </div>
+        <button className="secondary" onClick={onNuvio}>
+          <Link2 size={18} /> الربط مع نوفيو
+        </button>
+      </div>
+      {state.nuvioPlugins?.length > 0 && (
+        <section className="nuvio-plugins">
+          <div className="section-heading">
+            <h2>مستودعات أدوات نوفيو (Plugins)</h2>
+          </div>
+          <ul>
+            {state.nuvioPlugins.map((p) => (
+              <li key={p.key}>
+                <span>
+                  <b dir="auto">{p.name}</b>
+                  <small>
+                    <span dir="ltr">{p.host}</span> ·{" "}
+                    {arabicCount(p.scrapers, {
+                      zero: "بلا أدوات",
+                      one: "أداة واحدة",
+                      two: "أداتان",
+                      few: "{n} أدوات",
+                      many: "{n} أداة",
+                      other: "{n} أداة",
+                    })}
+                  </small>
+                </span>
+                <IconButton
+                  title="إزالة من القائمة"
+                  onClick={() => update("removeNuvioPlugin", { key: p.key })}
+                >
+                  <X size={16} />
+                </IconButton>
+              </li>
+            ))}
+          </ul>
+          <p className="subtle">
+            هذه أدوات بحث مكتوبة بـ JavaScript من أطراف أخرى. رِواق يحفظ قائمتها
+            فقط ولا يشغّل شيفرتها، لأن تشغيل شيفرة غريبة داخل التطبيق خطر على
+            جهازك. مصادر التشغيل في رِواق تأتي من إضافات ستريميو.
+          </p>
+        </section>
+      )}
     </div>
   );
 }

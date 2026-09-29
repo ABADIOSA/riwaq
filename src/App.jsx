@@ -29,6 +29,7 @@ import {
   Tv,
   Lock,
   Users,
+  Folders,
 } from "lucide-react";
 import { api, call } from "./lib/api.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
@@ -43,6 +44,11 @@ import PlayerPanel from "./components/PlayerPanel.jsx";
 import LiveTV from "./components/LiveTV.jsx";
 import Profiles from "./components/Profiles.jsx";
 import LibraryView from "./components/LibraryView.jsx";
+import { arrangeRows, safeHomeSections } from "../core/home.mjs";
+import CollectionsPage, {
+  NuvioLink,
+  PinnedCollections,
+} from "./components/Collections.jsx";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -85,6 +91,8 @@ export default function App() {
     [loadError, setLoadError] = useState(""),
     [selected, setSelected] = useState(null),
     [explore, setExplore] = useState(null),
+    [collectionTarget, setCollectionTarget] = useState(null),
+    [nuvioOpen, setNuvioOpen] = useState(false),
     [account, setAccount] = useState(false),
     [toast, setToast] = useState(""),
     [player, setPlayer] = useState({ active: false }),
@@ -382,8 +390,10 @@ export default function App() {
     !!activeProfile.lockedRooms?.includes(room) &&
     state.profiles?.unlocked === false;
   const navigate = (v) => {
-    if (isLocked(v)) {
-      setUnlockRoom(v);
+    // Collections live with the library, behind the same lock.
+    const room = v === "collections" ? "library" : v;
+    if (isLocked(room)) {
+      setUnlockRoom(room);
       return;
     }
     setView(v);
@@ -413,11 +423,32 @@ export default function App() {
     finishedCount,
     state.favorites.length,
   ]);
-  const heroItems = rows
+  const homeSections = safeHomeSections(state.settings.homeSections);
+  // Home rows as the viewer arranged them; other listings keep addon order.
+  const shownRows =
+    view === "home"
+      ? arrangeRows(rows, {
+          order: state.settings.homeOrder || [],
+          hidden: state.settings.homeHidden || [],
+        })
+      : rows;
+  const catalogRails = shownRows
+    .filter((r) => r.metas.length)
+    .map((row) => (
+      <Rail
+        key={row.key}
+        title={row.name === "Popular" ? "الأكثر شعبية" : row.name}
+        subtitle={`${typeName(row.type)} · ${row.provider}`}
+        metas={row.metas}
+        onOpen={open}
+        onMore={() => more(row)}
+      />
+    ));
+  const heroItems = shownRows
     .flatMap((r) => r.metas)
     .filter((m) => m.background)
     .slice(0, 5);
-  const hero = heroItems[heroIndex] || rows[0]?.metas?.[0];
+  const hero = heroItems[heroIndex] || shownRows[0]?.metas?.[0];
   const favorite = (meta) => update("favorite", meta);
   const more = (row) => {
     setCatalog(row.key);
@@ -477,6 +508,7 @@ export default function App() {
             [Home, "home", "الرئيسية"],
             [Compass, "discover", "اكتشف"],
             [Library, "library", "مكتبتي"],
+            [Folders, "collections", "المجموعات"],
             [Tv, "live", "بث مباشر"],
             [Puzzle, "addons", "الإضافات"],
           ]
@@ -491,11 +523,16 @@ export default function App() {
               >
                 <Icon size={20} />
                 <span>{label}</span>
-                {isLocked(id) && <Lock size={13} className="nav-lock" />}
+                {isLocked(id === "collections" ? "library" : id) && (
+                  <Lock size={13} className="nav-lock" />
+                )}
                 {id === "library" && favorites.length > 0 && (
                   <small>{favorites.length}</small>
                 )}
                 {id === "addons" && <small>{state.addons.length}</small>}
+                {id === "collections" && state.collections?.length > 0 && (
+                  <small>{state.collections.length}</small>
+                )}
               </button>
             ))}
         </nav>
@@ -615,72 +652,76 @@ export default function App() {
         </header>
         {["home", "discover", "search"].includes(view) && (
           <>
-            {view === "home" && state.settings.showHero !== false && hero && (
-              <section
-                className="hero"
-                style={{
-                  backgroundImage: imgUrl(hero.background)
-                    ? `url("${imgUrl(hero.background)}")`
-                    : undefined,
-                }}
-              >
-                <div className="hero-gradient" />
-                <div className="hero-content">
-                  <span className="eyebrow">
-                    <span /> من عالم السينما إلى رِواقك
-                  </span>
-                  <h1 dir="auto">{hero.name}</h1>
-                  <div className="hero-meta">
-                    {hero.imdbRating && (
-                      <span className="hero-rating">
-                        <Star size={15} fill="currentColor" /> {hero.imdbRating}
-                      </span>
-                    )}
-                    <span>{hero.releaseInfo}</span>
-                    <span>{typeName(hero.type)}</span>
-                    {hero.genres?.slice(0, 2).map((g) => (
-                      <span key={g}>{g}</span>
-                    ))}
-                  </div>
-                  <p dir="auto">
-                    {hero.description ||
-                      "اكتشف التفاصيل، واختر مصدر المشاهدة المناسب من إضافاتك."}
-                  </p>
-                  <div className="button-row">
-                    <button className="primary" onClick={() => open(hero)}>
-                      <Play fill="currentColor" size={18} />
-                      استكشف وشاهد
-                    </button>
-                    <button
-                      className="secondary"
-                      onClick={() => favorite(hero)}
-                    >
-                      {favorites.some((m) => m.id === hero.id) ? (
-                        <Check size={20} />
-                      ) : (
-                        <Plus size={20} />
+            {view === "home" &&
+              state.settings.showHero !== false &&
+              homeSections.includes("hero") &&
+              hero && (
+                <section
+                  className="hero"
+                  style={{
+                    backgroundImage: imgUrl(hero.background)
+                      ? `url("${imgUrl(hero.background)}")`
+                      : undefined,
+                  }}
+                >
+                  <div className="hero-gradient" />
+                  <div className="hero-content">
+                    <span className="eyebrow">
+                      <span /> من عالم السينما إلى رِواقك
+                    </span>
+                    <h1 dir="auto">{hero.name}</h1>
+                    <div className="hero-meta">
+                      {hero.imdbRating && (
+                        <span className="hero-rating">
+                          <Star size={15} fill="currentColor" />{" "}
+                          {hero.imdbRating}
+                        </span>
                       )}
-                      مكتبتي
-                    </button>
-                  </div>
-                </div>
-                <div className="hero-footer">
-                  <span>
-                    اختيارات من إضافاتك <span className="hero-line" />
-                  </span>
-                  <div className="hero-pages">
-                    {heroItems.map((m, i) => (
+                      <span>{hero.releaseInfo}</span>
+                      <span>{typeName(hero.type)}</span>
+                      {hero.genres?.slice(0, 2).map((g) => (
+                        <span key={g}>{g}</span>
+                      ))}
+                    </div>
+                    <p dir="auto">
+                      {hero.description ||
+                        "اكتشف التفاصيل، واختر مصدر المشاهدة المناسب من إضافاتك."}
+                    </p>
+                    <div className="button-row">
+                      <button className="primary" onClick={() => open(hero)}>
+                        <Play fill="currentColor" size={18} />
+                        استكشف وشاهد
+                      </button>
                       <button
-                        key={i}
-                        aria-label={`عرض ${m.name}`}
-                        className={i === heroIndex ? "selected" : ""}
-                        onClick={() => setHeroIndex(i)}
-                      />
-                    ))}
+                        className="secondary"
+                        onClick={() => favorite(hero)}
+                      >
+                        {favorites.some((m) => m.id === hero.id) ? (
+                          <Check size={20} />
+                        ) : (
+                          <Plus size={20} />
+                        )}
+                        مكتبتي
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </section>
-            )}
+                  <div className="hero-footer">
+                    <span>
+                      اختيارات من إضافاتك <span className="hero-line" />
+                    </span>
+                    <div className="hero-pages">
+                      {heroItems.map((m, i) => (
+                        <button
+                          key={i}
+                          aria-label={`عرض ${m.name}`}
+                          className={i === heroIndex ? "selected" : ""}
+                          onClick={() => setHeroIndex(i)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
             {view === "home" && !state.user && !loading && (
               <div className="connect-banner">
                 <span className="banner-icon">
@@ -776,20 +817,6 @@ export default function App() {
                 </Empty>
               ) : (
                 <>
-                  {view === "home" && uniqueProgress.length > 0 && (
-                    <Rail
-                      title="نكمل الحكاية؟"
-                      subtitle="متابعة المشاهدة"
-                      metas={uniqueProgress.map((p) => p.meta)}
-                      progressMap={Object.fromEntries(
-                        uniqueProgress.map((p) => [titleKey(p.meta), p]),
-                      )}
-                      onOpen={open}
-                    />
-                  )}
-                  {view === "home" && (
-                    <UpNextRail items={upNext} onOpen={open} />
-                  )}
                   {catalog ? (
                     <>
                       <div className="poster-grid">
@@ -813,21 +840,43 @@ export default function App() {
                         </button>
                       )}
                     </>
-                  ) : (
-                    rows
-                      .filter((r) => r.metas.length)
-                      .map((row) => (
-                        <Rail
-                          key={row.key}
-                          title={
-                            row.name === "Popular" ? "الأكثر شعبية" : row.name
-                          }
-                          subtitle={`${typeName(row.type)} · ${row.provider}`}
-                          metas={row.metas}
-                          onOpen={open}
-                          onMore={() => more(row)}
-                        />
+                  ) : view === "home" ? (
+                    // The viewer's own order of home sections (Settings).
+                    homeSections
+                      .filter((id) => id !== "hero")
+                      .map((id) => (
+                        <React.Fragment key={id}>
+                          {id === "continue" && uniqueProgress.length > 0 && (
+                            <Rail
+                              title="نكمل الحكاية؟"
+                              subtitle="متابعة المشاهدة"
+                              metas={uniqueProgress.map((p) => p.meta)}
+                              progressMap={Object.fromEntries(
+                                uniqueProgress.map((p) => [
+                                  titleKey(p.meta),
+                                  p,
+                                ]),
+                              )}
+                              onOpen={open}
+                            />
+                          )}
+                          {id === "upnext" && (
+                            <UpNextRail items={upNext} onOpen={open} />
+                          )}
+                          {id === "collections" && (
+                            <PinnedCollections
+                              state={state}
+                              onOpen={(cid, folderId) => {
+                                setCollectionTarget({ id: cid, folderId });
+                                navigate("collections");
+                              }}
+                            />
+                          )}
+                          {id === "catalogs" && catalogRails}
+                        </React.Fragment>
                       ))
+                  ) : (
+                    catalogRails
                   )}
                   {loading && <Busy text="نحمّل بقية الكتالوجات من إضافاتك…" />}
                   {!loading && !rows.some((r) => r.metas.length) && (
@@ -877,6 +926,19 @@ export default function App() {
             notice={notice}
           />
         )}
+        {view === "collections" && (
+          <CollectionsPage
+            key={state.profiles?.active}
+            state={state}
+            update={update}
+            act={act}
+            notice={notice}
+            onOpen={open}
+            target={collectionTarget}
+            setTarget={setCollectionTarget}
+            onNuvio={() => setNuvioOpen(true)}
+          />
+        )}
         {view === "live" && (
           <LiveTV state={state} act={act} notice={notice} update={update} />
         )}
@@ -888,12 +950,14 @@ export default function App() {
             notice={notice}
             setState={setState}
             onAccount={() => setAccount(true)}
+            onNuvio={() => setNuvioOpen(true)}
           />
         )}
         {view === "settings" && (
           <Preferences
             key={settingsTab}
             initialTab={settingsTab}
+            onNuvio={() => setNuvioOpen(true)}
             state={state}
             update={update}
             act={act}
@@ -963,6 +1027,14 @@ export default function App() {
           notice={notice}
           onPlayer={() => setPlayerOpen(true)}
           onOpenTitle={(meta) => setSelected({ meta })}
+        />
+      )}
+      {nuvioOpen && (
+        <NuvioLink
+          act={act}
+          setState={setState}
+          notice={notice}
+          onClose={() => setNuvioOpen(false)}
         />
       )}
       {explore && (

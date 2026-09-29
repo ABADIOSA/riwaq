@@ -47,6 +47,14 @@ import { nextSource, playableKeys } from "../core/failover.mjs";
 import { VideoHost, showSystemCursor } from "./video-host.mjs";
 import { CursorGate, cursorHidden } from "../core/cursor.mjs";
 import { trailerOf } from "../core/credits.mjs";
+import { toNuvio } from "../core/collections.mjs";
+import {
+  NUVIO_STORES,
+  nuvioFolders,
+  nuvioPreview,
+  parseProperties,
+  readNuvioZip,
+} from "../core/nuvio.mjs";
 import { DesktopUpdates } from "./updater.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -63,6 +71,14 @@ let window, client, player, videoHost, loginServer, loginTimer, presence;
 // A picked backup stays in main between "preview" and "restore"; the renderer
 // only ever holds the opaque token.
 let pendingBackup = null;
+// A Nuvio snapshot between its preview and the import, held in main only.
+let pendingNuvio = null;
+const nuvioReply = (stores, source) => {
+  const profiles = nuvioPreview(stores);
+  if (!profiles.length) throw new Error("لم نجد ملفات شخصية في بيانات نوفيو");
+  pendingNuvio = { token: randomBytes(16).toString("hex"), stores };
+  return { token: pendingNuvio.token, source, profiles };
+};
 let watching = { active: false, pip: false, error: false };
 // What is playing from an addon stream: subtitle requests need its stream key.
 let nowPlaying = null;
@@ -897,6 +913,96 @@ const methods = {
     await shell.openExternal(client.updates.releaseUrl());
     return true;
   },
+  collectionsEdit: (a) => client.collectionsEdit(a || {}),
+  collectionCatalogs: () => client.collectionCatalogs(),
+  collectionFolder: (a) =>
+    client.collectionFolder({
+      collectionId: String(a?.collectionId || ""),
+      folderId: String(a?.folderId || ""),
+      skip: Number(a?.skip) || 0,
+    }),
+  // Collections as Nuvio JSON: to the clipboard, or to a file the viewer names.
+  collectionsCopyNuvio: () => {
+    clipboard.writeText(
+      JSON.stringify(toNuvio(client.state.collections || []), null, 2),
+    );
+    return true;
+  },
+  collectionsSaveNuvio: async () => {
+    const r = await dialog.showSaveDialog(window, {
+      title: "حفظ المجموعات بصيغة نوفيو",
+      defaultPath: "riwaq-collections.json",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (r.canceled) return null;
+    writeFileSync(
+      r.filePath,
+      JSON.stringify(toNuvio(client.state.collections || []), null, 2),
+      "utf8",
+    );
+    return true;
+  },
+  importNuvioCollections: (a) =>
+    client.importNuvioCollections({
+      text: typeof a?.text === "string" ? a.text : "",
+    }),
+  /**
+   * Looks for Nuvio Desktop's data on this PC. Only the known stores are
+   * read; the folder comes from the environment, never from the interface.
+   */
+  nuvioScan: () => {
+    client.profiles.gate("settings");
+    if (process.platform !== "win32")
+      throw new Error("البحث عن نوفيو متاح على ويندوز فقط");
+    for (const folder of nuvioFolders(process.env, app.getPath("home"))) {
+      const stores = {};
+      for (const name of NUVIO_STORES) {
+        const file = join(folder.path, `${name}.properties`);
+        try {
+          if (!existsSync(file) || statSync(file).size > 40 * 1024 * 1024)
+            continue;
+          stores[name] = parseProperties(readFileSync(file, "latin1"));
+        } catch {
+          /* An unreadable store is skipped. */
+        }
+      }
+      if (Object.keys(stores).length) return nuvioReply(stores, folder.label);
+    }
+    throw new Error(
+      "لم نجد نوفيو على هذا الجهاز. افتح نوفيو وسجّل دخولك مرة ليحفظ بياناتك، أو استخدم ملف النسخة الاحتياطية.",
+    );
+  },
+  nuvioPickBackup: async () => {
+    client.profiles.gate("settings");
+    const r = await dialog.showOpenDialog(window, {
+      title: "اختيار نسخة إعدادات نوفيو",
+      filters: [{ name: "Nuvio backup", extensions: ["zip"] }],
+      properties: ["openFile"],
+    });
+    if (r.canceled) return null;
+    if (statSync(r.filePaths[0]).size > 200 * 1024 * 1024)
+      throw new Error("الملف كبير جداً");
+    return nuvioReply(
+      readNuvioZip(readFileSync(r.filePaths[0])),
+      basename(r.filePaths[0]),
+    );
+  },
+  nuvioImport: async (a) => {
+    if (!pendingNuvio || pendingNuvio.token !== a?.token)
+      throw new Error("اقرأ بيانات نوفيو من جديد");
+    const parts = {};
+    for (const key of ["addons", "collections", "library", "plugins"])
+      parts[key] = a?.parts?.[key] === true;
+    const reply = await client.importNuvio(pendingNuvio.stores, {
+      profile: a?.profile,
+      parts,
+    });
+    pendingNuvio = null;
+    broadcast();
+    return reply;
+  },
+  removeNuvioPlugin: (a) =>
+    client.removeNuvioPlugin({ key: typeof a?.key === "string" ? a.key : "" }),
   backupExport: async ({ passphrase, includeSecrets = false } = {}) => {
     // Seal first: a bad passphrase should fail before a file dialog opens.
     const { text, left } = client.exportBackup({

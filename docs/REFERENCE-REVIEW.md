@@ -33,6 +33,22 @@ Harbor beta (`src-tauri/src/mpv.rs`, MIT): MPV embedded with `input-cursor=no` a
 
 The owner asked for a title page like Harbor's and Nuvio's with cast, directors, production companies and filming locations, each opening to who they are and what else they made. Neither project's source was re-read for this round; the page is built from the owner's description and two public data sources. Wikidata supplies every viewer with crew, companies, filming locations (P915), settings, countries, awards and reverse links to other works, keyed by IMDb IDs so a work opens straight in Riwaq; TMDB, with the viewer's own key, adds portraits, characters, biographies and a fallback when Wikidata's query service is down. The pointer now hides with Win32 `ShowCursor` on the thread that owns the HUD, the mechanism noted in Nuvio HTPC above; the code is Riwaq's own.
 
+## Nuvio collections and data layout, studied 2026-09-29 (0.12)
+
+Nuvio HTPC (UmbraProjects/NuvioDesktop, GPL-3.0) at `b775bf5` (Release 1.15.0), for behaviour and file formats only; no code was copied.
+
+- **Collections.** A collection holds folders, and each folder gathers sources: addon catalogs keyed by manifest ID, type and catalog ID, plus TMDB and Trakt sources. Folders have a cover image or emoji and a tile shape. A collection can be pinned to the top of home and shown as tabs or rows, and there is a JSON import/export.
+- **Riwaq 0.12's collections.** They keep the addon-catalog model and the JSON shape so both directions work. They add folders of hand-picked, ordered titles, which Nuvio has no equivalent for.
+- **Account sync.** Nuvio syncs through a Supabase backend (`sync_pull_collections`, the `addons` table, and so on). Its publishable key is injected at build time and is not in the source, so Riwaq does not talk to Nuvio's servers.
+- **Local stores.** Nuvio Desktop keeps each profile's data in Java `.properties` stores in its data folder:
+  - `nuvio_addons` (`installed_addon_urls_N`, `addon_enabled_states_N`);
+  - `nuvio_collections` (`collections_N`);
+  - `nuvio_plugins` (`plugins_state_N`, with scraper code);
+  - `nuvio_library` (`library_N`);
+  - `nuvio_profiles`.
+- **Backup.** Its settings backup is a zip of `preferences/*.properties`.
+- **Riwaq 0.12's Nuvio link.** It reads those stores directly and never keeps or runs plugin code.
+
 ## Stremio Community v5
 
 - License: GPL-3.0. Stack: C++ with WebView2 and libmpv, wrapping the official Stremio web UI.
