@@ -227,7 +227,33 @@ export const DEFAULT_APPEARANCE = {
   heroStyle: "full",
   detailBackground: "backdrop",
   navHidden: [],
+  // Ambience: the viewer's own wallpaper behind the app, dimmed so text
+  // stays readable, or a soft glow taken from the artwork on screen.
+  wallpaper: "",
+  wallpaperDim: 70,
+  wallpaperBlur: 0,
+  ambient: "off",
+  // Logo: the full mark and name, the mark alone, the name alone, or the
+  // viewer's own image; the mark follows the accent colour or stays gold.
+  logoStyle: "full",
+  logoTint: "accent",
+  logoImage: "",
+  // The taskbar icon: Riwaq's own, or its mark drawn in the accent colour.
+  appIcon: "classic",
 };
+
+/** A wallpaper or logo must be a plain HTTPS image address, no credentials. */
+export function imageUrl(value) {
+  if (typeof value !== "string" || !value.trim() || value.length > 2000)
+    return "";
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:" || url.username || url.password) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
 
 const choose = (value, options, fallback) =>
   options.includes(value) ? value : fallback;
@@ -298,7 +324,46 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
         input.navHidden.filter((id) => HIDEABLE_NAV.some(([n]) => n === id)),
       ),
     ];
+  if (typeof input.wallpaper === "string")
+    next.wallpaper = imageUrl(input.wallpaper);
+  if ("wallpaperDim" in input)
+    next.wallpaperDim = number(input.wallpaperDim, 0, 95, next.wallpaperDim);
+  if ("wallpaperBlur" in input)
+    next.wallpaperBlur = number(input.wallpaperBlur, 0, 24, next.wallpaperBlur);
+  next.ambient = choose(input.ambient, ["off", "artwork"], next.ambient);
+  next.logoStyle = choose(
+    input.logoStyle,
+    ["full", "mark", "name", "image"],
+    next.logoStyle,
+  );
+  next.logoTint = choose(input.logoTint, ["accent", "gold"], next.logoTint);
+  if (typeof input.logoImage === "string")
+    next.logoImage = imageUrl(input.logoImage);
+  if (next.logoStyle === "image" && !next.logoImage) next.logoStyle = "full";
+  next.appIcon = choose(input.appIcon, ["classic", "accent"], next.appIcon);
   return next;
+}
+
+export const THEME_LIMIT = 24;
+/** The viewer's saved designs: a name and a validated appearance each. */
+export function cleanSavedThemes(input) {
+  const out = [];
+  for (const theme of Array.isArray(input) ? input : []) {
+    if (!theme || typeof theme !== "object") continue;
+    const name = String(theme.name || "")
+      .replace(/[\u0000-\u001f\u007f]+/g, " ")
+      .trim()
+      .slice(0, 40);
+    const id = /^[\w-]{1,40}$/.test(theme.id || "") ? theme.id : "";
+    if (!name || !id || out.some((t) => t.id === id)) continue;
+    out.push({
+      id,
+      name,
+      appearance: safeAppearance(theme.appearance, DEFAULT_APPEARANCE),
+    });
+    if (out.length >= THEME_LIMIT) break;
+  }
+  return out;
 }
 
 // The accent themes before 0.7 map onto the preset closest to each.
@@ -392,6 +457,13 @@ export function themeVariables(input) {
     "--poster-radius": `${a.posterRadius}px`,
     "--gap": `${gap}px`,
     "--app-font": `"${font}", "Segoe UI", Tahoma, sans-serif`,
+    ...(a.wallpaper
+      ? {
+          "--wallpaper": `url("${a.wallpaper}")`,
+          "--wallpaper-dim": String(a.wallpaperDim / 100),
+          "--wallpaper-blur": `${a.wallpaperBlur}px`,
+        }
+      : {}),
     color: c.text,
     background: c.bg,
     colorScheme: luminance(c.bg) > 0.4 ? "light" : "dark",
@@ -411,6 +483,10 @@ export function themeClasses(input) {
     a.posterTitles ? "" : "no-poster-titles",
     `hero-${a.heroStyle}`,
     `detailbg-${a.detailBackground}`,
+    a.wallpaper ? "wall-on" : "",
+    a.ambient === "artwork" ? "ambience-glow" : "",
+    `logostyle-${a.logoStyle}`,
+    `logotint-${a.logoTint}`,
   ]
     .filter(Boolean)
     .join(" ");

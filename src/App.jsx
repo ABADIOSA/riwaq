@@ -50,6 +50,12 @@ import CollectionsPage, {
   PinnedCollections,
 } from "./components/Collections.jsx";
 import FolderPage from "./components/FolderPage.jsx";
+import WindowBar, {
+  isEmptySpace,
+  useWindowState,
+} from "./components/WindowChrome.jsx";
+import Screensaver from "./components/Screensaver.jsx";
+import { drawAppIcon } from "./lib/app-icon.js";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -101,6 +107,7 @@ export default function App() {
     [account, setAccount] = useState(false),
     [toast, setToast] = useState(""),
     [player, setPlayer] = useState({ active: false }),
+    [scrolled, setScrolled] = useState(false),
     [playerOpen, setPlayerOpen] = useState(false),
     [refresh, setRefresh] = useState(0),
     [heroIndex, setHeroIndex] = useState(0),
@@ -369,6 +376,28 @@ export default function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+  const [win] = useWindowState();
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  // The taskbar icon follows the accent when the viewer asks for it.
+  const look = resolveAppearance(state.settings);
+  const iconSet = useRef(false);
+  useEffect(() => {
+    if (!ready) return;
+    if (look.appIcon === "accent") {
+      const dataUrl = drawAppIcon(look.colors.accent, look.colors.bg);
+      if (dataUrl)
+        call("setAppIcon", { dataUrl })
+          .then(() => (iconSet.current = true))
+          .catch(() => {});
+    } else if (iconSet.current) {
+      iconSet.current = false;
+      call("setAppIcon", {}).catch(() => {});
+    }
+  }, [ready, look.appIcon, look.colors.accent, look.colors.bg]);
   const open = (meta, videoId) => setSelected({ meta, videoId });
   const activeProfile = state.profiles?.list?.find(
     (p) => p.id === state.profiles.active,
@@ -484,22 +513,69 @@ export default function App() {
     }
   };
   const appearance = resolveAppearance(state.settings);
+  const barShown = win.frame !== "native" && !win.fullscreen;
+  // The artwork glow follows what is on screen: an open title, else the hero.
+  const ambientArt =
+    appearance.ambient === "artwork"
+      ? imgUrl(selected?.meta?.background) || imgUrl(hero?.background)
+      : "";
   return (
     <div
-      style={themeVariables(appearance)}
-      className={`app ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""}`}
+      style={{
+        ...themeVariables(appearance),
+        ...(ambientArt ? { "--ambient-image": `url("${ambientArt}")` } : {}),
+      }}
+      className={`app ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
+      onMouseDown={(e) => {
+        if (
+          !state.settings.dragAnywhere ||
+          e.button !== 0 ||
+          e.ctrlKey ||
+          e.shiftKey ||
+          !isEmptySpace(e.target)
+        )
+          return;
+        call("windowDrag", { phase: "start" }).catch(() => {});
+        const end = () => {
+          call("windowDrag", { phase: "end" }).catch(() => {});
+          window.removeEventListener("mouseup", end);
+        };
+        window.addEventListener("mouseup", end);
+      }}
     >
+      <WindowBar
+        win={win}
+        controls={state.settings.windowControls}
+        title="رِواق"
+      />
+      {ambientArt && <div className="ambience-layer" aria-hidden="true" />}
+      <Screensaver
+        minutes={state.settings.screensaver || 0}
+        clock={state.settings.screensaverClock !== false}
+        items={shownRows.flatMap((r) => r.metas).concat(favorites)}
+        blocked={player.active}
+      />
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">
-            <span />
-            <span />
-            <span />
-          </span>
-          <div>
-            <b>رِواق</b>
-            <small>RIWAQ</small>
-          </div>
+          {appearance.logoStyle === "image" ? (
+            <img
+              className="brand-image"
+              src={appearance.logoImage}
+              alt="رِواق"
+            />
+          ) : (
+            <>
+              <span className="brand-mark">
+                <span />
+                <span />
+                <span />
+              </span>
+              <div className="brand-name">
+                <b>رِواق</b>
+                <small>RIWAQ</small>
+              </div>
+            </>
+          )}
         </div>
         <span className="nav-label">مساحتك السينمائية</span>
         <nav>
@@ -623,7 +699,7 @@ export default function App() {
               </button>
             </div>
           )}
-        <header className="topbar">
+        <header className={`topbar ${scrolled ? "scrolled" : ""}`}>
           <div className="topbar-title">
             <span className="tiny-dot" /> تجربة مشاهدة، على ذوقك
           </div>

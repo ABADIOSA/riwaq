@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const allowed = new Set([
   "init",
+  "windowInfo",
+  "windowControl",
+  "windowDrag",
+  "relaunch",
+  "setAppIcon",
   "catalog",
   "catalogPlan",
   "subtitleCues",
@@ -112,6 +117,7 @@ contextBridge.exposeInMainWorld("riwaq", {
         "ended",
         "playerRequest",
         "hudCommand",
+        "window",
       ].includes(name)
     )
       return () => {};

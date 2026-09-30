@@ -1229,3 +1229,311 @@ button.dock-row {
 .theater.immersive.pointer-still {
   cursor: none;
 }
+
+/* Settings grouped like Harbor's: a group opens to its pages. */
+.studio-nav {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-inline-end: 4px;
+}
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-group-head,
+.settings-page {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: none;
+  border: 0;
+  text-align: right;
+  color: var(--muted);
+  border-radius: 11px;
+  font-size: 13px;
+}
+.settings-group-head {
+  padding: 12px 10px;
+  color: var(--text);
+}
+.settings-group-head b {
+  flex: 1;
+  font-weight: 700;
+}
+.settings-group-head.holds {
+  color: var(--accent);
+}
+.settings-chevron {
+  transition: transform 0.2s ease;
+  opacity: 0.6;
+}
+.settings-group.open .settings-chevron {
+  transform: rotate(-90deg);
+}
+.settings-page {
+  padding: 10px 12px 10px 10px;
+  padding-inline-start: 22px;
+}
+.settings-page:hover,
+.settings-group-head:hover {
+  background: #ffffff07;
+  color: var(--text);
+}
+.settings-page.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Your themes. */
+.theme-save {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0 16px;
+}
+.theme-save input {
+  flex: 1;
+  min-width: 200px;
+}
+.saved-themes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.saved-theme {
+  position: relative;
+  border-radius: var(--radius-lg, 16px);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.saved-theme.selected {
+  border-color: var(--accent);
+}
+.saved-theme-face {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-height: 104px;
+  padding: 12px;
+  border: 0;
+  text-align: right;
+}
+.saved-theme-face span {
+  width: 60%;
+  height: 22px;
+  border-radius: 6px;
+}
+.saved-theme-face i {
+  width: 36%;
+  height: 8px;
+  border-radius: 6px;
+}
+.saved-theme-face b {
+  margin-top: auto;
+  font-size: 13px;
+}
+.saved-theme-face svg {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+}
+.saved-theme-tools {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+}
+.saved-theme-tools button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 0;
+  background: #0008;
+  color: #fff;
+}
+
+/* Logo & icon. */
+.logo-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 10px 0 16px;
+}
+.logo-choices > button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 12px 12px;
+  border-radius: var(--radius-lg, 16px);
+  border: 1px solid var(--line);
+  background: var(--raised, #1b1e22);
+  color: var(--muted);
+}
+.logo-choices > button.selected {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.logo-choices > button:disabled {
+  opacity: 0.45;
+}
+.logo-sample {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  color: var(--text);
+}
+.logo-sample b {
+  font-size: 24px;
+}
+.logo-sample .brand-mark {
+  height: 30px;
+  width: 34px;
+}
+.logo-sample .brand-mark span {
+  width: 9px;
+}
+.logo-sample img {
+  max-height: 40px;
+  max-width: 120px;
+  object-fit: contain;
+}
+
+/* Ambience. */
+.wallpaper-preview {
+  position: relative;
+  height: 150px;
+  border-radius: var(--radius-lg, 16px);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+  margin: 12px 0;
+  border: 1px solid var(--line);
+}
+.wallpaper-preview i {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+
+/* Window. */
+.frame-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.frame-options > button {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px;
+  border-radius: var(--radius-lg, 16px);
+  border: 1px solid var(--line);
+  background: var(--raised, #1b1e22);
+  color: var(--text);
+  text-align: right;
+}
+.frame-options > button.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.frame-options > button > span:nth-child(2) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.frame-options small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.frame-art {
+  position: relative;
+  flex: none;
+  width: 92px;
+  height: 56px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.frame-art i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: #d9dde3;
+}
+.frame-hybrid i,
+.frame-riwaq i {
+  background: var(--panel);
+}
+.frame-art em {
+  position: absolute;
+  top: 3px;
+  width: 22px;
+  height: 6px;
+  border-radius: 3px;
+  background: #7a8089;
+  right: 4px;
+}
+.frame-riwaq em {
+  right: auto;
+  left: 4px;
+  background: var(--accent);
+}
+.window-buttons-preview {
+  display: flex;
+  gap: 6px;
+  direction: ltr;
+  margin: 14px 0 6px;
+}
+.window-buttons-preview span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--raised, #22262c);
+  color: var(--text);
+  border: 1px solid transparent;
+}
+.window-buttons-preview.style-glass span {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border-color: color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: 13px;
+}
+.window-buttons-preview.style-clean span {
+  background: transparent;
+}
+.restart-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+.type-sample {
+  margin: 14px 0 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--raised, #1b1e22);
+  font-size: 22px;
+}

@@ -1,5 +1,13 @@
 import UpdatesCard from "./UpdatesCard.jsx";
 import AppearanceStudio from "./AppearanceStudio.jsx";
+import {
+  AmbiencePage,
+  LogoPage,
+  ScreensaverCard,
+  ThemesLibrary,
+  WindowPage,
+} from "./settings/LookPages.jsx";
+import { useWindowState } from "./WindowChrome.jsx";
 import React, { useState, useEffect } from "react";
 import {
   Palette,
@@ -29,6 +37,18 @@ import {
   ArrowDown,
   Eye,
   EyeOff,
+  ChevronLeft,
+  Library,
+  Home as HomeIcon,
+  LayoutGrid,
+  SwatchBook,
+  Brush,
+  Shapes,
+  Type as TypeIcon,
+  PanelsTopLeft,
+  Sun,
+  AppWindow,
+  Cpu,
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -240,82 +260,150 @@ function mpvKey(event) {
   return [...parts, key].join("+");
 }
 
-const sections = [
-  [
-    "appearance",
-    "المظهر والتخصيص",
-    "الثيم الألوان التخطيط الرئيسية البطاقات الحركة خط حجم تدرج مشاركة تصميم",
-    Palette,
-  ],
-  [
-    "home",
-    "الصفحة الرئيسية",
-    "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام واجهة مجموعات مثبتة",
-    LayoutDashboard,
-  ],
-  [
-    "data",
-    "مكتبة البيانات",
-    "API TMDB OMDb MDBList Fanart تقييمات صور لغة",
-    Database,
-  ],
-  [
-    "connections",
-    "الحسابات والربط",
-    "Trakt Letterboxd Simkl Nuvio نوفيو مزامنة قوائم نقل مجموعات",
-    Link2,
-  ],
-  [
-    "playback",
-    "المشغل والمصادر",
-    "HDR الجودة تسريع العتاد متابعة إيقاف",
-    MonitorPlay,
-  ],
-  [
-    "sources",
-    "محرّك المصادر",
-    "ترتيب جودة أمان تخزين debrid حجم استبعاد CAM",
-    Filter,
-  ],
-  ["subtitles", "الصوت والترجمة", "عربي لغة حجم توقيت مسارات", Subtitles],
-  ["hotkeys", "اختصارات لوحة المفاتيح", "مفاتيح تخصيص تعارض MPV", Keyboard],
-  [
-    "presence",
-    "الحضور والإشعارات",
-    "Discord Telegram webhook حالة إشعار",
-    Bell,
-  ],
-  [
-    "backup",
-    "النسخ الاحتياطي",
-    "نسخة احتياطية استعادة نقل جهاز جديد تصدير تشفير",
-    Archive,
-  ],
-  [
-    "updates",
-    "التحديثات",
-    "إصدار تحديث تنزيل تثبيت قناة بيتا تلقائي جديد",
-    RefreshCw,
-  ],
-  [
-    "system",
-    "الاتصال والتطبيق",
-    "Stremio خدمة تشخيص MPV إصدار تحديث تنزيل تثبيت قناة بيتا",
-    SlidersHorizontal,
-  ],
+/**
+ * Settings are grouped the way Harbor groups them: a group opens to its
+ * pages. Each page is [id, title, search keywords, icon].
+ */
+const GROUPS = [
+  {
+    id: "account",
+    title: "الحسابات والربط",
+    Icon: Link2,
+    pages: [
+      [
+        "connections",
+        "الحسابات والربط",
+        "Trakt Letterboxd Simkl Nuvio نوفيو مزامنة قوائم نقل مجموعات",
+        Link2,
+      ],
+    ],
+  },
+  {
+    id: "watching",
+    title: "المشاهدة",
+    Icon: MonitorPlay,
+    pages: [
+      [
+        "playback",
+        "المشغل",
+        "HDR الجودة تسريع العتاد متابعة إيقاف معاينة تسريع",
+        MonitorPlay,
+      ],
+      ["subtitles", "الصوت والترجمة", "عربي لغة حجم توقيت مسارات", Subtitles],
+    ],
+  },
+  {
+    id: "content",
+    title: "المصادر والمكتبة",
+    Icon: Library,
+    pages: [
+      [
+        "sources",
+        "تفضيلات المصادر",
+        "أمان تخزين debrid حجم استبعاد CAM جودة",
+        SlidersHorizontal,
+      ],
+      [
+        "home",
+        "الرئيسية",
+        "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام مجموعات مثبتة",
+        HomeIcon,
+      ],
+      [
+        "cards",
+        "بطاقات الملصقات",
+        "بطاقة ملصق حجم انحناء تقييمات عنوان",
+        LayoutGrid,
+      ],
+      [
+        "data",
+        "مزوّدو البيانات الوصفية",
+        "API TMDB OMDb MDBList Fanart تقييمات صور لغة",
+        Database,
+      ],
+    ],
+  },
+  {
+    id: "look",
+    title: "المظهر",
+    Icon: Palette,
+    pages: [
+      ["theme", "السمة", "ثيم ألوان تدرج ثيمات جاهزة", SwatchBook],
+      ["themes", "سماتك", "سمات محفوظة رمز مشاركة تصميم", Brush],
+      ["logo", "الشعار والأيقونة", "شعار أيقونة شريط المهام صورة", Shapes],
+      ["type", "الخطوط", "خط الخطوط", TypeIcon],
+      [
+        "interface",
+        "الواجهة",
+        "حجم الواجهة زوايا كثافة تخطيط قائمة حركة شاشة التوقف",
+        PanelsTopLeft,
+      ],
+      ["ambience", "الأجواء (Ambience)", "خلفية صورة تعتيم توهج أجواء", Sun],
+      [
+        "window",
+        "النافذة",
+        "شريط العنوان أزرار النافذة تمويه سحب النافذة",
+        AppWindow,
+      ],
+    ],
+  },
+  {
+    id: "devices",
+    title: "التحكم",
+    Icon: Keyboard,
+    pages: [
+      ["hotkeys", "اختصارات لوحة المفاتيح", "مفاتيح تخصيص تعارض MPV", Keyboard],
+    ],
+  },
+  {
+    id: "system",
+    title: "النظام",
+    Icon: SlidersHorizontal,
+    pages: [
+      [
+        "presence",
+        "الحضور والإشعارات",
+        "Discord Telegram webhook حالة إشعار",
+        Bell,
+      ],
+      [
+        "backup",
+        "النسخ الاحتياطي",
+        "نسخة احتياطية استعادة نقل جهاز جديد تصدير تشفير",
+        Archive,
+      ],
+      [
+        "updates",
+        "التحديثات",
+        "إصدار تحديث تنزيل تثبيت قناة بيتا تلقائي جديد",
+        RefreshCw,
+      ],
+      ["system", "الاتصال والتطبيق", "Stremio خدمة تشخيص MPV إصدار", Cpu],
+    ],
+  },
 ];
+const sections = GROUPS.flatMap((g) => g.pages);
+const groupOf = (page) =>
+  GROUPS.find((g) => g.pages.some(([id]) => id === page));
+// Pages that moved: an old link still lands somewhere sensible.
+const MOVED = { appearance: "theme" };
+
 export default function SettingsStudio({
   state,
   update,
   act,
   notice,
-  initialTab = "appearance",
+  initialTab = "theme",
   onNuvio,
 }) {
-  const [tab, setTab] = useState(initialTab),
+  const [tab, setTab] = useState(MOVED[initialTab] || initialTab),
+    [open, setOpen] = useState(
+      () => new Set([groupOf(MOVED[initialTab] || initialTab)?.id || "look"]),
+    ),
     [search, setSearch] = useState(""),
     [draft, setDraft] = useState(state.settings),
     [diag, setDiag] = useState(null);
+  const [win] = useWindowState();
   const s = state.settings;
   useEffect(() => {
     setDraft(s);
@@ -388,19 +476,57 @@ export default function SettingsStudio({
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
-          {sections.map(([id, title, , Icon]) => (
-            <button
-              key={id}
-              className={id === tab && !search ? "selected" : ""}
-              onClick={() => {
-                setTab(id);
-                setSearch("");
-              }}
-            >
-              <Icon size={18} />
-              {title}
-            </button>
-          ))}
+          {GROUPS.map((group) => {
+            const pages = group.pages.filter(
+              ([, title, keywords]) =>
+                !search ||
+                `${title} ${keywords}`
+                  .toLowerCase()
+                  .includes(search.toLowerCase()),
+            );
+            if (!pages.length) return null;
+            const expanded = !!search || open.has(group.id);
+            const holdsTab = group.pages.some(([id]) => id === tab);
+            return (
+              <div
+                key={group.id}
+                className={`settings-group ${expanded ? "open" : ""}`}
+              >
+                <button
+                  className={`settings-group-head ${holdsTab ? "holds" : ""}`}
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    setOpen((was) => {
+                      const next = new Set(was);
+                      next.has(group.id)
+                        ? next.delete(group.id)
+                        : next.add(group.id);
+                      return next;
+                    })
+                  }
+                >
+                  <group.Icon size={18} />
+                  <b>{group.title}</b>
+                  <ChevronLeft size={15} className="settings-chevron" />
+                </button>
+                {expanded &&
+                  pages.map(([id, title, , Icon]) => (
+                    <button
+                      key={id}
+                      className={`settings-page ${id === tab && !search ? "selected" : ""}`}
+                      onClick={() => {
+                        setTab(id);
+                        setSearch("");
+                        setOpen((was) => new Set([...was, group.id]));
+                      }}
+                    >
+                      <Icon size={17} />
+                      {title}
+                    </button>
+                  ))}
+              </div>
+            );
+          })}
           <div className="privacy-note">
             <ShieldCheck size={20} />
             <b>مفاتيحك تبقى لك</b>
@@ -413,9 +539,44 @@ export default function SettingsStudio({
           )}
           {visible.map(([id]) => (
             <React.Fragment key={id}>
-              {id === "appearance" && (
+              {id === "theme" && (
+                <AppearanceStudio state={state} update={update} part="theme" />
+              )}
+              {id === "themes" && (
                 <>
-                  <AppearanceStudio state={state} update={update} />
+                  <ThemesLibrary
+                    state={state}
+                    update={update}
+                    notice={notice}
+                  />
+                  <AppearanceStudio
+                    state={state}
+                    update={update}
+                    part="themes"
+                  />
+                </>
+              )}
+              {id === "logo" && <LogoPage state={state} update={update} />}
+              {id === "type" && (
+                <AppearanceStudio state={state} update={update} part="type" />
+              )}
+              {id === "cards" && (
+                <AppearanceStudio state={state} update={update} part="cards" />
+              )}
+              {id === "ambience" && (
+                <AmbiencePage state={state} update={update} />
+              )}
+              {id === "window" && (
+                <WindowPage state={state} update={update} win={win} />
+              )}
+              {id === "interface" && (
+                <>
+                  <AppearanceStudio
+                    state={state}
+                    update={update}
+                    part="interface"
+                  />
+                  <ScreensaverCard state={state} update={update} />
                   <section className="settings-card">
                     <h2>السلوك</h2>
                     {toggle(

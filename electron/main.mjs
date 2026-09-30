@@ -10,6 +10,7 @@ import {
   clipboard,
   globalShortcut,
   powerMonitor,
+  nativeImage,
 } from "electron";
 import {
   readFileSync,
@@ -265,8 +266,64 @@ function applyZoom() {
 }
 const broadcast = () => {
   applyZoom();
+  applyTitleOverlay();
   emit("state", client.publicState());
 };
+// The frame the window was created with; a changed setting waits for a start.
+let runningFrame = "native";
+/** The hybrid bar's native buttons follow the current theme. */
+function applyTitleOverlay() {
+  if (runningFrame !== "hybrid" || !window || window.isDestroyed()) return;
+  const look = resolveAppearance(client.state.settings);
+  try {
+    window.setTitleBarOverlay({
+      color: look.colors.panel,
+      symbolColor: look.colors.text,
+      height: 36,
+    });
+  } catch {
+    /* Older systems draw their own colours. */
+  }
+}
+function windowState() {
+  return {
+    frame: runningFrame,
+    wanted: client?.state.settings.windowFrame || "native",
+    maximized: !!window?.isMaximized(),
+    fullscreen: !!window?.isFullScreen(),
+  };
+}
+let dragTimer = null;
+/**
+ * "Drag the window from anywhere": the page reports a press on empty space
+ * and its release; main follows the pointer in between. It stops on its own
+ * after fifteen seconds or when the window loses focus.
+ */
+function windowDrag(a) {
+  clearInterval(dragTimer);
+  dragTimer = null;
+  if (a?.phase !== "start") return true;
+  if (
+    !client.state.settings.dragAnywhere ||
+    !window ||
+    window.isMaximized() ||
+    window.isFullScreen()
+  )
+    return false;
+  const start = screen.getCursorScreenPoint();
+  const [x, y] = window.getPosition();
+  const began = Date.now();
+  dragTimer = setInterval(() => {
+    if (!window || window.isDestroyed() || Date.now() - began > 15000) {
+      clearInterval(dragTimer);
+      dragTimer = null;
+      return;
+    }
+    const point = screen.getCursorScreenPoint();
+    window.setPosition(x + point.x - start.x, y + point.y - start.y);
+  }, 12);
+  return true;
+}
 function save(data) {
   if (!safeStorage.isEncryptionAvailable())
     throw new Error("تشفير ويندوز غير متاح، تعذّر حفظ البيانات بأمان.");
@@ -606,6 +663,40 @@ function autoSubtitle(videoId) {
 }
 const methods = {
   init: () => client.init(),
+  windowInfo: () => windowState(),
+  windowControl: (a) => {
+    if (!window) return windowState();
+    if (a?.action === "minimize") window.minimize();
+    else if (a?.action === "maximize")
+      window.isMaximized() ? window.unmaximize() : window.maximize();
+    else if (a?.action === "close") window.close();
+    return windowState();
+  },
+  windowDrag,
+  // A frame change needs a new window; the usual shutdown path saves first.
+  relaunch: () => {
+    app.relaunch();
+    app.quit();
+    return true;
+  },
+  // The taskbar icon: Riwaq's own, or the mark drawn in the accent colour by
+  // the interface. Only a small PNG is accepted; nothing else reaches Windows.
+  setAppIcon: (a) => {
+    if (!window) return false;
+    const url = typeof a?.dataUrl === "string" ? a.dataUrl : "";
+    if (!url) {
+      window.setIcon(join(root, "assets", "icon.png"));
+      return true;
+    }
+    if (!url.startsWith("data:image/png;base64,") || url.length > 400000)
+      throw new Error("أيقونة غير صالحة");
+    const image = nativeImage.createFromDataURL(url);
+    const size = image.getSize();
+    if (image.isEmpty() || size.width > 512 || size.height > 512)
+      throw new Error("أيقونة غير صالحة");
+    window.setIcon(image);
+    return true;
+  },
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
   // Only a design code may be copied; nothing else reaches the clipboard.
@@ -1228,7 +1319,21 @@ app
         onChange: broadcast,
       });
       await client.updates.restore();
+      runningFrame = client.state.settings.windowFrame || "native";
+      const look = resolveAppearance(client.state.settings);
       window = new BrowserWindow({
+        ...(runningFrame === "hybrid"
+          ? {
+              titleBarStyle: "hidden",
+              titleBarOverlay: {
+                color: look.colors.panel,
+                symbolColor: look.colors.text,
+                height: 36,
+              },
+            }
+          : runningFrame === "riwaq"
+            ? { frame: false }
+            : {}),
         width: 1440,
         height: 960,
         minWidth: 980,
@@ -1272,6 +1377,12 @@ app
         placeHud();
       });
       window.on("move", () => placeHud());
+      const windowChanged = () => emit("window", windowState());
+      window.on("maximize", windowChanged);
+      window.on("unmaximize", windowChanged);
+      window.on("enter-full-screen", windowChanged);
+      window.on("leave-full-screen", windowChanged);
+      window.on("blur", () => windowDrag({ phase: "end" }));
       window.on("restore", () => placeHud());
       window.webContents.on("did-finish-load", () => {
         appliedZoom = 0;

@@ -1,5 +1,5 @@
 import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
-import { safeAppearance } from "./appearance.mjs";
+import { cleanSavedThemes, safeAppearance } from "./appearance.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -61,6 +61,17 @@ export const DEFAULT_SETTINGS = {
   homeSections: [...DEFAULT_HOME_SECTIONS],
   homeOrder: [],
   homeHidden: [],
+  // The window: Windows' own title bar, a hybrid bar with native-looking
+  // buttons drawn by Windows over Riwaq, or Riwaq's own bar and buttons.
+  // A frame change applies on the next start.
+  windowFrame: "native",
+  windowControls: "filled",
+  frostTopBar: false,
+  dragAnywhere: false,
+  // Minutes idle before the ambient screensaver, 0 for never.
+  screensaver: 0,
+  screensaverClock: true,
+  savedThemes: [],
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -239,6 +250,9 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "playerOverlay",
     "autoFailover",
     "videoFill",
+    "frostTopBar",
+    "dragAnywhere",
+    "screensaverClock",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (
@@ -288,6 +302,9 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     holdSpeed: [0, 1.5, 2, 3],
     subtitleKind: ["standard", "sdh", "forced"],
     autoSubtitles: ["off", "preferred"],
+    windowFrame: ["native", "hybrid", "riwaq"],
+    windowControls: ["filled", "glass", "clean"],
+    screensaver: [0, 1, 3, 5, 10, 15],
   }))
     if (values.includes(input[key])) next[key] = input[key];
   if (Number.isFinite(input.subtitlePosition))
@@ -299,6 +316,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
       input.appearance,
       current.appearance || undefined,
     );
+  if (Array.isArray(input.savedThemes))
+    next.savedThemes = cleanSavedThemes(input.savedThemes);
   if (Array.isArray(input.homeSections))
     next.homeSections = safeHomeSections(input.homeSections);
   for (const key of ["homeOrder", "homeHidden"])
