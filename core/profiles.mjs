@@ -191,7 +191,11 @@ export class Profiles {
       profile.lockedRooms = lockedRooms.filter((room) =>
         LOCKABLE_ROOMS.includes(room),
       );
-    if (typeof hideAdult === "boolean") profile.hideAdult = hideAdult;
+    if (typeof hideAdult === "boolean" && hideAdult !== !!profile.hideAdult) {
+      // Showing adult content again is a settings change, behind its lock.
+      if (!hideAdult) this.gate("settings");
+      profile.hideAdult = hideAdult;
+    }
     this.client.persist();
     return this.client.publicState();
   }

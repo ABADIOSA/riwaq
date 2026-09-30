@@ -15,6 +15,13 @@ import {
   ServicesPage,
 } from "./settings/ServicePages.jsx";
 import {
+  AiPage,
+  AwardsPage,
+  DetailsPage,
+  LibraryPage,
+  PlayerLayoutPage,
+} from "./settings/MorePages.jsx";
+import {
   BadgePacksPage,
   BadgeRulesPage,
   BadgesPage,
@@ -72,6 +79,10 @@ import {
   Server,
   ServerCog,
   Share2,
+  FileText,
+  BookMarked,
+  Gamepad2,
+  Trophy,
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -371,10 +382,28 @@ const GROUPS = [
         LayoutGrid,
       ],
       [
+        "details",
+        "صفحات التفاصيل",
+        "خلفية حرق أسماء الحلقات جوائز تفاصيل",
+        FileText,
+      ],
+      [
         "data",
         "مزوّدو البيانات الوصفية",
         "API TMDB OMDb MDBList Fanart تقييمات صور لغة",
         Database,
+      ],
+      [
+        "ai",
+        "البحث بالذكاء الاصطناعي",
+        "Groq OpenRouter ذكاء اصطناعي اقتراحات وصف بحث ذكي",
+        Sparkles,
+      ],
+      [
+        "library",
+        "المكتبة",
+        "إخفاء المشاهد البالغين محتوى للكبار مكتبة",
+        BookMarked,
       ],
     ],
   },
@@ -400,6 +429,12 @@ const GROUPS = [
         "شريط العنوان أزرار النافذة تمويه سحب النافذة",
         AppWindow,
       ],
+      [
+        "playerLayout",
+        "تخطيط المشغل",
+        "أزرار المشغل شريط التحكم بسيط سينمائي",
+        Gamepad2,
+      ],
       ["badges", "شارات البث", "شارات الصيغة دقة ترميز صوت", BadgeCheck],
       [
         "badgeRules",
@@ -408,6 +443,7 @@ const GROUPS = [
         ListChecks,
       ],
       ["badgePacks", "حزم الشارات", "حزمة استيراد تصدير JSON", Package],
+      ["awards", "أيقونات الجوائز", "جوائز أوسكار كأس غولدن غلوب إيمي", Trophy],
     ],
   },
   {
@@ -640,6 +676,17 @@ export default function SettingsStudio({
                 <HomeServersPage state={state} update={update} />
               )}
               {id === "p2p" && <P2PPage notice={notice} />}
+              {id === "library" && (
+                <LibraryPage state={state} update={update} />
+              )}
+              {id === "details" && (
+                <DetailsPage state={state} update={update} />
+              )}
+              {id === "ai" && <AiPage state={state} update={update} />}
+              {id === "playerLayout" && (
+                <PlayerLayoutPage state={state} update={update} />
+              )}
+              {id === "awards" && <AwardsPage state={state} update={update} />}
               {id === "server" && <ServerPage state={state} update={update} />}
               {id === "sorting" && (
                 <SortingPage state={state} update={update} />
@@ -668,11 +715,6 @@ export default function SettingsStudio({
                   <ScreensaverCard state={state} update={update} />
                   <section className="settings-card">
                     <h2>السلوك</h2>
-                    {toggle(
-                      "hideWatched",
-                      "إخفاء الأفلام التي شاهدتها",
-                      "تختفي الأفلام التي أكملتها أو علّمتها مشاهدة من الرئيسية والاكتشاف والمجموعات فور انتهائك. البحث والمكتبة ومتابعة المشاهدة واختياراتك في المجلدات تبقى كما هي.",
-                    )}
                     {toggle(
                       "reduceMotion",
                       "تقليل الحركة",

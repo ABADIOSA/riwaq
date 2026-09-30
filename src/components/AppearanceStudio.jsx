@@ -371,6 +371,14 @@ export default function AppearanceStudio({ state, update, part = "" }) {
           <label className="studio-toggle">
             <input
               type="checkbox"
+              checked={draft.posterWatched !== false}
+              onChange={(e) => change({ posterWatched: e.target.checked })}
+            />
+            علامة «شاهدته» على الأفلام التي أكملتها
+          </label>
+          <label className="studio-toggle">
+            <input
+              type="checkbox"
               checked={s.showRatings !== false}
               onChange={(e) =>
                 update("settings", { showRatings: e.target.checked })
@@ -425,19 +433,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               },
             )}
           </label>
-          <label className="studio-field">
-            خلفية صفحة التفاصيل
-            {pick(
-              "detailBackground",
-              [
-                ["backdrop", "صورة العمل"],
-                ["blur", "صورة ضبابية"],
-                ["solid", "لون ثابت"],
-              ],
-              draft.detailBackground,
-              (detailBackground) => change({ detailBackground }),
-            )}
-          </label>
+
           <div className="studio-field">
             عناصر القائمة
             <div className="choice-row">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   Award,
+  Trophy,
   Briefcase,
   Building2,
   Cake,
@@ -13,6 +14,7 @@ import { call } from "../lib/api.js";
 import { Busy, Empty, Modal, Poster } from "./UI.jsx";
 import { mapTiles } from "../../core/credits.mjs";
 import { arabicCount, ACTORS, AWARDS, WORKS } from "../../core/arabic.mjs";
+import { awardFamilies } from "../../core/awards.mjs";
 
 const initials = (name) =>
   String(name || "")
@@ -121,6 +123,28 @@ function Chips({ icon: Icon, title, items, kind, onExplore }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** One trophy per award family, with how many the work received. */
+export function AwardTrophies({ awards }) {
+  const { families, other } = awardFamilies(awards);
+  if (!families.length) return null;
+  return (
+    <div className="award-trophies" aria-label="الجوائز">
+      {families.map((f) => (
+        <span
+          key={f.id}
+          className="award-trophy"
+          style={{ "--trophy": f.color }}
+          title={`${f.label}: ${f.count}`}
+        >
+          <Trophy size={16} />
+          <b>{f.count}</b> {f.label}
+        </span>
+      ))}
+      {other > 0 && <span className="award-trophy other">+{other} أخرى</span>}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { cleanSavedThemes, safeAppearance } from "./appearance.mjs";
 import { cleanAddonPriority, cleanStreamFilters } from "./stream-prefs.mjs";
 import { cleanBadgeRules, cleanHiddenBadges } from "./badges.mjs";
 import { cleanServices } from "./services.mjs";
+import { cleanHudHidden } from "./hud-layout.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -89,6 +90,13 @@ export const DEFAULT_SETTINGS = {
   badgeRules: [],
   // Streaming services the viewer pays for, shown as home rows.
   streamingServices: [],
+  // Series: hide episode titles not reached yet.
+  spoilerGuard: "off",
+  // The player HUD: a preset of visible controls, or the viewer's own.
+  hudLayout: "full",
+  hudHidden: [],
+  // Award trophies grouped by family on details pages.
+  awardIcons: true,
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -272,6 +280,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "screensaverClock",
     "pickerReleaseName",
     "badgesOn",
+    "awardIcons",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (
@@ -327,6 +336,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     sourceMode: ["all", "direct", "p2p"],
     streamOrder: ["riwaq", "addon"],
     pickerLayout: ["detailed", "compact"],
+    spoilerGuard: ["off", "titles"],
+    hudLayout: ["full", "minimal", "cinema", "custom"],
   }))
     if (values.includes(input[key])) next[key] = input[key];
   if (Number.isFinite(input.subtitlePosition))
@@ -346,6 +357,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.addonPriority = cleanAddonPriority(input.addonPriority);
   if (Array.isArray(input.streamingServices))
     next.streamingServices = cleanServices(input.streamingServices);
+  if (Array.isArray(input.hudHidden))
+    next.hudHidden = cleanHudHidden(input.hudHidden);
   if (Array.isArray(input.badgeRules))
     next.badgeRules = cleanBadgeRules(input.badgeRules);
   if (Array.isArray(input.badgesHidden))

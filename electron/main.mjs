@@ -35,6 +35,7 @@ import {
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
+import { AI_PROVIDERS } from "../core/ai-search.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
 import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
 import {
@@ -849,6 +850,18 @@ const methods = {
   homeServerCheck: (a) =>
     client.services.homeServerCheck({ id: String(a?.id || "") }),
   streamServerInfo: () => client.services.streamServerInfo(),
+  // AI search: the key is saved behind the Settings lock and never returned.
+  aiSave: (a) => {
+    client.profiles.gate("settings");
+    return client.ai.save({
+      provider: String(a?.provider || ""),
+      key: typeof a?.key === "string" ? a.key : undefined,
+      model: typeof a?.model === "string" ? a.model : "",
+      clear: a?.clear === true,
+    });
+  },
+  aiTest: () => client.ai.test(),
+  aiSearch: (a) => client.ai.search({ query: String(a?.query || "") }),
   streamServerSave: (a) => {
     client.profiles.gate("settings");
     return client.services.streamServerSave({
@@ -894,6 +907,7 @@ const methods = {
       telegram: "https://core.telegram.org/bots#how-do-i-create-a-bot",
       discordApp: "https://discord.com/developers/applications",
       ...Object.fromEntries(DEBRID.map((d) => [d.id, d.url])),
+      ...Object.fromEntries(AI_PROVIDERS.map((p) => [p.id, p.keys])),
     };
     if (!urls[id]) throw new Error("رابط الخدمة غير معروف");
     await shell.openExternal(urls[id]);

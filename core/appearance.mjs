@@ -224,6 +224,8 @@ export const DEFAULT_APPEARANCE = {
   posterRadius: 12,
   posterHover: "lift",
   posterTitles: true,
+  // A check on the cards of films the viewer has finished.
+  posterWatched: true,
   heroStyle: "full",
   detailBackground: "backdrop",
   navHidden: [],
@@ -312,6 +314,8 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
   );
   if (typeof input.posterTitles === "boolean")
     next.posterTitles = input.posterTitles;
+  if (typeof input.posterWatched === "boolean")
+    next.posterWatched = input.posterWatched;
   next.heroStyle = choose(input.heroStyle, ["full", "compact"], next.heroStyle);
   next.detailBackground = choose(
     input.detailBackground,
@@ -481,6 +485,7 @@ export function themeClasses(input) {
     `density-${a.density}`,
     `hover-${a.posterHover}`,
     a.posterTitles ? "" : "no-poster-titles",
+    a.posterWatched ? "" : "no-watched-marks",
     `hero-${a.heroStyle}`,
     `detailbg-${a.detailBackground}`,
     a.wallpaper ? "wall-on" : "",

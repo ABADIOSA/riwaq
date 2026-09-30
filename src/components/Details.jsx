@@ -30,6 +30,7 @@ import { shuffleCandidates, shufflePick } from "../../core/shuffle.mjs";
 /** Episodes already shuffled to, per series, for this session. */
 const shuffled = new Map();
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
+import { spoilerIds } from "../../core/spoilers.mjs";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
 import {
@@ -44,6 +45,7 @@ import {
   CreditsFacts,
   ExploreModal,
   useCredits,
+  AwardTrophies,
 } from "./Credits.jsx";
 export default function Details({
   selection,
@@ -146,6 +148,14 @@ export default function Details({
     };
   }, [videoId, request]);
   const videos = episodeList(meta),
+    // Titles of episodes not reached yet stay hidden when the viewer asks.
+    spoilers =
+      state.settings.spoilerGuard === "titles"
+        ? spoilerIds(videos, state.progress, {
+            type: meta.type,
+            current: videoId,
+          })
+        : null,
     seasons = [...new Set(videos.map((v) => v.season ?? 1))],
     isFavorite = state.favorites.some(
       (m) => m.id === meta.id && m.type === meta.type,
@@ -249,6 +259,9 @@ export default function Details({
         <p className="synopsis" dir="auto">
           {meta.description}
         </p>
+        {state.settings.awardIcons !== false && credits?.awards?.length > 0 && (
+          <AwardTrophies awards={credits.awards} />
+        )}
         {meta.cast?.length > 0 && !credits?.cast?.length && (
           <p className="cast" dir="auto">
             {meta.cast.slice(0, 5).join(" · ")}
@@ -404,7 +417,17 @@ export default function Details({
                         {String(v.episode || 1).padStart(2, "0")}
                       </span>
                       <span>
-                        <b dir="auto">
+                        <b
+                          dir="auto"
+                          className={
+                            spoilers?.has(v.id) ? "spoiler-title" : undefined
+                          }
+                          title={
+                            spoilers?.has(v.id)
+                              ? "مخفي حتى تصل لهذه الحلقة. مرّر المؤشر لإظهاره."
+                              : undefined
+                          }
+                        >
                           {v.title || v.name || `الحلقة ${v.episode}`}
                         </b>
                         {v.released && (

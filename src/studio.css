@@ -1858,3 +1858,57 @@ em.tag-custom {
   gap: 10px;
   margin: 12px 0;
 }
+
+/* Award trophies on details pages. */
+.award-trophies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+.award-trophy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--trophy, #e6b450) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--trophy, #e6b450) 45%, transparent);
+}
+.award-trophy svg {
+  color: var(--trophy, #e6b450);
+}
+.award-trophy.other {
+  color: var(--muted);
+  background: none;
+}
+
+/* Spoiler protection: unreached episode titles, revealed on purpose. */
+.spoiler-title {
+  filter: blur(6px);
+  transition: filter 0.2s;
+}
+.episode:hover .spoiler-title,
+.episode:focus-visible .spoiler-title {
+  filter: none;
+}
+
+/* AI search on the results page. */
+.ai-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 6px 0 18px;
+}
+.ai-ask small {
+  color: var(--muted);
+}
+.award-trophies.dimmed {
+  opacity: 0.45;
+}
+.p2p-options ~ h3 {
+  margin-top: 18px;
+}
