@@ -12,6 +12,8 @@ import {
   webUrl,
 } from "./protocol.mjs";
 import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
+import { applyStreamPrefs } from "./stream-prefs.mjs";
+import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
 import { DataHub } from "./data-hub.mjs";
 import { Credits } from "./credits.mjs";
 import { Integrations } from "./integrations.mjs";
@@ -1208,7 +1210,11 @@ export class Client {
           );
           return (response.streams || [])
             .filter((s) => s && typeof s === "object")
-            .map((s) => ({ ...s, provider: addon.manifest.name }));
+            .map((s) => ({
+              ...s,
+              provider: addon.manifest.name,
+              addonId: addon.manifest.id,
+            }));
         } catch {
           failures.push(addon.manifest.name);
           return [];
@@ -1235,7 +1241,7 @@ export class Client {
       this.state.settings,
       this.requestContext(type, id),
     );
-    const streams = analysis.kept.map((entry) => {
+    const ranked = analysis.kept.map((entry) => {
       const { stream, parsed } = entry;
       const key = keyFor(unique[entry.index].identity);
       this.streams.set(key, { ...stream, type, videoId: id });
@@ -1277,7 +1283,20 @@ export class Client {
         torrent: !!stream.infoHash,
         external: !!(stream.externalUrl || stream.ytId),
         supported,
+        addonId: stream.addonId,
       };
+    });
+    // The viewer's source mode, saved filter and order, then their badges.
+    const settings = this.state.settings;
+    const prefs = applyStreamPrefs(
+      ranked,
+      settings,
+      this.enabled().map((a) => a.manifest.id),
+    );
+    const rules = cleanBadgeRules(settings.badgeRules);
+    const streams = prefs.streams.map((s) => {
+      const badges = ruleBadges(s, rules);
+      return badges.length ? { ...s, badges } : s;
     });
     const dropped = analysis.dropped.map((entry) => ({
       name: entry.stream.name || entry.stream.provider || "مصدر",
@@ -1295,6 +1314,9 @@ export class Client {
       failures,
       providers: addons.length,
       safety: analysis.safety,
+      mode: prefs.mode,
+      modeFallback: prefs.modeFallback,
+      filter: prefs.filter,
     };
   }
   /**

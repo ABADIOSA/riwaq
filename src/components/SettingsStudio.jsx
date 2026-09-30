@@ -8,6 +8,14 @@ import {
   WindowPage,
 } from "./settings/LookPages.jsx";
 import { useWindowState } from "./WindowChrome.jsx";
+import {
+  BadgePacksPage,
+  BadgeRulesPage,
+  BadgesPage,
+  FiltersPage,
+  PickerPage,
+  SortingPage,
+} from "./settings/SourcePages.jsx";
 import React, { useState, useEffect } from "react";
 import {
   Palette,
@@ -49,6 +57,11 @@ import {
   Sun,
   AppWindow,
   Cpu,
+  ArrowDownUp,
+  MousePointerClick,
+  BadgeCheck,
+  ListChecks,
+  Package,
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -304,6 +317,19 @@ const GROUPS = [
         SlidersHorizontal,
       ],
       [
+        "sorting",
+        "ترتيب مصادر البث",
+        "ترتيب النتائج أولوية الإضافات",
+        ArrowDownUp,
+      ],
+      [
+        "picker",
+        "اختيار المصدر",
+        "قائمة المصادر مختصر مفصل تورنت مباشر اسم النسخة",
+        MousePointerClick,
+      ],
+      ["filters", "مرشحات البث", "مرشح جودة 4K HDR أتموس حجم مشاركين", Filter],
+      [
         "home",
         "الرئيسية",
         "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام مجموعات مثبتة",
@@ -345,6 +371,14 @@ const GROUPS = [
         "شريط العنوان أزرار النافذة تمويه سحب النافذة",
         AppWindow,
       ],
+      ["badges", "شارات البث", "شارات الصيغة دقة ترميز صوت", BadgeCheck],
+      [
+        "badgeRules",
+        "قواعد الشارات",
+        "قاعدة شارة نمط مجموعة إصدار",
+        ListChecks,
+      ],
+      ["badgePacks", "حزم الشارات", "حزمة استيراد تصدير JSON", Package],
     ],
   },
   {
@@ -565,6 +599,20 @@ export default function SettingsStudio({
               )}
               {id === "ambience" && (
                 <AmbiencePage state={state} update={update} />
+              )}
+              {id === "sorting" && (
+                <SortingPage state={state} update={update} />
+              )}
+              {id === "picker" && <PickerPage state={state} update={update} />}
+              {id === "filters" && (
+                <FiltersPage state={state} update={update} notice={notice} />
+              )}
+              {id === "badges" && <BadgesPage state={state} update={update} />}
+              {id === "badgeRules" && (
+                <BadgeRulesPage state={state} update={update} notice={notice} />
+              )}
+              {id === "badgePacks" && (
+                <BadgePacksPage state={state} update={update} notice={notice} />
               )}
               {id === "window" && (
                 <WindowPage state={state} update={update} win={win} />

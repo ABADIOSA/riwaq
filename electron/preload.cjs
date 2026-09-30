@@ -10,6 +10,7 @@ const allowed = new Set([
   "catalogPlan",
   "subtitleCues",
   "copyThemeCode",
+  "copyBadgePack",
   "hudPanel",
   "hudRequest",
   "hudIdle",

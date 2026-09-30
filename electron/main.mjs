@@ -699,6 +699,20 @@ const methods = {
   },
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
+  // A badge pack is copied only as Riwaq's own pack JSON.
+  copyBadgePack: (a) => {
+    const json = String(a?.json || "");
+    let data;
+    try {
+      data = JSON.parse(json);
+    } catch {
+      throw new Error("حزمة غير صالحة");
+    }
+    if (data?.format !== "riwaq-badges" || json.length > 60000)
+      throw new Error("حزمة غير صالحة");
+    clipboard.writeText(json);
+    return true;
+  },
   // Only a design code may be copied; nothing else reaches the clipboard.
   copyThemeCode: (a) => {
     const code = String(a?.code || "");
