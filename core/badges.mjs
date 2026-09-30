@@ -65,7 +65,12 @@ export function cleanBadgeRules(input) {
     const id = /^[\w-]{1,40}$/.test(r.id || "") ? r.id : "";
     const label = text(r.label ?? r.name, 24);
     const pattern = typeof r.pattern === "string" ? r.pattern.trim() : "";
-    if (!id || !label || patternProblem(pattern) || out.some((x) => x.id === id))
+    if (
+      !id ||
+      !label ||
+      patternProblem(pattern) ||
+      out.some((x) => x.id === id)
+    )
       continue;
     out.push({
       id,

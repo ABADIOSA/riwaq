@@ -59,7 +59,9 @@ const text = (value, max) =>
         .slice(0, max)
     : "";
 const pickList = (value, allowed) =>
-  Array.isArray(value) ? [...new Set(value.filter((v) => allowed.includes(v)))] : [];
+  Array.isArray(value)
+    ? [...new Set(value.filter((v) => allowed.includes(v)))]
+    : [];
 
 /** Saved filters: a name, and only the categories and limits Riwaq knows. */
 export function cleanStreamFilters(input) {
@@ -98,7 +100,9 @@ export function cleanAddonPriority(input) {
     ? [
         ...new Set(
           input
-            .filter((id) => typeof id === "string" && /^[^\s<>"`]{1,200}$/.test(id))
+            .filter(
+              (id) => typeof id === "string" && /^[^\s<>"`]{1,200}$/.test(id),
+            )
             .slice(0, 100),
         ),
       ]
@@ -120,7 +124,10 @@ const known = (value, list) => (list.includes(value) ? value : "Other");
 /** Whether a stream, as the picker sees it, meets a saved filter. */
 export function matchesFilter(stream, filter) {
   if (!filter) return true;
-  if (filter.resolution.length && !filter.resolution.includes(bucket(stream.resolution)))
+  if (
+    filter.resolution.length &&
+    !filter.resolution.includes(bucket(stream.resolution))
+  )
     return false;
   if (
     filter.source.length &&
@@ -140,7 +147,11 @@ export function matchesFilter(stream, filter) {
   if (filter.requireHdr && !stream.hdr) return false;
   if (filter.cachedOnly && !stream.cached) return false;
   // Seeds only mean something for a torrent; a direct link passes.
-  if (filter.minSeeders && stream.torrent && (stream.seeders ?? 0) < filter.minSeeders)
+  if (
+    filter.minSeeders &&
+    stream.torrent &&
+    (stream.seeders ?? 0) < filter.minSeeders
+  )
     return false;
   if (filter.maxSizeGb && stream.size && stream.size > filter.maxSizeGb * GIB)
     return false;
@@ -149,7 +160,11 @@ export function matchesFilter(stream, filter) {
 
 /** The kind of link a stream is, for the source mode. */
 const inMode = (stream, mode) =>
-  mode === "p2p" ? !!stream.torrent : mode === "direct" ? !stream.torrent : true;
+  mode === "p2p"
+    ? !!stream.torrent
+    : mode === "direct"
+      ? !stream.torrent
+      : true;
 
 /**
  * Applies mode, filter and order to the ranked streams. `streams` carry the
@@ -195,7 +210,12 @@ export function applyStreamPrefs(streams, settings = {}, addonOrder = []) {
     mode,
     modeFallback,
     filter: filter
-      ? { id: filter.id, name: filter.name, matched, fallback: !matched && list.length > 0 }
+      ? {
+          id: filter.id,
+          name: filter.name,
+          matched,
+          fallback: !matched && list.length > 0,
+        }
       : null,
   };
 }
