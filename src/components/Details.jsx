@@ -30,6 +30,7 @@ import { shuffleCandidates, shufflePick } from "../../core/shuffle.mjs";
 /** Episodes already shuffled to, per series, for this session. */
 const shuffled = new Map();
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
+import { spoilerIds } from "../../core/spoilers.mjs";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
 import {
@@ -44,6 +45,7 @@ import {
   CreditsFacts,
   ExploreModal,
   useCredits,
+  AwardTrophies,
 } from "./Credits.jsx";
 export default function Details({
   selection,
@@ -65,6 +67,7 @@ export default function Details({
     [result, setResult] = useState(null),
     [streamsLoading, setStreamsLoading] = useState(false),
     [quality, setQuality] = useState(""),
+    [showOutside, setShowOutside] = useState(false),
     [showDropped, setShowDropped] = useState(false),
     [explained, setExplained] = useState(""),
     [playing, setPlaying] = useState(""),
@@ -145,6 +148,14 @@ export default function Details({
     };
   }, [videoId, request]);
   const videos = episodeList(meta),
+    // Titles of episodes not reached yet stay hidden when the viewer asks.
+    spoilers =
+      state.settings.spoilerGuard === "titles"
+        ? spoilerIds(videos, state.progress, {
+            type: meta.type,
+            current: videoId,
+          })
+        : null,
     seasons = [...new Set(videos.map((v) => v.season ?? 1))],
     isFavorite = state.favorites.some(
       (m) => m.id === meta.id && m.type === meta.type,
@@ -167,10 +178,19 @@ export default function Details({
         .finally(() => setSubLoading(false));
     }
   };
-  const shown =
+  const settings = state.settings;
+  const allShown =
     result?.streams?.filter(
       (s) => !quality || s.tier === quality || String(s.resolution) === quality,
     ) || [];
+  // Streams outside the active saved filter fold away until asked for.
+  const outside = allShown.filter((s) => s.matches === false);
+  const shown =
+    result?.filter && !result.filter.fallback && !showOutside
+      ? allShown.filter((s) => s.matches !== false)
+      : allShown;
+  const hiddenKinds = new Set(settings.badgesHidden || []);
+  const chip = (kind) => settings.badgesOn !== false && !hiddenKinds.has(kind);
   const dropped = result?.dropped || [];
   return (
     <Modal onClose={onClose} className="details-modal">
@@ -239,6 +259,9 @@ export default function Details({
         <p className="synopsis" dir="auto">
           {meta.description}
         </p>
+        {state.settings.awardIcons !== false && credits?.awards?.length > 0 && (
+          <AwardTrophies awards={credits.awards} />
+        )}
         {meta.cast?.length > 0 && !credits?.cast?.length && (
           <p className="cast" dir="auto">
             {meta.cast.slice(0, 5).join(" · ")}
@@ -394,7 +417,17 @@ export default function Details({
                         {String(v.episode || 1).padStart(2, "0")}
                       </span>
                       <span>
-                        <b dir="auto">
+                        <b
+                          dir="auto"
+                          className={
+                            spoilers?.has(v.id) ? "spoiler-title" : undefined
+                          }
+                          title={
+                            spoilers?.has(v.id)
+                              ? "مخفي حتى تصل لهذه الحلقة. مرّر المؤشر لإظهاره."
+                              : undefined
+                          }
+                        >
                           {v.title || v.name || `الحلقة ${v.episode}`}
                         </b>
                         {v.released && (
@@ -458,14 +491,39 @@ export default function Details({
               </IconButton>
             </div>
           </div>
+          {result?.modeFallback && (
+            <p className="stream-pref-note">
+              لا توجد مصادر من النوع الذي اخترته في «اختيار المصدر»، فنعرض كل
+              المصادر.
+            </p>
+          )}
+          {result?.filter && (
+            <p className="stream-pref-note">
+              {result.filter.fallback
+                ? `لا مصدر يطابق مرشح «${result.filter.name}»، فنعرض الأفضل المتاح.`
+                : `مرشح «${result.filter.name}» مفعّل: ${result.filter.matched} مطابق.`}
+              {!result.filter.fallback && outside.length > 0 && (
+                <button
+                  className="text-button"
+                  onClick={() => setShowOutside(!showOutside)}
+                >
+                  {showOutside
+                    ? "أخفِ غير المطابق"
+                    : `اعرض ${outside.length} غير مطابق`}
+                </button>
+              )}
+            </p>
+          )}
           {streamsLoading ? (
             <Busy text="نبحث في إضافاتك عن المصادر…" />
           ) : shown.length ? (
-            <div className="stream-list">
+            <div
+              className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""}`}
+            >
               {shown.map((s, i) => (
                 <div
                   key={s.key}
-                  className={`stream ${i === 0 ? "recommended" : ""}`}
+                  className={`stream ${i === 0 ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
                 >
                   <button
                     className="stream-play"
@@ -473,7 +531,9 @@ export default function Details({
                     onClick={() => playStream(s)}
                   >
                     <span className="stream-quality">
-                      {s.resolution === 2160 ? (
+                      {!chip("resolution") ? (
+                        <Play size={20} />
+                      ) : s.resolution === 2160 ? (
                         "4K"
                       ) : s.resolution ? (
                         `${s.resolution}p`
@@ -483,37 +543,52 @@ export default function Details({
                     </span>
                     <span className="stream-info">
                       <b dir="auto">{s.name}</b>
-                      <span dir="auto">{s.title || s.provider}</span>
+                      {settings.pickerReleaseName !== false && (
+                        <span dir="auto">{s.title || s.provider}</span>
+                      )}
                       <small>
-                        {s.hdr && <em className="tag-hdr">{s.hdr}</em>}
-                        {s.codec && <em>{s.codec}</em>}
-                        {s.source && <em>{s.source}</em>}
-                        {s.audio && (
+                        {(s.badges || []).map((b) => (
+                          <em
+                            key={b.label}
+                            className="tag-custom"
+                            style={{ "--badge": b.color }}
+                          >
+                            {b.label}
+                          </em>
+                        ))}
+                        {chip("hdr") && s.hdr && (
+                          <em className="tag-hdr">{s.hdr}</em>
+                        )}
+                        {chip("codec") && s.codec && <em>{s.codec}</em>}
+                        {chip("source") && s.source && <em>{s.source}</em>}
+                        {chip("audio") && s.audio && (
                           <em>
                             {s.audio}
                             {s.channels ? ` ${s.channels}` : ""}
                           </em>
                         )}
-                        {s.sizeLabel && <em>{s.sizeLabel}</em>}
-                        {s.cached && (
+                        {chip("size") && s.sizeLabel && <em>{s.sizeLabel}</em>}
+                        {chip("cached") && s.cached && (
                           <em className="tag-cached">
                             <Zap size={11} /> {s.debrid || "مخزّن"}
                           </em>
                         )}
-                        {s.seeders !== null && s.seeders !== undefined && (
-                          <em>
-                            <Users size={11} /> {s.seeders}
-                          </em>
-                        )}
-                        {s.trustedGroup && (
+                        {chip("seeders") &&
+                          s.seeders !== null &&
+                          s.seeders !== undefined && (
+                            <em>
+                              <Users size={11} /> {s.seeders}
+                            </em>
+                          )}
+                        {chip("group") && s.trustedGroup && (
                           <em className="tag-trusted">
                             <ShieldCheck size={11} /> {s.group}
                           </em>
                         )}
-                        {s.arabicDub && (
+                        {chip("arabic") && s.arabicDub && (
                           <em className="tag-arabic">دبلجة عربية</em>
                         )}
-                        {s.arabicSub && (
+                        {chip("arabic") && s.arabicSub && (
                           <em className="tag-arabic">ترجمة عربية</em>
                         )}
                         {s.torrent && <em>Stremio Service</em>}

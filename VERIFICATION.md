@@ -1,4 +1,42 @@
-# Verification — Riwaq 0.14.0
+# Verification — Riwaq 0.15.0
+
+## 0.15.0 — Harbor's settings pages
+
+The owner shared three screenshots of Harbor's settings and asked for those features. Built in four commits: grouped settings with window, ambience, themes, logo and screensaver; stream filters, ordering, picker and badges; services, debrid, home servers and the torrent engine; AI search, spoiler protection, player layout, award icons and library filters.
+
+Executed:
+
+- `npm test`: **328 passing, 0 failing** (296 + 32 new), all mocked:
+  - `tests/look.test.mjs` (5): appearance fields, saved themes, window settings and root classes.
+  - `tests/stream-prefs.test.mjs` (7): filters, source mode with fallback, addon priority, pattern guard, rule badges and packs.
+  - `tests/services.test.mjs` (9): debrid requests and account parsing for five services, watch providers and chosen services, home-server helpers, streaming-server values and profiles. Also, with a mocked `request`:
+    - debrid keys kept out of `publicState` and checked without redirects;
+    - a Jellyfin sign-in keeping only the token, with "your copy" first among streams, its token-bearing URL only in main, and disable/remove;
+    - service rows reporting `needs: tmdb` without any request;
+    - a streaming-server change verified by re-reading it.
+  - `tests/wave4.test.mjs` (11): adult addons and titles, spoiler IDs, HUD presets and settings, the watched-mark class, award families and AI requests. Also:
+    - defensive parsing of AI replies and name/year matching;
+    - AI search through mocked TMDB, with the key never in `publicState`;
+    - a rejected key reading as rejected;
+    - a hide-adult profile skipping an adult addon and a flagged title, with turning it off gated by the Settings lock.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge at 980×680 and 1440×960 (HUD at 980×552):
+  - every new page opens in Harbor's order;
+  - services: choosing two adds their home section and two home rows; a saved debrid key shows "ends soon · 5 days";
+  - home servers: a wrong password adds nothing and clears the password field; a right one lists the server with its item count, and the toggle works;
+  - P2P: the profile moves from balanced to fast and the cache to unlimited; the server page reports connected with its version;
+  - details: episodes 3–5 blurred after episode 1 is finished and 2 is current; trophies read "2 الأوسكار", "1 غولدن غلوب", "+1 أخرى";
+  - AI search: a saved key clears its field; the results page asks on demand and shows a suggestions row;
+  - player layout: custom hides the chosen controls; the HUD shows 11 controls in full, 7 in minimal and 4 in cinema, and hides the title in cinema;
+  - a finished film carries the watched mark; hide adult and the details background save;
+  - window, filters, sorting, picker, badge rules and packs were rendered in the earlier commits.
+  - No page errors, no horizontal overflow.
+
+Not executed:
+
+- Nothing ran on Windows: frames, drag-anywhere, taskbar icon or relaunch.
+- No real debrid key, Jellyfin/Emby server, Stremio Service settings write, Groq or OpenRouter key, or live TMDB watch-provider list was used.
+- No real adult-flagged addon was tried.
 
 ## 0.14.0 — the best of Harbor, Nuvio, Nuvio HTPC and Stremio Community
 

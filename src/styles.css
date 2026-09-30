@@ -2854,3 +2854,34 @@ button.secondary {
   color: var(--muted, #9aa0a8);
   white-space: nowrap;
 }
+.stream-pref-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+.stream.outside {
+  opacity: 0.62;
+}
+.stream-info em.tag-custom {
+  background: color-mix(in srgb, var(--badge, #e7b66e) 22%, transparent);
+  color: var(--badge, #e7b66e);
+  border-color: color-mix(in srgb, var(--badge, #e7b66e) 45%, transparent);
+  font-weight: 700;
+}
+.stream-list.compact .stream-play {
+  padding-block: 9px;
+}
+.stream-list.compact .stream-info > span {
+  display: none;
+}
+.stream-list.compact .stream-quality {
+  width: 52px;
+  height: 40px;
+  font-size: 14px;
+}

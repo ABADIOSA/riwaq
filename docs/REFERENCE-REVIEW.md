@@ -49,6 +49,14 @@ Nuvio HTPC (UmbraProjects/NuvioDesktop, GPL-3.0) at `b775bf5` (Release 1.15.0), 
 - **Backup.** Its settings backup is a zip of `preferences/*.properties`.
 - **Riwaq 0.12's Nuvio link.** It reads those stores directly and never keeps or runs plugin code.
 
+## Harbor's settings pages, 2026-09-30 (0.15)
+
+The owner shared three screenshots of Harbor's settings (Sources & library, Appearance, Window) and asked for the features. Harbor is MIT; its pages were matched by behaviour from the screenshots and its public descriptions, and written from scratch.
+
+- **Done:** services (streaming catalogs and debrid), home servers (Jellyfin and Emby), source preferences, stream ordering, source picker, stream filters, P2P engine, streaming server, home, poster cards, detail pages (background, spoiler protection), metadata providers, AI search, library (hide watched, hide adult); theme, your themes, logo and icon, fonts, interface (with a screensaver), ambience, window (native, hybrid or Riwaq bar, control styles, frosted top bar, drag anywhere), player layout, stream badges, badge rules, badge packs, award icons.
+- **Different on purpose:** debrid keys only read account health; playback stays with the viewer's addons. AI search sends only the typed sentence, on request. Streaming-service rows use TMDB with the viewer's key. Torrent profiles are Riwaq's own values.
+- **Not taken:** Plex sign-in through plex.tv; routing playback through debrid.
+
 ## Four betas compared, 2026-09-30 (0.14)
 
 The owner asked for the latest betas of four apps to be compared: the best feature they share, and the best of each, brought into Riwaq. Each was read for behaviour only; no code was copied. Harbor is MIT; the others are GPL-3.0.

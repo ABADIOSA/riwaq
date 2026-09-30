@@ -22,6 +22,7 @@ import PlayerDock from "./PlayerDock.jsx";
 import { api, call } from "../lib/api.js";
 import { clock } from "../lib/helpers.js";
 import { resolveAppearance } from "../../core/appearance.mjs";
+import { hudHidden } from "../../core/hud-layout.mjs";
 
 // Controls fade after the pointer has been still this long, and the pointer
 // hides with them. Paused playback and an open panel keep them up.
@@ -159,6 +160,8 @@ export default function Hud() {
     skipNext !== player.videoId &&
     !player.error;
   const holdRate = Number(state?.settings.holdSpeed ?? 2);
+  const hidden = hudHidden(state?.settings || {});
+  const shows = (id) => !hidden.has(id);
   const onStageDown = (e) => {
     if (e.button !== 0 || e.target !== e.currentTarget) return;
     if (!holdRate || player.live || player.pause || dock) return;
@@ -244,15 +247,21 @@ export default function Hud() {
         onMouseEnter={() => (overControls.current = true)}
         onMouseLeave={() => (overControls.current = false)}
       >
-        <div className="hud-title">
-          <span className="eyebrow">RIWAQ CINEMA</span>
-          <h1 dir="auto">{player.name}</h1>
-          {series && <small>{episodeOf(player.videoId)}</small>}
-        </div>
+        {shows("title") ? (
+          <div className="hud-title">
+            <span className="eyebrow">RIWAQ CINEMA</span>
+            <h1 dir="auto">{player.name}</h1>
+            {series && <small>{episodeOf(player.videoId)}</small>}
+          </div>
+        ) : (
+          <div className="hud-title" />
+        )}
         <div className="hud-buttons">
-          <button title="تصغير ومتابعة التصفح" onClick={() => command("pip")}>
-            <Minimize2 size={19} />
-          </button>
+          {shows("pip") && (
+            <button title="تصغير ومتابعة التصفح" onClick={() => command("pip")}>
+              <Minimize2 size={19} />
+            </button>
+          )}
           <button title="إيقاف المشاهدة" onClick={() => act("stop")}>
             <X size={20} />
           </button>
@@ -447,7 +456,7 @@ export default function Hud() {
                 <Pause size={22} fill="currentColor" />
               )}
             </button>
-            {series && (
+            {series && shows("episodes") && (
               <button
                 title="الحلقة السابقة"
                 onClick={() => act("hudRequest", { type: "previous" })}
@@ -455,29 +464,33 @@ export default function Hud() {
                 <SkipBack size={19} />
               </button>
             )}
-            <button
-              title="رجوع"
-              onClick={() =>
-                command(
-                  "seek",
-                  (player.position || 0) - (state?.settings.seekStep || 10),
-                )
-              }
-            >
-              <RotateCcw size={19} />
-            </button>
-            <button
-              title="تقديم"
-              onClick={() =>
-                command(
-                  "seek",
-                  (player.position || 0) + (state?.settings.seekStep || 10),
-                )
-              }
-            >
-              <RotateCw size={19} />
-            </button>
-            {series && (
+            {shows("seek") && (
+              <>
+                <button
+                  title="رجوع"
+                  onClick={() =>
+                    command(
+                      "seek",
+                      (player.position || 0) - (state?.settings.seekStep || 10),
+                    )
+                  }
+                >
+                  <RotateCcw size={19} />
+                </button>
+                <button
+                  title="تقديم"
+                  onClick={() =>
+                    command(
+                      "seek",
+                      (player.position || 0) + (state?.settings.seekStep || 10),
+                    )
+                  }
+                >
+                  <RotateCw size={19} />
+                </button>
+              </>
+            )}
+            {series && shows("episodes") && (
               <button
                 title="الحلقة التالية"
                 onClick={() => act("hudRequest", { type: "next" })}
@@ -485,55 +498,67 @@ export default function Hud() {
                 <SkipForward size={19} />
               </button>
             )}
-            <button
-              title="كتم الصوت"
-              onClick={() => command("mute")}
-              className="hud-volume-icon"
-            >
-              {player.muted || !player.volume ? (
-                <VolumeX size={19} />
-              ) : (
-                <Volume2 size={19} />
-              )}
-            </button>
-            <input
-              className="hud-volume"
-              aria-label="مستوى الصوت"
-              type="range"
-              min="0"
-              max="150"
-              value={player.volume || 0}
-              onChange={(e) => command("volume", Number(e.target.value))}
-            />
-            <small>{Math.round(player.volume || 0)}%</small>
+            {shows("volume") && (
+              <>
+                <button
+                  title="كتم الصوت"
+                  onClick={() => command("mute")}
+                  className="hud-volume-icon"
+                >
+                  {player.muted || !player.volume ? (
+                    <VolumeX size={19} />
+                  ) : (
+                    <Volume2 size={19} />
+                  )}
+                </button>
+                <input
+                  className="hud-volume"
+                  aria-label="مستوى الصوت"
+                  type="range"
+                  min="0"
+                  max="150"
+                  value={player.volume || 0}
+                  onChange={(e) => command("volume", Number(e.target.value))}
+                />
+                <small>{Math.round(player.volume || 0)}%</small>
+              </>
+            )}
           </div>
           <div className="hud-group">
-            {!player.live && player.duration > 0 && (
+            {shows("ends") && !player.live && player.duration > 0 && (
               <small className="hud-ends">ينتهي {endsAt(player)}</small>
             )}
-            <button
-              title="الترجمة والصوت (C أو الزر الأيمن)"
-              className={dock ? "on" : ""}
-              onClick={() => setDock(dock ? null : "subs")}
-            >
-              <Captions size={20} />
-            </button>
-            <button
-              title="إعدادات المشغل"
-              onClick={() => act("hudRequest", { type: "settings" })}
-            >
-              <SlidersHorizontal size={19} />
-            </button>
-            <button
-              title={player.fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
-              onClick={() => command("fullscreen")}
-            >
-              {player.fullscreen ? (
-                <Minimize size={19} />
-              ) : (
-                <Maximize size={19} />
-              )}
-            </button>
+            {shows("subs") && (
+              <button
+                title="الترجمة والصوت (C أو الزر الأيمن)"
+                className={dock ? "on" : ""}
+                onClick={() => setDock(dock ? null : "subs")}
+              >
+                <Captions size={20} />
+              </button>
+            )}
+            {shows("settings") && (
+              <button
+                title="إعدادات المشغل"
+                onClick={() => act("hudRequest", { type: "settings" })}
+              >
+                <SlidersHorizontal size={19} />
+              </button>
+            )}
+            {shows("fullscreen") && (
+              <button
+                title={
+                  player.fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"
+                }
+                onClick={() => command("fullscreen")}
+              >
+                {player.fullscreen ? (
+                  <Minimize size={19} />
+                ) : (
+                  <Maximize size={19} />
+                )}
+              </button>
+            )}
           </div>
         </div>
       </footer>

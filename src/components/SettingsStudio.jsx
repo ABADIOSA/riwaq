@@ -1,5 +1,34 @@
 import UpdatesCard from "./UpdatesCard.jsx";
 import AppearanceStudio from "./AppearanceStudio.jsx";
+import {
+  AmbiencePage,
+  LogoPage,
+  ScreensaverCard,
+  ThemesLibrary,
+  WindowPage,
+} from "./settings/LookPages.jsx";
+import { useWindowState } from "./WindowChrome.jsx";
+import {
+  HomeServersPage,
+  P2PPage,
+  ServerPage,
+  ServicesPage,
+} from "./settings/ServicePages.jsx";
+import {
+  AiPage,
+  AwardsPage,
+  DetailsPage,
+  LibraryPage,
+  PlayerLayoutPage,
+} from "./settings/MorePages.jsx";
+import {
+  BadgePacksPage,
+  BadgeRulesPage,
+  BadgesPage,
+  FiltersPage,
+  PickerPage,
+  SortingPage,
+} from "./settings/SourcePages.jsx";
 import React, { useState, useEffect } from "react";
 import {
   Palette,
@@ -29,6 +58,31 @@ import {
   ArrowDown,
   Eye,
   EyeOff,
+  ChevronLeft,
+  Library,
+  Home as HomeIcon,
+  LayoutGrid,
+  SwatchBook,
+  Brush,
+  Shapes,
+  Type as TypeIcon,
+  PanelsTopLeft,
+  Sun,
+  AppWindow,
+  Cpu,
+  ArrowDownUp,
+  MousePointerClick,
+  BadgeCheck,
+  ListChecks,
+  Package,
+  Tv,
+  Server,
+  ServerCog,
+  Share2,
+  FileText,
+  BookMarked,
+  Gamepad2,
+  Trophy,
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -240,82 +294,215 @@ function mpvKey(event) {
   return [...parts, key].join("+");
 }
 
-const sections = [
-  [
-    "appearance",
-    "المظهر والتخصيص",
-    "الثيم الألوان التخطيط الرئيسية البطاقات الحركة خط حجم تدرج مشاركة تصميم",
-    Palette,
-  ],
-  [
-    "home",
-    "الصفحة الرئيسية",
-    "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام واجهة مجموعات مثبتة",
-    LayoutDashboard,
-  ],
-  [
-    "data",
-    "مكتبة البيانات",
-    "API TMDB OMDb MDBList Fanart تقييمات صور لغة",
-    Database,
-  ],
-  [
-    "connections",
-    "الحسابات والربط",
-    "Trakt Letterboxd Simkl Nuvio نوفيو مزامنة قوائم نقل مجموعات",
-    Link2,
-  ],
-  [
-    "playback",
-    "المشغل والمصادر",
-    "HDR الجودة تسريع العتاد متابعة إيقاف",
-    MonitorPlay,
-  ],
-  [
-    "sources",
-    "محرّك المصادر",
-    "ترتيب جودة أمان تخزين debrid حجم استبعاد CAM",
-    Filter,
-  ],
-  ["subtitles", "الصوت والترجمة", "عربي لغة حجم توقيت مسارات", Subtitles],
-  ["hotkeys", "اختصارات لوحة المفاتيح", "مفاتيح تخصيص تعارض MPV", Keyboard],
-  [
-    "presence",
-    "الحضور والإشعارات",
-    "Discord Telegram webhook حالة إشعار",
-    Bell,
-  ],
-  [
-    "backup",
-    "النسخ الاحتياطي",
-    "نسخة احتياطية استعادة نقل جهاز جديد تصدير تشفير",
-    Archive,
-  ],
-  [
-    "updates",
-    "التحديثات",
-    "إصدار تحديث تنزيل تثبيت قناة بيتا تلقائي جديد",
-    RefreshCw,
-  ],
-  [
-    "system",
-    "الاتصال والتطبيق",
-    "Stremio خدمة تشخيص MPV إصدار تحديث تنزيل تثبيت قناة بيتا",
-    SlidersHorizontal,
-  ],
+/**
+ * Settings are grouped the way Harbor groups them: a group opens to its
+ * pages. Each page is [id, title, search keywords, icon].
+ */
+const GROUPS = [
+  {
+    id: "account",
+    title: "الحسابات والربط",
+    Icon: Link2,
+    pages: [
+      [
+        "connections",
+        "الحسابات والربط",
+        "Trakt Letterboxd Simkl Nuvio نوفيو مزامنة قوائم نقل مجموعات",
+        Link2,
+      ],
+    ],
+  },
+  {
+    id: "watching",
+    title: "المشاهدة",
+    Icon: MonitorPlay,
+    pages: [
+      [
+        "playback",
+        "المشغل",
+        "HDR الجودة تسريع العتاد متابعة إيقاف معاينة تسريع",
+        MonitorPlay,
+      ],
+      ["subtitles", "الصوت والترجمة", "عربي لغة حجم توقيت مسارات", Subtitles],
+    ],
+  },
+  {
+    id: "content",
+    title: "المصادر والمكتبة",
+    Icon: Library,
+    pages: [
+      [
+        "services",
+        "خدمات البث",
+        "Netflix شاهد OSN منصات Debrid Real-Debrid AllDebrid TorBox Premiumize اشتراك",
+        Tv,
+      ],
+      [
+        "homeServers",
+        "الخوادم المنزلية",
+        "Jellyfin Emby خادم نسختك مكتبة منزلية",
+        Server,
+      ],
+      [
+        "sources",
+        "تفضيلات المصادر",
+        "أمان تخزين debrid حجم استبعاد CAM جودة",
+        SlidersHorizontal,
+      ],
+      [
+        "sorting",
+        "ترتيب مصادر البث",
+        "ترتيب النتائج أولوية الإضافات",
+        ArrowDownUp,
+      ],
+      [
+        "picker",
+        "اختيار المصدر",
+        "قائمة المصادر مختصر مفصل تورنت مباشر اسم النسخة",
+        MousePointerClick,
+      ],
+      ["filters", "مرشحات البث", "مرشح جودة 4K HDR أتموس حجم مشاركين", Filter],
+      ["p2p", "محرك P2P", "تورنت اتصالات سرعة تخزين مؤقت cache", Share2],
+      [
+        "server",
+        "خادم البث",
+        "Stremio Service خادم عنوان اتصال إصدار MPV",
+        ServerCog,
+      ],
+      [
+        "home",
+        "الرئيسية",
+        "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام مجموعات مثبتة",
+        HomeIcon,
+      ],
+      [
+        "cards",
+        "بطاقات الملصقات",
+        "بطاقة ملصق حجم انحناء تقييمات عنوان",
+        LayoutGrid,
+      ],
+      [
+        "details",
+        "صفحات التفاصيل",
+        "خلفية حرق أسماء الحلقات جوائز تفاصيل",
+        FileText,
+      ],
+      [
+        "data",
+        "مزوّدو البيانات الوصفية",
+        "API TMDB OMDb MDBList Fanart تقييمات صور لغة",
+        Database,
+      ],
+      [
+        "ai",
+        "البحث بالذكاء الاصطناعي",
+        "Groq OpenRouter ذكاء اصطناعي اقتراحات وصف بحث ذكي",
+        Sparkles,
+      ],
+      [
+        "library",
+        "المكتبة",
+        "إخفاء المشاهد البالغين محتوى للكبار مكتبة",
+        BookMarked,
+      ],
+    ],
+  },
+  {
+    id: "look",
+    title: "المظهر",
+    Icon: Palette,
+    pages: [
+      ["theme", "السمة", "ثيم ألوان تدرج ثيمات جاهزة", SwatchBook],
+      ["themes", "سماتك", "سمات محفوظة رمز مشاركة تصميم", Brush],
+      ["logo", "الشعار والأيقونة", "شعار أيقونة شريط المهام صورة", Shapes],
+      ["type", "الخطوط", "خط الخطوط", TypeIcon],
+      [
+        "interface",
+        "الواجهة",
+        "حجم الواجهة زوايا كثافة تخطيط قائمة حركة شاشة التوقف",
+        PanelsTopLeft,
+      ],
+      ["ambience", "الأجواء (Ambience)", "خلفية صورة تعتيم توهج أجواء", Sun],
+      [
+        "window",
+        "النافذة",
+        "شريط العنوان أزرار النافذة تمويه سحب النافذة",
+        AppWindow,
+      ],
+      [
+        "playerLayout",
+        "تخطيط المشغل",
+        "أزرار المشغل شريط التحكم بسيط سينمائي",
+        Gamepad2,
+      ],
+      ["badges", "شارات البث", "شارات الصيغة دقة ترميز صوت", BadgeCheck],
+      [
+        "badgeRules",
+        "قواعد الشارات",
+        "قاعدة شارة نمط مجموعة إصدار",
+        ListChecks,
+      ],
+      ["badgePacks", "حزم الشارات", "حزمة استيراد تصدير JSON", Package],
+      ["awards", "أيقونات الجوائز", "جوائز أوسكار كأس غولدن غلوب إيمي", Trophy],
+    ],
+  },
+  {
+    id: "devices",
+    title: "التحكم",
+    Icon: Keyboard,
+    pages: [
+      ["hotkeys", "اختصارات لوحة المفاتيح", "مفاتيح تخصيص تعارض MPV", Keyboard],
+    ],
+  },
+  {
+    id: "system",
+    title: "النظام",
+    Icon: SlidersHorizontal,
+    pages: [
+      [
+        "presence",
+        "الحضور والإشعارات",
+        "Discord Telegram webhook حالة إشعار",
+        Bell,
+      ],
+      [
+        "backup",
+        "النسخ الاحتياطي",
+        "نسخة احتياطية استعادة نقل جهاز جديد تصدير تشفير",
+        Archive,
+      ],
+      [
+        "updates",
+        "التحديثات",
+        "إصدار تحديث تنزيل تثبيت قناة بيتا تلقائي جديد",
+        RefreshCw,
+      ],
+      ["system", "الاتصال والتطبيق", "Stremio خدمة تشخيص MPV إصدار", Cpu],
+    ],
+  },
 ];
+const sections = GROUPS.flatMap((g) => g.pages);
+const groupOf = (page) =>
+  GROUPS.find((g) => g.pages.some(([id]) => id === page));
+// Pages that moved: an old link still lands somewhere sensible.
+const MOVED = { appearance: "theme" };
+
 export default function SettingsStudio({
   state,
   update,
   act,
   notice,
-  initialTab = "appearance",
+  initialTab = "theme",
   onNuvio,
 }) {
-  const [tab, setTab] = useState(initialTab),
+  const [tab, setTab] = useState(MOVED[initialTab] || initialTab),
+    [open, setOpen] = useState(
+      () => new Set([groupOf(MOVED[initialTab] || initialTab)?.id || "look"]),
+    ),
     [search, setSearch] = useState(""),
     [draft, setDraft] = useState(state.settings),
     [diag, setDiag] = useState(null);
+  const [win] = useWindowState();
   const s = state.settings;
   useEffect(() => {
     setDraft(s);
@@ -388,19 +575,57 @@ export default function SettingsStudio({
               onChange={(e) => setSearch(e.target.value)}
             />
           </label>
-          {sections.map(([id, title, , Icon]) => (
-            <button
-              key={id}
-              className={id === tab && !search ? "selected" : ""}
-              onClick={() => {
-                setTab(id);
-                setSearch("");
-              }}
-            >
-              <Icon size={18} />
-              {title}
-            </button>
-          ))}
+          {GROUPS.map((group) => {
+            const pages = group.pages.filter(
+              ([, title, keywords]) =>
+                !search ||
+                `${title} ${keywords}`
+                  .toLowerCase()
+                  .includes(search.toLowerCase()),
+            );
+            if (!pages.length) return null;
+            const expanded = !!search || open.has(group.id);
+            const holdsTab = group.pages.some(([id]) => id === tab);
+            return (
+              <div
+                key={group.id}
+                className={`settings-group ${expanded ? "open" : ""}`}
+              >
+                <button
+                  className={`settings-group-head ${holdsTab ? "holds" : ""}`}
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    setOpen((was) => {
+                      const next = new Set(was);
+                      next.has(group.id)
+                        ? next.delete(group.id)
+                        : next.add(group.id);
+                      return next;
+                    })
+                  }
+                >
+                  <group.Icon size={18} />
+                  <b>{group.title}</b>
+                  <ChevronLeft size={15} className="settings-chevron" />
+                </button>
+                {expanded &&
+                  pages.map(([id, title, , Icon]) => (
+                    <button
+                      key={id}
+                      className={`settings-page ${id === tab && !search ? "selected" : ""}`}
+                      onClick={() => {
+                        setTab(id);
+                        setSearch("");
+                        setOpen((was) => new Set([...was, group.id]));
+                      }}
+                    >
+                      <Icon size={17} />
+                      {title}
+                    </button>
+                  ))}
+              </div>
+            );
+          })}
           <div className="privacy-note">
             <ShieldCheck size={20} />
             <b>مفاتيحك تبقى لك</b>
@@ -413,16 +638,83 @@ export default function SettingsStudio({
           )}
           {visible.map(([id]) => (
             <React.Fragment key={id}>
-              {id === "appearance" && (
+              {id === "theme" && (
+                <AppearanceStudio state={state} update={update} part="theme" />
+              )}
+              {id === "themes" && (
                 <>
-                  <AppearanceStudio state={state} update={update} />
+                  <ThemesLibrary
+                    state={state}
+                    update={update}
+                    notice={notice}
+                  />
+                  <AppearanceStudio
+                    state={state}
+                    update={update}
+                    part="themes"
+                  />
+                </>
+              )}
+              {id === "logo" && <LogoPage state={state} update={update} />}
+              {id === "type" && (
+                <AppearanceStudio state={state} update={update} part="type" />
+              )}
+              {id === "cards" && (
+                <AppearanceStudio state={state} update={update} part="cards" />
+              )}
+              {id === "ambience" && (
+                <AmbiencePage state={state} update={update} />
+              )}
+              {id === "services" && (
+                <ServicesPage
+                  state={state}
+                  update={update}
+                  onSettings={setTab}
+                />
+              )}
+              {id === "homeServers" && (
+                <HomeServersPage state={state} update={update} />
+              )}
+              {id === "p2p" && <P2PPage notice={notice} />}
+              {id === "library" && (
+                <LibraryPage state={state} update={update} />
+              )}
+              {id === "details" && (
+                <DetailsPage state={state} update={update} />
+              )}
+              {id === "ai" && <AiPage state={state} update={update} />}
+              {id === "playerLayout" && (
+                <PlayerLayoutPage state={state} update={update} />
+              )}
+              {id === "awards" && <AwardsPage state={state} update={update} />}
+              {id === "server" && <ServerPage state={state} update={update} />}
+              {id === "sorting" && (
+                <SortingPage state={state} update={update} />
+              )}
+              {id === "picker" && <PickerPage state={state} update={update} />}
+              {id === "filters" && (
+                <FiltersPage state={state} update={update} notice={notice} />
+              )}
+              {id === "badges" && <BadgesPage state={state} update={update} />}
+              {id === "badgeRules" && (
+                <BadgeRulesPage state={state} update={update} notice={notice} />
+              )}
+              {id === "badgePacks" && (
+                <BadgePacksPage state={state} update={update} notice={notice} />
+              )}
+              {id === "window" && (
+                <WindowPage state={state} update={update} win={win} />
+              )}
+              {id === "interface" && (
+                <>
+                  <AppearanceStudio
+                    state={state}
+                    update={update}
+                    part="interface"
+                  />
+                  <ScreensaverCard state={state} update={update} />
                   <section className="settings-card">
                     <h2>السلوك</h2>
-                    {toggle(
-                      "hideWatched",
-                      "إخفاء الأفلام التي شاهدتها",
-                      "تختفي الأفلام التي أكملتها أو علّمتها مشاهدة من الرئيسية والاكتشاف والمجموعات فور انتهائك. البحث والمكتبة ومتابعة المشاهدة واختياراتك في المجلدات تبقى كما هي.",
-                    )}
                     {toggle(
                       "reduceMotion",
                       "تقليل الحركة",
@@ -846,35 +1138,10 @@ export default function SettingsStudio({
                         </span>
                       ))}
                     </div>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        save("serverUrl", draft.serverUrl);
-                      }}
-                    >
-                      <label>عنوان Stremio Service</label>
-                      <div className="input-action">
-                        <input
-                          aria-label="عنوان Stremio Service"
-                          dir="ltr"
-                          value={draft.serverUrl}
-                          onChange={(e) =>
-                            setDraft({ ...draft, serverUrl: e.target.value })
-                          }
-                        />
-                        <button className="secondary">حفظ</button>
-                      </div>
-                      <p className="subtle">
-                        مطلوب لمصادر التورنت. الروابط المباشرة تعمل بالمشغل
-                        المرفق دون خدمة إضافية.
-                      </p>
-                    </form>
-                    <button
-                      className="secondary"
-                      onClick={() => update("choosePlayer")}
-                    >
-                      اختيار نسخة MPV مخصصة
-                    </button>
+                    <p className="subtle">
+                      عنوان خادم البث وإعدادات التورنت في «المصادر والمكتبة ←
+                      خادم البث» و«محرك P2P».
+                    </p>
                   </section>
                   <section className="settings-card">
                     <h2>رِواق {state.update?.current || ""}</h2>

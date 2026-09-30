@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.14.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.15.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -51,12 +51,21 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `hideWatched` hides finished films (`watchedTitles`/`withoutWatched` in `core/library.mjs`) live at render time on home, discover, collections and folder pages. It never applies in search, the library, continue watching, up next or hand-picked folder titles. Series are never hidden, since a row cannot know every episode.
 - Dropped files arrive through Chromium's file navigation, which both windows refuse (`onDropNavigate`). Only `core/drop.mjs` video and subtitle extensions are accepted: a video plays like the file dialog does, and a subtitle joins an active viewing.
 - Source failover (`core/failover.mjs`) replays the next ranked playable source from the same position, at most three times per title.
+- Settings are grouped like Harbor (`GROUPS` in `SettingsStudio.jsx`: account, watching, content, look, devices, system); a page is `[id, title, keywords, icon]`, and search spans every page.
+- Window (`windowFrame` native/hybrid/riwaq, `windowControls`, `frostTopBar`, `dragAnywhere`): a frame change applies on relaunch (`runningFrame` in main). Drag-anywhere is main polling the cursor between `windowDrag` start and end, and only from empty space. `setAppIcon` takes a PNG data URL of at most 512 px drawn by the renderer. Ambience wallpapers and logo images are HTTPS without credentials (`imageUrl`).
+- Stream preferences (`core/stream-prefs.mjs`) apply after `analyzeStreams`, never inside it: source mode, saved filters (`activeFilter` must exist), Riwaq or addon order with `addonPriority`. A filter that matches nothing falls back to all streams and says so. Badge rules (`core/badges.mjs`) are viewer regexes refused when they nest quantifiers or use backreferences, tested against at most 400 characters; packs are `riwaq-badges` JSON.
+- Services (`core/services.mjs`, `core/services-hub.mjs`): streaming services are TMDB watch providers turned into discover rows with the viewer's TMDB key. Debrid keys are only used to read the account (status, days left) with redirects refused; playback never goes through them. Keys, home-server tokens and the AI key live in the encrypted state (`debrid`, `homeServers`, `aiSearch`), are never in `publicState`, are not written to backups, and survive a restore.
+- Home servers (`core/home-servers.mjs`): Jellyfin/Emby sign-in sends the password once and keeps only the token. Copies are matched by IMDb ID, offered first as "your copy" with a stream URL that carries the token and therefore stays in main behind an opaque key. Plex is not supported.
+- The streaming server's torrent profile and cache are read with GET `/settings` and written with POST `/settings` (`core/streaming-server.mjs`); a change counts only when a re-read shows it. Server paths never reach the interface.
+- AI search (`core/ai-search.mjs`, `core/ai-hub.mjs`): Groq or OpenRouter with the viewer's own key, asked only when the viewer presses the button on the results page. Only the typed sentence (one line, at most 300 characters) is sent, never history or library. Suggestions are matched through TMDB when a key exists, otherwise through addon search.
+- Spoiler protection (`core/spoilers.mjs`, `spoilerGuard`) blurs unreached episode titles; the current, next and finished episodes and specials stay clear. Player layout (`core/hud-layout.mjs`) hides HUD controls by preset or custom list; play/pause, the timeline and stop always remain. Award icons (`core/awards.mjs`) group Wikidata P166 awards into families by label.
+- A profile's `hideAdult` (`core/adult.mjs`) skips addons declaring `behaviorHints.adult` and titles flagged adult or with an adult genre, in catalogs, collection rows and AI results. Turning it off passes the Settings room lock.
 - No user account was authenticated in provider tests. Distinguish mocked tests, live catalog tests and actual native playback in reports.
 
 ## Good next contributions
 
 1. Exercise the remaining 0.5 surfaces on a Windows desktop: backup export and restore through real dialogs and DPAPI (including `profile.before-restore.bin`), the up next rail and calendar against live Cinemeta, and scrobbling against a real Trakt account. The 0.8 update UI now passes native smoke, and an isolated real NSIS upgrade preserves encrypted data. Extend verification only with flows actually run. See VERIFICATION.md.
-2. Test real user-owned API credentials, OAuth accounts and an actual IPTV subscription; exercise expired/revoked sessions, provider rate limits and a catchup server without logging secrets.
+2. Test real user-owned API credentials, OAuth accounts, debrid keys, a Jellyfin/Emby server, Groq/OpenRouter keys and an actual IPTV subscription; exercise expired/revoked sessions, provider rate limits and a catchup server without logging secrets.
 3. Extend Windows mixed-DPI, multi-monitor and HDR verification on real hardware, including the cost of the picture profiles on a real GPU.
 4. Add metadata-source precedence, and verify seek previews against real debrid, NAS and torrent sources on Windows.
 5. Add a full external OS PiP mode if desired; the current mini player stays inside Riwaq.

@@ -10,6 +10,7 @@ import {
   clipboard,
   globalShortcut,
   powerMonitor,
+  nativeImage,
 } from "electron";
 import {
   readFileSync,
@@ -33,6 +34,8 @@ import {
 } from "../core/subtitles.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
+import { DEBRID } from "../core/services.mjs";
+import { AI_PROVIDERS } from "../core/ai-search.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
 import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
 import {
@@ -265,8 +268,64 @@ function applyZoom() {
 }
 const broadcast = () => {
   applyZoom();
+  applyTitleOverlay();
   emit("state", client.publicState());
 };
+// The frame the window was created with; a changed setting waits for a start.
+let runningFrame = "native";
+/** The hybrid bar's native buttons follow the current theme. */
+function applyTitleOverlay() {
+  if (runningFrame !== "hybrid" || !window || window.isDestroyed()) return;
+  const look = resolveAppearance(client.state.settings);
+  try {
+    window.setTitleBarOverlay({
+      color: look.colors.panel,
+      symbolColor: look.colors.text,
+      height: 36,
+    });
+  } catch {
+    /* Older systems draw their own colours. */
+  }
+}
+function windowState() {
+  return {
+    frame: runningFrame,
+    wanted: client?.state.settings.windowFrame || "native",
+    maximized: !!window?.isMaximized(),
+    fullscreen: !!window?.isFullScreen(),
+  };
+}
+let dragTimer = null;
+/**
+ * "Drag the window from anywhere": the page reports a press on empty space
+ * and its release; main follows the pointer in between. It stops on its own
+ * after fifteen seconds or when the window loses focus.
+ */
+function windowDrag(a) {
+  clearInterval(dragTimer);
+  dragTimer = null;
+  if (a?.phase !== "start") return true;
+  if (
+    !client.state.settings.dragAnywhere ||
+    !window ||
+    window.isMaximized() ||
+    window.isFullScreen()
+  )
+    return false;
+  const start = screen.getCursorScreenPoint();
+  const [x, y] = window.getPosition();
+  const began = Date.now();
+  dragTimer = setInterval(() => {
+    if (!window || window.isDestroyed() || Date.now() - began > 15000) {
+      clearInterval(dragTimer);
+      dragTimer = null;
+      return;
+    }
+    const point = screen.getCursorScreenPoint();
+    window.setPosition(x + point.x - start.x, y + point.y - start.y);
+  }, 12);
+  return true;
+}
 function save(data) {
   if (!safeStorage.isEncryptionAvailable())
     throw new Error("تشفير ويندوز غير متاح، تعذّر حفظ البيانات بأمان.");
@@ -606,8 +665,56 @@ function autoSubtitle(videoId) {
 }
 const methods = {
   init: () => client.init(),
+  windowInfo: () => windowState(),
+  windowControl: (a) => {
+    if (!window) return windowState();
+    if (a?.action === "minimize") window.minimize();
+    else if (a?.action === "maximize")
+      window.isMaximized() ? window.unmaximize() : window.maximize();
+    else if (a?.action === "close") window.close();
+    return windowState();
+  },
+  windowDrag,
+  // A frame change needs a new window; the usual shutdown path saves first.
+  relaunch: () => {
+    app.relaunch();
+    app.quit();
+    return true;
+  },
+  // The taskbar icon: Riwaq's own, or the mark drawn in the accent colour by
+  // the interface. Only a small PNG is accepted; nothing else reaches Windows.
+  setAppIcon: (a) => {
+    if (!window) return false;
+    const url = typeof a?.dataUrl === "string" ? a.dataUrl : "";
+    if (!url) {
+      window.setIcon(join(root, "assets", "icon.png"));
+      return true;
+    }
+    if (!url.startsWith("data:image/png;base64,") || url.length > 400000)
+      throw new Error("أيقونة غير صالحة");
+    const image = nativeImage.createFromDataURL(url);
+    const size = image.getSize();
+    if (image.isEmpty() || size.width > 512 || size.height > 512)
+      throw new Error("أيقونة غير صالحة");
+    window.setIcon(image);
+    return true;
+  },
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
+  // A badge pack is copied only as Riwaq's own pack JSON.
+  copyBadgePack: (a) => {
+    const json = String(a?.json || "");
+    let data;
+    try {
+      data = JSON.parse(json);
+    } catch {
+      throw new Error("حزمة غير صالحة");
+    }
+    if (data?.format !== "riwaq-badges" || json.length > 60000)
+      throw new Error("حزمة غير صالحة");
+    clipboard.writeText(json);
+    return true;
+  },
   // Only a design code may be copied; nothing else reaches the clipboard.
   copyThemeCode: (a) => {
     const code = String(a?.code || "");
@@ -708,6 +815,65 @@ const methods = {
     return state;
   },
   providerSave: (a) => client.dataHub.save(a),
+  // Services, home servers and the streaming server. Keys and tokens stay in
+  // main; changing them is behind the Settings room lock.
+  debridSave: (a) => {
+    client.profiles.gate("settings");
+    return client.services.debridSave({
+      id: String(a?.id || ""),
+      key: typeof a?.key === "string" ? a.key : undefined,
+      clear: a?.clear === true,
+    });
+  },
+  debridCheck: (a) => client.services.debridCheck({ id: String(a?.id || "") }),
+  watchProviders: () => client.services.watchProviders(),
+  serviceRows: () => client.services.serviceRows(),
+  homeServerAdd: (a) => {
+    client.profiles.gate("settings");
+    return client.services.homeServerAdd({
+      url: String(a?.url || ""),
+      username: String(a?.username || ""),
+      password: String(a?.password || ""),
+    });
+  },
+  homeServerRemove: (a) => {
+    client.profiles.gate("settings");
+    return client.services.homeServerRemove({ id: String(a?.id || "") });
+  },
+  homeServerToggle: (a) => {
+    client.profiles.gate("settings");
+    return client.services.homeServerToggle({
+      id: String(a?.id || ""),
+      enabled: a?.enabled === true,
+    });
+  },
+  homeServerCheck: (a) =>
+    client.services.homeServerCheck({ id: String(a?.id || "") }),
+  streamServerInfo: () => client.services.streamServerInfo(),
+  // AI search: the key is saved behind the Settings lock and never returned.
+  aiSave: (a) => {
+    client.profiles.gate("settings");
+    return client.ai.save({
+      provider: String(a?.provider || ""),
+      key: typeof a?.key === "string" ? a.key : undefined,
+      model: typeof a?.model === "string" ? a.model : "",
+      clear: a?.clear === true,
+    });
+  },
+  aiTest: () => client.ai.test(),
+  aiSearch: (a) => client.ai.search({ query: String(a?.query || "") }),
+  streamServerSave: (a) => {
+    client.profiles.gate("settings");
+    return client.services.streamServerSave({
+      profile: typeof a?.profile === "string" ? a.profile : undefined,
+      cacheSize:
+        a && "cacheSize" in a
+          ? a.cacheSize === null
+            ? null
+            : Number(a.cacheSize)
+          : undefined,
+    });
+  },
   providerTest: (a) => client.dataHub.test(a.id),
   integrationSave: (a) => client.integrations.save(a),
   integrationSync: (a) => client.integrations.sync(a.id),
@@ -740,6 +906,8 @@ const methods = {
       discord: "https://support.discord.com/hc/articles/228383668",
       telegram: "https://core.telegram.org/bots#how-do-i-create-a-bot",
       discordApp: "https://discord.com/developers/applications",
+      ...Object.fromEntries(DEBRID.map((d) => [d.id, d.url])),
+      ...Object.fromEntries(AI_PROVIDERS.map((p) => [p.id, p.keys])),
     };
     if (!urls[id]) throw new Error("رابط الخدمة غير معروف");
     await shell.openExternal(urls[id]);
@@ -1228,7 +1396,21 @@ app
         onChange: broadcast,
       });
       await client.updates.restore();
+      runningFrame = client.state.settings.windowFrame || "native";
+      const look = resolveAppearance(client.state.settings);
       window = new BrowserWindow({
+        ...(runningFrame === "hybrid"
+          ? {
+              titleBarStyle: "hidden",
+              titleBarOverlay: {
+                color: look.colors.panel,
+                symbolColor: look.colors.text,
+                height: 36,
+              },
+            }
+          : runningFrame === "riwaq"
+            ? { frame: false }
+            : {}),
         width: 1440,
         height: 960,
         minWidth: 980,
@@ -1272,6 +1454,12 @@ app
         placeHud();
       });
       window.on("move", () => placeHud());
+      const windowChanged = () => emit("window", windowState());
+      window.on("maximize", windowChanged);
+      window.on("unmaximize", windowChanged);
+      window.on("enter-full-screen", windowChanged);
+      window.on("leave-full-screen", windowChanged);
+      window.on("blur", () => windowDrag({ phase: "end" }));
       window.on("restore", () => placeHud());
       window.webContents.on("did-finish-load", () => {
         appliedZoom = 0;

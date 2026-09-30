@@ -1,5 +1,9 @@
 import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
-import { safeAppearance } from "./appearance.mjs";
+import { cleanSavedThemes, safeAppearance } from "./appearance.mjs";
+import { cleanAddonPriority, cleanStreamFilters } from "./stream-prefs.mjs";
+import { cleanBadgeRules, cleanHiddenBadges } from "./badges.mjs";
+import { cleanServices } from "./services.mjs";
+import { cleanHudHidden } from "./hud-layout.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -61,6 +65,38 @@ export const DEFAULT_SETTINGS = {
   homeSections: [...DEFAULT_HOME_SECTIONS],
   homeOrder: [],
   homeHidden: [],
+  // The window: Windows' own title bar, a hybrid bar with native-looking
+  // buttons drawn by Windows over Riwaq, or Riwaq's own bar and buttons.
+  // A frame change applies on the next start.
+  windowFrame: "native",
+  windowControls: "filled",
+  frostTopBar: false,
+  dragAnywhere: false,
+  // Minutes idle before the ambient screensaver, 0 for never.
+  screensaver: 0,
+  screensaverClock: true,
+  savedThemes: [],
+  // Sources: which links, which order, which saved filter, and how the
+  // picker and its badges look.
+  sourceMode: "all",
+  streamOrder: "riwaq",
+  addonPriority: [],
+  streamFilters: [],
+  activeFilter: "",
+  pickerLayout: "detailed",
+  pickerReleaseName: true,
+  badgesOn: true,
+  badgesHidden: [],
+  badgeRules: [],
+  // Streaming services the viewer pays for, shown as home rows.
+  streamingServices: [],
+  // Series: hide episode titles not reached yet.
+  spoilerGuard: "off",
+  // The player HUD: a preset of visible controls, or the viewer's own.
+  hudLayout: "full",
+  hudHidden: [],
+  // Award trophies grouped by family on details pages.
+  awardIcons: true,
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -239,6 +275,12 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "playerOverlay",
     "autoFailover",
     "videoFill",
+    "frostTopBar",
+    "dragAnywhere",
+    "screensaverClock",
+    "pickerReleaseName",
+    "badgesOn",
+    "awardIcons",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (
@@ -288,6 +330,14 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     holdSpeed: [0, 1.5, 2, 3],
     subtitleKind: ["standard", "sdh", "forced"],
     autoSubtitles: ["off", "preferred"],
+    windowFrame: ["native", "hybrid", "riwaq"],
+    windowControls: ["filled", "glass", "clean"],
+    screensaver: [0, 1, 3, 5, 10, 15],
+    sourceMode: ["all", "direct", "p2p"],
+    streamOrder: ["riwaq", "addon"],
+    pickerLayout: ["detailed", "compact"],
+    spoilerGuard: ["off", "titles"],
+    hudLayout: ["full", "minimal", "cinema", "custom"],
   }))
     if (values.includes(input[key])) next[key] = input[key];
   if (Number.isFinite(input.subtitlePosition))
@@ -299,6 +349,25 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
       input.appearance,
       current.appearance || undefined,
     );
+  if (Array.isArray(input.savedThemes))
+    next.savedThemes = cleanSavedThemes(input.savedThemes);
+  if (Array.isArray(input.streamFilters))
+    next.streamFilters = cleanStreamFilters(input.streamFilters);
+  if (Array.isArray(input.addonPriority))
+    next.addonPriority = cleanAddonPriority(input.addonPriority);
+  if (Array.isArray(input.streamingServices))
+    next.streamingServices = cleanServices(input.streamingServices);
+  if (Array.isArray(input.hudHidden))
+    next.hudHidden = cleanHudHidden(input.hudHidden);
+  if (Array.isArray(input.badgeRules))
+    next.badgeRules = cleanBadgeRules(input.badgeRules);
+  if (Array.isArray(input.badgesHidden))
+    next.badgesHidden = cleanHiddenBadges(input.badgesHidden);
+  if (typeof input.activeFilter === "string")
+    next.activeFilter = input.activeFilter;
+  // An active filter must be one the viewer still has.
+  if (!(next.streamFilters || []).some((f) => f.id === next.activeFilter))
+    next.activeFilter = "";
   if (Array.isArray(input.homeSections))
     next.homeSections = safeHomeSections(input.homeSections);
   for (const key of ["homeOrder", "homeHidden"])

@@ -1,5 +1,14 @@
-import React, { useState, useEffect, useRef } from "react";
-import { LoaderCircle, Film, X, Play, Star, ChevronLeft } from "lucide-react";
+import React, { useState, useEffect, useRef, useContext } from "react";
+import {
+  LoaderCircle,
+  Film,
+  X,
+  Play,
+  Star,
+  ChevronLeft,
+  Check,
+} from "lucide-react";
+import { WatchedContext } from "../lib/watched.js";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { titleKey } from "../../core/library.mjs";
 import { arabicCount, MINUTES } from "../../core/arabic.mjs";
@@ -65,6 +74,8 @@ export function Modal({ children, onClose, className = "" }) {
   );
 }
 export function Poster({ meta, onOpen, progress }) {
+  const finished = useContext(WatchedContext);
+  const seen = finished?.has(`${meta.type}:${meta.id}`);
   return (
     <button
       className="poster-card"
@@ -89,6 +100,11 @@ export function Poster({ meta, onOpen, progress }) {
           <span className="rating">
             <Star size={11} fill="currentColor" />
             {meta.imdbRating}
+          </span>
+        )}
+        {seen && (
+          <span className="watched-mark" title="شاهدته">
+            <Check size={13} strokeWidth={3} />
           </span>
         )}
         {progress && (

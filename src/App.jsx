@@ -3,7 +3,7 @@ import {
   themeClasses,
   themeVariables,
 } from "../core/appearance.mjs";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Home,
   Compass,
@@ -36,6 +36,8 @@ import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
 import { IconButton, Busy, Empty, Poster, Rail } from "./components/UI.jsx";
 import Details from "./components/Details.jsx";
 import { ExploreModal, PeopleRow } from "./components/Credits.jsx";
+import AiSearchRow from "./components/AiSearch.jsx";
+import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
 import Addons from "./components/Addons.jsx";
 import Preferences from "./components/SettingsStudio.jsx";
@@ -50,6 +52,13 @@ import CollectionsPage, {
   PinnedCollections,
 } from "./components/Collections.jsx";
 import FolderPage from "./components/FolderPage.jsx";
+import WindowBar, {
+  isEmptySpace,
+  useWindowState,
+} from "./components/WindowChrome.jsx";
+import Screensaver from "./components/Screensaver.jsx";
+import ServiceRails from "./components/ServiceRails.jsx";
+import { drawAppIcon } from "./lib/app-icon.js";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -101,6 +110,7 @@ export default function App() {
     [account, setAccount] = useState(false),
     [toast, setToast] = useState(""),
     [player, setPlayer] = useState({ active: false }),
+    [scrolled, setScrolled] = useState(false),
     [playerOpen, setPlayerOpen] = useState(false),
     [refresh, setRefresh] = useState(0),
     [heroIndex, setHeroIndex] = useState(0),
@@ -369,6 +379,28 @@ export default function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+  const [win] = useWindowState();
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  // The taskbar icon follows the accent when the viewer asks for it.
+  const look = resolveAppearance(state.settings);
+  const iconSet = useRef(false);
+  useEffect(() => {
+    if (!ready) return;
+    if (look.appIcon === "accent") {
+      const dataUrl = drawAppIcon(look.colors.accent, look.colors.bg);
+      if (dataUrl)
+        call("setAppIcon", { dataUrl })
+          .then(() => (iconSet.current = true))
+          .catch(() => {});
+    } else if (iconSet.current) {
+      iconSet.current = false;
+      call("setAppIcon", {}).catch(() => {});
+    }
+  }, [ready, look.appIcon, look.colors.accent, look.colors.bg]);
   const open = (meta, videoId) => setSelected({ meta, videoId });
   const activeProfile = state.profiles?.list?.find(
     (p) => p.id === state.profiles.active,
@@ -416,9 +448,11 @@ export default function App() {
   const homeSections = safeHomeSections(state.settings.homeSections);
   // Finished films leave the rows the moment they are finished, without a
   // reload. Search keeps them, as Nuvio HTPC does.
-  const watched = state.settings.hideWatched
-    ? watchedTitles(state.progress)
-    : null;
+  const finished = useMemo(
+    () => watchedTitles(state?.progress),
+    [state?.progress],
+  );
+  const watched = state.settings.hideWatched ? finished : null;
   const liveRows =
     watched?.size && view !== "search"
       ? rows.map((r) => ({ ...r, metas: withoutWatched(r.metas, watched) }))
@@ -484,641 +518,720 @@ export default function App() {
     }
   };
   const appearance = resolveAppearance(state.settings);
+  const barShown = win.frame !== "native" && !win.fullscreen;
+  // The artwork glow follows what is on screen: an open title, else the hero.
+  const ambientArt =
+    appearance.ambient === "artwork"
+      ? imgUrl(selected?.meta?.background) || imgUrl(hero?.background)
+      : "";
   return (
-    <div
-      style={themeVariables(appearance)}
-      className={`app ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""}`}
-    >
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">
-            <span />
-            <span />
-            <span />
-          </span>
-          <div>
-            <b>رِواق</b>
-            <small>RIWAQ</small>
-          </div>
-        </div>
-        <span className="nav-label">مساحتك السينمائية</span>
-        <nav>
-          {[
-            [Home, "home", "الرئيسية"],
-            [Compass, "discover", "اكتشف"],
-            [Library, "library", "مكتبتي"],
-            [Folders, "collections", "المجموعات"],
-            [Tv, "live", "بث مباشر"],
-            [Puzzle, "addons", "الإضافات"],
-          ]
-            .filter(
-              ([, id]) => !appearance.navHidden.includes(id) || view === id,
-            )
-            .map(([Icon, id, label]) => (
-              <button
-                key={id}
-                className={
-                  view === id || (view === "folder" && folderFrom === id)
-                    ? "nav-item active"
-                    : "nav-item"
-                }
-                onClick={() => navigate(id)}
-              >
-                <Icon size={20} />
-                <span>{label}</span>
-                {isLocked(id === "collections" ? "library" : id) && (
-                  <Lock size={13} className="nav-lock" />
-                )}
-                {id === "library" && favorites.length > 0 && (
-                  <small>{favorites.length}</small>
-                )}
-                {id === "addons" && <small>{state.addons.length}</small>}
-                {id === "collections" && state.collections?.length > 0 && (
-                  <small>{state.collections.length}</small>
-                )}
-              </button>
-            ))}
-        </nav>
-        <div className="sidebar-note">
-          <span className="status-dot" /> إضافاتك. اختياراتك. تجربتك.
-          <p>متوافق مع إضافات ستريميو</p>
-        </div>
-        <div className="sidebar-bottom">
-          <button
-            className={view === "settings" ? "nav-item active" : "nav-item"}
-            onClick={() => navigate("settings")}
-          >
-            <Settings size={20} />
-            الإعدادات
-            {state.update?.available && (
-              <small className="update-dot" title="يتوفر إصدار جديد">
-                جديد
-              </small>
+    <WatchedContext.Provider value={finished}>
+      <div
+        style={{
+          ...themeVariables(appearance),
+          ...(ambientArt ? { "--ambient-image": `url("${ambientArt}")` } : {}),
+        }}
+        className={`app ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
+        onMouseDown={(e) => {
+          if (
+            !state.settings.dragAnywhere ||
+            e.button !== 0 ||
+            e.ctrlKey ||
+            e.shiftKey ||
+            !isEmptySpace(e.target)
+          )
+            return;
+          call("windowDrag", { phase: "start" }).catch(() => {});
+          const end = () => {
+            call("windowDrag", { phase: "end" }).catch(() => {});
+            window.removeEventListener("mouseup", end);
+          };
+          window.addEventListener("mouseup", end);
+        }}
+      >
+        <WindowBar
+          win={win}
+          controls={state.settings.windowControls}
+          title="رِواق"
+        />
+        {ambientArt && <div className="ambience-layer" aria-hidden="true" />}
+        <Screensaver
+          minutes={state.settings.screensaver || 0}
+          clock={state.settings.screensaverClock !== false}
+          items={shownRows.flatMap((r) => r.metas).concat(favorites)}
+          blocked={player.active}
+        />
+        <aside className="sidebar">
+          <div className="brand">
+            {appearance.logoStyle === "image" ? (
+              <img
+                className="brand-image"
+                src={appearance.logoImage}
+                alt="رِواق"
+              />
+            ) : (
+              <>
+                <span className="brand-mark">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <div className="brand-name">
+                  <b>رِواق</b>
+                  <small>RIWAQ</small>
+                </div>
+              </>
             )}
-          </button>
-          <button
-            className="profile-button"
-            onClick={() => setProfilesOpen(true)}
-            title="تبديل الملف الشخصي"
-          >
-            <Users size={17} />
-            <span>{activeProfile?.name || "المشاهد"}</span>
-            {state.profiles?.list?.length > 1 && (
-              <small>{state.profiles.list.length}</small>
-            )}
-          </button>
-          <button className="account-button" onClick={() => setAccount(true)}>
-            <span className="avatar">
-              {state.user ? (
-                (state.user.name || state.user.email || "R")[0].toUpperCase()
-              ) : (
-                <LogIn size={19} />
-              )}
-            </span>
-            <span>
-              <b>{state.user?.name || "حساب ستريميو"}</b>
-              <small>
-                {state.user
-                  ? "متصل • الإضافات مستوردة"
-                  : "اربط حسابك وانقل إضافاتك"}
-              </small>
-            </span>
-            <ChevronLeft size={16} />
-          </button>
-        </div>
-      </aside>
-      <main className={player.active ? "content with-player" : "content"}>
-        {!player.active &&
-          view !== "settings" &&
-          ["available", "downloading", "ready"].includes(
-            state.update?.status,
-          ) && (
-            <div className="connect-banner update-banner" role="status">
-              <span className="banner-icon">
-                <RefreshCw size={23} />
-              </span>
-              <div>
-                <b>
-                  {state.update.status === "ready"
-                    ? "تحديث رِواق جاهز"
-                    : state.update.status === "downloading"
-                      ? `جاري تنزيل التحديث · ${Math.floor(state.update.percent || 0)}%`
-                      : "جديد رِواق وصل"}
-                </b>
-                <p>
-                  الإصدار {state.update.packageVersion} ·{" "}
-                  {state.update.status === "ready"
-                    ? "واصل التصفح أو ثبّته في الوقت المناسب لك."
-                    : "تحديثاتك ومزاياك الجديدة في مكان واحد."}
-                </p>
-              </div>
-              <button
-                className="text-button"
-                onClick={() => {
-                  setSettingsTab("updates");
-                  setView("settings");
-                }}
-              >
-                عرض التحديث
-              </button>
-            </div>
-          )}
-        <header className="topbar">
-          <div className="topbar-title">
-            <span className="tiny-dot" /> تجربة مشاهدة، على ذوقك
           </div>
-          <form
-            className="search-box"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (search.trim()) {
-                setQuery(search.trim());
-                setFilter("");
-                navigate("search");
-                setCatalog("");
-              }
-            }}
-          >
-            <Search size={17} />
-            <input
-              ref={searchRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث عن فيلم أو مسلسل…"
-              aria-label="البحث عن فيلم أو مسلسل"
-            />
-            <kbd>Ctrl K</kbd>
-          </form>
-          <IconButton
-            title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
-            onClick={() => act("localVideo")}
-          >
-            <FolderOpen size={20} />
-          </IconButton>
-        </header>
-        {["home", "discover", "search"].includes(view) && (
-          <>
-            {view === "home" &&
-              state.settings.showHero !== false &&
-              homeSections.includes("hero") &&
-              hero && (
-                <section
-                  className="hero"
-                  style={{
-                    backgroundImage: imgUrl(hero.background)
-                      ? `url("${imgUrl(hero.background)}")`
-                      : undefined,
-                  }}
+          <span className="nav-label">مساحتك السينمائية</span>
+          <nav>
+            {[
+              [Home, "home", "الرئيسية"],
+              [Compass, "discover", "اكتشف"],
+              [Library, "library", "مكتبتي"],
+              [Folders, "collections", "المجموعات"],
+              [Tv, "live", "بث مباشر"],
+              [Puzzle, "addons", "الإضافات"],
+            ]
+              .filter(
+                ([, id]) => !appearance.navHidden.includes(id) || view === id,
+              )
+              .map(([Icon, id, label]) => (
+                <button
+                  key={id}
+                  className={
+                    view === id || (view === "folder" && folderFrom === id)
+                      ? "nav-item active"
+                      : "nav-item"
+                  }
+                  onClick={() => navigate(id)}
                 >
-                  <div className="hero-gradient" />
-                  <div className="hero-content">
-                    <span className="eyebrow">
-                      <span /> من عالم السينما إلى رِواقك
-                    </span>
-                    <h1 dir="auto">{hero.name}</h1>
-                    <div className="hero-meta">
-                      {hero.imdbRating && (
-                        <span className="hero-rating">
-                          <Star size={15} fill="currentColor" />{" "}
-                          {hero.imdbRating}
-                        </span>
-                      )}
-                      <span>{hero.releaseInfo}</span>
-                      <span>{typeName(hero.type)}</span>
-                      {hero.genres?.slice(0, 2).map((g) => (
-                        <span key={g}>{g}</span>
-                      ))}
-                    </div>
-                    <p dir="auto">
-                      {hero.description ||
-                        "اكتشف التفاصيل، واختر مصدر المشاهدة المناسب من إضافاتك."}
-                    </p>
-                    <div className="button-row">
-                      <button className="primary" onClick={() => open(hero)}>
-                        <Play fill="currentColor" size={18} />
-                        استكشف وشاهد
-                      </button>
-                      <button
-                        className="secondary"
-                        onClick={() => favorite(hero)}
-                      >
-                        {favorites.some((m) => m.id === hero.id) ? (
-                          <Check size={20} />
-                        ) : (
-                          <Plus size={20} />
-                        )}
-                        مكتبتي
-                      </button>
-                    </div>
-                  </div>
-                  <div className="hero-footer">
-                    <span>
-                      اختيارات من إضافاتك <span className="hero-line" />
-                    </span>
-                    <div className="hero-pages">
-                      {heroItems.map((m, i) => (
-                        <button
-                          key={i}
-                          aria-label={`عرض ${m.name}`}
-                          className={i === heroIndex ? "selected" : ""}
-                          onClick={() => setHeroIndex(i)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </section>
+                  <Icon size={20} />
+                  <span>{label}</span>
+                  {isLocked(id === "collections" ? "library" : id) && (
+                    <Lock size={13} className="nav-lock" />
+                  )}
+                  {id === "library" && favorites.length > 0 && (
+                    <small>{favorites.length}</small>
+                  )}
+                  {id === "addons" && <small>{state.addons.length}</small>}
+                  {id === "collections" && state.collections?.length > 0 && (
+                    <small>{state.collections.length}</small>
+                  )}
+                </button>
+              ))}
+          </nav>
+          <div className="sidebar-note">
+            <span className="status-dot" /> إضافاتك. اختياراتك. تجربتك.
+            <p>متوافق مع إضافات ستريميو</p>
+          </div>
+          <div className="sidebar-bottom">
+            <button
+              className={view === "settings" ? "nav-item active" : "nav-item"}
+              onClick={() => navigate("settings")}
+            >
+              <Settings size={20} />
+              الإعدادات
+              {state.update?.available && (
+                <small className="update-dot" title="يتوفر إصدار جديد">
+                  جديد
+                </small>
               )}
-            {view === "home" && !state.user && !loading && (
-              <div className="connect-banner">
+            </button>
+            <button
+              className="profile-button"
+              onClick={() => setProfilesOpen(true)}
+              title="تبديل الملف الشخصي"
+            >
+              <Users size={17} />
+              <span>{activeProfile?.name || "المشاهد"}</span>
+              {state.profiles?.list?.length > 1 && (
+                <small>{state.profiles.list.length}</small>
+              )}
+            </button>
+            <button className="account-button" onClick={() => setAccount(true)}>
+              <span className="avatar">
+                {state.user ? (
+                  (state.user.name || state.user.email || "R")[0].toUpperCase()
+                ) : (
+                  <LogIn size={19} />
+                )}
+              </span>
+              <span>
+                <b>{state.user?.name || "حساب ستريميو"}</b>
+                <small>
+                  {state.user
+                    ? "متصل • الإضافات مستوردة"
+                    : "اربط حسابك وانقل إضافاتك"}
+                </small>
+              </span>
+              <ChevronLeft size={16} />
+            </button>
+          </div>
+        </aside>
+        <main className={player.active ? "content with-player" : "content"}>
+          {!player.active &&
+            view !== "settings" &&
+            ["available", "downloading", "ready"].includes(
+              state.update?.status,
+            ) && (
+              <div className="connect-banner update-banner" role="status">
                 <span className="banner-icon">
-                  <Puzzle size={23} />
+                  <RefreshCw size={23} />
                 </span>
                 <div>
-                  <b>كل إضافاتك، في مكانها.</b>
+                  <b>
+                    {state.update.status === "ready"
+                      ? "تحديث رِواق جاهز"
+                      : state.update.status === "downloading"
+                        ? `جاري تنزيل التحديث · ${Math.floor(state.update.percent || 0)}%`
+                        : "جديد رِواق وصل"}
+                  </b>
                   <p>
-                    اربط حساب ستريميو لاستيراد إضافاتك ومكتبتك بإعداداتها
-                    الحالية.
+                    الإصدار {state.update.packageVersion} ·{" "}
+                    {state.update.status === "ready"
+                      ? "واصل التصفح أو ثبّته في الوقت المناسب لك."
+                      : "تحديثاتك ومزاياك الجديدة في مكان واحد."}
                   </p>
                 </div>
                 <button
                   className="text-button"
-                  onClick={() => setAccount(true)}
+                  onClick={() => {
+                    setSettingsTab("updates");
+                    setView("settings");
+                  }}
                 >
-                  ربط الحساب <ArrowLeftIcon />
+                  عرض التحديث
                 </button>
               </div>
             )}
-            <div className="page-body">
-              {view !== "home" && (
-                <div className="page-heading">
-                  <div>
-                    <span className="eyebrow">
-                      {view === "search"
-                        ? "نتائج من إضافاتك"
-                        : "مساحة للاكتشاف"}
-                    </span>
-                    <h1>
-                      {view === "search"
-                        ? `نتائج «${query}»`
-                        : catalog
-                          ? rows[0]?.name || "اكتشف"
-                          : "شيء يستحق المشاهدة"}
-                    </h1>
-                  </div>
-                  <IconButton
-                    title="تحديث"
-                    onClick={() => setRefresh((x) => x + 1)}
+          <header className={`topbar ${scrolled ? "scrolled" : ""}`}>
+            <div className="topbar-title">
+              <span className="tiny-dot" /> تجربة مشاهدة، على ذوقك
+            </div>
+            <form
+              className="search-box"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (search.trim()) {
+                  setQuery(search.trim());
+                  setFilter("");
+                  navigate("search");
+                  setCatalog("");
+                }
+              }}
+            >
+              <Search size={17} />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="ابحث عن فيلم أو مسلسل…"
+                aria-label="البحث عن فيلم أو مسلسل"
+              />
+              <kbd>Ctrl K</kbd>
+            </form>
+            <IconButton
+              title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
+              onClick={() => act("localVideo")}
+            >
+              <FolderOpen size={20} />
+            </IconButton>
+          </header>
+          {["home", "discover", "search"].includes(view) && (
+            <>
+              {view === "home" &&
+                state.settings.showHero !== false &&
+                homeSections.includes("hero") &&
+                hero && (
+                  <section
+                    className="hero"
+                    style={{
+                      backgroundImage: imgUrl(hero.background)
+                        ? `url("${imgUrl(hero.background)}")`
+                        : undefined,
+                    }}
                   >
-                    <RefreshCw size={19} />
-                  </IconButton>
-                </div>
-              )}
-              {view !== "home" && !catalog && (
-                <div className="filter-tabs">
-                  {[
-                    ["", "الكل"],
-                    ["movie", "أفلام"],
-                    ["series", "مسلسلات"],
-                    ...[...new Set(rows.map((r) => r.type))]
-                      .filter((t) => !["movie", "series"].includes(t))
-                      .map((t) => [t, typeName(t)]),
-                  ].map(([t, label]) => (
-                    <button
-                      className={filter === t ? "selected" : ""}
-                      key={t}
-                      onClick={() => setFilter(t)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {view === "search" && query && !catalog && (
-                <PeopleRow query={query} onExplore={setExplore} />
-              )}
-              {loading && rows.length === 0 ? (
-                <div className="skeleton-wrap">
-                  <div className="skeleton-title" />
-                  <div className="skeleton-row">
-                    {Array.from({ length: 6 }, (_, i) => (
-                      <div className="skeleton" key={i} />
-                    ))}
+                    <div className="hero-gradient" />
+                    <div className="hero-content">
+                      <span className="eyebrow">
+                        <span /> من عالم السينما إلى رِواقك
+                      </span>
+                      <h1 dir="auto">{hero.name}</h1>
+                      <div className="hero-meta">
+                        {hero.imdbRating && (
+                          <span className="hero-rating">
+                            <Star size={15} fill="currentColor" />{" "}
+                            {hero.imdbRating}
+                          </span>
+                        )}
+                        <span>{hero.releaseInfo}</span>
+                        <span>{typeName(hero.type)}</span>
+                        {hero.genres?.slice(0, 2).map((g) => (
+                          <span key={g}>{g}</span>
+                        ))}
+                      </div>
+                      <p dir="auto">
+                        {hero.description ||
+                          "اكتشف التفاصيل، واختر مصدر المشاهدة المناسب من إضافاتك."}
+                      </p>
+                      <div className="button-row">
+                        <button className="primary" onClick={() => open(hero)}>
+                          <Play fill="currentColor" size={18} />
+                          استكشف وشاهد
+                        </button>
+                        <button
+                          className="secondary"
+                          onClick={() => favorite(hero)}
+                        >
+                          {favorites.some((m) => m.id === hero.id) ? (
+                            <Check size={20} />
+                          ) : (
+                            <Plus size={20} />
+                          )}
+                          مكتبتي
+                        </button>
+                      </div>
+                    </div>
+                    <div className="hero-footer">
+                      <span>
+                        اختيارات من إضافاتك <span className="hero-line" />
+                      </span>
+                      <div className="hero-pages">
+                        {heroItems.map((m, i) => (
+                          <button
+                            key={i}
+                            aria-label={`عرض ${m.name}`}
+                            className={i === heroIndex ? "selected" : ""}
+                            onClick={() => setHeroIndex(i)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                )}
+              {view === "home" && !state.user && !loading && (
+                <div className="connect-banner">
+                  <span className="banner-icon">
+                    <Puzzle size={23} />
+                  </span>
+                  <div>
+                    <b>كل إضافاتك، في مكانها.</b>
+                    <p>
+                      اربط حساب ستريميو لاستيراد إضافاتك ومكتبتك بإعداداتها
+                      الحالية.
+                    </p>
                   </div>
-                  <Busy text="نحمّل الكتالوجات من إضافاتك…" />
+                  <button
+                    className="text-button"
+                    onClick={() => setAccount(true)}
+                  >
+                    ربط الحساب <ArrowLeftIcon />
+                  </button>
                 </div>
-              ) : loadError ? (
-                <Empty
-                  icon={Wifi}
-                  title="تعذّر تحميل الكتالوجات"
-                  action={
-                    <button
-                      className="primary"
+              )}
+              <div className="page-body">
+                {view !== "home" && (
+                  <div className="page-heading">
+                    <div>
+                      <span className="eyebrow">
+                        {view === "search"
+                          ? "نتائج من إضافاتك"
+                          : "مساحة للاكتشاف"}
+                      </span>
+                      <h1>
+                        {view === "search"
+                          ? `نتائج «${query}»`
+                          : catalog
+                            ? rows[0]?.name || "اكتشف"
+                            : "شيء يستحق المشاهدة"}
+                      </h1>
+                    </div>
+                    <IconButton
+                      title="تحديث"
                       onClick={() => setRefresh((x) => x + 1)}
                     >
-                      إعادة المحاولة
-                    </button>
-                  }
-                >
-                  {loadError}
-                </Empty>
-              ) : (
-                <>
-                  {catalog ? (
-                    <>
-                      <div className="poster-grid">
-                        {liveRows
-                          .flatMap((r) => r.metas)
-                          .map((m, i) => (
-                            <Poster
-                              key={`${m.id}:${i}`}
-                              meta={m}
-                              onOpen={open}
-                            />
-                          ))}
-                      </div>
-                      {rows[0]?.hasMore && (
-                        <button
-                          className="secondary load-more"
-                          onClick={loadMore}
-                          disabled={paging}
-                        >
-                          {paging ? "جاري التحميل…" : "تحميل المزيد"}
-                        </button>
-                      )}
-                    </>
-                  ) : view === "home" ? (
-                    // The viewer's own order of home sections (Settings).
-                    homeSections
-                      .filter((id) => id !== "hero")
-                      .map((id) => (
-                        <React.Fragment key={id}>
-                          {id === "continue" && uniqueProgress.length > 0 && (
-                            <Rail
-                              title="نكمل الحكاية؟"
-                              subtitle="متابعة المشاهدة"
-                              metas={uniqueProgress.map((p) => p.meta)}
-                              progressMap={Object.fromEntries(
-                                uniqueProgress.map((p) => [
-                                  titleKey(p.meta),
-                                  p,
-                                ]),
-                              )}
-                              onOpen={open}
-                            />
-                          )}
-                          {id === "upnext" && (
-                            <UpNextRail items={upNext} onOpen={open} />
-                          )}
-                          {id === "collections" && (
-                            <PinnedCollections
-                              state={state}
-                              onOpen={(cid, folderId) => {
-                                // A folder opens on its own page; the
-                                // collection's heading opens the collection.
-                                if (folderId) {
-                                  setFolderTarget({
-                                    collectionId: cid,
-                                    folderId,
-                                  });
-                                  setFolderFrom("home");
-                                  navigate("folder");
-                                  return;
-                                }
-                                setCollectionTarget({ id: cid });
-                                navigate("collections");
-                              }}
-                            />
-                          )}
-                          {id === "catalogs" && catalogRails}
-                        </React.Fragment>
-                      ))
-                  ) : (
-                    catalogRails
-                  )}
-                  {loading && <Busy text="نحمّل بقية الكتالوجات من إضافاتك…" />}
-                  {!loading && !rows.some((r) => r.metas.length) && (
-                    <Empty
-                      icon={view === "search" ? Search : Puzzle}
-                      title={
-                        view === "search"
-                          ? "لم نجد نتائج لهذا البحث"
-                          : "ابدأ بإضافة عوالم جديدة"
-                      }
-                      action={
-                        view === "search" ? undefined : (
-                          <button
-                            className="primary"
-                            onClick={() => navigate("addons")}
-                          >
-                            إدارة الإضافات
-                          </button>
-                        )
-                      }
-                    >
-                      {view === "search"
-                        ? "جرّب اسم العمل بلغته الأصلية، أو أضف كتالوجاً يدعم البحث."
-                        : "أضف كتالوجاً أو اربط حساب ستريميو لتظهر العناوين هنا."}
-                    </Empty>
-                  )}
-                  {failures.length > 0 && (
-                    <div className="inline-warning">
-                      <AlertCircle size={16} />
-                      بعض الإضافات لم تستجب: {failures.join("، ")}
-                      <button onClick={() => setRefresh((x) => x + 1)}>
+                      <RefreshCw size={19} />
+                    </IconButton>
+                  </div>
+                )}
+                {view !== "home" && !catalog && (
+                  <div className="filter-tabs">
+                    {[
+                      ["", "الكل"],
+                      ["movie", "أفلام"],
+                      ["series", "مسلسلات"],
+                      ...[...new Set(rows.map((r) => r.type))]
+                        .filter((t) => !["movie", "series"].includes(t))
+                        .map((t) => [t, typeName(t)]),
+                    ].map(([t, label]) => (
+                      <button
+                        className={filter === t ? "selected" : ""}
+                        key={t}
+                        onClick={() => setFilter(t)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {view === "search" && query && !catalog && (
+                  <>
+                    <PeopleRow query={query} onExplore={setExplore} />
+                    <AiSearchRow
+                      query={query}
+                      ai={state.aiSearch}
+                      onOpen={open}
+                      onSettings={(tab) => {
+                        setSettingsTab(tab);
+                        navigate("settings");
+                      }}
+                    />
+                  </>
+                )}
+                {loading && rows.length === 0 ? (
+                  <div className="skeleton-wrap">
+                    <div className="skeleton-title" />
+                    <div className="skeleton-row">
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <div className="skeleton" key={i} />
+                      ))}
+                    </div>
+                    <Busy text="نحمّل الكتالوجات من إضافاتك…" />
+                  </div>
+                ) : loadError ? (
+                  <Empty
+                    icon={Wifi}
+                    title="تعذّر تحميل الكتالوجات"
+                    action={
+                      <button
+                        className="primary"
+                        onClick={() => setRefresh((x) => x + 1)}
+                      >
                         إعادة المحاولة
                       </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </>
+                    }
+                  >
+                    {loadError}
+                  </Empty>
+                ) : (
+                  <>
+                    {catalog ? (
+                      <>
+                        <div className="poster-grid">
+                          {liveRows
+                            .flatMap((r) => r.metas)
+                            .map((m, i) => (
+                              <Poster
+                                key={`${m.id}:${i}`}
+                                meta={m}
+                                onOpen={open}
+                              />
+                            ))}
+                        </div>
+                        {rows[0]?.hasMore && (
+                          <button
+                            className="secondary load-more"
+                            onClick={loadMore}
+                            disabled={paging}
+                          >
+                            {paging ? "جاري التحميل…" : "تحميل المزيد"}
+                          </button>
+                        )}
+                      </>
+                    ) : view === "home" ? (
+                      // The viewer's own order of home sections (Settings).
+                      homeSections
+                        .filter((id) => id !== "hero")
+                        .map((id) => (
+                          <React.Fragment key={id}>
+                            {id === "continue" && uniqueProgress.length > 0 && (
+                              <Rail
+                                title="نكمل الحكاية؟"
+                                subtitle="متابعة المشاهدة"
+                                metas={uniqueProgress.map((p) => p.meta)}
+                                progressMap={Object.fromEntries(
+                                  uniqueProgress.map((p) => [
+                                    titleKey(p.meta),
+                                    p,
+                                  ]),
+                                )}
+                                onOpen={open}
+                              />
+                            )}
+                            {id === "upnext" && (
+                              <UpNextRail items={upNext} onOpen={open} />
+                            )}
+                            {id === "services" && (
+                              <ServiceRails
+                                state={state}
+                                watched={watched}
+                                onOpen={open}
+                                onSettings={(tab) => {
+                                  setSettingsTab(tab);
+                                  navigate("settings");
+                                }}
+                              />
+                            )}
+                            {id === "collections" && (
+                              <PinnedCollections
+                                state={state}
+                                onOpen={(cid, folderId) => {
+                                  // A folder opens on its own page; the
+                                  // collection's heading opens the collection.
+                                  if (folderId) {
+                                    setFolderTarget({
+                                      collectionId: cid,
+                                      folderId,
+                                    });
+                                    setFolderFrom("home");
+                                    navigate("folder");
+                                    return;
+                                  }
+                                  setCollectionTarget({ id: cid });
+                                  navigate("collections");
+                                }}
+                              />
+                            )}
+                            {id === "catalogs" && catalogRails}
+                          </React.Fragment>
+                        ))
+                    ) : (
+                      catalogRails
+                    )}
+                    {loading && (
+                      <Busy text="نحمّل بقية الكتالوجات من إضافاتك…" />
+                    )}
+                    {!loading && !rows.some((r) => r.metas.length) && (
+                      <Empty
+                        icon={view === "search" ? Search : Puzzle}
+                        title={
+                          view === "search"
+                            ? "لم نجد نتائج لهذا البحث"
+                            : "ابدأ بإضافة عوالم جديدة"
+                        }
+                        action={
+                          view === "search" ? undefined : (
+                            <button
+                              className="primary"
+                              onClick={() => navigate("addons")}
+                            >
+                              إدارة الإضافات
+                            </button>
+                          )
+                        }
+                      >
+                        {view === "search"
+                          ? "جرّب اسم العمل بلغته الأصلية، أو أضف كتالوجاً يدعم البحث."
+                          : "أضف كتالوجاً أو اربط حساب ستريميو لتظهر العناوين هنا."}
+                      </Empty>
+                    )}
+                    {failures.length > 0 && (
+                      <div className="inline-warning">
+                        <AlertCircle size={16} />
+                        بعض الإضافات لم تستجب: {failures.join("، ")}
+                        <button onClick={() => setRefresh((x) => x + 1)}>
+                          إعادة المحاولة
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+          {view === "library" && (
+            <LibraryView
+              key={state.profiles?.active}
+              state={state}
+              update={update}
+              onOpen={open}
+              notice={notice}
+            />
+          )}
+          {view === "collections" && (
+            <CollectionsPage
+              key={state.profiles?.active}
+              state={state}
+              update={update}
+              act={act}
+              notice={notice}
+              onOpen={open}
+              target={collectionTarget}
+              setTarget={setCollectionTarget}
+              onFolderPage={(cid, folderId) => {
+                setFolderTarget({ collectionId: cid, folderId });
+                setFolderFrom("collections");
+                navigate("folder");
+              }}
+              onNuvio={() => setNuvioOpen(true)}
+              onSettings={(tab) => {
+                setSettingsTab(tab);
+                navigate("settings");
+              }}
+            />
+          )}
+          {view === "folder" && (
+            <FolderPage
+              key={state.profiles?.active}
+              state={state}
+              target={folderTarget}
+              onTarget={setFolderTarget}
+              onOpen={open}
+              onBack={() => navigate(folderFrom)}
+              onEdit={(cid, folderId) => {
+                setCollectionTarget({ id: cid, folderId });
+                navigate("collections");
+              }}
+              onSettings={(tab) => {
+                setSettingsTab(tab);
+                navigate("settings");
+              }}
+            />
+          )}
+          {view === "live" && (
+            <LiveTV state={state} act={act} notice={notice} update={update} />
+          )}
+          {view === "addons" && (
+            <Addons
+              state={state}
+              update={update}
+              act={act}
+              notice={notice}
+              setState={setState}
+              onAccount={() => setAccount(true)}
+              onNuvio={() => setNuvioOpen(true)}
+            />
+          )}
+          {view === "settings" && (
+            <Preferences
+              key={settingsTab}
+              initialTab={settingsTab}
+              onNuvio={() => setNuvioOpen(true)}
+              state={state}
+              update={update}
+              act={act}
+              notice={notice}
+            />
+          )}
+          <footer className="page-footer">
+            <span>
+              رِواق <b>·</b> مساحة للحكايات
+            </span>
+            <small>
+              عميل مستقل لمنظومة Stremio
+              {state.update?.current ? ` · ${state.update.current}` : ""}
+            </small>
+          </footer>
+        </main>
+        {toast && (
+          <div role="status" className="toast">
+            <AlertCircle size={18} />
+            <span>{toast}</span>
+            <button aria-label="إغلاق التنبيه" onClick={() => setToast("")}>
+              <X size={16} />
+            </button>
+          </div>
         )}
-        {view === "library" && (
-          <LibraryView
-            key={state.profiles?.active}
+        {(profilesOpen || unlockRoom) && (
+          <Profiles
             state={state}
-            update={update}
-            onOpen={open}
-            notice={notice}
-          />
-        )}
-        {view === "collections" && (
-          <CollectionsPage
-            key={state.profiles?.active}
-            state={state}
-            update={update}
             act={act}
-            notice={notice}
-            onOpen={open}
-            target={collectionTarget}
-            setTarget={setCollectionTarget}
-            onFolderPage={(cid, folderId) => {
-              setFolderTarget({ collectionId: cid, folderId });
-              setFolderFrom("collections");
-              navigate("folder");
-            }}
-            onNuvio={() => setNuvioOpen(true)}
-            onSettings={(tab) => {
-              setSettingsTab(tab);
-              navigate("settings");
-            }}
-          />
-        )}
-        {view === "folder" && (
-          <FolderPage
-            key={state.profiles?.active}
-            state={state}
-            target={folderTarget}
-            onTarget={setFolderTarget}
-            onOpen={open}
-            onBack={() => navigate(folderFrom)}
-            onEdit={(cid, folderId) => {
-              setCollectionTarget({ id: cid, folderId });
-              navigate("collections");
-            }}
-            onSettings={(tab) => {
-              setSettingsTab(tab);
-              navigate("settings");
-            }}
-          />
-        )}
-        {view === "live" && (
-          <LiveTV state={state} act={act} notice={notice} update={update} />
-        )}
-        {view === "addons" && (
-          <Addons
-            state={state}
             update={update}
-            act={act}
             notice={notice}
+            unlockRoom={unlockRoom}
+            onUnlocked={() => {
+              const room = unlockRoom;
+              setUnlockRoom("");
+              if (room) {
+                setView(room);
+                setCatalog("");
+                setFilter("");
+              }
+            }}
+            onClose={() => {
+              setProfilesOpen(false);
+              setUnlockRoom("");
+            }}
+          />
+        )}
+        {account && (
+          <Account
+            state={state}
+            onClose={() => setAccount(false)}
+            act={act}
+            update={update}
             setState={setState}
-            onAccount={() => setAccount(true)}
-            onNuvio={() => setNuvioOpen(true)}
-          />
-        )}
-        {view === "settings" && (
-          <Preferences
-            key={settingsTab}
-            initialTab={settingsTab}
-            onNuvio={() => setNuvioOpen(true)}
-            state={state}
-            update={update}
-            act={act}
             notice={notice}
           />
         )}
-        <footer className="page-footer">
-          <span>
-            رِواق <b>·</b> مساحة للحكايات
-          </span>
-          <small>
-            عميل مستقل لمنظومة Stremio
-            {state.update?.current ? ` · ${state.update.current}` : ""}
-          </small>
-        </footer>
-      </main>
-      {toast && (
-        <div role="status" className="toast">
-          <AlertCircle size={18} />
-          <span>{toast}</span>
-          <button aria-label="إغلاق التنبيه" onClick={() => setToast("")}>
-            <X size={16} />
-          </button>
-        </div>
-      )}
-      {(profilesOpen || unlockRoom) && (
-        <Profiles
-          state={state}
-          act={act}
-          update={update}
-          notice={notice}
-          unlockRoom={unlockRoom}
-          onUnlocked={() => {
-            const room = unlockRoom;
-            setUnlockRoom("");
-            if (room) {
-              setView(room);
-              setCatalog("");
-              setFilter("");
+        {selected && (
+          <Details
+            key={`${selected.meta.type}:${selected.meta.id}`}
+            selection={selected}
+            state={state}
+            onClose={() => setSelected(null)}
+            onFavorite={favorite}
+            update={update}
+            act={act}
+            notice={notice}
+            onPlayer={() => setPlayerOpen(true)}
+            onOpenTitle={(meta) => setSelected({ meta })}
+          />
+        )}
+        {nuvioOpen && (
+          <NuvioLink
+            act={act}
+            setState={setState}
+            notice={notice}
+            onClose={() => setNuvioOpen(false)}
+          />
+        )}
+        {explore && (
+          <ExploreModal
+            key={explore.qid || explore.tmdb}
+            start={explore}
+            onClose={() => setExplore(null)}
+            onOpenTitle={(meta) => {
+              setExplore(null);
+              setSelected({ meta });
+            }}
+          />
+        )}
+        {player.active && (
+          <PlayerView
+            player={player}
+            state={state}
+            act={act}
+            hidden={
+              !!selected ||
+              account ||
+              playerOpen ||
+              profilesOpen ||
+              !!unlockRoom
             }
-          }}
-          onClose={() => {
-            setProfilesOpen(false);
-            setUnlockRoom("");
-          }}
-        />
-      )}
-      {account && (
-        <Account
-          state={state}
-          onClose={() => setAccount(false)}
-          act={act}
-          update={update}
-          setState={setState}
-          notice={notice}
-        />
-      )}
-      {selected && (
-        <Details
-          key={`${selected.meta.type}:${selected.meta.id}`}
-          selection={selected}
-          state={state}
-          onClose={() => setSelected(null)}
-          onFavorite={favorite}
-          update={update}
-          act={act}
-          notice={notice}
-          onPlayer={() => setPlayerOpen(true)}
-          onOpenTitle={(meta) => setSelected({ meta })}
-        />
-      )}
-      {nuvioOpen && (
-        <NuvioLink
-          act={act}
-          setState={setState}
-          notice={notice}
-          onClose={() => setNuvioOpen(false)}
-        />
-      )}
-      {explore && (
-        <ExploreModal
-          key={explore.qid || explore.tmdb}
-          start={explore}
-          onClose={() => setExplore(null)}
-          onOpenTitle={(meta) => {
-            setExplore(null);
-            setSelected({ meta });
-          }}
-        />
-      )}
-      {player.active && (
-        <PlayerView
-          player={player}
-          state={state}
-          act={act}
-          hidden={
-            !!selected || account || playerOpen || profilesOpen || !!unlockRoom
-          }
-          onSettings={() => setPlayerOpen(true)}
-          update={update}
-          dockRequest={dockRequest}
-          onAdvance={(direction) =>
-            advance(player.meta, player.videoId, direction)
-          }
-          onEpisode={(id) => advance(player.meta, player.videoId, 0, false, id)}
-        />
-      )}
-      {playerOpen && (
-        <PlayerPanel
-          player={player}
-          state={state}
-          act={act}
-          update={update}
-          onClose={() => setPlayerOpen(false)}
-        />
-      )}
-    </div>
+            onSettings={() => setPlayerOpen(true)}
+            update={update}
+            dockRequest={dockRequest}
+            onAdvance={(direction) =>
+              advance(player.meta, player.videoId, direction)
+            }
+            onEpisode={(id) =>
+              advance(player.meta, player.videoId, 0, false, id)
+            }
+          />
+        )}
+        {playerOpen && (
+          <PlayerPanel
+            player={player}
+            state={state}
+            act={act}
+            update={update}
+            onClose={() => setPlayerOpen(false)}
+          />
+        )}
+      </div>
+    </WatchedContext.Provider>
   );
 }
 function ArrowLeftIcon() {

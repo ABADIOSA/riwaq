@@ -1,10 +1,29 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const allowed = new Set([
   "init",
+  "windowInfo",
+  "windowControl",
+  "windowDrag",
+  "relaunch",
+  "setAppIcon",
   "catalog",
   "catalogPlan",
   "subtitleCues",
   "copyThemeCode",
+  "copyBadgePack",
+  "debridSave",
+  "debridCheck",
+  "watchProviders",
+  "serviceRows",
+  "homeServerAdd",
+  "homeServerRemove",
+  "homeServerToggle",
+  "homeServerCheck",
+  "streamServerInfo",
+  "streamServerSave",
+  "aiSave",
+  "aiTest",
+  "aiSearch",
   "hudPanel",
   "hudRequest",
   "hudIdle",
@@ -112,6 +131,7 @@ contextBridge.exposeInMainWorld("riwaq", {
         "ended",
         "playerRequest",
         "hudCommand",
+        "window",
       ].includes(name)
     )
       return () => {};

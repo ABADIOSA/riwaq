@@ -12,6 +12,11 @@ import {
   webUrl,
 } from "./protocol.mjs";
 import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
+import { applyStreamPrefs } from "./stream-prefs.mjs";
+import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
+import { ServicesHub } from "./services-hub.mjs";
+import { AiSearch } from "./ai-hub.mjs";
+import { isAdultAddon, withoutAdult } from "./adult.mjs";
 import { DataHub } from "./data-hub.mjs";
 import { Credits } from "./credits.mjs";
 import { Integrations } from "./integrations.mjs";
@@ -141,6 +146,8 @@ export class Client {
     this.metas = new Map();
     this.cache = new Map();
     this.dataHub = new DataHub(this);
+    this.services = new ServicesHub(this);
+    this.ai = new AiSearch(this);
     this.credits = new Credits(this);
     this.integrations = new Integrations(this);
     this.live = new LiveHub(this);
@@ -204,6 +211,8 @@ export class Client {
       })),
       lastSync,
       providers: this.dataHub.publicState(),
+      services: this.services.publicState(),
+      aiSearch: this.ai.publicState(),
       integrations: this.integrations.publicState(),
       live: this.live.publicState(),
       profiles: this.profiles.publicState(),
@@ -666,9 +675,11 @@ export class Client {
         ),
         { ttl: 600000, failFor: 120000, timeout: 10000 },
       );
-      const metas = (data.metas || [])
-        .filter((m) => m?.id && m.name)
-        .map((m) => ({ ...m, type: m.type || found.cat.type }));
+      const metas = this.adultFilter(
+        (data.metas || [])
+          .filter((m) => m?.id && m.name)
+          .map((m) => ({ ...m, type: m.type || found.cat.type })),
+      );
       // A catalog that takes "skip" can be read further on the folder page.
       const pages = (found.cat.extra || []).some((e) => e?.name === "skip");
       return {
@@ -1056,6 +1067,13 @@ export class Client {
       this.cache.delete(this.cache.keys().next().value);
     this.cache.set(url, entry);
   }
+  /** Whether the active profile hides adult addons and titles. */
+  hidesAdult() {
+    return !!this.profiles?.active?.()?.hideAdult;
+  }
+  adultFilter(metas) {
+    return this.hidesAdult() ? withoutAdult(metas) : metas;
+  }
   /** The catalogs a listing would request, in the viewer's addon order. */
   catalogTasks({
     type = "",
@@ -1064,7 +1082,9 @@ export class Client {
     catalogKey = "",
     skip = 0,
   } = {}) {
+    const hideAdult = this.hidesAdult();
     return this.enabled()
+      .filter((addon) => !(hideAdult && isAdultAddon(addon.manifest)))
       .flatMap((addon) =>
         (addon.manifest.catalogs || [])
           .filter(
@@ -1105,9 +1125,11 @@ export class Client {
           resourceUrl(addon.transportUrl, "catalog", cat.type, cat.id, extras),
           { ttl: 600000, failFor: 120000, timeout: 10000 },
         );
-        const metas = (data.metas || [])
-          .filter((m) => m?.id && m.name)
-          .map((m) => ({ ...m, type: m.type || cat.type }));
+        const metas = this.adultFilter(
+          (data.metas || [])
+            .filter((m) => m?.id && m.name)
+            .map((m) => ({ ...m, type: m.type || cat.type })),
+        );
         return {
           key,
           name: cat.name || cat.id,
@@ -1208,7 +1230,11 @@ export class Client {
           );
           return (response.streams || [])
             .filter((s) => s && typeof s === "object")
-            .map((s) => ({ ...s, provider: addon.manifest.name }));
+            .map((s) => ({
+              ...s,
+              provider: addon.manifest.name,
+              addonId: addon.manifest.id,
+            }));
         } catch {
           failures.push(addon.manifest.name);
           return [];
@@ -1235,7 +1261,7 @@ export class Client {
       this.state.settings,
       this.requestContext(type, id),
     );
-    const streams = analysis.kept.map((entry) => {
+    const ranked = analysis.kept.map((entry) => {
       const { stream, parsed } = entry;
       const key = keyFor(unique[entry.index].identity);
       this.streams.set(key, { ...stream, type, videoId: id });
@@ -1277,8 +1303,59 @@ export class Client {
         torrent: !!stream.infoHash,
         external: !!(stream.externalUrl || stream.ytId),
         supported,
+        addonId: stream.addonId,
       };
     });
+    // The viewer's source mode, saved filter and order, then their badges.
+    const settings = this.state.settings;
+    const prefs = applyStreamPrefs(
+      ranked,
+      settings,
+      this.enabled().map((a) => a.manifest.id),
+    );
+    const rules = cleanBadgeRules(settings.badgeRules);
+    // The viewer's own copies on their home servers come first.
+    const home = (
+      await this.services.homeStreams({ type, id }).catch(() => [])
+    ).map((copy) => {
+      const key = keyFor(`home|${copy.server.id}|${copy.itemId}`);
+      this.streams.set(key, { url: copy.url, type, videoId: id, home: true });
+      const resolution = Number.parseInt(copy.label.resolution) || 0;
+      return {
+        key,
+        name: copy.server.name,
+        title: `نسختك على ${copy.server.name}${copy.label.container ? ` · ${copy.label.container}` : ""}`,
+        provider: copy.server.name,
+        tier:
+          resolution >= 2160
+            ? "4K"
+            : resolution >= 1080
+              ? "1080p"
+              : resolution >= 720
+                ? "720p"
+                : "SD",
+        score: 1000,
+        reasons: [
+          { code: "home", label: "نسختك على خادمك المنزلي", points: 1000 },
+        ],
+        resolution,
+        resolutionLabel: copy.label.resolution || "",
+        codec: copy.label.codec,
+        size: copy.label.size || null,
+        sizeLabel: sizeLabel(copy.label.size || 0),
+        home: true,
+        supported: true,
+        matches: true,
+        badges: [{ label: "نسختك", color: "#4ADE80" }],
+      };
+    });
+    const streams = [
+      ...home,
+      ...prefs.streams.map((s) => {
+        const badges = ruleBadges(s, rules);
+        return badges.length ? { ...s, badges } : s;
+      }),
+    ];
     const dropped = analysis.dropped.map((entry) => ({
       name: entry.stream.name || entry.stream.provider || "مصدر",
       provider: entry.stream.provider,
@@ -1295,6 +1372,9 @@ export class Client {
       failures,
       providers: addons.length,
       safety: analysis.safety,
+      mode: prefs.mode,
+      modeFallback: prefs.modeFallback,
+      filter: prefs.filter,
     };
   }
   /**
