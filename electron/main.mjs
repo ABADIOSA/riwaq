@@ -35,6 +35,7 @@ import {
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
+import { fetchPackText } from "../core/badges.mjs";
 import { AI_PROVIDERS } from "../core/ai-search.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
 import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
@@ -702,6 +703,9 @@ const methods = {
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
   // A badge pack is copied only as Riwaq's own pack JSON.
+  // A badge pack from a link (harbor.site, GitHub, a gist...): HTTPS only,
+  // never a machine on the viewer's network, and only its text comes back.
+  badgePackFetch: (a) => fetchPackText(String(a?.url || "")),
   copyBadgePack: (a) => {
     const json = String(a?.json || "");
     let data;
@@ -710,7 +714,7 @@ const methods = {
     } catch {
       throw new Error("حزمة غير صالحة");
     }
-    if (data?.format !== "riwaq-badges" || json.length > 60000)
+    if (data?.format !== "riwaq-badges" || json.length > 400000)
       throw new Error("حزمة غير صالحة");
     clipboard.writeText(json);
     return true;

@@ -1,4 +1,30 @@
-# Verification — Riwaq 0.15.0
+# Verification — Riwaq 0.16.0
+
+## 0.16.0 — badge packs from a link
+
+The owner asked for links such as https://harbor.site/badges/harbor-light.json to be accepted. harbor.site is refused by this build environment's egress policy, so that file was not fetched here. Its format was read in Harbor's MIT source (`stream-badges.ts`, `packs-tab.tsx`: Harbor lists it as a Nuvio-format pack) and in Nuvio's `StreamBadgeRules.kt` (behaviour only).
+
+Executed:
+
+- `npm test`: **340 passing, 0 failing** (328 + 12 new in `tests/badge-packs.test.mjs`). They are mocked, and cover:
+  - Nuvio and Harbor formats, name-to-chip mapping and art replacement rules;
+  - pictures and styles carried into the picker;
+  - Java pattern and ARGB colour normalization, and forgiving JSON;
+  - a 300-badge pack capped at 250 rules, and the export round trip;
+  - public-HTTPS link checks and the redirect rules;
+  - the safe `(?:[^.]*\.)` run and the matching deadline.
+- **Live, real pack:** NardBadges (106 badges, same Nuvio format, served from raw.githubusercontent.com) was fetched through the real `fetchPackText` in Node and imported whole:
+  - 30 built-in pictures and 76 rules, none refused;
+  - 300 realistic stream titles matched in about 335 ms, and the worst single rule on an adversarial 400-character title took about 40 ms.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge at 980×680 and 1440×960, using the real NardBadges text as the fetched pack and generated PNGs as its pictures:
+  - an http link is refused;
+  - the preview lists 30 pictures and 76 rules, and installing adds them;
+  - the rules page hides the 76 pack rules until asked;
+  - the picker shows pictures for 4K, DV+HDR10, HEVC, REMUX and Atmos 7.1, plus rule pictures (Atmos+DV, REMUX 1, PRIME, WEB 1), with sizes and seeds left as text;
+  - no page errors, no horizontal overflow.
+
+Not executed: fetching harbor.site itself (blocked here, not by Riwaq); anything on Windows.
 
 ## 0.15.0 — Harbor's settings pages
 

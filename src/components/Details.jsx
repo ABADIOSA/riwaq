@@ -31,6 +31,8 @@ import { shuffleCandidates, shufflePick } from "../../core/shuffle.mjs";
 const shuffled = new Map();
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { spoilerIds } from "../../core/spoilers.mjs";
+import { chipArt } from "../../core/badges.mjs";
+import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
 import {
@@ -191,6 +193,7 @@ export default function Details({
       : allShown;
   const hiddenKinds = new Set(settings.badgesHidden || []);
   const chip = (kind) => settings.badgesOn !== false && !hiddenKinds.has(kind);
+  const art = settings.badgeArt || {};
   const dropped = result?.dropped || [];
   return (
     <Modal onClose={onClose} className="details-modal">
@@ -547,25 +550,61 @@ export default function Details({
                         <span dir="auto">{s.title || s.provider}</span>
                       )}
                       <small>
+                        {chip("resolution") &&
+                          chipArt(art, "resolution", s.resolution).map(
+                            (src) => (
+                              <img
+                                key={src}
+                                className="badge-art"
+                                src={src}
+                                alt={`${s.resolution}p`}
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                              />
+                            ),
+                          )}
                         {(s.badges || []).map((b) => (
-                          <em
-                            key={b.label}
-                            className="tag-custom"
-                            style={{ "--badge": b.color }}
-                          >
-                            {b.label}
-                          </em>
+                          <RuleBadge key={b.label} badge={b} />
                         ))}
                         {chip("hdr") && s.hdr && (
-                          <em className="tag-hdr">{s.hdr}</em>
+                          <ArtChip
+                            images={chipArt(art, "hdr", s.hdr)}
+                            label={s.hdr}
+                          >
+                            <em className="tag-hdr">{s.hdr}</em>
+                          </ArtChip>
                         )}
-                        {chip("codec") && s.codec && <em>{s.codec}</em>}
-                        {chip("source") && s.source && <em>{s.source}</em>}
+                        {chip("codec") && s.codec && (
+                          <ArtChip
+                            images={chipArt(art, "codec", s.codec)}
+                            label={s.codec}
+                          >
+                            <em>{s.codec}</em>
+                          </ArtChip>
+                        )}
+                        {chip("source") && s.source && (
+                          <ArtChip
+                            images={chipArt(art, "source", s.source)}
+                            label={s.source}
+                          >
+                            <em>{s.source}</em>
+                          </ArtChip>
+                        )}
                         {chip("audio") && s.audio && (
-                          <em>
-                            {s.audio}
-                            {s.channels ? ` ${s.channels}` : ""}
-                          </em>
+                          <ArtChip
+                            images={[
+                              ...chipArt(art, "audio", s.audio),
+                              ...(chipArt(art, "audio", s.audio).length
+                                ? chipArt(art, "channels", s.channels)
+                                : []),
+                            ]}
+                            label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
+                          >
+                            <em>
+                              {s.audio}
+                              {s.channels ? ` ${s.channels}` : ""}
+                            </em>
+                          </ArtChip>
                         )}
                         {chip("size") && s.sizeLabel && <em>{s.sizeLabel}</em>}
                         {chip("cached") && s.cached && (

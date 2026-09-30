@@ -1912,3 +1912,23 @@ em.tag-custom {
 .p2p-options ~ h3 {
   margin-top: 18px;
 }
+
+/* Badge packs: known links, preview and pictures. */
+.known-packs {
+  margin-top: 10px;
+}
+.pack-samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0 10px;
+}
+.pack-counts {
+  margin: 0 0 10px;
+  padding-inline-start: 18px;
+  line-height: 1.9;
+}
+.rule-list .pack-samples {
+  margin: 0;
+}
