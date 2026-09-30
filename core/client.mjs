@@ -14,6 +14,7 @@ import {
 import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
 import { applyStreamPrefs } from "./stream-prefs.mjs";
 import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
+import { ServicesHub } from "./services-hub.mjs";
 import { DataHub } from "./data-hub.mjs";
 import { Credits } from "./credits.mjs";
 import { Integrations } from "./integrations.mjs";
@@ -143,6 +144,7 @@ export class Client {
     this.metas = new Map();
     this.cache = new Map();
     this.dataHub = new DataHub(this);
+    this.services = new ServicesHub(this);
     this.credits = new Credits(this);
     this.integrations = new Integrations(this);
     this.live = new LiveHub(this);
@@ -206,6 +208,7 @@ export class Client {
       })),
       lastSync,
       providers: this.dataHub.publicState(),
+      services: this.services.publicState(),
       integrations: this.integrations.publicState(),
       live: this.live.publicState(),
       profiles: this.profiles.publicState(),
@@ -1294,10 +1297,48 @@ export class Client {
       this.enabled().map((a) => a.manifest.id),
     );
     const rules = cleanBadgeRules(settings.badgeRules);
-    const streams = prefs.streams.map((s) => {
-      const badges = ruleBadges(s, rules);
-      return badges.length ? { ...s, badges } : s;
+    // The viewer's own copies on their home servers come first.
+    const home = (
+      await this.services.homeStreams({ type, id }).catch(() => [])
+    ).map((copy) => {
+      const key = keyFor(`home|${copy.server.id}|${copy.itemId}`);
+      this.streams.set(key, { url: copy.url, type, videoId: id, home: true });
+      const resolution = Number.parseInt(copy.label.resolution) || 0;
+      return {
+        key,
+        name: copy.server.name,
+        title: `نسختك على ${copy.server.name}${copy.label.container ? ` · ${copy.label.container}` : ""}`,
+        provider: copy.server.name,
+        tier:
+          resolution >= 2160
+            ? "4K"
+            : resolution >= 1080
+              ? "1080p"
+              : resolution >= 720
+                ? "720p"
+                : "SD",
+        score: 1000,
+        reasons: [
+          { code: "home", label: "نسختك على خادمك المنزلي", points: 1000 },
+        ],
+        resolution,
+        resolutionLabel: copy.label.resolution || "",
+        codec: copy.label.codec,
+        size: copy.label.size || null,
+        sizeLabel: sizeLabel(copy.label.size || 0),
+        home: true,
+        supported: true,
+        matches: true,
+        badges: [{ label: "نسختك", color: "#4ADE80" }],
+      };
     });
+    const streams = [
+      ...home,
+      ...prefs.streams.map((s) => {
+        const badges = ruleBadges(s, rules);
+        return badges.length ? { ...s, badges } : s;
+      }),
+    ];
     const dropped = analysis.dropped.map((entry) => ({
       name: entry.stream.name || entry.stream.provider || "مصدر",
       provider: entry.stream.provider,

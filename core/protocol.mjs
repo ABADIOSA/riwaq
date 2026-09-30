@@ -2,6 +2,7 @@ import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
 import { cleanSavedThemes, safeAppearance } from "./appearance.mjs";
 import { cleanAddonPriority, cleanStreamFilters } from "./stream-prefs.mjs";
 import { cleanBadgeRules, cleanHiddenBadges } from "./badges.mjs";
+import { cleanServices } from "./services.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -86,6 +87,8 @@ export const DEFAULT_SETTINGS = {
   badgesOn: true,
   badgesHidden: [],
   badgeRules: [],
+  // Streaming services the viewer pays for, shown as home rows.
+  streamingServices: [],
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -341,6 +344,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.streamFilters = cleanStreamFilters(input.streamFilters);
   if (Array.isArray(input.addonPriority))
     next.addonPriority = cleanAddonPriority(input.addonPriority);
+  if (Array.isArray(input.streamingServices))
+    next.streamingServices = cleanServices(input.streamingServices);
   if (Array.isArray(input.badgeRules))
     next.badgeRules = cleanBadgeRules(input.badgeRules);
   if (Array.isArray(input.badgesHidden))

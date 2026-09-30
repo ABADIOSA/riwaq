@@ -9,6 +9,12 @@ import {
 } from "./settings/LookPages.jsx";
 import { useWindowState } from "./WindowChrome.jsx";
 import {
+  HomeServersPage,
+  P2PPage,
+  ServerPage,
+  ServicesPage,
+} from "./settings/ServicePages.jsx";
+import {
   BadgePacksPage,
   BadgeRulesPage,
   BadgesPage,
@@ -62,6 +68,10 @@ import {
   BadgeCheck,
   ListChecks,
   Package,
+  Tv,
+  Server,
+  ServerCog,
+  Share2,
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -311,6 +321,18 @@ const GROUPS = [
     Icon: Library,
     pages: [
       [
+        "services",
+        "خدمات البث",
+        "Netflix شاهد OSN منصات Debrid Real-Debrid AllDebrid TorBox Premiumize اشتراك",
+        Tv,
+      ],
+      [
+        "homeServers",
+        "الخوادم المنزلية",
+        "Jellyfin Emby خادم نسختك مكتبة منزلية",
+        Server,
+      ],
+      [
         "sources",
         "تفضيلات المصادر",
         "أمان تخزين debrid حجم استبعاد CAM جودة",
@@ -329,6 +351,13 @@ const GROUPS = [
         MousePointerClick,
       ],
       ["filters", "مرشحات البث", "مرشح جودة 4K HDR أتموس حجم مشاركين", Filter],
+      ["p2p", "محرك P2P", "تورنت اتصالات سرعة تخزين مؤقت cache", Share2],
+      [
+        "server",
+        "خادم البث",
+        "Stremio Service خادم عنوان اتصال إصدار MPV",
+        ServerCog,
+      ],
       [
         "home",
         "الرئيسية",
@@ -600,6 +629,18 @@ export default function SettingsStudio({
               {id === "ambience" && (
                 <AmbiencePage state={state} update={update} />
               )}
+              {id === "services" && (
+                <ServicesPage
+                  state={state}
+                  update={update}
+                  onSettings={setTab}
+                />
+              )}
+              {id === "homeServers" && (
+                <HomeServersPage state={state} update={update} />
+              )}
+              {id === "p2p" && <P2PPage notice={notice} />}
+              {id === "server" && <ServerPage state={state} update={update} />}
               {id === "sorting" && (
                 <SortingPage state={state} update={update} />
               )}
@@ -1055,35 +1096,10 @@ export default function SettingsStudio({
                         </span>
                       ))}
                     </div>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        save("serverUrl", draft.serverUrl);
-                      }}
-                    >
-                      <label>عنوان Stremio Service</label>
-                      <div className="input-action">
-                        <input
-                          aria-label="عنوان Stremio Service"
-                          dir="ltr"
-                          value={draft.serverUrl}
-                          onChange={(e) =>
-                            setDraft({ ...draft, serverUrl: e.target.value })
-                          }
-                        />
-                        <button className="secondary">حفظ</button>
-                      </div>
-                      <p className="subtle">
-                        مطلوب لمصادر التورنت. الروابط المباشرة تعمل بالمشغل
-                        المرفق دون خدمة إضافية.
-                      </p>
-                    </form>
-                    <button
-                      className="secondary"
-                      onClick={() => update("choosePlayer")}
-                    >
-                      اختيار نسخة MPV مخصصة
-                    </button>
+                    <p className="subtle">
+                      عنوان خادم البث وإعدادات التورنت في «المصادر والمكتبة ←
+                      خادم البث» و«محرك P2P».
+                    </p>
                   </section>
                   <section className="settings-card">
                     <h2>رِواق {state.update?.current || ""}</h2>

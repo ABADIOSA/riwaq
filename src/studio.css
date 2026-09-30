@@ -1737,3 +1737,124 @@ em.tag-custom {
     grid-template-columns: 1fr;
   }
 }
+
+/* Sources & library: streaming services, debrid, home servers, P2P. */
+.service-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.service-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--line);
+  background: var(--raised, #1b1e22);
+  color: var(--text);
+  text-align: right;
+  min-width: 0;
+}
+.service-chip > span:not(.service-logo-blank) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.service-chip img,
+.service-logo-blank {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex: none;
+  background: var(--line);
+}
+.service-chip.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.service-chip.selected svg {
+  color: var(--accent);
+}
+.service-chip:disabled {
+  opacity: 0.45;
+}
+.service-rows {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.service-row {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--line);
+  background: var(--raised, #1b1e22);
+}
+.service-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.service-row .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.service-status {
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--line);
+  color: var(--muted);
+}
+.service-status.ok {
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+}
+.service-status.warn {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+.service-status.bad {
+  background: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+}
+.home-server-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+.home-server-form label {
+  display: grid;
+  gap: 6px;
+}
+.empty-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.p2p-options > button {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.p2p-options p {
+  margin: 0;
+  color: var(--muted);
+}
+.server-probe {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}

@@ -34,6 +34,7 @@ import {
 } from "../core/subtitles.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
+import { DEBRID } from "../core/services.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
 import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
 import {
@@ -813,6 +814,53 @@ const methods = {
     return state;
   },
   providerSave: (a) => client.dataHub.save(a),
+  // Services, home servers and the streaming server. Keys and tokens stay in
+  // main; changing them is behind the Settings room lock.
+  debridSave: (a) => {
+    client.profiles.gate("settings");
+    return client.services.debridSave({
+      id: String(a?.id || ""),
+      key: typeof a?.key === "string" ? a.key : undefined,
+      clear: a?.clear === true,
+    });
+  },
+  debridCheck: (a) => client.services.debridCheck({ id: String(a?.id || "") }),
+  watchProviders: () => client.services.watchProviders(),
+  serviceRows: () => client.services.serviceRows(),
+  homeServerAdd: (a) => {
+    client.profiles.gate("settings");
+    return client.services.homeServerAdd({
+      url: String(a?.url || ""),
+      username: String(a?.username || ""),
+      password: String(a?.password || ""),
+    });
+  },
+  homeServerRemove: (a) => {
+    client.profiles.gate("settings");
+    return client.services.homeServerRemove({ id: String(a?.id || "") });
+  },
+  homeServerToggle: (a) => {
+    client.profiles.gate("settings");
+    return client.services.homeServerToggle({
+      id: String(a?.id || ""),
+      enabled: a?.enabled === true,
+    });
+  },
+  homeServerCheck: (a) =>
+    client.services.homeServerCheck({ id: String(a?.id || "") }),
+  streamServerInfo: () => client.services.streamServerInfo(),
+  streamServerSave: (a) => {
+    client.profiles.gate("settings");
+    return client.services.streamServerSave({
+      profile: typeof a?.profile === "string" ? a.profile : undefined,
+      cacheSize:
+        a && "cacheSize" in a
+          ? a.cacheSize === null
+            ? null
+            : Number(a.cacheSize)
+          : undefined,
+    });
+  },
   providerTest: (a) => client.dataHub.test(a.id),
   integrationSave: (a) => client.integrations.save(a),
   integrationSync: (a) => client.integrations.sync(a.id),
@@ -845,6 +893,7 @@ const methods = {
       discord: "https://support.discord.com/hc/articles/228383668",
       telegram: "https://core.telegram.org/bots#how-do-i-create-a-bot",
       discordApp: "https://discord.com/developers/applications",
+      ...Object.fromEntries(DEBRID.map((d) => [d.id, d.url])),
     };
     if (!urls[id]) throw new Error("رابط الخدمة غير معروف");
     await shell.openExternal(urls[id]);

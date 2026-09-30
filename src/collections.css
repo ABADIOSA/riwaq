@@ -913,3 +913,16 @@ button.danger,
   opacity: 1;
   color: var(--accent);
 }
+.service-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.service-title img {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.service-needs {
+  margin: 0 0 24px;
+}

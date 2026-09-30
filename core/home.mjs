@@ -10,6 +10,7 @@ export const HOME_SECTIONS = [
   ["continue", "نكمل الحكاية"],
   ["upnext", "الحلقات التالية"],
   ["collections", "المجموعات المثبّتة"],
+  ["services", "خدماتك للبث"],
   ["catalogs", "كتالوجات الإضافات"],
 ];
 export const DEFAULT_HOME_SECTIONS = HOME_SECTIONS.map(([id]) => id);

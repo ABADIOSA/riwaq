@@ -55,6 +55,7 @@ import WindowBar, {
   useWindowState,
 } from "./components/WindowChrome.jsx";
 import Screensaver from "./components/Screensaver.jsx";
+import ServiceRails from "./components/ServiceRails.jsx";
 import { drawAppIcon } from "./lib/app-icon.js";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
@@ -944,6 +945,17 @@ export default function App() {
                           )}
                           {id === "upnext" && (
                             <UpNextRail items={upNext} onOpen={open} />
+                          )}
+                          {id === "services" && (
+                            <ServiceRails
+                              state={state}
+                              watched={watched}
+                              onOpen={open}
+                              onSettings={(tab) => {
+                                setSettingsTab(tab);
+                                navigate("settings");
+                              }}
+                            />
                           )}
                           {id === "collections" && (
                             <PinnedCollections
