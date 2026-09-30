@@ -1313,7 +1313,10 @@ export class Client {
       settings,
       this.enabled().map((a) => a.manifest.id),
     );
+    // Badge matching gets a time budget so no stream title can hold up the
+    // picker.
     const rules = cleanBadgeRules(settings.badgeRules);
+    const badgeDeadline = Date.now() + 1500;
     // The viewer's own copies on their home servers come first.
     const home = (
       await this.services.homeStreams({ type, id }).catch(() => [])
@@ -1352,7 +1355,7 @@ export class Client {
     const streams = [
       ...home,
       ...prefs.streams.map((s) => {
-        const badges = ruleBadges(s, rules);
+        const badges = ruleBadges(s, rules, badgeDeadline);
         return badges.length ? { ...s, badges } : s;
       }),
     ];

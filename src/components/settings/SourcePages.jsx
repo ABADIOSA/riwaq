@@ -24,6 +24,7 @@ import {
   ruleBadges,
 } from "../../../core/badges.mjs";
 import { call } from "../../lib/api.js";
+import { RuleBadge } from "../StreamBadge.jsx";
 
 const newId = () =>
   (crypto.randomUUID?.() || `${Date.now()}${Math.random()}`)
@@ -526,6 +527,8 @@ export function BadgeRulesPage({ state, update, notice }) {
     color: "#E7B66E",
   });
   const [search, setSearch] = useState("");
+  const [showPacks, setShowPacks] = useState(false);
+  const fromPacks = rules.filter((r) => r.pack).length;
   const [sample, setSample] = useState(
     "Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC.TrueHD.Atmos.7.1-FraMeSToR",
   );
@@ -533,8 +536,11 @@ export function BadgeRulesPage({ state, update, notice }) {
   const save = (list) => update("settings", { badgeRules: list });
   const visible = rules.filter(
     (r) =>
-      !search ||
-      `${r.label} ${r.pattern}`.toLowerCase().includes(search.toLowerCase()),
+      (showPacks || !r.pack || search) &&
+      (!search ||
+        `${r.label} ${r.pattern} ${r.pack || ""}`
+          .toLowerCase()
+          .includes(search.toLowerCase())),
   );
   const earned = useMemo(
     () => ruleBadges({ name: "", title: sample }, rules),
@@ -611,15 +617,7 @@ export function BadgeRulesPage({ state, update, notice }) {
         />
         <div className="rule-earned">
           {earned.length ? (
-            earned.map((b) => (
-              <em
-                key={b.label}
-                className="tag-custom"
-                style={{ "--badge": b.color }}
-              >
-                {b.label}
-              </em>
-            ))
+            earned.map((b) => <RuleBadge key={b.label} badge={b} />)
           ) : (
             <small className="subtle">لا تطابقه أي قاعدة مفعّلة.</small>
           )}
@@ -670,14 +668,25 @@ export function BadgeRulesPage({ state, update, notice }) {
             onChange={(e) => setSearch(e.target.value)}
           />
         )}
+        {fromPacks > 0 && (
+          <button
+            className="text-button"
+            onClick={() => setShowPacks(!showPacks)}
+          >
+            {showPacks
+              ? "أخفِ قواعد الحزم"
+              : `أظهر ${fromPacks} قاعدة من الحزم`}
+          </button>
+        )}
         {visible.length ? (
           <ul className="rule-list">
             {visible.map((r) => (
               <li key={r.id} className={r.enabled ? "" : "off"}>
-                <em className="tag-custom" style={{ "--badge": r.color }}>
-                  {r.label}
-                </em>
-                <code dir="ltr">{r.pattern}</code>
+                <RuleBadge badge={r} />
+                <code dir="ltr">
+                  {r.pack ? `${r.pack} · ` : ""}
+                  {r.pattern}
+                </code>
                 <button
                   className={`toggle ${r.enabled ? "on" : ""}`}
                   aria-label={`تفعيل ${r.label}`}
@@ -715,44 +724,190 @@ export function BadgeRulesPage({ state, update, notice }) {
 }
 
 /** Packs: a JSON file of rules and hidden kinds, to share or import. */
+/** A pack's name from its link: "harbor-light" from …/harbor-light.json. */
+const packName = (link, host) => {
+  try {
+    const file = new URL(link).pathname.split("/").filter(Boolean).pop() || "";
+    const base = decodeURIComponent(file).replace(/\.json$/i, "");
+    return (base && base !== "badges" ? base : host).slice(0, 60);
+  } catch {
+    return String(host || "حزمة").slice(0, 60);
+  }
+};
+
+/** Packs people share as links, known to work with Riwaq's importer. */
+const KNOWN_PACKS = [
+  ["Harbor Light", "https://harbor.site/badges/harbor-light.json"],
+  ["Harbor Color", "https://harbor.site/badges/harbor-color.json"],
+  ["Harbor Minimal", "https://harbor.site/badges/minimal.json"],
+  ["Harbor Abstract", "https://harbor.site/badges/abstract.json"],
+  [
+    "NardBadges",
+    "https://raw.githubusercontent.com/vowl313/NardBadges/refs/heads/main/NardBadges.json",
+  ],
+];
+
 export function BadgePacksPage({ state, update, notice }) {
   const s = state.settings;
+  const rules = s.badgeRules || [];
+  const art = s.badgeArt || {};
+  const [url, setUrl] = useState("");
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState(null);
   const file = useRef(null);
-  const apply = async (json) => {
+  const read = (json, name) => {
     try {
-      const pack = importBadgePack(json, () => newId());
-      const merged = [...pack.rules, ...(s.badgeRules || [])].slice(
-        0,
-        RULE_LIMIT,
-      );
-      if (
-        await update("settings", {
-          badgeRules: merged,
-          badgesHidden: [
-            ...new Set([...(s.badgesHidden || []), ...pack.hidden]),
-          ],
-        })
-      ) {
-        setText("");
-        setError("");
-        notice(
-          `أُضيفت ${pack.rules.length} قاعدة${pack.skipped ? ` وتُركت ${pack.skipped} غير صالحة` : ""}`,
-        );
-      }
+      setPreview({ name, pack: importBadgePack(json, undefined, { name }) });
+      setError("");
     } catch (e) {
+      setPreview(null);
       setError(e.message);
     }
   };
+  const fetchUrl = async (link) => {
+    setBusy(true);
+    setError("");
+    setPreview(null);
+    try {
+      const { text: body, name } = await call("badgePackFetch", { url: link });
+      read(body, packName(link, name));
+    } catch (e) {
+      setError(e.message);
+    }
+    setBusy(false);
+  };
+  const install = async () => {
+    const { pack, name } = preview;
+    const ids = new Set(pack.rules.map((r) => r.id));
+    // Importing a pack again replaces its earlier rules.
+    const kept = rules.filter((r) => r.pack !== name && !ids.has(r.id));
+    const merged = [...pack.rules, ...kept].slice(0, RULE_LIMIT);
+    const ok = await update("settings", {
+      badgesOn: true,
+      badgeRules: merged,
+      badgeArt: { ...art, ...pack.art },
+      badgesHidden: [...new Set([...(s.badgesHidden || []), ...pack.hidden])],
+    });
+    if (ok) {
+      notice(
+        `ثُبّتت «${name}»: ${Object.keys(pack.art).length} صورة و${pack.rules.length} قاعدة`,
+      );
+      setPreview(null);
+      setUrl("");
+      setText("");
+    }
+  };
+  const installed = [...new Set(rules.map((r) => r.pack).filter(Boolean))].map(
+    (name) => [name, rules.filter((r) => r.pack === name).length],
+  );
+  const samples = preview
+    ? [
+        ...Object.values(preview.pack.art),
+        ...preview.pack.rules.map((r) => r.image).filter(Boolean),
+      ].slice(0, 14)
+    : [];
   return (
     <>
       <section className="settings-card">
-        <h2>استيراد حزمة</h2>
+        <h2>استيراد حزمة من رابط</h2>
         <p>
-          الحزمة ملف badges.json يضيف قواعد شارات جاهزة. تُفحص كل قاعدة قبل
-          إضافتها، ولا يُنفّذ أي شيء من الملف.
+          الصق رابط ملف الشارات، مثل حزم هاربور أو نوفيو أو رابط gist. يقرأ
+          رِواق صيغته وصيغة هاربور ونوفيو، ويعرض ما في الحزمة قبل تثبيتها. لا
+          يُنفّذ أي شيء من الملف، وتُفحص كل قاعدة.
         </p>
+        <form
+          className="input-action"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (url.trim()) fetchUrl(url.trim());
+          }}
+        >
+          <input
+            dir="ltr"
+            aria-label="رابط الحزمة"
+            placeholder="https://harbor.site/badges/harbor-light.json"
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setError("");
+            }}
+          />
+          <button className="primary" disabled={!url.trim() || busy}>
+            {busy ? "نجلب…" : "اعرض الحزمة"}
+          </button>
+        </form>
+        <div className="choice-row known-packs">
+          {KNOWN_PACKS.map(([name, link]) => (
+            <button
+              key={link}
+              disabled={busy}
+              onClick={() => {
+                setUrl(link);
+                fetchUrl(link);
+              }}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+        {error && <p className="inline-warning">{error}</p>}
+      </section>
+      {preview && (
+        <section className="settings-card pack-preview">
+          <h2>{preview.name}</h2>
+          <div className="pack-samples">
+            {samples.map((src) => (
+              <img
+                key={src}
+                src={src}
+                alt=""
+                className="badge-art"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+            ))}
+          </div>
+          <ul className="pack-counts">
+            <li>
+              <b>{Object.keys(preview.pack.art).length}</b> صورة للشارات المدمجة
+              (4K، HDR، أتموس…)
+            </li>
+            <li>
+              <b>{preview.pack.rules.length}</b> قاعدة شارات
+              {preview.pack.rules.filter((r) => r.image).length
+                ? ` (${preview.pack.rules.filter((r) => r.image).length} منها بصور)`
+                : ""}
+            </li>
+            {preview.pack.skipped > 0 && (
+              <li>
+                <b>{preview.pack.skipped}</b> تُركت: نمطها غير صالح أو قد يبطئ
+                رِواق، أو بلا اسم.
+              </li>
+            )}
+            {preview.pack.disabled > 0 && (
+              <li>
+                <b>{preview.pack.disabled}</b> معطّلة في الحزمة نفسها.
+              </li>
+            )}
+          </ul>
+          <p className="subtle">
+            صور الشارات تُحمّل من موقع الحزمة عند عرض المصادر. تثبيت الحزمة
+            نفسها مرة ثانية يستبدل قواعدها القديمة.
+          </p>
+          <div className="button-row">
+            <button className="primary" onClick={install}>
+              <Check size={15} /> ثبّت الحزمة
+            </button>
+            <button className="ghost" onClick={() => setPreview(null)}>
+              إلغاء
+            </button>
+          </div>
+        </section>
+      )}
+      <section className="settings-card">
+        <h2>من ملف أو نص</h2>
         <input
           ref={file}
           type="file"
@@ -762,19 +917,19 @@ export function BadgePacksPage({ state, update, notice }) {
             const f = e.target.files?.[0];
             e.target.value = "";
             if (!f) return;
-            if (f.size > 200000) return setError("الملف أكبر من المسموح");
-            apply(await f.text());
+            if (f.size > 3000000) return setError("الملف أكبر من المسموح");
+            read(await f.text(), f.name.replace(/\.json$/i, "").slice(0, 60));
           }}
         />
         <button className="secondary" onClick={() => file.current?.click()}>
           <Upload size={15} /> استيراد من ملف
         </button>
         <label className="studio-field">
-          أو الصق محتوى الحزمة
+          أو الصق محتوى الحزمة أو رابطها
           <textarea
             dir="ltr"
             rows={5}
-            placeholder='{"rules":[{"label":"REMUX","pattern":"remux","color":"#E7B66E"}]}'
+            placeholder='{"filters":[{"name":"REMUX","pattern":"remux","imageURL":"https://…"}]}'
             value={text}
             onChange={(e) => {
               setText(e.target.value);
@@ -782,18 +937,74 @@ export function BadgePacksPage({ state, update, notice }) {
             }}
           />
         </label>
-        {error && <p className="inline-warning">{error}</p>}
         <button
           className="primary"
-          disabled={!text.trim()}
-          onClick={() => apply(text)}
+          disabled={!text.trim() || busy}
+          onClick={() =>
+            /^https:\/\/\S+$/.test(text.trim())
+              ? fetchUrl(text.trim())
+              : read(text, "حزمة ملصوقة")
+          }
         >
-          استيراد
+          اعرض الحزمة
         </button>
       </section>
+      {(installed.length > 0 || Object.keys(art).length > 0) && (
+        <section className="settings-card">
+          <h2>المثبّت</h2>
+          <ul className="rule-list">
+            {installed.map(([name, count]) => (
+              <li key={name}>
+                <b>{name}</b>
+                <small className="subtle">{count} قاعدة</small>
+                <button
+                  className="icon-plain"
+                  title="إزالة الحزمة"
+                  aria-label={`إزالة ${name}`}
+                  onClick={() =>
+                    update("settings", {
+                      badgeRules: rules.filter((r) => r.pack !== name),
+                    })
+                  }
+                >
+                  <Trash2 size={14} />
+                </button>
+              </li>
+            ))}
+            {Object.keys(art).length > 0 && (
+              <li>
+                <span className="pack-samples">
+                  {Object.values(art)
+                    .slice(0, 6)
+                    .map((src) => (
+                      <img
+                        key={src}
+                        src={src}
+                        alt=""
+                        className="badge-art"
+                        referrerPolicy="no-referrer"
+                      />
+                    ))}
+                </span>
+                <small className="subtle">
+                  {Object.keys(art).length} صورة للشارات المدمجة
+                </small>
+                <button
+                  className="icon-plain"
+                  title="إرجاع الشارات المدمجة نصاً"
+                  aria-label="إزالة صور الشارات المدمجة"
+                  onClick={() => update("settings", { badgeArt: {} })}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </li>
+            )}
+          </ul>
+        </section>
+      )}
       <section className="settings-card">
         <h2>شارك إعدادك</h2>
-        <p>انسخ قواعدك والشارات المخفية كملف JSON لتشاركها.</p>
+        <p>انسخ قواعدك وصورك والشارات المخفية كملف JSON لتشاركها.</p>
         <div className="button-row">
           <button
             className="secondary"
@@ -805,7 +1016,7 @@ export function BadgePacksPage({ state, update, notice }) {
           >
             <Copy size={15} /> نسخ JSON
           </button>
-          {(s.badgeRules || []).length > 0 && (
+          {rules.length > 0 && (
             <button
               className="secondary danger"
               onClick={() =>

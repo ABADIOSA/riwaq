@@ -49,6 +49,10 @@ Nuvio HTPC (UmbraProjects/NuvioDesktop, GPL-3.0) at `b775bf5` (Release 1.15.0), 
 - **Backup.** Its settings backup is a zip of `preferences/*.properties`.
 - **Riwaq 0.12's Nuvio link.** It reads those stores directly and never keeps or runs plugin code.
 
+## Badge packs from a link, 2026-09-30 (0.16)
+
+Harbor's packs tab imports a `badges.json` link. Its community packs, such as `harbor.site/badges/harbor-light.json`, are Nuvio-format files (`filters` with `name`, `pattern`, `imageURL`, colours and `tagStyle`). A filter named after a built-in kind replaces that kind's picture; the rest become rules. Riwaq follows the same behaviour in its own code, and also reads Harbor exports (`overrides` + `rules`). It adds HTTPS-only pictures, link checks in main and a matching deadline. Nuvio's `StreamBadgeRules.kt` confirmed the field names.
+
 ## Harbor's settings pages, 2026-09-30 (0.15)
 
 The owner shared three screenshots of Harbor's settings (Sources & library, Appearance, Window) and asked for the features. Harbor is MIT; its pages were matched by behaviour from the screenshots and its public descriptions, and written from scratch.

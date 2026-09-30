@@ -1,7 +1,11 @@
 import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
 import { cleanSavedThemes, safeAppearance } from "./appearance.mjs";
 import { cleanAddonPriority, cleanStreamFilters } from "./stream-prefs.mjs";
-import { cleanBadgeRules, cleanHiddenBadges } from "./badges.mjs";
+import {
+  cleanBadgeArt,
+  cleanBadgeRules,
+  cleanHiddenBadges,
+} from "./badges.mjs";
 import { cleanServices } from "./services.mjs";
 import { cleanHudHidden } from "./hud-layout.mjs";
 import {
@@ -88,6 +92,8 @@ export const DEFAULT_SETTINGS = {
   badgesOn: true,
   badgesHidden: [],
   badgeRules: [],
+  // Pictures for the built-in chips, from a badge pack.
+  badgeArt: {},
   // Streaming services the viewer pays for, shown as home rows.
   streamingServices: [],
   // Series: hide episode titles not reached yet.
@@ -361,6 +367,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.hudHidden = cleanHudHidden(input.hudHidden);
   if (Array.isArray(input.badgeRules))
     next.badgeRules = cleanBadgeRules(input.badgeRules);
+  if (input.badgeArt && typeof input.badgeArt === "object")
+    next.badgeArt = cleanBadgeArt(input.badgeArt);
   if (Array.isArray(input.badgesHidden))
     next.badgesHidden = cleanHiddenBadges(input.badgesHidden);
   if (typeof input.activeFilter === "string")

@@ -2885,3 +2885,34 @@ button.secondary {
   height: 40px;
   font-size: 14px;
 }
+
+/* Badge pictures from packs, and custom badge styles. */
+.badge-art {
+  height: 20px;
+  width: auto;
+  max-width: 96px;
+  object-fit: contain;
+  vertical-align: middle;
+  border-radius: 4px;
+}
+.stream-info small {
+  align-items: center;
+}
+em.tag-custom {
+  color: var(--badge-text, var(--badge, #e7b66e)) !important;
+  border-color: var(
+    --badge-border,
+    color-mix(in srgb, var(--badge, #e7b66e) 45%, transparent)
+  ) !important;
+}
+em.tag-custom.badge-outlined {
+  background: transparent !important;
+}
+em.tag-custom.badge-filled-and-bordered,
+em.tag-custom.badge-bordered {
+  border-width: 1.5px;
+}
+/* A pack colour with its own text colour is a solid tag, as Nuvio draws it. */
+em.tag-custom.has-text:not(.badge-outlined) {
+  background: var(--badge) !important;
+}
