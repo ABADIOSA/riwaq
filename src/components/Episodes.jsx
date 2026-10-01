@@ -1,4 +1,5 @@
 import React from "react";
+import { cardArt } from "../../core/ambient.mjs";
 import { Film, Sparkles, CalendarDays, Check, Tv } from "lucide-react";
 import { imgUrl } from "../lib/helpers.js";
 import { ScrollRow } from "./UI.jsx";
@@ -43,6 +44,8 @@ export function UpNextRail({ items, onOpen }) {
           <button
             key={`${item.meta.type}:${item.meta.id}`}
             className="up-next-card"
+            data-ambient={cardArt(item.meta).backdrop || undefined}
+            data-ambient-poster={cardArt(item.meta).poster || undefined}
             onClick={() => onOpen(item.meta, item.video.id)}
             aria-label={`${item.meta.name}، ${item.label}`}
           >

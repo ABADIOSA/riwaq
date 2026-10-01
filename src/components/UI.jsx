@@ -12,6 +12,7 @@ import {
 import { WatchedContext } from "../lib/watched.js";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { titleKey } from "../../core/library.mjs";
+import { cardArt } from "../../core/ambient.mjs";
 import { arabicCount, MINUTES } from "../../core/arabic.mjs";
 export function IconButton({ title, children, ...props }) {
   return (
@@ -79,9 +80,13 @@ export function Modal({ children, onClose, className = "" }) {
 export const Poster = memo(function Poster({ meta, onOpen, progress }) {
   const finished = useContext(WatchedContext);
   const seen = finished?.has(`${meta.type}:${meta.id}`);
+  // The picture this card lends the artwork glow when the pointer rests here.
+  const art = cardArt(meta);
   return (
     <button
       className="poster-card"
+      data-ambient={art.backdrop || undefined}
+      data-ambient-poster={art.poster || undefined}
       onClick={() => onOpen(meta, progress?.videoId)}
       aria-label={`تفاصيل ${meta.name}`}
     >

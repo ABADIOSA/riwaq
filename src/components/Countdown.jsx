@@ -7,6 +7,7 @@ import {
   remaining,
 } from "../../core/countdown.mjs";
 import { imgUrl } from "../lib/helpers.js";
+import { cardArt } from "../../core/ambient.mjs";
 import { call } from "../lib/api.js";
 import { ScrollRow } from "./UI.jsx";
 
@@ -184,6 +185,8 @@ export function CountdownRail({ state, update, onOpen }) {
             >
               <button
                 className="countdown-open"
+                data-ambient={cardArt(c).backdrop || undefined}
+                data-ambient-poster={cardArt(c).poster || undefined}
                 onClick={() =>
                   onOpen({
                     type: c.type,

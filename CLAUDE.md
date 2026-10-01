@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.23.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.24.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -78,6 +78,12 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - `Rail` and `Poster` are `memo`. A rail renders 12 cards and adds 12 when `ScrollRow` comes within 1.5 screens of its end. Rows stay `content-visibility: auto`.
   - Pass memoized rails stable handlers (`openStable`, `moreStable`, `favoriteStable`). `finished` keeps its identity until the set of finished titles changes.
   - Never put a per-card `backdrop-filter` back, or a changing variable on the app root (the ambient artwork lives on its own layer).
+- The artwork glow (`core/ambient.mjs`, `Ambient.jsx`, appearance `ambient: "artwork"`):
+  - By default (`ambientFollow: "hover"`) it follows the card under the pointer or keyboard focus. Otherwise it shows the hero or the open title page.
+  - Cards lend their picture through `data-ambient` / `data-ambient-poster` (`cardArt`: HTTPS only, metahub's backdrop by IMDb ID as a fallback). `AmbientLayer` reads those attributes with one delegated `pointerover`/`focusin` listener, never React state in App.
+  - Two layers crossfade, and a picture loads before it shows.
+  - Settings: `ambientDelay` (0–1500 ms), `ambientLeave` (`return`/`stay`), `ambientImage` (`backdrop`/`poster`), `ambientBlur` (`soft`/`medium`/`strong`, size × scale ≥ 120), `ambientStrength` (5–60) and `ambientFade` (0–2000 ms, 0 with reduced motion).
+  - Layer styles are inline on the layers, never variables on the app root.
   - Rarely visited rooms are `React.lazy`.
 - No user account was authenticated in provider tests. Distinguish mocked tests, live catalog tests and actual native playback in reports.
 
