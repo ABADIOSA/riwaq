@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronLeft,
@@ -19,7 +19,7 @@ export const HERO_SECONDS = 9;
  * an optional slow turn to the next title that waits while the pointer or
  * the keyboard is on it. The page is right to left, so "next" is on the left.
  */
-export default function HomeHero({
+function HomeHero({
   items,
   index,
   setIndex,
@@ -184,3 +184,5 @@ export default function HomeHero({
     </section>
   );
 }
+
+export default memo(HomeHero);

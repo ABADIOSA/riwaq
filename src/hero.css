@@ -177,3 +177,10 @@
     transform: scaleX(1);
   }
 }
+
+/* Rows below the screen are neither laid out nor painted until they come
+   near it; the reserved height keeps the scrollbar honest. */
+.rail {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
+}

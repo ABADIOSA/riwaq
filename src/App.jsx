@@ -3,7 +3,16 @@ import {
   themeClasses,
   themeVariables,
 } from "../core/appearance.mjs";
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, {
+  lazy,
+  memo,
+  Suspense,
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   Home,
   Compass,
@@ -42,19 +51,21 @@ import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
 import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
-import Addons from "./components/Addons.jsx";
-import Preferences from "./components/SettingsStudio.jsx";
 import PlayerView from "./components/PlayerView.jsx";
 import PlayerPanel from "./components/PlayerPanel.jsx";
-import LiveTV from "./components/LiveTV.jsx";
 import Profiles from "./components/Profiles.jsx";
-import LibraryView from "./components/LibraryView.jsx";
 import { arrangeRows, safeHomeSections } from "../core/home.mjs";
+// Rooms opened now and then load when first visited, so the start of the
+// app parses only what home needs.
+const Addons = lazy(() => import("./components/Addons.jsx"));
+const Preferences = lazy(() => import("./components/SettingsStudio.jsx"));
+const LiveTV = lazy(() => import("./components/LiveTV.jsx"));
+const LibraryView = lazy(() => import("./components/LibraryView.jsx"));
+const FolderPage = lazy(() => import("./components/FolderPage.jsx"));
 import CollectionsPage, {
   NuvioLink,
   PinnedCollections,
 } from "./components/Collections.jsx";
-import FolderPage from "./components/FolderPage.jsx";
 import WindowBar, {
   isEmptySpace,
   useWindowState,
@@ -417,6 +428,19 @@ export default function App() {
     requestAnimationFrame(() => window.scrollTo(0, scrollBefore.current));
   };
   const open = (meta, videoId) => openTitle({ meta, videoId });
+  // Stable handles for memoized rows and cards: they always call the
+  // latest handler, so a re-render of the app does not redraw every card.
+  const latest = useRef({});
+  latest.current.open = open;
+  const openStable = useCallback(
+    (meta, videoId) => latest.current.open(meta, videoId),
+    [],
+  );
+  const moreStable = useCallback((row) => latest.current.more(row), []);
+  const favoriteStable = useCallback(
+    (meta) => latest.current.favorite(meta),
+    [],
+  );
   const activeProfile = state.profiles?.list?.find(
     (p) => p.id === state.profiles.active,
   );
@@ -439,7 +463,19 @@ export default function App() {
     setFilter("");
   };
   const favorites = state.favorites;
-  const uniqueProgress = continueWatching(state.progress);
+  const uniqueProgress = useMemo(
+    () => continueWatching(state.progress),
+    [state.progress],
+  );
+  const continueRail = useMemo(
+    () => ({
+      metas: uniqueProgress.map((p) => p.meta),
+      progressMap: Object.fromEntries(
+        uniqueProgress.map((p) => [titleKey(p.meta), p]),
+      ),
+    }),
+    [uniqueProgress],
+  );
   // Progress is saved every few seconds during playback. Up next only changes
   // when an episode is finished or a series is saved, so refetch on those.
   const finishedCount = Object.values(state.progress || {}).filter(
@@ -464,48 +500,68 @@ export default function App() {
   const homeSections = safeHomeSections(state.settings.homeSections);
   // Finished films leave the rows the moment they are finished, without a
   // reload. Search keeps them, as Nuvio HTPC does.
-  const finished = useMemo(
+  // Progress is saved every few seconds while watching; the set of finished
+  // titles keeps its identity until it really changes, so every card that
+  // reads it does not redraw on each save.
+  const finishedNow = useMemo(
     () => watchedTitles(state?.progress),
     [state?.progress],
   );
+  const finishedKey = [...finishedNow].sort().join("|");
+  const finished = useMemo(() => finishedNow, [finishedKey]);
   const watched = state.settings.hideWatched ? finished : null;
-  const liveRows =
-    watched?.size && view !== "search"
-      ? rows.map((r) => ({ ...r, metas: withoutWatched(r.metas, watched) }))
-      : rows;
-  // Home rows as the viewer arranged them; other listings keep addon order.
-  const shownRows =
-    view === "home"
+  const homeOrder = state.settings.homeOrder;
+  const homeHidden = state.settings.homeHidden;
+  const shownRows = useMemo(() => {
+    const liveRows =
+      watched?.size && view !== "search"
+        ? rows.map((r) => ({ ...r, metas: withoutWatched(r.metas, watched) }))
+        : rows;
+    // Home rows as the viewer arranged them; other listings keep addon order.
+    return view === "home"
       ? arrangeRows(liveRows, {
-          order: state.settings.homeOrder || [],
-          hidden: state.settings.homeHidden || [],
+          order: homeOrder || [],
+          hidden: homeHidden || [],
         })
       : liveRows;
-  const catalogRails = shownRows
-    .filter((r) => r.metas.length)
-    .map((row) => (
-      <Rail
-        key={row.key}
-        title={row.name === "Popular" ? "الأكثر شعبية" : row.name}
-        subtitle={`${typeName(row.type)} · ${row.provider}`}
-        metas={row.metas}
-        onOpen={open}
-        onMore={() => more(row)}
-      />
-    ));
-  const heroItems = shownRows
-    .flatMap((r) => r.metas)
-    .filter((m) => m.background)
-    .filter((m, i, all) => all.findIndex((x) => x.id === m.id) === i)
-    .slice(0, 8);
+  }, [rows, watched, view, homeOrder, homeHidden]);
+  const catalogRails = useMemo(
+    () =>
+      shownRows
+        .filter((r) => r.metas.length)
+        .map((row) => (
+          <CatalogRail
+            key={row.key}
+            row={row}
+            onOpen={openStable}
+            onMore={moreStable}
+          />
+        )),
+    [shownRows],
+  );
+  const heroItems = useMemo(
+    () =>
+      shownRows
+        .flatMap((r) => r.metas.slice(0, 20))
+        .filter((m) => m.background)
+        .filter((m, i, all) => all.findIndex((x) => x.id === m.id) === i)
+        .slice(0, 8),
+    [shownRows],
+  );
   const hero =
     heroItems[heroIndex % (heroItems.length || 1)] || shownRows[0]?.metas?.[0];
+  const heroList = useMemo(
+    () => (heroItems.length ? heroItems : hero ? [hero] : []),
+    [heroItems, heroItems.length ? null : hero],
+  );
   const favorite = (meta) => update("favorite", meta);
   const more = (row) => {
     setCatalog(row.key);
     setFilter(row.type);
     if (view !== "search") setView("discover");
   };
+  latest.current.favorite = favorite;
+  latest.current.more = more;
   const loadMore = async () => {
     if (paging || !rows[0]) return;
     setPaging(true);
@@ -547,7 +603,6 @@ export default function App() {
       <div
         style={{
           ...themeVariables(appearance),
-          ...(ambientArt ? { "--ambient-image": `url("${ambientArt}")` } : {}),
         }}
         className={`app ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
         onMouseDown={(e) => {
@@ -572,7 +627,15 @@ export default function App() {
           controls={state.settings.windowControls}
           title="رِواق"
         />
-        {ambientArt && <div className="ambience-layer" aria-hidden="true" />}
+        {ambientArt && (
+          // The picture is set on the layer itself: a variable on the app
+          // root would restyle every element each time the hero turns.
+          <div
+            className="ambience-layer"
+            aria-hidden="true"
+            style={{ "--ambient-image": `url("${ambientArt}")` }}
+          />
+        )}
         <Screensaver
           minutes={state.settings.screensaver || 0}
           clock={state.settings.screensaverClock !== false}
@@ -791,14 +854,14 @@ export default function App() {
                 homeSections.includes("hero") &&
                 hero && (
                   <HomeHero
-                    items={heroItems.length ? heroItems : [hero]}
+                    items={heroList}
                     index={heroIndex}
                     setIndex={setHeroIndex}
                     settings={state.settings}
                     favorites={favorites}
                     running={!selected && !player.active && !playerOpen}
-                    onOpen={open}
-                    onFavorite={favorite}
+                    onOpen={openStable}
+                    onFavorite={favoriteStable}
                   />
                 )}
               {view === "home" && !state.user && !loading && (
@@ -940,14 +1003,9 @@ export default function App() {
                               <Rail
                                 title="نكمل الحكاية؟"
                                 subtitle="متابعة المشاهدة"
-                                metas={uniqueProgress.map((p) => p.meta)}
-                                progressMap={Object.fromEntries(
-                                  uniqueProgress.map((p) => [
-                                    titleKey(p.meta),
-                                    p,
-                                  ]),
-                                )}
-                                onOpen={open}
+                                metas={continueRail.metas}
+                                progressMap={continueRail.progressMap}
+                                onOpen={openStable}
                               />
                             )}
                             {id === "upnext" && (
@@ -1038,80 +1096,82 @@ export default function App() {
               </div>
             </>
           )}
-          {view === "library" && (
-            <LibraryView
-              key={state.profiles?.active}
-              state={state}
-              update={update}
-              onOpen={open}
-              notice={notice}
-            />
-          )}
-          {view === "collections" && (
-            <CollectionsPage
-              key={state.profiles?.active}
-              state={state}
-              update={update}
-              act={act}
-              notice={notice}
-              onOpen={open}
-              target={collectionTarget}
-              setTarget={setCollectionTarget}
-              onFolderPage={(cid, folderId) => {
-                setFolderTarget({ collectionId: cid, folderId });
-                setFolderFrom("collections");
-                navigate("folder");
-              }}
-              onNuvio={() => setNuvioOpen(true)}
-              onSettings={(tab) => {
-                setSettingsTab(tab);
-                navigate("settings");
-              }}
-            />
-          )}
-          {view === "folder" && (
-            <FolderPage
-              key={state.profiles?.active}
-              state={state}
-              target={folderTarget}
-              onTarget={setFolderTarget}
-              onOpen={open}
-              onBack={() => navigate(folderFrom)}
-              onEdit={(cid, folderId) => {
-                setCollectionTarget({ id: cid, folderId });
-                navigate("collections");
-              }}
-              onSettings={(tab) => {
-                setSettingsTab(tab);
-                navigate("settings");
-              }}
-            />
-          )}
-          {view === "live" && (
-            <LiveTV state={state} act={act} notice={notice} update={update} />
-          )}
-          {view === "addons" && (
-            <Addons
-              state={state}
-              update={update}
-              act={act}
-              notice={notice}
-              setState={setState}
-              onAccount={() => setAccount(true)}
-              onNuvio={() => setNuvioOpen(true)}
-            />
-          )}
-          {view === "settings" && (
-            <Preferences
-              key={settingsTab}
-              initialTab={settingsTab}
-              onNuvio={() => setNuvioOpen(true)}
-              state={state}
-              update={update}
-              act={act}
-              notice={notice}
-            />
-          )}
+          <Suspense fallback={<Busy />}>
+            {view === "library" && (
+              <LibraryView
+                key={state.profiles?.active}
+                state={state}
+                update={update}
+                onOpen={open}
+                notice={notice}
+              />
+            )}
+            {view === "collections" && (
+              <CollectionsPage
+                key={state.profiles?.active}
+                state={state}
+                update={update}
+                act={act}
+                notice={notice}
+                onOpen={open}
+                target={collectionTarget}
+                setTarget={setCollectionTarget}
+                onFolderPage={(cid, folderId) => {
+                  setFolderTarget({ collectionId: cid, folderId });
+                  setFolderFrom("collections");
+                  navigate("folder");
+                }}
+                onNuvio={() => setNuvioOpen(true)}
+                onSettings={(tab) => {
+                  setSettingsTab(tab);
+                  navigate("settings");
+                }}
+              />
+            )}
+            {view === "folder" && (
+              <FolderPage
+                key={state.profiles?.active}
+                state={state}
+                target={folderTarget}
+                onTarget={setFolderTarget}
+                onOpen={open}
+                onBack={() => navigate(folderFrom)}
+                onEdit={(cid, folderId) => {
+                  setCollectionTarget({ id: cid, folderId });
+                  navigate("collections");
+                }}
+                onSettings={(tab) => {
+                  setSettingsTab(tab);
+                  navigate("settings");
+                }}
+              />
+            )}
+            {view === "live" && (
+              <LiveTV state={state} act={act} notice={notice} update={update} />
+            )}
+            {view === "addons" && (
+              <Addons
+                state={state}
+                update={update}
+                act={act}
+                notice={notice}
+                setState={setState}
+                onAccount={() => setAccount(true)}
+                onNuvio={() => setNuvioOpen(true)}
+              />
+            )}
+            {view === "settings" && (
+              <Preferences
+                key={settingsTab}
+                initialTab={settingsTab}
+                onNuvio={() => setNuvioOpen(true)}
+                state={state}
+                update={update}
+                act={act}
+                notice={notice}
+              />
+            )}
+          </Suspense>
           <footer className="page-footer">
             <span>
               رِواق <b>·</b> مساحة للحكايات
@@ -1219,6 +1279,19 @@ export default function App() {
     </WatchedContext.Provider>
   );
 }
+/** One addon catalog on home, discover or search; redrawn only when its row changes. */
+const CatalogRail = memo(function CatalogRail({ row, onOpen, onMore }) {
+  return (
+    <Rail
+      title={row.name === "Popular" ? "الأكثر شعبية" : row.name}
+      subtitle={`${typeName(row.type)} · ${row.provider}`}
+      metas={row.metas}
+      onOpen={onOpen}
+      onMore={() => onMore(row)}
+    />
+  );
+});
+
 function ArrowLeftIcon() {
   return <ChevronLeft size={17} />;
 }
