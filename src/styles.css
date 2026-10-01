@@ -399,6 +399,9 @@ button.secondary {
   margin-right: 220px;
   min-height: 100vh;
   padding-bottom: 10px;
+  /* Nothing inside may give the whole window a horizontal scrollbar; rows
+     scroll on their own. "clip" keeps sticky headers working. */
+  overflow-x: clip;
 }
 .content.with-player {
   padding-bottom: 95px;
@@ -778,8 +781,16 @@ button.secondary {
   margin: 0 0 28px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--line);
+  /* List addons name types after their lists ("Top Fantasy/Sci-Fi
+     Movies"): the tabs scroll with arrows instead of widening the page. */
+  overflow-x: auto;
 }
 .filter-tabs button {
+  flex: none;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border: 1px solid #ffffff12;
   border-radius: 20px;
   padding: 8px 21px;
@@ -2971,10 +2982,15 @@ em.tag-custom.has-text:not(.badge-outlined) {
 .scroll-row-wrap:has(> .library-tabs) .scroll-arrow,
 .scroll-row-wrap:has(> .folder-source-tabs) .scroll-arrow,
 .scroll-row-wrap:has(> .folder-siblings) .scroll-arrow,
-.scroll-row-wrap:has(> .episode-list) .scroll-arrow {
+.scroll-row-wrap:has(> .episode-list) .scroll-arrow,
+.scroll-row-wrap:has(> .filter-tabs) .scroll-arrow {
   width: 32px;
   height: 32px;
   margin-top: -16px;
+}
+/* The type tabs carry 20px of padding under them: centre on the buttons. */
+.scroll-row-wrap:has(> .filter-tabs) .scroll-arrow {
+  margin-top: -26px;
 }
 /* A poster row's arrows sit on the pictures, not on the titles below. */
 .scroll-row-wrap:has(> .poster-row) .scroll-arrow {

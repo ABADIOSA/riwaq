@@ -1,5 +1,29 @@
 # Verification — Riwaq 0.20.0
 
+## 0.24.1 — Discover without a sideways scrollbar, "عرض الكل" restored
+
+The owner sent a screenshot of a window-wide horizontal scrollbar on the Discover page.
+
+Reproduced on a build of the published 0.24.0, with Discover holding 18 types (AIOLists-style names such as "Top Fantasy/Sci-Fi Movies"):
+
+- The page overflowed by 1083 px at 980×680, 639 px at 1440×960 and 85 px at 2000×1100. The overflowing elements were the type buttons in `.filter-tabs`, a single non-wrapping flex line.
+- Pressing "عرض الكل" threw `liveRows is not defined` and rendered nothing. 0.22.0 had moved `liveRows` inside the `shownRows` memo, but the full-catalog grid still used it.
+
+Fixed:
+
+- The type tabs are a `ScrollRow` with arrows; buttons do not shrink and long names are ellipsized with a `title`.
+- `.content` has `overflow-x: clip`.
+- The grid uses `shownRows`.
+- New `tests/undefined-names.test.mjs` parses every `src`, `core` and `electron` module with rolldown's parser, walks its scopes, and fails on any undeclared identifier. It fails on the old App.jsx (`liveRows`) and passes now.
+- A global ESLint `no-undef` run over the same files found nothing else.
+
+Executed:
+
+- `npm test`: **385 passing, 0 failing** (382 + 2 in `tests/undefined-names.test.mjs` + 1 layout test in `tests/performance.test.mjs`).
+- Same render after the fix: overflow 0 at all three sizes, "عرض الكل" showed 30 cards, and there were no page errors. The tab arrows sit centred on the buttons.
+
+Not executed: Windows, the owner's actual addon set.
+
 ## 0.24.0 — the artwork glow follows the pointer
 
 The owner noticed that the artwork glow was tied to the hero's title. They asked for it to follow the title under the mouse, with settings to customise it.
