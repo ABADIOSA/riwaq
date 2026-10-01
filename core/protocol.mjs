@@ -10,6 +10,8 @@ import { cleanServices } from "./services.mjs";
 import { cleanHudHidden } from "./hud-layout.mjs";
 import { PRAYER_CITIES, PRAYER_METHODS } from "./prayer.mjs";
 import { LOGO_MODES } from "./logos.mjs";
+import { HOME_GROUPING, cleanSmartHidden } from "./smart-groups.mjs";
+import { cleanFeedHidden } from "./feed.mjs";
 import { cleanCountdowns } from "./countdown.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
@@ -125,6 +127,13 @@ export const DEFAULT_SETTINGS = {
   titleLogos: "arabic",
   // The home hero moves to the next title on its own, paused on hover.
   heroAutoplay: true,
+  // Home's layout (core/smart-groups.mjs, core/feed.mjs): Riwaq's own rows
+  // until the viewer builds collections ("auto"), always ("riwaq"), the
+  // addons' catalogs gathered into groups ("groups"), or one row per catalog
+  // ("rows"); the groups and Riwaq rows the viewer hid.
+  homeGrouping: "auto",
+  smartHidden: [],
+  feedHidden: [],
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -377,6 +386,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     prayerMethod: Object.keys(PRAYER_METHODS),
     prayerAsr: ["standard", "hanafi"],
     titleLogos: LOGO_MODES,
+    homeGrouping: HOME_GROUPING,
   }))
     if (values.includes(input[key])) next[key] = input[key];
   if (Number.isFinite(input.subtitlePosition))
@@ -417,6 +427,10 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
   }
   if (next.prayerCity === "custom" && !next.prayerCustom)
     next.prayerCity = DEFAULT_SETTINGS.prayerCity;
+  if (Array.isArray(input.smartHidden))
+    next.smartHidden = cleanSmartHidden(input.smartHidden);
+  if (Array.isArray(input.feedHidden))
+    next.feedHidden = cleanFeedHidden(input.feedHidden);
   if (Array.isArray(input.countdowns))
     next.countdowns = cleanCountdowns(input.countdowns);
   if (Array.isArray(input.hudHidden))
@@ -434,6 +448,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.activeFilter = "";
   if (Array.isArray(input.homeSections))
     next.homeSections = safeHomeSections(input.homeSections);
+  if (Array.isArray(input.homeSeen))
+    next.homeSeen = safeHomeSections(input.homeSeen);
   for (const key of ["homeOrder", "homeHidden"])
     if (Array.isArray(input[key])) next[key] = safeCatalogKeys(input[key]);
   if (input.subtitleStyle && typeof input.subtitleStyle === "object")

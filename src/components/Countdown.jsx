@@ -8,6 +8,10 @@ import {
 } from "../../core/countdown.mjs";
 import { imgUrl } from "../lib/helpers.js";
 import { cardArt } from "../../core/ambient.mjs";
+import {
+  DEFAULT_HOME_SECTIONS,
+  visibleHomeSections,
+} from "../../core/home.mjs";
 import { call } from "../lib/api.js";
 import { ScrollRow } from "./UI.jsx";
 
@@ -60,9 +64,13 @@ async function setPinned(state, update, entry, on) {
         ...list.filter((c) => !(c.type === entry.type && c.id === entry.id)),
       ])
     : list.filter((c) => !(c.type === entry.type && c.id === entry.id));
-  const sections = state.settings.homeSections || [];
+  const sections = visibleHomeSections(
+    state.settings.homeSections,
+    state.settings.homeSeen,
+  );
   const patch = { countdowns: next };
   if (on && !sections.includes("countdowns")) {
+    patch.homeSeen = DEFAULT_HOME_SECTIONS;
     const at = sections.indexOf("hero");
     patch.homeSections =
       at < 0

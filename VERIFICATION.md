@@ -1,5 +1,57 @@
 # Verification — Riwaq 0.20.0
 
+## 0.25.0 — home by Riwaq's own categories, Discover by groups
+
+The owner asked for a default home organisation for viewers who build no collections or who have so many addons that one row per catalog spoils the page, and the same for Discover's tabs (screenshot: arabcity-akwam, wecima, youtube, Berserk, DC, Marvel, Starwars, Sport…).
+
+- A first version grouped the addon catalogs into shelves. The owner replied that they meant Harbor's approach: titles arranged by the app's own categories, not by addon.
+- Harbor's home builds TMDB rows with a key and Cinemeta genre rows without one, and was studied for behaviour only.
+- 0.25.0 therefore puts Riwaq's own rows (`core/feed.mjs`) first on home, and keeps the addon groups only for what those rows do not cover.
+
+Executed:
+
+- `npm test` before the Trakt section: **394 passing, 0 failing**. New since 0.24.1: 4 in `tests/smart-groups.test.mjs` and 5 in `tests/feed.test.mjs`. They cover:
+  - the owner's catalogs classified into groups;
+  - layouts with and without collections;
+  - the groups kept beside the feed;
+  - feed plans with and without a key, carrying keys and labels only;
+  - hidden rows;
+  - TMDB trending, chart, upcoming and Arabic/Korean discover requests;
+  - backdrops from chart results;
+  - Cinemeta URLs by genre and skip;
+  - `Client.catalogPlan`/`catalog` serving `feed:` keys from a fake TMDB and a fake Cinemeta, including planning a single feed row for its full page.
+- `npm run check`, `npm run build` and `tests/undefined-names.test.mjs` pass.
+- Rendered in Chromium at 1440×960 with a mocked bridge, 12 addon catalogs modelled on the owner's and mocked feed rows:
+  - With a TMDB key, home showed the 21 TMDB rows in order (رائج هذا الأسبوع … قريباً في السينما). Below them were shelves for مقترحة لك, عربي, قنوات وبث مباشر, رياضة and يوتيوب وفيديو (no films, series or anime shelves). The hero was taken from the first feed row.
+  - Without a key, home showed the 16 Cinemeta rows, with an anime shelf among the addon shelves.
+  - A feed row's "عرض الكل" showed 15 cards, and "تحميل المزيد" requested page 2 and showed 30.
+  - Discover never requested the feed and showed only addon catalogs.
+  - The settings card listed 21 Riwaq rows, and hiding "رعب" saved `feedHidden: ["horror"]`.
+  - No page errors, no overflow.
+- Found by the render and fixed: a feed row's full page planned no catalog, because `catalogPlan` with a `catalogKey` only searched addons.
+- The earlier Discover group tabs render from the first version still applies: 10 tabs with counts, and "عربي" left only the Arabic catalogs.
+
+Trakt suggestions (asked for after the feed: "a section of suggestions linked to Trakt"):
+
+- `tests/trakt-suggestions.test.mjs` (4 tests) covers:
+  - the request URL and bearer token;
+  - dropping titles without an IMDb ID;
+  - the 30-minute cache and `force`;
+  - "not interested" sending `DELETE /recommendations/movies/tt…` and removing the title;
+  - nothing requested without a token;
+  - a reply refused when the account changes mid-request;
+  - disconnect clearing the cache;
+  - the section joining a pre-0.25 arrangement after "upnext" but not one saved with `homeSeen`;
+  - the IPC staying off the HUD bridge.
+- The section-count test now expects 8.
+- `npm test`: **398 passing, 0 failing**.
+- Rendered in Chromium with a mocked bridge and a profile whose saved `homeSections` predates the section:
+  - Connected: the section appeared after "upnext" with 8 film cards. "مو مهتم" removed one and showed "لن يقترح تراكت «…» بعد الآن". The series chip showed 5 cards, "تحديث" asked with `force`, and a card opened its title page.
+  - Not connected: the invitation's "اربط تراكت" opened the settings.
+  - No page errors, no overflow.
+
+Not executed: real TMDB or Cinemeta responses (Cinemeta is blocked from this build environment), the first-load cost of matching TMDB rows to IMDb IDs on a real key, a real Trakt account's suggestions, Windows.
+
 ## 0.24.1 — Discover without a sideways scrollbar, "عرض الكل" restored
 
 The owner sent a screenshot of a window-wide horizontal scrollbar on the Discover page.

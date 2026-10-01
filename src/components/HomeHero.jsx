@@ -28,6 +28,7 @@ function HomeHero({
   running,
   onOpen,
   onFavorite,
+  fromRiwaq = false,
 }) {
   const count = items.length;
   const at = count ? ((index % count) + count) % count : 0;
@@ -145,7 +146,8 @@ function HomeHero({
       )}
       <div className="hero-footer">
         <span>
-          اختيارات من إضافاتك <span className="hero-line" />
+          {fromRiwaq ? "مختارات رِواق" : "اختيارات من إضافاتك"}{" "}
+          <span className="hero-line" />
           <span className="hero-count" dir="ltr">
             {at + 1} / {count}
           </span>

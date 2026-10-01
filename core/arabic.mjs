@@ -51,6 +51,14 @@ export const EPISODES = {
   many: "{n} حلقة",
   other: "{n} حلقة",
 };
+export const CATALOGS = {
+  zero: "لا كتالوجات",
+  one: "كتالوج واحد",
+  two: "كتالوجان",
+  few: "{n} كتالوجات",
+  many: "{n} كتالوجاً",
+  other: "{n} كتالوج",
+};
 export const MINUTES = {
   zero: "أقل من دقيقة",
   one: "دقيقة واحدة",

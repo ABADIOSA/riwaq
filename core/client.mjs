@@ -55,6 +55,13 @@ import {
 } from "./collections.mjs";
 import { nuvioProfile } from "./nuvio.mjs";
 import {
+  FEED_PREFIX,
+  chartRequest,
+  cinemetaUrl,
+  feedPlan,
+  feedRow,
+} from "./feed.mjs";
+import {
   sourceLabel,
   tmdbItems,
   tmdbRequest,
@@ -96,6 +103,8 @@ export async function fetchJson(url, init = {}) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
     if (text.length > 20_000_000) throw new Error("Response too large");
+    // A 204 or an empty body (Trakt's deletes) is a success with nothing in it.
+    if (!text.trim()) return null;
     return JSON.parse(text);
   } catch (error) {
     // URLs may contain addon credentials. Never include them in errors or logs.
@@ -791,10 +800,15 @@ export class Client {
     let items;
     let more = false;
     try {
-      const { path, params } = tmdbRequest(source, {
-        language: this.state.settings.metadataLanguage || "ar-SA",
-        page,
-      });
+      const language = this.state.settings.metadataLanguage || "ar-SA";
+      // Riwaq's own rows (core/feed.mjs) also read TMDB's charts and trending.
+      const { path, params } = ["chart", "trending"].includes(source.kind)
+        ? chartRequest(source, {
+            page,
+            language,
+            region: this.state.settings.region || "SA",
+          })
+        : tmdbRequest(source, { language, page });
       // Ten minutes per TMDB page, so opening a folder again is instant.
       const pages = (this.tmdbPages ||= new Map());
       const key = `${path}?${new URLSearchParams(params)}`;
@@ -856,6 +870,9 @@ export class Client {
             : item.imdb
               ? `https://images.metahub.space/poster/medium/${item.imdb}/img`
               : undefined,
+          ...(item.backdrop
+            ? { background: `https://image.tmdb.org/t/p/w1280${item.backdrop}` }
+            : {}),
           ...(item.released ? { releaseInfo: item.released.slice(0, 4) } : {}),
           ...(item.rating ? { imdbRating: item.rating.toFixed(1) } : {}),
         };
@@ -1129,14 +1146,83 @@ export class Client {
    * rows as they arrive: opaque keys and labels, never addon URLs.
    */
   catalogPlan(args = {}) {
-    return this.catalogTasks(args).map(({ addon, cat, key }) => ({
+    const addons = this.catalogTasks(args).map(({ addon, cat, key }) => ({
       key,
       name: cat.name || cat.id,
       provider: addon.manifest.name,
       type: cat.type,
     }));
+    // One of Riwaq's own rows opened on its full page.
+    if (String(args.catalogKey || "").startsWith(FEED_PREFIX))
+      return feedPlan({ tmdb: this.tmdbActive() }).filter(
+        (r) => r.key === args.catalogKey,
+      );
+    // Home asks for Riwaq's own rows first (core/feed.mjs).
+    if (args.feed !== true || args.search || args.catalogKey) return addons;
+    return [
+      ...feedPlan({
+        tmdb: this.tmdbActive(),
+        hidden: this.state.settings.feedHidden || [],
+      }),
+      ...addons,
+    ];
+  }
+  /** Whether the viewer's TMDB key is present and switched on. */
+  tmdbActive() {
+    const entry = this.state.providers?.tmdb;
+    return !!entry?.key && entry.enabled !== false;
+  }
+  /**
+   * One of Riwaq's own rows: a TMDB chart or discover query matched to IMDb
+   * IDs with the viewer's key, or a Cinemeta catalog without one.
+   */
+  async feedCatalog(key, { page = 1, skip = 0 } = {}) {
+    const tmdb = this.tmdbActive();
+    const row = feedRow(key, { tmdb });
+    if (!row) return { rows: [], failures: [] };
+    const base = {
+      key,
+      name: row.name,
+      provider: "رِواق",
+      type: row.type,
+      feed: true,
+      page,
+    };
+    if (tmdb) {
+      const result = await this.tmdbRow(row.source, this.enabled(), page);
+      const metas = this.adultFilter(result.metas || []);
+      return {
+        rows: metas.length ? [{ ...base, metas, hasMore: !!result.more }] : [],
+        failures: result.note === "failed" ? ["TMDB"] : [],
+      };
+    }
+    try {
+      const data = await this.cached(cinemetaUrl(row, skip), {
+        ttl: 600000,
+        failFor: 120000,
+        timeout: 10000,
+      });
+      const metas = this.adultFilter(
+        (data.metas || [])
+          .filter((m) => m?.id && m.name)
+          .map((m) => ({ ...m, type: m.type || row.type })),
+      );
+      return {
+        rows: metas.length
+          ? [{ ...base, metas, hasMore: metas.length > 0 }]
+          : [],
+        failures: [],
+      };
+    } catch {
+      return { rows: [], failures: ["Cinemeta"] };
+    }
   }
   async catalog(args = {}) {
+    if (String(args.catalogKey || "").startsWith(FEED_PREFIX))
+      return this.feedCatalog(args.catalogKey, {
+        page: Number.isInteger(args.page) && args.page > 0 ? args.page : 1,
+        skip: Number(args.skip) || 0,
+      });
     const tasks = this.catalogTasks(args);
     const results = new Array(tasks.length),
       failures = [];

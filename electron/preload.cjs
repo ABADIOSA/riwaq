@@ -27,6 +27,8 @@ const allowed = new Set([
   "seasonDetails",
   "releaseDates",
   "titleLogos",
+  "traktSuggestions",
+  "traktHideSuggestion",
   "openArtwork",
   "aiTest",
   "aiSearch",

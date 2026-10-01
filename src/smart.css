@@ -1,0 +1,111 @@
+/* Riwaq's sections (core/smart-groups.mjs): a shelf per group of catalogs,
+   with chips for "all" and each catalog above its row. */
+.smart-head {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.smart-head .section-heading {
+  margin-bottom: 0;
+}
+.smart-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 1px 4px;
+}
+.smart-chips button {
+  flex: none;
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 15px;
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted, #9aa0a8);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+.smart-chips button:hover {
+  color: var(--text, #eee);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.smart-chips button.selected {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.scroll-row-wrap:has(> .smart-chips) .scroll-arrow {
+  width: 30px;
+  height: 30px;
+  margin-top: -17px;
+}
+/* The count beside each Discover group. */
+.filter-tabs button small {
+  margin-inline-start: 6px;
+  opacity: 0.6;
+  font-size: 10px;
+}
+.settings-subhead {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  color: var(--muted, #9aa0a8);
+}
+
+/* Trakt's suggestions (Suggestions.jsx). */
+.suggest-card {
+  position: relative;
+  flex: none;
+}
+.suggest-hide {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid #ffffff2a;
+  background: #0b0d10cc;
+  color: #e9ebee;
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+.suggest-card:hover .suggest-hide,
+.suggest-hide:focus-visible {
+  opacity: 1;
+}
+.suggest-hide:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.suggest-invite {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px dashed var(--line, #ffffff1f);
+  border-radius: 14px;
+  color: var(--muted, #9aa0a8);
+}
+.suggest-invite svg {
+  color: var(--accent);
+  flex: none;
+}
+.suggest-invite p {
+  margin: 0;
+  flex: 1;
+}
+.suggest-empty {
+  padding: 12px 0;
+}

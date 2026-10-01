@@ -88,12 +88,19 @@ import {
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
-import { arabicCount } from "../../core/arabic.mjs";
+import { arabicCount, CATALOGS } from "../../core/arabic.mjs";
+import {
+  SMART_GROUPS,
+  groupOf as catalogGroup,
+  groupsBesideFeed,
+  homeLayout,
+} from "../../core/smart-groups.mjs";
+import { feedChoices } from "../../core/feed.mjs";
 import {
   HOME_SECTIONS,
   arrangeRows,
   moveCatalog,
-  safeHomeSections,
+  visibleHomeSections,
 } from "../../core/home.mjs";
 
 /**
@@ -109,13 +116,19 @@ function HomeEditor({ state, update, notice }) {
       .then(setPlan)
       .catch(() => setPlan([]));
   }, [state.addons.map((a) => `${a.key}:${a.enabled}`).join("|")]);
-  const visible = safeHomeSections(s.homeSections);
+  const visible = visibleHomeSections(s.homeSections, s.homeSeen);
   const sections = [
     ...visible,
     ...HOME_SECTIONS.map(([id]) => id).filter((id) => !visible.includes(id)),
   ];
   const label = Object.fromEntries(HOME_SECTIONS);
-  const saveSections = (next) => update("settings", { homeSections: next });
+  // Saving records every section that exists now, so a section added in a
+  // later version still appears until the viewer hides it.
+  const saveSections = (next) =>
+    update("settings", {
+      homeSections: next,
+      homeSeen: HOME_SECTIONS.map(([id]) => id),
+    });
   const moveSection = (id, direction) => {
     const list = [...visible];
     const i = list.indexOf(id);
@@ -126,8 +139,123 @@ function HomeEditor({ state, update, notice }) {
   };
   const hidden = new Set(s.homeHidden || []);
   const ordered = plan ? arrangeRows(plan, { order: s.homeOrder || [] }) : [];
+  const grouping = s.homeGrouping || "auto";
+  const layout = homeLayout(grouping, state.collections);
+  const tmdbOn = (state.providers || []).some(
+    (p) => p.id === "tmdb" && p.configured && p.enabled,
+  );
+  const smartOff = new Set(s.smartHidden || []);
+  const feedOff = new Set(s.feedHidden || []);
+  const perGroup = {};
+  for (const row of plan || []) {
+    const id = catalogGroup(row);
+    perGroup[id] = (perGroup[id] || 0) + 1;
+  }
+  const shownGroups = SMART_GROUPS.filter(
+    ([id]) =>
+      perGroup[id] &&
+      (layout !== "riwaq" || groupsBesideFeed(tmdbOn).includes(id)),
+  );
+  const toggle = (key, set, id) =>
+    update("settings", {
+      [key]: set.has(id) ? [...set].filter((x) => x !== id) : [...set, id],
+    });
   return (
     <>
+      <section className="settings-card">
+        <h2>ترتيب الرئيسية</h2>
+        <p>
+          الرئيسية تعرض الأعمال بتصنيف رِواق نفسه، رائج وفي السينما والأعلى
+          تقييماً وعربي وتركي وكوري وأنمي وأنواع الأفلام، لا صفاً لكل إضافة.
+          إضافاتك تبقى في «اكتشف» وهي اللي تجيب المصادر.
+        </p>
+        <div className="choice-row" role="radiogroup">
+          {[
+            ["auto", "تصنيف رِواق حتى أسوي مجموعاتي"],
+            ["riwaq", "تصنيف رِواق دائماً"],
+            ["groups", "كتالوجات إضافاتي في أقسام"],
+            ["rows", "كل كتالوج في صف"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              role="radio"
+              aria-checked={grouping === id}
+              className={grouping === id ? "selected" : ""}
+              onClick={() => update("settings", { homeGrouping: id })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="subtle">
+          {layout === "riwaq"
+            ? tmdbOn
+              ? "الرئيسية الآن بتصنيف رِواق من TMDB بلغتك ومنطقتك."
+              : "الرئيسية الآن بتصنيف رِواق من Cinemeta. أضف مفتاح TMDB في «مصادر البيانات» لتظهر صفوف العربي والتركي والكوري والأنمي وفي السينما."
+            : layout === "groups"
+              ? "الرئيسية الآن تجمع كتالوجات إضافاتك في أقسام."
+              : grouping === "auto"
+                ? "عندك مجموعات خاصة، فالرئيسية تعرض كل كتالوج في صف مع مجموعاتك المثبّتة."
+                : "الرئيسية الآن تعرض كل كتالوج في صف."}
+        </p>
+        {layout === "riwaq" && (
+          <>
+            <h3 className="settings-subhead">صفوف رِواق</h3>
+            <ol className="home-editor">
+              {feedChoices(tmdbOn).map(({ id, name }) => {
+                const off = feedOff.has(id);
+                return (
+                  <li key={id} className={off ? "off" : ""}>
+                    <span>
+                      <b>{name}</b>
+                    </span>
+                    <div className="button-row">
+                      <button
+                        title={off ? "إظهار" : "إخفاء"}
+                        className={off ? "" : "on"}
+                        onClick={() => toggle("feedHidden", feedOff, id)}
+                      >
+                        {off ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </>
+        )}
+        {layout !== "rows" && shownGroups.length > 0 && (
+          <>
+            <h3 className="settings-subhead">
+              {layout === "riwaq"
+                ? "أقسام من إضافاتك تحت صفوف رِواق"
+                : "أقسام إضافاتك"}
+            </h3>
+            <ol className="home-editor">
+              {shownGroups.map(([id, name]) => {
+                const off = smartOff.has(id);
+                return (
+                  <li key={id} className={off ? "off" : ""}>
+                    <span>
+                      <b>{name}</b>
+                      <small>{arabicCount(perGroup[id], CATALOGS)}</small>
+                    </span>
+                    <div className="button-row">
+                      <button
+                        title={off ? "إظهار" : "إخفاء"}
+                        className={off ? "" : "on"}
+                        onClick={() => toggle("smartHidden", smartOff, id)}
+                      >
+                        {off ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </>
+        )}
+      </section>
       <section className="settings-card">
         <h2>أقسام الرئيسية</h2>
         <p>رتّب الأقسام كما تحب، وأخفِ ما لا تحتاجه.</p>
@@ -253,6 +381,7 @@ function HomeEditor({ state, update, notice }) {
               homeOrder: [],
               homeHidden: [],
               homeSections: HOME_SECTIONS.map(([id]) => id),
+              homeSeen: HOME_SECTIONS.map(([id]) => id),
             })) && notice("عادت الرئيسية لترتيبها الأصلي")
           }
         >

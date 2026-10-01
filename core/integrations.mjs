@@ -180,7 +180,11 @@ export class Integrations {
   disconnect(id) {
     const s = this.get(id);
     this.devices.delete(id);
-    if (id === "trakt") this.session = null;
+    if (id === "trakt") {
+      this.session = null;
+      // Disconnecting forgets the account's suggestions too.
+      this.suggestions?.clear();
+    }
     if (s.addonKey)
       this.client.state.addons = this.client.state.addons.filter(
         (a) => keyFor(a.transportUrl) !== s.addonKey,
@@ -276,7 +280,7 @@ export class Integrations {
       d.busy = false;
     }
   }
-  async trakt(path, body) {
+  async trakt(path, body, method) {
     const s = this.get("trakt");
     if (!s.token) throw new Error("اربط حساب Trakt أولاً");
     if (
@@ -309,7 +313,12 @@ export class Integrations {
         });
       await this.refreshing;
     }
-    const options = body ? POST(body) : { redirect: "error" };
+    const options =
+      method === "DELETE"
+        ? { method: "DELETE", redirect: "error" }
+        : body
+          ? POST(body)
+          : { redirect: "error" };
     return this.client.request("https://api.trakt.tv" + path, {
       ...options,
       headers: {
@@ -319,6 +328,53 @@ export class Integrations {
         Authorization: `Bearer ${s.token.access_token}`,
       },
     });
+  }
+  /**
+   * Trakt's suggestions for the signed-in viewer, films or series. Read
+   * only, never sent anywhere, and kept for 30 minutes per account. Titles
+   * without an IMDb ID are dropped, since addons open titles by it.
+   */
+  async recommendations(kind = "movies", { force = false } = {}) {
+    if (!["movies", "shows"].includes(kind))
+      throw new Error("نوع الاقتراحات غير معروف");
+    const s = this.get("trakt");
+    if (!s.token?.access_token) return { connected: false, metas: [] };
+    const cache = (this.suggestions ||= new Map());
+    const key = `${s.username || ""}:${kind}`;
+    const hit = cache.get(key);
+    if (!force && hit && Date.now() - hit.at < 1800000) return hit.value;
+    const result = await this.trakt(
+      `/recommendations/${kind}?ignore_collected=true&ignore_watchlisted=false&limit=40`,
+    );
+    // A reply may only fill the account that asked for it.
+    if (this.get("trakt") !== s) throw new Error("تغير الحساب أثناء الطلب");
+    if (!Array.isArray(result)) throw new Error("استجابة Trakt غير صالحة");
+    const type = kind === "movies" ? "movie" : "series";
+    const value = {
+      connected: true,
+      username: s.username || "",
+      metas: this.client.adultFilter(
+        result.map((e) => metaFrom(e, type)).filter(Boolean),
+      ),
+    };
+    cache.set(key, { at: Date.now(), value });
+    return value;
+  }
+  /** "Not interested": Trakt stops suggesting the title to this account. */
+  async hideRecommendation(kind, id) {
+    if (!["movies", "shows"].includes(kind) || !/^tt\d{5,12}$/.test(id || ""))
+      throw new Error("العنوان غير صالح");
+    const s = this.get("trakt");
+    if (!s.token?.access_token) throw new Error("اربط حساب Trakt أولاً");
+    await this.trakt(`/recommendations/${kind}/${id}`, null, "DELETE");
+    if (this.get("trakt") !== s) throw new Error("تغير الحساب أثناء الطلب");
+    const hit = this.suggestions?.get(`${s.username || ""}:${kind}`);
+    if (hit)
+      hit.value = {
+        ...hit.value,
+        metas: hit.value.metas.filter((m) => m.id !== id),
+      };
+    return true;
   }
   async simkl(path, authed = true) {
     const s = this.get("simkl");

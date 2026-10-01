@@ -56,13 +56,22 @@ import AiSearchRow from "./components/AiSearch.jsx";
 import { PrayerChip } from "./components/Prayer.jsx";
 import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
+import SmartShelves from "./components/SmartHome.jsx";
+import TraktSuggestions from "./components/Suggestions.jsx";
+import {
+  groupRows,
+  groupsBesideFeed,
+  homeLayout,
+  SMART_IDS,
+} from "../core/smart-groups.mjs";
+import { arabicCount, CATALOGS } from "../core/arabic.mjs";
 import AmbientLayer from "./components/Ambient.jsx";
 import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
 import PlayerView from "./components/PlayerView.jsx";
 import PlayerPanel from "./components/PlayerPanel.jsx";
 import Profiles from "./components/Profiles.jsx";
-import { arrangeRows, safeHomeSections } from "../core/home.mjs";
+import { arrangeRows, visibleHomeSections } from "../core/home.mjs";
 // Rooms opened now and then load when first visited, so the start of the
 // app parses only what home needs.
 const Addons = lazy(() => import("./components/Addons.jsx"));
@@ -117,6 +126,8 @@ export default function App() {
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState(""),
+    // Discover and search tabs: one of Riwaq's groups, or "all".
+    [group, setGroup] = useState("all"),
     [catalog, setCatalog] = useState(""),
     [rows, setRows] = useState([]),
     [failures, setFailures] = useState([]),
@@ -314,6 +325,16 @@ export default function App() {
   const addonSignature = state.addons
     .map((a) => `${a.key}:${a.enabled}`)
     .join("|");
+  // Home's layout: Riwaq's own rows (core/feed.mjs) until the viewer builds
+  // collections, the addons' groups, or one row per catalog.
+  const tmdbOn = (state.providers || []).some(
+    (p) => p.id === "tmdb" && p.configured && p.enabled,
+  );
+  const layout = homeLayout(state.settings.homeGrouping, state.collections);
+  const feedSignature =
+    layout === "riwaq"
+      ? `${tmdbOn}|${(state.settings.feedHidden || []).join(",")}`
+      : "off";
   useEffect(() => {
     if (!ready || !["home", "discover", "search"].includes(view)) return;
     let current = true;
@@ -323,6 +344,7 @@ export default function App() {
     setFailures([]);
     setHeroIndex(0);
     const args = {
+      feed: view === "home" && feedSignature !== "off",
       type: view === "home" ? "" : filter,
       search: view === "search" ? query : "",
       catalogKey: view !== "home" ? catalog : "",
@@ -388,6 +410,7 @@ export default function App() {
     query,
     catalog,
     addonSignature,
+    feedSignature,
     refresh,
     state.profiles?.active,
   ]);
@@ -445,6 +468,16 @@ export default function App() {
     [],
   );
   const moreStable = useCallback((row) => latest.current.more(row), []);
+  const noticeStable = useCallback((m) => latest.current.notice(m), []);
+  const settingsStable = useCallback((tab) => latest.current.settings(tab), []);
+  // Trakt's state for the suggestions section, stable between state events.
+  const traktAccount = (state.integrations || []).find((i) => i.id === "trakt");
+  const traktConnected = !!traktAccount?.connected;
+  const traktUser = traktAccount?.username || "";
+  const traktState = useMemo(
+    () => ({ connected: traktConnected, username: traktUser }),
+    [traktConnected, traktUser],
+  );
   const favoriteStable = useCallback(
     (meta) => latest.current.favorite(meta),
     [],
@@ -469,6 +502,7 @@ export default function App() {
     setView(v);
     setCatalog("");
     setFilter("");
+    setGroup("all");
   };
   const favorites = state.favorites;
   const uniqueProgress = useMemo(
@@ -505,7 +539,10 @@ export default function App() {
     finishedCount,
     state.favorites.length,
   ]);
-  const homeSections = safeHomeSections(state.settings.homeSections);
+  const homeSections = visibleHomeSections(
+    state.settings.homeSections,
+    state.settings.homeSeen,
+  );
   // Finished films leave the rows the moment they are finished, without a
   // reload. Search keeps them, as Nuvio HTPC does.
   // Progress is saved every few seconds while watching; the set of finished
@@ -533,10 +570,37 @@ export default function App() {
         })
       : liveRows;
   }, [rows, watched, view, homeOrder, homeHidden]);
+  // Riwaq's groups of the rows on screen: Discover's tabs and home's shelves.
+  const rowGroups = useMemo(() => groupRows(shownRows), [shownRows]);
+  const groupKeys = useMemo(
+    () =>
+      group === "all"
+        ? null
+        : new Set(
+            (rowGroups.find((g) => g.id === group)?.rows || []).map(
+              (r) => r.key,
+            ),
+          ),
+    [rowGroups, group],
+  );
+  const feedRows = useMemo(() => shownRows.filter((r) => r.feed), [shownRows]);
+  const addonRows = useMemo(
+    () => shownRows.filter((r) => !r.feed),
+    [shownRows],
+  );
+  // Under Riwaq's rows, only the addon groups those rows do not cover.
+  const besideFeed = useMemo(() => {
+    const keep = groupsBesideFeed(tmdbOn);
+    return [
+      ...(state.settings.smartHidden || []),
+      ...SMART_IDS.filter((id) => !keep.includes(id)),
+    ];
+  }, [tmdbOn, state.settings.smartHidden]);
   const catalogRails = useMemo(
     () =>
       shownRows
         .filter((r) => r.metas.length)
+        .filter((r) => view === "home" || !groupKeys || groupKeys.has(r.key))
         .map((row) => (
           <CatalogRail
             key={row.key}
@@ -545,7 +609,7 @@ export default function App() {
             onMore={moreStable}
           />
         )),
-    [shownRows],
+    [shownRows, groupKeys, view],
   );
   const heroItems = useMemo(
     () =>
@@ -570,6 +634,11 @@ export default function App() {
   };
   latest.current.favorite = favorite;
   latest.current.more = more;
+  latest.current.notice = notice;
+  latest.current.settings = (tab) => {
+    setSettingsTab(tab);
+    navigate("settings");
+  };
   const loadMore = async () => {
     if (paging || !rows[0]) return;
     setPaging(true);
@@ -579,13 +648,16 @@ export default function App() {
         type: filter,
         search: view === "search" ? query : "",
         skip: rows[0].metas.length,
+        // Riwaq's TMDB rows page by number; their pages lose unmatched titles.
+        page: (rows[0].page || 1) + 1,
       });
       const next = result.rows[0];
       if (next)
         setRows((old) => [
           {
             ...old[0],
-            hasMore: next.metas.length > 0,
+            page: (old[0].page || 1) + 1,
+            hasMore: next.hasMore ?? next.metas.length > 0,
             metas: [
               ...new Map(
                 [...old[0].metas, ...next.metas].map((m) => [m.id, m]),
@@ -805,6 +877,7 @@ export default function App() {
                 if (search.trim()) {
                   setQuery(search.trim());
                   setFilter("");
+                  setGroup("all");
                   navigate("search");
                   setCatalog("");
                 }
@@ -868,6 +941,7 @@ export default function App() {
                     running={!selected && !player.active && !playerOpen}
                     onOpen={openStable}
                     onFavorite={favoriteStable}
+                    fromRiwaq={feedRows.length > 0}
                   />
                 )}
               {view === "home" && !state.user && !loading && (
@@ -915,25 +989,27 @@ export default function App() {
                     </IconButton>
                   </div>
                 )}
-                {view !== "home" && !catalog && (
+                {view !== "home" && !catalog && rowGroups.length > 0 && (
+                  // Riwaq's groups instead of one tab per addon type: a
+                  // dozen addons used to give twenty tabs.
                   <ScrollRow className="filter-tabs" role="tablist">
                     {[
-                      ["", "الكل"],
-                      ["movie", "أفلام"],
-                      ["series", "مسلسلات"],
-                      ...[...new Set(rows.map((r) => r.type))]
-                        .filter((t) => !["movie", "series"].includes(t))
-                        .map((t) => [t, typeName(t)]),
-                    ].map(([t, label]) => (
+                      [
+                        "all",
+                        "الكل",
+                        shownRows.filter((r) => r.metas.length).length,
+                      ],
+                      ...rowGroups.map((g) => [g.id, g.name, g.rows.length]),
+                    ].map(([id, label, count]) => (
                       <button
-                        className={filter === t ? "selected" : ""}
-                        key={t}
+                        className={group === id ? "selected" : ""}
+                        key={id}
                         role="tab"
-                        aria-selected={filter === t}
-                        title={label}
-                        onClick={() => setFilter(t)}
+                        aria-selected={group === id}
+                        title={`${label}: ${arabicCount(count, CATALOGS)}`}
+                        onClick={() => setGroup(id)}
                       >
-                        {label}
+                        {label} <small>{count}</small>
                       </button>
                     ))}
                   </ScrollRow>
@@ -1017,6 +1093,14 @@ export default function App() {
                                 onOpen={openStable}
                               />
                             )}
+                            {id === "suggestions" && (
+                              <TraktSuggestions
+                                trakt={traktState}
+                                onOpen={openStable}
+                                onSettings={settingsStable}
+                                notice={noticeStable}
+                              />
+                            )}
                             {id === "upnext" && (
                               <UpNextRail items={upNext} onOpen={open} />
                             )}
@@ -1058,7 +1142,34 @@ export default function App() {
                                 }}
                               />
                             )}
-                            {id === "catalogs" && catalogRails}
+                            {id === "catalogs" &&
+                              (layout === "rows" ? (
+                                catalogRails
+                              ) : layout === "riwaq" && feedRows.length ? (
+                                <>
+                                  {feedRows.map((row) => (
+                                    <CatalogRail
+                                      key={row.key}
+                                      row={row}
+                                      onOpen={openStable}
+                                      onMore={moreStable}
+                                    />
+                                  ))}
+                                  <SmartShelves
+                                    rows={addonRows}
+                                    hidden={besideFeed}
+                                    onOpen={openStable}
+                                    onMore={moreStable}
+                                  />
+                                </>
+                              ) : (
+                                <SmartShelves
+                                  rows={addonRows}
+                                  hidden={state.settings.smartHidden}
+                                  onOpen={openStable}
+                                  onMore={moreStable}
+                                />
+                              ))}
                           </React.Fragment>
                         ))
                     ) : (
@@ -1214,6 +1325,7 @@ export default function App() {
                 setView(room);
                 setCatalog("");
                 setFilter("");
+                setGroup("all");
               }
             }}
             onClose={() => {
