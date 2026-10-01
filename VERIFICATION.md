@@ -22,7 +22,7 @@ Executed:
 - `npm test`: **385 passing, 0 failing** (382 + 2 in `tests/undefined-names.test.mjs` + 1 layout test in `tests/performance.test.mjs`).
 - Same render after the fix: overflow 0 at all three sizes, "عرض الكل" showed 30 cards, and there were no page errors. The tab arrows sit centred on the buttons.
 
-- The first release run of 0.24.1 failed on the Windows runner before packaging, so nothing was published. The new test built its root with `new URL("..", import.meta.url).pathname`, which reads `/D:/a/…` on Windows and joined into `D:\\D:\\a\\riwaq\\riwaq\\src`. Pull-request CI runs on Linux and had passed. The test now uses `fileURLToPath`; `path.win32.join` of the runner's URL gives `D:\\a\\riwaq\\riwaq\\src`.
+- The first release run of 0.24.1 failed on the Windows runner before packaging, so nothing was published. The new test built its root with `new URL("..", import.meta.url).pathname`, which reads `/D:/a/…` on Windows and joined into `D:\D:\a\riwaq\riwaq\src`. Pull-request CI runs on Linux and had passed. The test now uses `fileURLToPath`; `path.win32.join` of the runner's URL gives `D:\a\riwaq\riwaq\src`.
 
 Not executed: Windows, the owner's actual addon set.
 
