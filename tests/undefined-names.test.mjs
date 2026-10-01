@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseAst } from "rolldown/parseAst";
 
 // The interface is plain JSX, so a name used outside the scope that declares
@@ -256,7 +257,8 @@ test("the checker notices a name used outside the scope that declares it", () =>
 });
 
 test("every interface and core module uses only names it declares", () => {
-  const root = new URL("..", import.meta.url).pathname;
+  // fileURLToPath, not .pathname: on Windows the latter reads "/D:/…".
+  const root = fileURLToPath(new URL("..", import.meta.url));
   const all = [
     ...files(join(root, "src"), /\.(jsx|js)$/),
     ...files(join(root, "core"), /\.mjs$/),
