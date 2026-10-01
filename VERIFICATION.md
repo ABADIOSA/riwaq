@@ -1,5 +1,27 @@
 # Verification — Riwaq 0.20.0
 
+## 0.22.1 — resolution from the stated line count
+
+The owner sent a screenshot of two sources for The Fantastic Four: First Steps, both marked 4K. The addon labelled the first "HD" and the second "4K".
+
+- The first stream's chips name the group HiDt, BluRay, x265, HDR10 and Dolby Vision at 12.29 GB. That matches HiDt's "1080p UHD BluRay … DV HDR10 x265" releases.
+- `parseResolution` tested `2160|4k|uhd` before `1080`, so "UHD", which names the 4K disc the encode came from, made it 2160.
+- It now takes a stated line count first, highest first: `4320`, `2160`, `1440`, `1080`, `720` with `p`/`i`, or bare when not followed by a size, rate, frame rate or decimal. Only then does it read words: `8K`, `4K`/`UHD`, `2K`, `FHD`, `HD`.
+- The owner's imported NardBadges pack defines its 4K badge the same way (`2160|4k|uhd` without `1080|720`). Its picture replaces the built-in resolution chip, so the chip follows the corrected value.
+
+Executed:
+
+- `npm test`: **377 passing, 0 failing** (376 + 1 in `tests/stream-engine.test.mjs`). The new test covers:
+  - the HiDt-style filename gives 1080, DV+HDR10, tier `1080p_HDR`;
+  - a FraMeSToR 2160p UHD remux stays 2160;
+  - "4K Remastered 1080p" gives 1080;
+  - "UHD BluRay" alone gives 2160;
+  - "4K … 720 MB" and "1080 kbps 4K" give 2160;
+  - "1080i", "FHD" and "HD" give 1080, 1080 and 720.
+- The existing remux, scoring and badge-pack tests still pass.
+
+Not executed: the owner's actual addon response, Windows.
+
 ## 0.22.0 — lighter and faster
 
 The owner said Riwaq felt heavy and slow. I measured a mocked home page in headless Chromium at 1440×960: 100 addon catalogs of 60 titles each, artwork ambience on, using `scratchpad/ui/perf.mjs`. These are renderer measurements without a GPU, and not Windows ones.

@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.22.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.22.1-win-x64.exe`.
 
 ## Design and invariants
 
@@ -23,7 +23,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Tracker history is opt-in and account-scoped. Do not silently send playback activity. Disconnect must remove credentials and queued writes.
 - Letterboxd uses a disclosed public Stremboxd addon bridge or CSV import matched with TMDB. It is NOT official unrestricted Letterboxd OAuth. Do not request Letterboxd passwords.
 - Reference apps were studied for behavior; their implementation code is not copied into this MIT application. Harbor is MIT, Nuvio Desktop and Stremio Community v5 are GPL-3.0. Keep third-party notices and MPV build provenance.
-- The stream engine must stay explainable: every rejection and every point carries a label the interface can show. Arabic subtitles and Arabic dubs are separate facts, and a dub is never promoted to someone who asked for the original audio.
+- The stream engine must stay explainable: every rejection and every point carries a label the interface can show. Resolution comes from a stated line count first (`2160p`, `1080p`, a bare `1080` that is not a size or rate), and only then from words (`8K`, `4K`, `UHD`, `2K`, `FHD`, `HD`): "1080p UHD BluRay" is 1080p. Arabic subtitles and Arabic dubs are separate facts, and a dub is never promoted to someone who asked for the original audio.
 - Live TV sources are the viewer's own. Playlist and Xtream URLs carry credentials, so channels cross the IPC bridge as opaque keys and are resolved to URLs only in main. Riwaq supplies no channels or subscriptions.
 - Profiles namespace favorites, progress, connected lists and settings. Addons, provider keys, platform accounts, live sources and hotkeys stay shared. The parental PIN is scrypt-hashed and an unlock lives in memory only.
 - Ship no third-party shader files. Picture profiles are built from MPV's own options; a viewer supplies their own GLSL chain if they want one.

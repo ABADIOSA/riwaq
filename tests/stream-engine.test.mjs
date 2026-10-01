@@ -243,3 +243,38 @@ test("human readable sizes", () => {
   assert.equal(sizeLabel(1536), "1.5 KB");
   assert.equal(sizeLabel(2.5 * 1024 ** 3), "2.5 GB");
 });
+
+test("a stated 1080p wins over UHD, 4K and other words", () => {
+  // A 1080p encode of a 4K disc keeps Dolby Vision and HDR10 but is not 4K.
+  const hidt = parseStream({
+    name: "HD 🔥⚡",
+    description:
+      "THE FANTASTIC FOUR FIRST STEPS (2025)\nBLURAY · HEVC\n12.29 GB",
+    behaviorHints: {
+      filename:
+        "The.Fantastic.Four.First.Steps.2025.1080p.UHD.BluRay.DDP5.1.DV.HDR10.x265-HiDt.mkv",
+    },
+    url: "https://example.test/hidt",
+  });
+  assert.equal(hidt.resolution, 1080);
+  assert.equal(hidt.hdr, "DV+HDR10");
+  assert.equal(tierOf(hidt), "1080p_HDR");
+  const remux = parseStream({
+    name: "4K 🔥+⚡",
+    behaviorHints: {
+      filename:
+        "The.Fantastic.4.First.Steps.2025.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC.TrueHD.7.1.Atmos-FraMeSToR.mkv",
+    },
+  });
+  assert.equal(remux.resolution, 2160);
+  for (const [title, lines] of [
+    ["Film 4K Remastered 1080p BluRay", 1080],
+    ["Film UHD BluRay", 2160],
+    ["Film 4K HDR 💾 720 MB", 2160],
+    ["Film 1080 kbps 4K", 2160],
+    ["Film 1080i HDTV", 1080],
+    ["Film FHD", 1080],
+    ["Film HD", 720],
+  ])
+    assert.equal(parseStream({ title }).resolution, lines, title);
+});
