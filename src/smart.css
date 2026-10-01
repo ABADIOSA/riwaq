@@ -1,0 +1,54 @@
+/* Riwaq's sections (core/smart-groups.mjs): a shelf per group of catalogs,
+   with chips for "all" and each catalog above its row. */
+.smart-head {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.smart-head .section-heading {
+  margin-bottom: 0;
+}
+.smart-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 1px 4px;
+}
+.smart-chips button {
+  flex: none;
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 15px;
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted, #9aa0a8);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+.smart-chips button:hover {
+  color: var(--text, #eee);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.smart-chips button.selected {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.scroll-row-wrap:has(> .smart-chips) .scroll-arrow {
+  width: 30px;
+  height: 30px;
+  margin-top: -17px;
+}
+/* The count beside each Discover group. */
+.filter-tabs button small {
+  margin-inline-start: 6px;
+  opacity: 0.6;
+  font-size: 10px;
+}

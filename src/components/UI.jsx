@@ -241,22 +241,26 @@ export const Rail = memo(function Rail({
   onOpen,
   onMore,
   progressMap,
+  header,
+  className = "",
 }) {
   const total = Math.min(metas.length, RAIL_LIMIT);
   const [count, setCount] = useState(RAIL_FIRST);
   return (
-    <section className="rail">
-      <div className="section-heading">
-        <div>
-          <h2>{title}</h2>
-          {subtitle && <span>{subtitle}</span>}
+    <section className={`rail ${className}`}>
+      {header || (
+        <div className="section-heading">
+          <div>
+            <h2>{title}</h2>
+            {subtitle && <span>{subtitle}</span>}
+          </div>
+          {onMore && (
+            <button className="text-button" onClick={onMore}>
+              عرض الكل <ChevronLeft size={16} />
+            </button>
+          )}
         </div>
-        {onMore && (
-          <button className="text-button" onClick={onMore}>
-            عرض الكل <ChevronLeft size={16} />
-          </button>
-        )}
-      </div>
+      )}
       <ScrollRow
         className="poster-row"
         onNearEnd={

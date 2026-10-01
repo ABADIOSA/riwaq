@@ -56,6 +56,9 @@ import AiSearchRow from "./components/AiSearch.jsx";
 import { PrayerChip } from "./components/Prayer.jsx";
 import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
+import SmartShelves from "./components/SmartHome.jsx";
+import { groupRows, smartHomeOn } from "../core/smart-groups.mjs";
+import { arabicCount, CATALOGS } from "../core/arabic.mjs";
 import AmbientLayer from "./components/Ambient.jsx";
 import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
@@ -117,6 +120,8 @@ export default function App() {
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState(""),
+    // Discover and search tabs: one of Riwaq's groups, or "all".
+    [group, setGroup] = useState("all"),
     [catalog, setCatalog] = useState(""),
     [rows, setRows] = useState([]),
     [failures, setFailures] = useState([]),
@@ -469,6 +474,7 @@ export default function App() {
     setView(v);
     setCatalog("");
     setFilter("");
+    setGroup("all");
   };
   const favorites = state.favorites;
   const uniqueProgress = useMemo(
@@ -533,10 +539,25 @@ export default function App() {
         })
       : liveRows;
   }, [rows, watched, view, homeOrder, homeHidden]);
+  // Riwaq's groups of the rows on screen: Discover's tabs and home's shelves.
+  const rowGroups = useMemo(() => groupRows(shownRows), [shownRows]);
+  const groupKeys = useMemo(
+    () =>
+      group === "all"
+        ? null
+        : new Set(
+            (rowGroups.find((g) => g.id === group)?.rows || []).map(
+              (r) => r.key,
+            ),
+          ),
+    [rowGroups, group],
+  );
+  const smartHome = smartHomeOn(state.settings.homeGrouping, state.collections);
   const catalogRails = useMemo(
     () =>
       shownRows
         .filter((r) => r.metas.length)
+        .filter((r) => view === "home" || !groupKeys || groupKeys.has(r.key))
         .map((row) => (
           <CatalogRail
             key={row.key}
@@ -545,7 +566,7 @@ export default function App() {
             onMore={moreStable}
           />
         )),
-    [shownRows],
+    [shownRows, groupKeys, view],
   );
   const heroItems = useMemo(
     () =>
@@ -805,6 +826,7 @@ export default function App() {
                 if (search.trim()) {
                   setQuery(search.trim());
                   setFilter("");
+                  setGroup("all");
                   navigate("search");
                   setCatalog("");
                 }
@@ -915,25 +937,27 @@ export default function App() {
                     </IconButton>
                   </div>
                 )}
-                {view !== "home" && !catalog && (
+                {view !== "home" && !catalog && rowGroups.length > 0 && (
+                  // Riwaq's groups instead of one tab per addon type: a
+                  // dozen addons used to give twenty tabs.
                   <ScrollRow className="filter-tabs" role="tablist">
                     {[
-                      ["", "الكل"],
-                      ["movie", "أفلام"],
-                      ["series", "مسلسلات"],
-                      ...[...new Set(rows.map((r) => r.type))]
-                        .filter((t) => !["movie", "series"].includes(t))
-                        .map((t) => [t, typeName(t)]),
-                    ].map(([t, label]) => (
+                      [
+                        "all",
+                        "الكل",
+                        shownRows.filter((r) => r.metas.length).length,
+                      ],
+                      ...rowGroups.map((g) => [g.id, g.name, g.rows.length]),
+                    ].map(([id, label, count]) => (
                       <button
-                        className={filter === t ? "selected" : ""}
-                        key={t}
+                        className={group === id ? "selected" : ""}
+                        key={id}
                         role="tab"
-                        aria-selected={filter === t}
-                        title={label}
-                        onClick={() => setFilter(t)}
+                        aria-selected={group === id}
+                        title={`${label}: ${arabicCount(count, CATALOGS)}`}
+                        onClick={() => setGroup(id)}
                       >
-                        {label}
+                        {label} <small>{count}</small>
                       </button>
                     ))}
                   </ScrollRow>
@@ -1058,7 +1082,17 @@ export default function App() {
                                 }}
                               />
                             )}
-                            {id === "catalogs" && catalogRails}
+                            {id === "catalogs" &&
+                              (smartHome ? (
+                                <SmartShelves
+                                  rows={shownRows}
+                                  hidden={state.settings.smartHidden}
+                                  onOpen={openStable}
+                                  onMore={moreStable}
+                                />
+                              ) : (
+                                catalogRails
+                              ))}
                           </React.Fragment>
                         ))
                     ) : (
@@ -1214,6 +1248,7 @@ export default function App() {
                 setView(room);
                 setCatalog("");
                 setFilter("");
+                setGroup("all");
               }
             }}
             onClose={() => {

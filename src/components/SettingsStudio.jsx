@@ -88,7 +88,12 @@ import {
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
-import { arabicCount } from "../../core/arabic.mjs";
+import { arabicCount, CATALOGS } from "../../core/arabic.mjs";
+import {
+  SMART_GROUPS,
+  groupOf as catalogGroup,
+  smartHomeOn,
+} from "../../core/smart-groups.mjs";
 import {
   HOME_SECTIONS,
   arrangeRows,
@@ -126,8 +131,78 @@ function HomeEditor({ state, update, notice }) {
   };
   const hidden = new Set(s.homeHidden || []);
   const ordered = plan ? arrangeRows(plan, { order: s.homeOrder || [] }) : [];
+  const grouping = s.homeGrouping || "auto";
+  const smartOn = smartHomeOn(grouping, state.collections);
+  const smartOff = new Set(s.smartHidden || []);
+  const perGroup = {};
+  for (const row of plan || []) {
+    const id = catalogGroup(row);
+    perGroup[id] = (perGroup[id] || 0) + 1;
+  }
   return (
     <>
+      <section className="settings-card">
+        <h2>كتالوجات إضافاتك في الرئيسية</h2>
+        <p>
+          مع إضافات كثيرة تصير الرئيسية صفوفاً لا تنتهي. أقسام رِواق تجمع كل
+          كتالوجاتك في رفوف قليلة: أفلام، مسلسلات، عربي، أنمي، قنوات، رياضة،
+          ويوتيوب. فوق كل رف أزرار لكتالوجاته، و«الكل» يخلط بينها.
+        </p>
+        <div className="choice-row" role="radiogroup">
+          {[
+            ["auto", "أقسام رِواق حتى أسوي مجموعاتي"],
+            ["smart", "أقسام رِواق دائماً"],
+            ["rows", "كل كتالوج في صف"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              role="radio"
+              aria-checked={grouping === id}
+              className={grouping === id ? "selected" : ""}
+              onClick={() => update("settings", { homeGrouping: id })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="subtle">
+          {smartOn
+            ? "الرئيسية الآن مقسّمة بأقسام رِواق."
+            : grouping === "auto"
+              ? "عندك مجموعات خاصة، فالرئيسية تعرض كل كتالوج في صف مع مجموعاتك المثبّتة."
+              : "الرئيسية الآن تعرض كل كتالوج في صف."}
+        </p>
+        {smartOn && plan?.length > 0 && (
+          <ol className="home-editor">
+            {SMART_GROUPS.filter(([id]) => perGroup[id]).map(([id, name]) => {
+              const off = smartOff.has(id);
+              return (
+                <li key={id} className={off ? "off" : ""}>
+                  <span>
+                    <b>{name}</b>
+                    <small>{arabicCount(perGroup[id], CATALOGS)}</small>
+                  </span>
+                  <div className="button-row">
+                    <button
+                      title={off ? "إظهار" : "إخفاء"}
+                      className={off ? "" : "on"}
+                      onClick={() =>
+                        update("settings", {
+                          smartHidden: off
+                            ? [...smartOff].filter((x) => x !== id)
+                            : [...smartOff, id],
+                        })
+                      }
+                    >
+                      {off ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
       <section className="settings-card">
         <h2>أقسام الرئيسية</h2>
         <p>رتّب الأقسام كما تحب، وأخفِ ما لا تحتاجه.</p>

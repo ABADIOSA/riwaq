@@ -1,5 +1,28 @@
 # Verification — Riwaq 0.20.0
 
+## 0.25.0 — Riwaq's sections on home and Discover
+
+The owner asked for a default organisation of home for viewers who build no collections or who have so many addons that one row per catalog spoils the page. They asked for the same on Discover, whose tabs showed one per addon type (screenshot: arabcity-akwam, wecima, youtube, Berserk, DC, Marvel, Starwars, Sport…).
+
+Executed:
+
+- `npm test`: **389 passing, 0 failing** (385 + 4 in `tests/smart-groups.test.mjs`). They cover:
+  - the owner's catalogs from the screenshot classified into groups, including list-addon types judged by their titles;
+  - an Arabic word containing "لك" not counted as a suggestion;
+  - group order, kept row order, and empty and hidden groups;
+  - the all-shelf interleaving titles once each;
+  - `auto`/`smart`/`rows` with and without collections;
+  - settings validation.
+- `npm run check`, `npm run build` and `tests/undefined-names.test.mjs` pass.
+- Rendered in Chromium with a mocked bridge at 1440×960 and 980×680, with 22 catalogs modelled on the owner's:
+  - Home showed 9 shelves: مقترحة لك, أفلام, مسلسلات, عربي, أنمي, قنوات وبث مباشر, رياضة, يوتيوب وفيديو and أخرى.
+  - The عربي shelf had chips for الكل, ArabCity-AlooyTV, ArabCity-Akwam, Akwam and WeCima. Its first card changed from "ArabCity-AlooyTV 1" (blended) to "WeCima 1" on the WeCima chip, and its "عرض الكل" opened the WeCima page with 20 cards.
+  - Discover showed 10 tabs with counts (الكل 22, then 2/6/3/4/1/2/2/1/1). "عربي" left exactly the four Arabic catalog rails.
+  - With `homeGrouping: "rows"`, or `auto` with a collection, home went back to 22 catalog rails.
+  - No page errors, no overflow.
+
+Not executed: Windows, the owner's real addons (the grouping is a heuristic from names and types).
+
 ## 0.24.1 — Discover without a sideways scrollbar, "عرض الكل" restored
 
 The owner sent a screenshot of a window-wide horizontal scrollbar on the Discover page.
