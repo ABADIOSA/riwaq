@@ -866,6 +866,12 @@ const methods = {
     });
   },
   aiTest: () => client.ai.test(),
+  // TMDB's stills and descriptions for one season, with the viewer's key.
+  seasonDetails: (a) =>
+    client.seasonDetails({
+      id: String(a?.id || ""),
+      season: Number(a?.season),
+    }),
   // A title's artwork gallery; keys stay here and only image URLs return.
   artwork: (a) =>
     client.artwork({ type: String(a?.type || ""), id: String(a?.id || "") }),
