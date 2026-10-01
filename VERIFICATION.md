@@ -1,4 +1,39 @@
-# Verification — Riwaq 0.18.0
+# Verification — Riwaq 0.19.0
+
+## 0.19.0 — Riwaq's own identity, prayer times, episodes with stills
+
+The owner said the interface felt like Harbor's and wanted something only Riwaq has. They also asked why episodes had no pictures or descriptions. The addon's episode `thumbnail` and `overview` were never shown.
+
+Executed:
+
+- `npm test`: **363 passing, 0 failing** (353 + 4 in `tests/season-details.test.mjs` + 6 in `tests/prayer.test.mjs`), all mocked or pure.
+  - Prayer tests:
+    - every listed city and season keeps the order Fajr < sunrise < Dhuhr < Asr < Maghrib < Isha, with Dhuhr between 11:15 and 12:50;
+    - Makkah on the June solstice is within 3 minutes of remembered Umm al-Qura times (4:12, 12:22, 3:42, 7:05). These come from memory, not a fetched timetable;
+    - Isha is Maghrib + 90, and 120 on a Ramadan day;
+    - Hanafi Asr is later, MWL Isha is angle-based;
+    - next prayer and prayers inside a span; clocks, runtimes and settings validation.
+  - Season tests:
+    - TMDB parsing, generic names dropped, English filling, addon-first merging;
+    - the client caching both the TV ID and the season.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge and a fixed clock (2026-10-01 15:20 in Jeddah) at 980×680 and 1440×960:
+  - the root carries `identity-riwaq`, poster corners compute to the 50% 26% arch, and the heading font is Sakkal Majalla. This Linux build has no such font, so it fell back; on Windows it is present;
+  - the prayer chip reads "العصر 3:37 م · بعد 17 د", and its card lists the six times with Asr marked;
+  - a 2 h 46 m film reads "يخلص 6:06 م · يمر فيه أذان العصر (3:37 م)" (Maghrib at 6:11 is correctly not crossed);
+  - episode cards show stills, Arabic titles and descriptions from the mocked TMDB season, a watched check, a progress bar, and blurred spoilers;
+  - switching the city to Riyadh shows Dhuhr 11:43, and the auto-pause toggle saves;
+  - switching identity to classic and back works;
+  - no page errors, no horizontal overflow.
+- Two defects caught by the render and fixed before this result:
+  - the arch lost to `.app.cardstyle-* .poster-image`;
+  - a relative heading size shrank hero titles.
+
+Not executed:
+- `checkPrayer` in main (a real viewing reaching an adhan).
+- Real TMDB season requests.
+- Windows rendering of Sakkal Majalla.
+- Comparison against an official Umm al-Qura timetable file.
 
 ## 0.18.0 — arrows instead of horizontal scrollbars
 

@@ -8,6 +8,7 @@ import {
 } from "./badges.mjs";
 import { cleanServices } from "./services.mjs";
 import { cleanHudHidden } from "./hud-layout.mjs";
+import { PRAYER_CITIES, PRAYER_METHODS } from "./prayer.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -105,6 +106,15 @@ export const DEFAULT_SETTINGS = {
   awardIcons: true,
   // A title's sources appear after Play; true shows them on opening.
   sourcesOnOpen: false,
+  // Prayer times, computed on this machine (core/prayer.mjs).
+  prayerOn: true,
+  prayerCity: "jeddah",
+  prayerCustom: null,
+  prayerMethod: "ummalqura",
+  prayerAsr: "standard",
+  prayerWarn: true,
+  prayerHeadsUp: true,
+  prayerPause: false,
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -290,6 +300,10 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "badgesOn",
     "awardIcons",
     "sourcesOnOpen",
+    "prayerOn",
+    "prayerWarn",
+    "prayerHeadsUp",
+    "prayerPause",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (
@@ -347,6 +361,9 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     pickerLayout: ["detailed", "compact"],
     spoilerGuard: ["off", "titles"],
     hudLayout: ["full", "minimal", "cinema", "custom"],
+    prayerCity: [...PRAYER_CITIES.map((c) => c.id), "custom"],
+    prayerMethod: Object.keys(PRAYER_METHODS),
+    prayerAsr: ["standard", "hanafi"],
   }))
     if (values.includes(input[key])) next[key] = input[key];
   if (Number.isFinite(input.subtitlePosition))
@@ -366,6 +383,27 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.addonPriority = cleanAddonPriority(input.addonPriority);
   if (Array.isArray(input.streamingServices))
     next.streamingServices = cleanServices(input.streamingServices);
+  if (input.prayerCustom && typeof input.prayerCustom === "object") {
+    const lat = Number(input.prayerCustom.lat);
+    const lng = Number(input.prayerCustom.lng);
+    const tz = Number(input.prayerCustom.tz);
+    if (
+      Number.isFinite(lat) &&
+      Math.abs(lat) <= 66 &&
+      Number.isFinite(lng) &&
+      Math.abs(lng) <= 180 &&
+      Number.isFinite(tz) &&
+      tz >= -12 &&
+      tz <= 14
+    )
+      next.prayerCustom = {
+        lat: Math.round(lat * 10000) / 10000,
+        lng: Math.round(lng * 10000) / 10000,
+        tz: Math.round(tz * 4) / 4,
+      };
+  }
+  if (next.prayerCity === "custom" && !next.prayerCustom)
+    next.prayerCity = DEFAULT_SETTINGS.prayerCity;
   if (Array.isArray(input.hudHidden))
     next.hudHidden = cleanHudHidden(input.hudHidden);
   if (Array.isArray(input.badgeRules))

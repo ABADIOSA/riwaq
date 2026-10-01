@@ -17,6 +17,12 @@ import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
 import {
+  fillOverviews,
+  needsEnglish,
+  parseSeason,
+  seasonRequest,
+} from "./season-details.mjs";
+import {
   fanartRequest,
   mergeArtwork,
   metaArtwork,
@@ -1253,6 +1259,49 @@ export class Client {
         this.artworkCache.delete(this.artworkCache.keys().next().value);
       this.artworkCache.set(cacheKey, { at: Date.now(), value });
     }
+    return value;
+  }
+  /**
+   * TMDB's details for one season (core/season-details.mjs), in the viewer's
+   * metadata language with English filling missing descriptions. Without a
+   * TMDB key the page uses the addon's episode fields alone.
+   */
+  async seasonDetails({ id, season }) {
+    const entry = this.state.providers?.tmdb;
+    if (!entry?.key || entry.enabled === false)
+      return { needs: ["tmdb"], episodes: {} };
+    const imdb = String(id || "").split(":")[0];
+    if (!/^tt\d{5,12}$/.test(imdb) || !Number.isInteger(season))
+      throw new Error("العنوان غير صالح");
+    const language = this.state.settings.metadataLanguage || "ar-SA";
+    const meta = this.metas.get(`series:${imdb}`);
+    const cache = (this.seasonCache ||= new Map());
+    const tvIds = (this.tvIds ||= new Map());
+    let tmdbId = meta?.tmdbId || tvIds.get(imdb);
+    if (!tmdbId) {
+      const found = await this.tmdbCall(`find/${imdb}`, {
+        external_source: "imdb_id",
+      });
+      tmdbId = found?.tv_results?.[0]?.id;
+      if (tmdbId) tvIds.set(imdb, tmdbId);
+    }
+    const request = seasonRequest(tmdbId, season, language);
+    if (!request) return { needs: [], episodes: {} };
+    const key = `${tmdbId}:${season}:${language}`;
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < 86400000) return hit.value;
+    let episodes = parseSeason(
+      await this.tmdbCall(request.path, request.params),
+    );
+    if (language !== "en-US" && needsEnglish(episodes)) {
+      const english = await this.tmdbCall(request.path, {
+        language: "en-US",
+      }).catch(() => null);
+      if (english) episodes = fillOverviews(episodes, parseSeason(english));
+    }
+    const value = { needs: [], episodes };
+    if (cache.size > 200) cache.delete(cache.keys().next().value);
+    cache.set(key, { at: Date.now(), value });
     return value;
   }
   async metadataOf(type, id) {

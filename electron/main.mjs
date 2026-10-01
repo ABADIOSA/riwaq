@@ -37,6 +37,13 @@ import { inputConf } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
 import { artworkHost } from "../core/artwork.mjs";
+import {
+  FIVE,
+  PRAYER_NAMES,
+  clockAt,
+  prayerPlace,
+  prayerTimes,
+} from "../core/prayer.mjs";
 import { AI_PROVIDERS } from "../core/ai-search.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
 import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
@@ -161,6 +168,49 @@ const emit = (name, data) => {
   if (hud && !hud.isDestroyed() && hudReady && HUD_EVENTS.has(name))
     hud.webContents.send("riwaq:" + name, data);
 };
+/**
+ * During a viewing: a heads-up five minutes before a prayer and a notice at
+ * its time; when the viewer asked for it, the viewing pauses at the adhan.
+ * Times come from core/prayer.mjs on this machine; nothing is sent anywhere.
+ */
+const prayerSeen = new Set();
+function checkPrayer(now = new Date()) {
+  const s = client?.state.settings;
+  if (!s?.prayerOn || !player?.state.active) return;
+  const place = prayerPlace(s);
+  const times = prayerTimes(now, {
+    ...place,
+    method: s.prayerMethod,
+    asr: s.prayerAsr,
+  });
+  for (const key of FIVE) {
+    const at = times[key];
+    if (!at) continue;
+    const diff = now - at;
+    const id = `${at.toISOString()}:${key}`;
+    const name = PRAYER_NAMES[key];
+    if (
+      s.prayerHeadsUp &&
+      diff >= -5 * 60000 &&
+      diff < -4 * 60000 &&
+      !prayerSeen.has(`${id}:soon`)
+    ) {
+      prayerSeen.add(`${id}:soon`);
+      emit("notice", `أذان ${name} بعد خمس دقائق (${clockAt(at, place.tz)})`);
+    }
+    if (diff >= 0 && diff < 2 * 60000 && !prayerSeen.has(id)) {
+      prayerSeen.add(id);
+      if (s.prayerPause && !player.state.pause) {
+        player.send(["set_property", "pause", true]);
+        emit(
+          "notice",
+          `حان وقت صلاة ${name}. أوقفنا المشاهدة مؤقتاً، وتكمل من نفس اللحظة متى ما رجعت.`,
+        );
+      } else emit("notice", `حان وقت صلاة ${name} (${clockAt(at, place.tz)})`);
+    }
+  }
+  if (prayerSeen.size > 60) prayerSeen.clear();
+}
 const overlayEnabled = () =>
   !process.env.RIWAQ_SMOKE && client?.state.settings.playerOverlay !== false;
 /** Creates the HUD once; it stays hidden until a viewing needs it. */
@@ -866,6 +916,12 @@ const methods = {
     });
   },
   aiTest: () => client.ai.test(),
+  // TMDB's stills and descriptions for one season, with the viewer's key.
+  seasonDetails: (a) =>
+    client.seasonDetails({
+      id: String(a?.id || ""),
+      season: Number(a?.season),
+    }),
   // A title's artwork gallery; keys stay here and only image URLs return.
   artwork: (a) =>
     client.artwork({ type: String(a?.type || ""), id: String(a?.id || "") }),
@@ -1594,6 +1650,7 @@ app
       };
       applyPresence().catch(() => {});
       if (!process.env.RIWAQ_SMOKE) client.updates.start();
+      setInterval(() => checkPrayer(), 15000).unref?.();
       window.on("minimize", () => {
         placeHud();
         if (

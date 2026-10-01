@@ -24,6 +24,7 @@ const allowed = new Set([
   "aiSave",
   "badgePackFetch",
   "artwork",
+  "seasonDetails",
   "openArtwork",
   "aiTest",
   "aiSearch",

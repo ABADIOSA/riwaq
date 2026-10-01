@@ -8,6 +8,7 @@ import "./library.css";
 import "./appearance.css";
 import "./hud.css";
 import "./title.css";
+import "./identity.css";
 import "./collections.css";
 import "./window.css";
 // The same page runs the player HUD in its transparent window (#hud).

@@ -40,6 +40,9 @@ import { shuffleCandidates, shufflePick } from "../../core/shuffle.mjs";
 const shuffled = new Map();
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { spoilerIds } from "../../core/spoilers.mjs";
+import { episodeDetails } from "../../core/season-details.mjs";
+import { runtimeMinutes } from "../../core/prayer.mjs";
+import { EndsAt } from "./Prayer.jsx";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
 import { IconButton, Busy, Empty, ScrollRow } from "./UI.jsx";
@@ -88,6 +91,7 @@ export default function Details({
     [request, setRequest] = useState(0),
     [explore, setExplore] = useState(null),
     [collecting, setCollecting] = useState(false),
+    [seasonInfo, setSeasonInfo] = useState(null),
     // Sources load only once the viewer presses play, unless they asked for
     // them on opening (Details pages settings) or were sent here to choose.
     [showSources, setShowSources] = useState(
@@ -165,6 +169,18 @@ export default function Details({
       current = false;
     };
   }, [videoId, request, showSources]);
+  // TMDB's stills and descriptions for the season on screen (with a key).
+  useEffect(() => {
+    if (meta.type !== "series" || loading) return;
+    let live = true;
+    setSeasonInfo(null);
+    call("seasonDetails", { id: meta.id, season })
+      .then((info) => live && setSeasonInfo(info))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [meta.id, season, loading]);
   // Escape goes back from the page unless a dialog or the viewer has it.
   useEffect(() => {
     const onKey = (e) => {
@@ -239,6 +255,19 @@ export default function Details({
   const currentEpisode = videos.find((v) => v.id === videoId);
   const saved = state.progress[`${meta.type}:${videoId}`];
   const resuming = saved && !isCompleted(saved) && saved.position > 30;
+  // How long the viewing would take from where the viewer would start.
+  const totalMinutes =
+    (currentEpisode &&
+      episodeDetails(
+        currentEpisode,
+        seasonInfo?.episodes?.[currentEpisode.episode],
+      ).runtime) ||
+    runtimeMinutes(meta.runtime) ||
+    (saved?.duration > 0 ? Math.round(saved.duration / 60) : 0);
+  const remainingMinutes = Math.max(
+    0,
+    Math.round(totalMinutes - (resuming ? saved.position / 60 : 0)),
+  );
   const playLabel = currentEpisode
     ? `${resuming ? "متابعة" : "تشغيل"} ${episodeLabel(currentEpisode)}`
     : resuming
@@ -389,6 +418,9 @@ export default function Details({
                 : "أضف إلى الطابور"}
             </button>
           </div>
+          {!loading && (
+            <EndsAt minutes={remainingMinutes} settings={state.settings} />
+          )}
           {error && <p className="inline-warning">{error}</p>}
         </div>
       </div>
@@ -467,58 +499,108 @@ export default function Details({
               <ScrollRow className="episode-list">
                 {videos
                   .filter((v) => (v.season ?? 1) === season)
-                  .map((v) => (
-                    <button
-                      key={v.id}
-                      className={
-                        videoId === v.id ? "episode selected" : "episode"
-                      }
-                      disabled={
-                        v.released && Date.parse(v.released) > Date.now()
-                      }
-                      onClick={() =>
-                        videoId === v.id ? openSources() : setVideoId(v.id)
-                      }
-                      title={
-                        videoId === v.id && !showSources
-                          ? "اضغط مرة أخرى لعرض المصادر"
-                          : undefined
-                      }
-                    >
-                      <span className="episode-number">
-                        {String(v.episode || 1).padStart(2, "0")}
-                      </span>
-                      <span>
-                        <b
-                          dir="auto"
-                          className={
-                            spoilers?.has(v.id) ? "spoiler-title" : undefined
-                          }
-                          title={
-                            spoilers?.has(v.id)
-                              ? "مخفي حتى تصل لهذه الحلقة. مرّر المؤشر لإظهاره."
+                  .map((v) => {
+                    const d = episodeDetails(
+                      v,
+                      seasonInfo?.episodes?.[v.episode],
+                    );
+                    const hidden = spoilers?.has(v.id);
+                    const saved = state.progress[`${meta.type}:${v.id}`];
+                    const done = isCompleted(saved);
+                    const upcoming =
+                      v.released && Date.parse(v.released) > Date.now();
+                    const part =
+                      !done && saved?.duration > 0
+                        ? Math.min(100, (saved.position / saved.duration) * 100)
+                        : 0;
+                    return (
+                      <button
+                        key={v.id}
+                        className={`episode episode-card ${videoId === v.id ? "selected" : ""} ${hidden ? "spoiler" : ""}`}
+                        disabled={upcoming}
+                        onClick={() =>
+                          videoId === v.id ? openSources() : setVideoId(v.id)
+                        }
+                        title={
+                          hidden
+                            ? "مخفية حتى تصل لهذه الحلقة. مرّر المؤشر لإظهارها."
+                            : videoId === v.id && !showSources
+                              ? "اضغط مرة أخرى لعرض المصادر"
                               : undefined
-                          }
-                        >
-                          {v.title || v.name || `الحلقة ${v.episode}`}
-                        </b>
-                        {v.released && (
-                          <small>
-                            {new Date(v.released).toLocaleDateString("ar-SA", {
-                              calendar: "gregory",
-                            })}
+                        }
+                      >
+                        <span className="episode-still">
+                          {d.thumb ? (
+                            <img
+                              src={d.thumb}
+                              alt=""
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              onError={(e) =>
+                                (e.currentTarget.style.display = "none")
+                              }
+                            />
+                          ) : null}
+                          <span className="episode-number">
+                            {String(v.episode || 1).padStart(2, "0")}
+                          </span>
+                          {done && (
+                            <span className="episode-done" title="شاهدتها">
+                              <Check size={14} strokeWidth={3} />
+                            </span>
+                          )}
+                          {videoId === v.id && (
+                            <span className="episode-play">
+                              <Play size={22} fill="currentColor" />
+                            </span>
+                          )}
+                          {part > 0 && (
+                            <span className="progress-line">
+                              <i style={{ width: `${part}%` }} />
+                            </span>
+                          )}
+                        </span>
+                        <span className="episode-text">
+                          <b dir="auto" className="episode-title">
+                            {d.title || `الحلقة ${v.episode}`}
+                          </b>
+                          <small className="episode-facts">
+                            {[
+                              d.runtime ? `${d.runtime} د` : "",
+                              v.released
+                                ? new Date(v.released).toLocaleDateString(
+                                    "ar-SA-u-ca-gregory-nu-latn",
+                                    {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )
+                                : "",
+                              upcoming ? "قريباً" : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                            {d.rating ? (
+                              <em className="episode-rating">
+                                <Star size={11} fill="currentColor" />{" "}
+                                {d.rating}
+                              </em>
+                            ) : null}
                           </small>
-                        )}
-                      </span>
-                      {isCompleted(state.progress[`${meta.type}:${v.id}`]) ? (
-                        <Check size={16} />
-                      ) : videoId === v.id ? (
-                        <Play size={16} />
-                      ) : (
-                        <ChevronLeft size={16} />
-                      )}
-                    </button>
-                  ))}
+                          {d.overview && (
+                            <span
+                              className="episode-overview"
+                              dir="auto"
+                              lang={d.overviewLang || undefined}
+                            >
+                              {d.overview}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
               </ScrollRow>
               {videos.some((v) => v.id === videoId) && (
                 <EpisodeActions

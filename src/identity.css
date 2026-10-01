@@ -1,0 +1,177 @@
+/* Riwaq's own look (appearance "identity": riwaq). A riwaq is an arcade: a
+   row of arches. Cards and stills open as arched windows, section titles
+   carry the eight-pointed star (khatam), and a faint mashrabiya lattice sits
+   behind the sidebar and the hero. Headings use Sakkal Majalla, a Naskh face
+   Windows ships, so no font file is bundled. "classic" keeps the old look. */
+.identity-riwaq {
+  --arch: 50% 26%;
+  --khatam: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpolygon points='12,1 15.22,4.22 19.78,4.22 19.78,8.78 23,12 19.78,15.22 19.78,19.78 15.22,19.78 12,23 8.78,19.78 4.22,19.78 4.22,15.22 1,12 4.22,8.78 4.22,4.22 8.78,4.22'/%3E%3C/svg%3E");
+  --lattice: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cg fill='none' stroke='black' stroke-width='1'%3E%3Cpolygon points='24,11 27.81,14.81 33.19,14.81 33.19,20.19 37,24 33.19,27.81 33.19,33.19 27.81,33.19 24,37 20.19,33.19 14.81,33.19 14.81,27.81 11,24 14.81,20.19 14.81,14.81 20.19,14.81'/%3E%3Cpath d='M0 0L11 11M48 0L37 11M0 48L11 37M48 48L37 37M24 0V8M24 48V40M0 24H8M48 24H40'/%3E%3C/g%3E%3C/svg%3E");
+  --heading-font:
+    "Sakkal Majalla", "Traditional Arabic", var(--font, "Segoe UI"), serif;
+}
+
+/* Arched windows: posters, episode stills, folder tiles and gallery posters. */
+.app.identity-riwaq .poster-image,
+.app.identity-riwaq .episode-card .episode-still,
+.app.identity-riwaq .gallery-posters .gallery-item {
+  border-top-left-radius: var(--arch);
+  border-top-right-radius: var(--arch);
+}
+.identity-riwaq .episode-card .episode-still {
+  --arch: 50% 34%;
+}
+/* A thin gold frame follows the arch on hover, like a carved border. */
+.identity-riwaq .poster-image::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  z-index: 2;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  border-top-left-radius: var(--arch);
+  border-top-right-radius: var(--arch);
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.identity-riwaq .poster-card:hover .poster-image::before,
+.identity-riwaq .poster-card:focus-visible .poster-image::before {
+  opacity: 1;
+}
+
+/* The khatam before every section title. */
+.identity-riwaq .section-heading h2,
+.identity-riwaq .title-facts > h2,
+.identity-riwaq .settings-card > h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.identity-riwaq .section-heading h2::before,
+.identity-riwaq .title-facts > h2::before,
+.identity-riwaq .settings-card > h2::before {
+  content: "";
+  flex: none;
+  width: 15px;
+  height: 15px;
+  background: var(--accent);
+  -webkit-mask: var(--khatam) center / contain no-repeat;
+  mask: var(--khatam) center / contain no-repeat;
+}
+
+/* Naskh headings. Sakkal Majalla draws small, so it is set larger. */
+.identity-riwaq .hero h1,
+.identity-riwaq .detail-content > h1,
+.identity-riwaq .page-heading h1 {
+  font-family: var(--heading-font);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.identity-riwaq .hero h1 {
+  font-size: 64px;
+}
+.identity-riwaq .detail-content > h1 {
+  font-size: 58px;
+}
+.identity-riwaq .page-heading h1 {
+  font-size: 44px;
+}
+.identity-riwaq.hero-compact .hero h1 {
+  font-size: 46px;
+}
+/* The arch would clip a corner badge: watched marks sit lower. */
+.identity-riwaq .episode-done,
+.identity-riwaq .watched-mark {
+  top: auto;
+  bottom: 10px;
+}
+.identity-riwaq .section-heading h2,
+.identity-riwaq .title-facts > h2 {
+  font-family: var(--heading-font);
+  font-size: 27px;
+  font-weight: 700;
+}
+
+/* The mashrabiya lattice behind the sidebar and the hero. */
+.identity-riwaq .sidebar::before,
+.identity-riwaq .hero::before,
+.identity-riwaq .title-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--accent);
+  -webkit-mask: var(--lattice) 0 0 / 48px 48px repeat;
+  mask: var(--lattice) 0 0 / 48px 48px repeat;
+  opacity: 0.045;
+}
+.identity-riwaq .hero::before,
+.identity-riwaq .title-hero::before {
+  z-index: 0;
+  opacity: 0.07;
+  /* The lattice fades out toward the picture. */
+  -webkit-mask:
+    var(--lattice) 0 0 / 48px 48px repeat,
+    linear-gradient(270deg, #000 0%, transparent 55%);
+  -webkit-mask-composite: source-in;
+  mask:
+    var(--lattice) 0 0 / 48px 48px repeat,
+    linear-gradient(270deg, #000 0%, transparent 55%);
+  mask-composite: intersect;
+}
+.identity-riwaq .sidebar > * {
+  position: relative;
+}
+
+/* The active page in the menu is an arch, not a rounded pill. */
+.identity-riwaq .nav-item.active {
+  border-top-left-radius: 50% 40%;
+  border-top-right-radius: 50% 40%;
+}
+.identity-riwaq .nav-item.active::before {
+  display: none;
+}
+.identity-riwaq .nav-item.active::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 12px;
+  width: 9px;
+  height: 9px;
+  background: var(--accent);
+  -webkit-mask: var(--khatam) center / contain no-repeat;
+  mask: var(--khatam) center / contain no-repeat;
+}
+
+/* Arrows of a row: a small arched door. */
+.identity-riwaq .scroll-arrow {
+  border-radius: 50% 50% 12px 12px / 60% 60% 12px 12px;
+}
+
+/* The play button on a title page carries the star. */
+.identity-riwaq .title-play::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  margin-inline-start: 2px;
+  background: currentColor;
+  opacity: 0.55;
+  -webkit-mask: var(--khatam) center / contain no-repeat;
+  mask: var(--khatam) center / contain no-repeat;
+}
+
+/* Keep text and controls above the lattice. */
+.identity-riwaq .hero-content,
+.identity-riwaq .hero-dots,
+.identity-riwaq .title-hero .detail-content {
+  position: relative;
+  z-index: 1;
+}
+.identity-riwaq .nav-item {
+  position: relative;
+}
+.identity-riwaq .nav-item.active::after {
+  top: 50%;
+  margin-top: -4.5px;
+}

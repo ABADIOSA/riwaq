@@ -390,6 +390,38 @@ export default function AppearanceStudio({ state, update, part = "" }) {
       )}
 
       {show("interface") && (
+        <section className="settings-card identity-picker">
+          <h2>هوية الواجهة</h2>
+          <p>
+            «رِواق» هي هوية برنامجنا: بطاقات بأعلى مقوّس مثل نوافذ الرواق، ونجمة
+            ثمانية بجانب العناوين، ونقش مشربية خفيف، وعناوين بخط النسخ.
+            «كلاسيكي» يرجّع البطاقات المستطيلة.
+          </p>
+          <div className="identity-options" role="radiogroup">
+            {[
+              ["riwaq", "رِواق", "أقواس ومشربيات ونجمة ثمانية"],
+              ["classic", "كلاسيكي", "بطاقات مستطيلة بلا زخارف"],
+            ].map(([id, title, caption]) => (
+              <button
+                key={id}
+                role="radio"
+                aria-checked={draft.identity === id}
+                className={draft.identity === id ? "selected" : ""}
+                onClick={() => change({ identity: id })}
+              >
+                <span className={`identity-sample sample-${id}`}>
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <b>{title}</b>
+                <small>{caption}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {show("interface") && (
         <section className="settings-card">
           <h2>الصفحات والتنقل</h2>
           <div className="layout-choices">

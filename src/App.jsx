@@ -37,6 +37,7 @@ import { IconButton, Busy, Empty, Poster, Rail } from "./components/UI.jsx";
 import Details from "./components/Details.jsx";
 import { ExploreModal, PeopleRow } from "./components/Credits.jsx";
 import AiSearchRow from "./components/AiSearch.jsx";
+import { PrayerChip } from "./components/Prayer.jsx";
 import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
 import Addons from "./components/Addons.jsx";
@@ -746,6 +747,13 @@ export default function App() {
               />
               <kbd>Ctrl K</kbd>
             </form>
+            <PrayerChip
+              settings={state.settings}
+              onSettings={(tab) => {
+                setSettingsTab(tab);
+                navigate("settings");
+              }}
+            />
             <IconButton
               title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
               onClick={() => act("localVideo")}
