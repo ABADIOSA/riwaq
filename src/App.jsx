@@ -57,6 +57,7 @@ import { PrayerChip } from "./components/Prayer.jsx";
 import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
+import TraktSuggestions from "./components/Suggestions.jsx";
 import {
   groupRows,
   groupsBesideFeed,
@@ -70,7 +71,7 @@ import Account from "./components/Account.jsx";
 import PlayerView from "./components/PlayerView.jsx";
 import PlayerPanel from "./components/PlayerPanel.jsx";
 import Profiles from "./components/Profiles.jsx";
-import { arrangeRows, safeHomeSections } from "../core/home.mjs";
+import { arrangeRows, visibleHomeSections } from "../core/home.mjs";
 // Rooms opened now and then load when first visited, so the start of the
 // app parses only what home needs.
 const Addons = lazy(() => import("./components/Addons.jsx"));
@@ -467,6 +468,16 @@ export default function App() {
     [],
   );
   const moreStable = useCallback((row) => latest.current.more(row), []);
+  const noticeStable = useCallback((m) => latest.current.notice(m), []);
+  const settingsStable = useCallback((tab) => latest.current.settings(tab), []);
+  // Trakt's state for the suggestions section, stable between state events.
+  const traktAccount = (state.integrations || []).find((i) => i.id === "trakt");
+  const traktConnected = !!traktAccount?.connected;
+  const traktUser = traktAccount?.username || "";
+  const traktState = useMemo(
+    () => ({ connected: traktConnected, username: traktUser }),
+    [traktConnected, traktUser],
+  );
   const favoriteStable = useCallback(
     (meta) => latest.current.favorite(meta),
     [],
@@ -528,7 +539,10 @@ export default function App() {
     finishedCount,
     state.favorites.length,
   ]);
-  const homeSections = safeHomeSections(state.settings.homeSections);
+  const homeSections = visibleHomeSections(
+    state.settings.homeSections,
+    state.settings.homeSeen,
+  );
   // Finished films leave the rows the moment they are finished, without a
   // reload. Search keeps them, as Nuvio HTPC does.
   // Progress is saved every few seconds while watching; the set of finished
@@ -620,6 +634,11 @@ export default function App() {
   };
   latest.current.favorite = favorite;
   latest.current.more = more;
+  latest.current.notice = notice;
+  latest.current.settings = (tab) => {
+    setSettingsTab(tab);
+    navigate("settings");
+  };
   const loadMore = async () => {
     if (paging || !rows[0]) return;
     setPaging(true);
@@ -1072,6 +1091,14 @@ export default function App() {
                                 metas={continueRail.metas}
                                 progressMap={continueRail.progressMap}
                                 onOpen={openStable}
+                              />
+                            )}
+                            {id === "suggestions" && (
+                              <TraktSuggestions
+                                trakt={traktState}
+                                onOpen={openStable}
+                                onSettings={settingsStable}
+                                notice={noticeStable}
                               />
                             )}
                             {id === "upnext" && (

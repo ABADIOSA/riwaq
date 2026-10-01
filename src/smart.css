@@ -57,3 +57,55 @@
   font-size: 13px;
   color: var(--muted, #9aa0a8);
 }
+
+/* Trakt's suggestions (Suggestions.jsx). */
+.suggest-card {
+  position: relative;
+  flex: none;
+}
+.suggest-hide {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid #ffffff2a;
+  background: #0b0d10cc;
+  color: #e9ebee;
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+.suggest-card:hover .suggest-hide,
+.suggest-hide:focus-visible {
+  opacity: 1;
+}
+.suggest-hide:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.suggest-invite {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border: 1px dashed var(--line, #ffffff1f);
+  border-radius: 14px;
+  color: var(--muted, #9aa0a8);
+}
+.suggest-invite svg {
+  color: var(--accent);
+  flex: none;
+}
+.suggest-invite p {
+  margin: 0;
+  flex: 1;
+}
+.suggest-empty {
+  padding: 12px 0;
+}

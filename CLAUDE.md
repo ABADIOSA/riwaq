@@ -48,6 +48,12 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - Without the key, `CINEMETA_FEED` holds Cinemeta's public `top` catalogs, overall and by genre (`cinemetaUrl`, paged by `skip`).
   - Rows travel through the normal pooled loader as plan entries `feed:<id>`. `catalogPlan({ feed: true })` puts them before the addon catalogs (home only), a `feed:` `catalogKey` plans that row alone, and `catalog` serves it with `page` for TMDB and `skip` for Cinemeta.
   - `feedHidden` hides rows, validated against every known row ID. The interface sees keys and labels only.
+- Trakt suggestions (`Integrations.recommendations`, `hideRecommendation`, `Suggestions.jsx`, home section `suggestions`):
+  - The data is read from `api.trakt.tv/recommendations/{movies|shows}` with the signed-in token, cached 30 minutes per account and cleared on disconnect. Titles without an IMDb ID are dropped.
+  - A reply may only fill the account that asked.
+  - "مو مهتم" sends `DELETE /recommendations/{kind}/{imdb}`, the only write, made only on the viewer's click. `fetchJson` treats an empty body as `null`.
+  - IPC `traktSuggestions` and `traktHideSuggestion` are main-window only.
+  - New home sections reach saved arrangements through `visibleHomeSections(homeSections, homeSeen)`. Every writer of `homeSections` also writes `homeSeen`, so a section the viewer hid stays hidden.
 - Riwaq's sections (`core/smart-groups.mjs`, `SmartHome.jsx`):
   - Grouping: `groupOf` puts each addon catalog row in one of `SMART_GROUPS` (foryou, movies, series, arabic, anime, live, sports, videos, other). It looks at the declared type, then words in the catalog and addon names, then the majority type of its titles (list addons name types after lists).
   - Home layout: `homeGrouping` is `auto` (the default: Riwaq's rows until the profile has collections, then one row per catalog), `riwaq`, `groups` or `rows`, resolved by `homeLayout`.

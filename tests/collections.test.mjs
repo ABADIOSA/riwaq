@@ -453,7 +453,7 @@ test("the home page follows the viewer's arrangement", () => {
   assert.deepEqual(next.homeSections, ["catalogs"]);
   assert.deepEqual(next.homeOrder, [a]);
   assert.deepEqual(next.homeHidden, []);
-  assert.equal(DEFAULT_SETTINGS.homeSections.length, 7);
+  assert.equal(DEFAULT_SETTINGS.homeSections.length, 8);
 });
 
 test("collections and Nuvio actions are main-window only", () => {

@@ -958,6 +958,16 @@ const methods = {
   integrationDisconnect: (a) => client.integrations.disconnect(a.id),
   traktLogin: (a) => client.integrations.begin(a?.id || "trakt"),
   traktPoll: (a) => client.integrations.poll(a?.id || "trakt"),
+  traktSuggestions: (a) =>
+    client.integrations.recommendations(
+      a?.kind === "shows" ? "shows" : "movies",
+      { force: a?.force === true },
+    ),
+  traktHideSuggestion: (a) =>
+    client.integrations.hideRecommendation(
+      a?.kind === "shows" ? "shows" : "movies",
+      String(a?.id || ""),
+    ),
   letterboxdImport: async () => {
     const r = await dialog.showOpenDialog(window, {
       title: "اختيار تصدير Letterboxd",

@@ -103,6 +103,8 @@ export async function fetchJson(url, init = {}) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
     if (text.length > 20_000_000) throw new Error("Response too large");
+    // A 204 or an empty body (Trakt's deletes) is a success with nothing in it.
+    if (!text.trim()) return null;
     return JSON.parse(text);
   } catch (error) {
     // URLs may contain addon credentials. Never include them in errors or logs.

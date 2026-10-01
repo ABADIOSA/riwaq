@@ -448,6 +448,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.activeFilter = "";
   if (Array.isArray(input.homeSections))
     next.homeSections = safeHomeSections(input.homeSections);
+  if (Array.isArray(input.homeSeen))
+    next.homeSeen = safeHomeSections(input.homeSeen);
   for (const key of ["homeOrder", "homeHidden"])
     if (Array.isArray(input[key])) next[key] = safeCatalogKeys(input[key]);
   if (input.subtitleStyle && typeof input.subtitleStyle === "object")

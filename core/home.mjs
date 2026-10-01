@@ -10,6 +10,7 @@ export const HOME_SECTIONS = [
   ["countdowns", "العد التنازلي"],
   ["continue", "نكمل الحكاية"],
   ["upnext", "الحلقات التالية"],
+  ["suggestions", "اقتراحات تراكت"],
   ["collections", "المجموعات المثبّتة"],
   ["services", "خدماتك للبث"],
   ["catalogs", "كتالوجات الإضافات"],
@@ -22,6 +23,36 @@ export function safeHomeSections(value) {
   if (!Array.isArray(value)) return [...DEFAULT_HOME_SECTIONS];
   const known = new Set(DEFAULT_HOME_SECTIONS);
   return [...new Set(value.filter((id) => known.has(id)))];
+}
+
+// The sections every profile saved before `homeSeen` existed (0.25).
+const LEGACY_SEEN = [
+  "hero",
+  "countdowns",
+  "continue",
+  "upnext",
+  "collections",
+  "services",
+  "catalogs",
+];
+
+/**
+ * The sections to show. A section added after the viewer last arranged home
+ * (it is not in `seen`) joins at its default place, so a saved arrangement
+ * never hides a new feature; one the viewer removed knowingly stays removed.
+ */
+export function visibleHomeSections(stored, seen) {
+  const list = safeHomeSections(stored);
+  if (!Array.isArray(stored)) return list;
+  const known = Array.isArray(seen) ? seen : LEGACY_SEEN;
+  for (const [index, id] of DEFAULT_HOME_SECTIONS.entries()) {
+    if (known.includes(id) || list.includes(id)) continue;
+    const before = DEFAULT_HOME_SECTIONS.slice(0, index)
+      .reverse()
+      .find((x) => list.includes(x));
+    list.splice(before ? list.indexOf(before) + 1 : 0, 0, id);
+  }
+  return list;
 }
 
 /** A list of catalog keys, deduplicated and bounded. */

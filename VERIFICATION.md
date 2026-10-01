@@ -10,7 +10,7 @@ The owner asked for a default home organisation for viewers who build no collect
 
 Executed:
 
-- `npm test`: **394 passing, 0 failing**. New since 0.24.1: 4 in `tests/smart-groups.test.mjs` and 5 in `tests/feed.test.mjs`. They cover:
+- `npm test` before the Trakt section: **394 passing, 0 failing**. New since 0.24.1: 4 in `tests/smart-groups.test.mjs` and 5 in `tests/feed.test.mjs`. They cover:
   - the owner's catalogs classified into groups;
   - layouts with and without collections;
   - the groups kept beside the feed;
@@ -31,7 +31,26 @@ Executed:
 - Found by the render and fixed: a feed row's full page planned no catalog, because `catalogPlan` with a `catalogKey` only searched addons.
 - The earlier Discover group tabs render from the first version still applies: 10 tabs with counts, and "عربي" left only the Arabic catalogs.
 
-Not executed: real TMDB or Cinemeta responses (Cinemeta is blocked from this build environment), the first-load cost of matching TMDB rows to IMDb IDs on a real key, Windows.
+Trakt suggestions (asked for after the feed: "a section of suggestions linked to Trakt"):
+
+- `tests/trakt-suggestions.test.mjs` (4 tests) covers:
+  - the request URL and bearer token;
+  - dropping titles without an IMDb ID;
+  - the 30-minute cache and `force`;
+  - "not interested" sending `DELETE /recommendations/movies/tt…` and removing the title;
+  - nothing requested without a token;
+  - a reply refused when the account changes mid-request;
+  - disconnect clearing the cache;
+  - the section joining a pre-0.25 arrangement after "upnext" but not one saved with `homeSeen`;
+  - the IPC staying off the HUD bridge.
+- The section-count test now expects 8.
+- `npm test`: **398 passing, 0 failing**.
+- Rendered in Chromium with a mocked bridge and a profile whose saved `homeSections` predates the section:
+  - Connected: the section appeared after "upnext" with 8 film cards. "مو مهتم" removed one and showed "لن يقترح تراكت «…» بعد الآن". The series chip showed 5 cards, "تحديث" asked with `force`, and a card opened its title page.
+  - Not connected: the invitation's "اربط تراكت" opened the settings.
+  - No page errors, no overflow.
+
+Not executed: real TMDB or Cinemeta responses (Cinemeta is blocked from this build environment), the first-load cost of matching TMDB rows to IMDb IDs on a real key, a real Trakt account's suggestions, Windows.
 
 ## 0.24.1 — Discover without a sideways scrollbar, "عرض الكل" restored
 

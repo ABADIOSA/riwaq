@@ -100,7 +100,7 @@ import {
   HOME_SECTIONS,
   arrangeRows,
   moveCatalog,
-  safeHomeSections,
+  visibleHomeSections,
 } from "../../core/home.mjs";
 
 /**
@@ -116,13 +116,19 @@ function HomeEditor({ state, update, notice }) {
       .then(setPlan)
       .catch(() => setPlan([]));
   }, [state.addons.map((a) => `${a.key}:${a.enabled}`).join("|")]);
-  const visible = safeHomeSections(s.homeSections);
+  const visible = visibleHomeSections(s.homeSections, s.homeSeen);
   const sections = [
     ...visible,
     ...HOME_SECTIONS.map(([id]) => id).filter((id) => !visible.includes(id)),
   ];
   const label = Object.fromEntries(HOME_SECTIONS);
-  const saveSections = (next) => update("settings", { homeSections: next });
+  // Saving records every section that exists now, so a section added in a
+  // later version still appears until the viewer hides it.
+  const saveSections = (next) =>
+    update("settings", {
+      homeSections: next,
+      homeSeen: HOME_SECTIONS.map(([id]) => id),
+    });
   const moveSection = (id, direction) => {
     const list = [...visible];
     const i = list.indexOf(id);
@@ -375,6 +381,7 @@ function HomeEditor({ state, update, notice }) {
               homeOrder: [],
               homeHidden: [],
               homeSections: HOME_SECTIONS.map(([id]) => id),
+              homeSeen: HOME_SECTIONS.map(([id]) => id),
             })) && notice("عادت الرئيسية لترتيبها الأصلي")
           }
         >
