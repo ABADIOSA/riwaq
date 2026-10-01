@@ -97,7 +97,7 @@ The owner asked for the latest betas of four apps to be compared: the best featu
 ## API and format references
 
 - [TMDB application auth](https://developer.themoviedb.org/docs/authentication-application), [OMDb](https://www.omdbapi.com/), [MDBList](https://api.mdblist.com/), [Fanart API](https://fanart.tv/api-docs/api-v3/).
-- [Trakt auth](https://docs.trakt.tv/reference/auth), [device code](https://docs.trakt.tv/reference/postoauthdevicecode), [device polling](https://docs.trakt.tv/reference/postoauthdevicetoken). Token endpoints use `auth.trakt.tv`; refresh tokens rotate and are single-use.
+- [Trakt auth](https://docs.trakt.tv/reference/auth), [device code](https://docs.trakt.tv/reference/postoauthdevicecode), [device polling](https://docs.trakt.tv/reference/postoauthdevicetoken). Token endpoints use `auth.trakt.tv`; refresh tokens rotate and are single-use. Trakt's API is behind Cloudflare and requires a User-Agent identifying the app; without one, requests (including the device code) are refused with 403.
 - [Letterboxd API availability](https://letterboxd.com/api-beta/): access requires approval. Public lists use the explicitly disclosed [Stremboxd](https://stremboxd.com) bridge; CSV uses the user's official export and TMDB matching.
 - [MPV manual](https://mpv.io/manual/stable/) for IPC, `--wid` embedding, scalers, `ab-loop`, chapters and tone mapping. [Koffi](https://koffi.dev/pointers) for Win32 pointer handling.
 - [XMLTV DTD](https://github.com/XMLTV/xmltv/blob/master/xmltv.dtd) for the guide format, and the M3U `#EXTINF` attribute conventions (`tvg-id`, `group-title`, `catchup`, `catchup-source`) as used by IPTV playlist providers.

@@ -985,8 +985,8 @@ const methods = {
       omdb: "https://www.omdbapi.com/apikey.aspx",
       mdblist: "https://mdblist.com/preferences/",
       fanart: "https://fanart.tv/get-an-api-key/",
-      trakt: "https://app.trakt.tv/settings/apps",
-      traktActivate: "https://auth.trakt.tv/activate",
+      trakt: "https://trakt.tv/oauth/applications",
+      traktActivate: "https://trakt.tv/activate",
       simkl: "https://simkl.com/settings/developer/",
       simklActivate: "https://simkl.com/pin/",
       letterboxd: "https://letterboxd.com/settings/data/",
@@ -1727,6 +1727,11 @@ function cleanError(error) {
   const message = error?.message || "";
   if (/[\u0600-\u06FF]/.test(message) && !/https?:|\\\\/.test(message))
     return message;
+  // A bare status code carries no address, and tells the viewer (and us)
+  // far more than the generic sentence.
+  const status = /^HTTP (\d{3})$/.exec(message)?.[1];
+  if (status)
+    return `تعذّر إكمال العملية: ردّ الخادم برمز ${status}. تحقق من الاتصال والإعدادات ثم أعد المحاولة.`;
   return "تعذّر إكمال العملية. تحقق من الاتصال والإعدادات ثم أعد المحاولة.";
 }
 app.on("window-all-closed", () => app.quit());

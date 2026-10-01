@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.25.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.25.1-win-x64.exe`.
 
 ## Design and invariants
 
@@ -19,7 +19,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Persist secrets using Electron safeStorage on Windows; never add a plaintext fallback or commit profiles, addon exports or credentials.
 - Providers are optional. A failing data provider must not block addon metadata or playback. Reject credential-bearing API redirects.
 - Stremio sync is additive, one-way import. Do not claim two-way sync.
-- Trakt uses `auth.trakt.tv` for device/token endpoints and `api.trakt.tv` for data. Respect polling intervals, expiry, 429 backoff and single-use refresh-token rotation.
+- Trakt uses `auth.trakt.tv` for device/token endpoints and `api.trakt.tv` for data. Respect polling intervals, expiry, 429 backoff and single-use refresh-token rotation. Trakt sits behind Cloudflare, which answers 403 to requests without a User-Agent naming the app: every Trakt (and Simkl) request carries `Integrations.traktHeaders()` (`Riwaq/<version>`). The activation page is the `verification_url` Trakt returns, if it is HTTPS on trakt.tv, otherwise `https://trakt.tv/activate`. `traktProblem` turns Trakt statuses into Arabic sentences and keeps `status` on the error (scrobbling reads 409 from it). Main's `cleanError` shows a bare status code instead of the generic sentence.
 - Tracker history is opt-in and account-scoped. Do not silently send playback activity. Disconnect must remove credentials and queued writes.
 - Letterboxd uses a disclosed public Stremboxd addon bridge or CSV import matched with TMDB. It is NOT official unrestricted Letterboxd OAuth. Do not request Letterboxd passwords.
 - Reference apps were studied for behavior; their implementation code is not copied into this MIT application. Harbor is MIT, Nuvio Desktop and Stremio Community v5 are GPL-3.0. Keep third-party notices and MPV build provenance.

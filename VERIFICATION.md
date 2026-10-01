@@ -1,5 +1,27 @@
 # Verification — Riwaq 0.20.0
 
+## 0.25.1 — Trakt connection
+
+The owner reported problems connecting to and talking with Trakt, with a screenshot of the generic toast "تعذّر إكمال العملية. تحقق من الاتصال والإعدادات ثم أعد المحاولة."
+
+- That sentence comes from main's `cleanError`. It replaces any error message that is not Arabic, so Trakt's "HTTP 4xx" answers were hidden.
+- Trakt, its documentation and its developer site are blocked from this build environment (egress proxy). The diagnosis therefore rests on web search results and on the reference apps.
+- Trakt's documentation ("Required Headers") and developer reports say that Trakt's API sits behind Cloudflare and refuses requests without a User-Agent with 403, including `/oauth/device/code`. Riwaq sent no User-Agent on any Trakt request.
+- The same sources confirm that OAuth requests now belong on `auth.trakt.tv`, which Riwaq already used. Harbor and Nuvio in `refs` still use `api.trakt.tv` for some of them.
+- The activation page Riwaq showed, `auth.trakt.tv/activate`, was not Trakt's `verification_url`. The apps-page link `app.trakt.tv/settings/apps` was replaced with the documented `trakt.tv/oauth/applications`.
+
+Executed:
+
+- `npm test`: **402 passing, 0 failing** (398 + 4 in `tests/trakt-connection.test.mjs`). They cover:
+  - device code, API and refresh requests all carrying `User-Agent: Riwaq/<version> (+https://github.com/ABADIOSA/riwaq)` with the API key and version headers;
+  - the activation page taken from Trakt's reply only when it is HTTPS on trakt.tv;
+  - 403 at connect, 401, 429, 5xx and other codes read as Arabic sentences, with `status` kept;
+  - device polling 409/410/418 explained;
+  - main's `cleanError` showing bare status codes.
+- The scrobble test (409 means already recorded) passes, now reading `error.status`.
+
+Not executed: a real Trakt account (blocked here), Windows.
+
 ## 0.25.0 — home by Riwaq's own categories, Discover by groups
 
 The owner asked for a default home organisation for viewers who build no collections or who have so many addons that one row per catalog spoils the page, and the same for Discover's tabs (screenshot: arabcity-akwam, wecima, youtube, Berserk, DC, Marvel, Starwars, Sport…).
