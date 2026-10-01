@@ -42,7 +42,7 @@ import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { spoilerIds } from "../../core/spoilers.mjs";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
-import { IconButton, Busy, Empty } from "./UI.jsx";
+import { IconButton, Busy, Empty, ScrollRow } from "./UI.jsx";
 import { call } from "../lib/api.js";
 import {
   queueKey,
@@ -464,7 +464,7 @@ export default function Details({
                   ))}
                 </select>
               </div>
-              <div className="episode-list">
+              <ScrollRow className="episode-list">
                 {videos
                   .filter((v) => (v.season ?? 1) === season)
                   .map((v) => (
@@ -519,7 +519,7 @@ export default function Details({
                       )}
                     </button>
                   ))}
-              </div>
+              </ScrollRow>
               {videos.some((v) => v.id === videoId) && (
                 <EpisodeActions
                   meta={meta}

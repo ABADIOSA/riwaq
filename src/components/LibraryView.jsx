@@ -9,7 +9,7 @@ import {
   Check,
   Search,
 } from "lucide-react";
-import { Empty, Poster, Rail, IconButton } from "./UI.jsx";
+import { Empty, Poster, Rail, IconButton, ScrollRow } from "./UI.jsx";
 import {
   continueWatching,
   latestProgress,
@@ -107,7 +107,11 @@ export default function LibraryView({ state, update, onOpen, notice }) {
           <span>بانتظار المشاهدة</span>
         </div>
       </div>
-      <div className="library-tabs" role="tablist" aria-label="أقسام المكتبة">
+      <ScrollRow
+        className="library-tabs"
+        role="tablist"
+        aria-label="أقسام المكتبة"
+      >
         {[
           ["saved", "قائمتي"],
           ["continue", "متابعة المشاهدة"],
@@ -128,7 +132,7 @@ export default function LibraryView({ state, update, onOpen, notice }) {
             {id !== "calendar" && <small>{counts[id]}</small>}
           </button>
         ))}
-      </div>
+      </ScrollRow>
       {tab !== "calendar" && (
         <div className="library-toolbar">
           <label className="library-search">

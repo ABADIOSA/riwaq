@@ -81,6 +81,9 @@
 .title-body > section {
   margin: 14px 0;
 }
+.title-body > * {
+  min-width: 0;
+}
 .sources-closed {
   display: flex;
   flex-wrap: wrap;

@@ -2916,3 +2916,70 @@ em.tag-custom.badge-bordered {
 em.tag-custom.has-text:not(.badge-outlined) {
   background: var(--badge) !important;
 }
+
+/* Rows moved with arrows (ScrollRow in UI.jsx), not a scrollbar. */
+.scroll-row-wrap {
+  position: relative;
+  /* A grid or flex parent must not stretch the row to its content. */
+  min-width: 0;
+  max-width: 100%;
+}
+.scroll-row {
+  scrollbar-width: none !important;
+}
+.scroll-row::-webkit-scrollbar {
+  display: none;
+}
+.scroll-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  margin-top: -21px;
+  border-radius: 50%;
+  border: 1px solid #ffffff26;
+  background: color-mix(in srgb, var(--bg, #101215) 82%, transparent);
+  color: var(--text, #f1f2f4);
+  box-shadow: 0 6px 18px #0009;
+  backdrop-filter: blur(8px);
+  opacity: 0.88;
+  transition:
+    opacity 0.15s,
+    transform 0.15s,
+    border-color 0.15s;
+}
+.scroll-row-wrap:hover .scroll-arrow,
+.scroll-arrow:focus-visible {
+  opacity: 1;
+}
+.scroll-arrow:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: scale(1.08);
+}
+/* Right-to-left: going back sits on the right, going forward on the left. */
+.scroll-back {
+  inset-inline-start: -6px;
+}
+.scroll-forward {
+  inset-inline-end: -6px;
+}
+/* Small rows (tabs, folder tiles, episodes) get smaller arrows. */
+.scroll-row-wrap:has(> .library-tabs) .scroll-arrow,
+.scroll-row-wrap:has(> .folder-source-tabs) .scroll-arrow,
+.scroll-row-wrap:has(> .folder-siblings) .scroll-arrow,
+.scroll-row-wrap:has(> .episode-list) .scroll-arrow {
+  width: 32px;
+  height: 32px;
+  margin-top: -16px;
+}
+/* A poster row's arrows sit on the pictures, not on the titles below. */
+.scroll-row-wrap:has(> .poster-row) .scroll-arrow {
+  top: calc(50% - 22px);
+}
+.reduced-motion .scroll-arrow {
+  transition: none;
+}

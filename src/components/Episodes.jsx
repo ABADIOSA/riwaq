@@ -1,6 +1,7 @@
 import React from "react";
 import { Film, Sparkles, CalendarDays, Check, Tv } from "lucide-react";
 import { imgUrl } from "../lib/helpers.js";
+import { ScrollRow } from "./UI.jsx";
 import { groupByDay } from "../../core/episodes.mjs";
 import { arabicCount, EPISODES } from "../../core/arabic.mjs";
 
@@ -37,7 +38,7 @@ export function UpNextRail({ items, onOpen }) {
           <span>من المسلسلات التي تتابعها</span>
         </div>
       </div>
-      <div className="poster-row">
+      <ScrollRow className="poster-row">
         {items.slice(0, 20).map((item) => (
           <button
             key={`${item.meta.type}:${item.meta.id}`}
@@ -80,7 +81,7 @@ export function UpNextRail({ items, onOpen }) {
             )}
           </button>
         ))}
-      </div>
+      </ScrollRow>
     </section>
   );
 }

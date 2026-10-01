@@ -11,7 +11,7 @@ import {
   User,
 } from "lucide-react";
 import { call } from "../lib/api.js";
-import { Busy, Empty, Modal, Poster } from "./UI.jsx";
+import { Busy, Empty, Modal, Poster, ScrollRow } from "./UI.jsx";
 import { mapTiles } from "../../core/credits.mjs";
 import { arabicCount, ACTORS, AWARDS, WORKS } from "../../core/arabic.mjs";
 import { awardFamilies } from "../../core/awards.mjs";
@@ -81,7 +81,7 @@ export function CastRail({ credits, onExplore }) {
         <h2>طاقم التمثيل</h2>
         <span>{arabicCount(cast.length, ACTORS)}</span>
       </div>
-      <div className="credits-cast-row">
+      <ScrollRow className="credits-cast-row">
         {cast.map((person, i) => (
           <button
             key={`${person.qid || person.tmdb || person.name}:${i}`}
@@ -94,7 +94,7 @@ export function CastRail({ credits, onExplore }) {
             {person.character && <small dir="auto">{person.character}</small>}
           </button>
         ))}
-      </div>
+      </ScrollRow>
     </section>
   );
 }
@@ -254,7 +254,7 @@ export function CollectionRails({ credits, onOpenTitle }) {
         </h2>
         <span>{arabicCount(c.works.length, WORKS)}</span>
       </div>
-      <div className="poster-row">
+      <ScrollRow className="poster-row">
         {c.works.map((work, i) => (
           <div
             key={work.id}
@@ -275,7 +275,7 @@ export function CollectionRails({ credits, onOpenTitle }) {
             {work.current && <small>تتصفحه الآن</small>}
           </div>
         ))}
-      </div>
+      </ScrollRow>
     </section>
   ));
 }
@@ -300,7 +300,7 @@ export function PeopleRow({ query, onExplore }) {
         <h2>أشخاص</h2>
         <span>من Wikidata</span>
       </div>
-      <div className="credits-cast-row">
+      <ScrollRow className="credits-cast-row">
         {people.map((person) => (
           <button
             key={person.qid}
@@ -314,7 +314,7 @@ export function PeopleRow({ query, onExplore }) {
             )}
           </button>
         ))}
-      </div>
+      </ScrollRow>
     </section>
   );
 }

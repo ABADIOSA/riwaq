@@ -1,4 +1,21 @@
-# Verification — Riwaq 0.17.1
+# Verification — Riwaq 0.18.0
+
+## 0.18.0 — arrows instead of horizontal scrollbars
+
+The owner asked for the horizontal scrollbar to be replaced by arrows that reveal the cast and titles a row could not show.
+
+Executed:
+
+- `npm test`: **353 passing, 0 failing**. No logic changed in core.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge at 980×680 and 1440×960:
+  - A 40-title catalog row (previously cut to 14) showed only "التالي" at the start. One press moved it 619 px at 980 wide and 983 px at 1440. It then showed both arrows, and at the end only "السابق"; "السابق" moved it back.
+  - 24 actors and 30 episodes on a title page each moved with their arrows.
+  - No scrollbar remained: offsetHeight equalled clientHeight on every row.
+  - The first render found the cast row stretched to its content inside the page grid (6740 px wide, nothing to scroll). `min-width: 0` on the wrapper and on the title page's children fixed it before this result.
+  - No page errors, no horizontal overflow.
+
+Not executed: Windows, a touch screen.
 
 ## 0.17.1 — update checks that survive GitHub's rate limit
 

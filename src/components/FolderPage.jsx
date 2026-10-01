@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
-import { Busy, Empty, Poster, Rail } from "./UI.jsx";
+import { Busy, Empty, Poster, Rail, ScrollRow } from "./UI.jsx";
 import { Face, FOLDERS, SOURCES, TITLES, n, noteText } from "./Collections.jsx";
 import { folderItems, mergePage, randomPick } from "../../core/folder-view.mjs";
 import { watchedTitles, withoutWatched } from "../../core/library.mjs";
@@ -220,7 +220,11 @@ export default function FolderPage({
       </header>
 
       {siblings.length > 1 && (
-        <nav className="folder-siblings" aria-label="مجلدات المجموعة">
+        <ScrollRow
+          as="nav"
+          className="folder-siblings"
+          aria-label="مجلدات المجموعة"
+        >
           {siblings.map((f) => (
             <button
               key={f.id}
@@ -234,7 +238,7 @@ export default function FolderPage({
               <span dir="auto">{f.title}</span>
             </button>
           ))}
-        </nav>
+        </ScrollRow>
       )}
 
       <div className="folder-toolbar">
@@ -288,7 +292,7 @@ export default function FolderPage({
       </div>
 
       {layout === "grid" && (filled.length > 1 || titles.length > 0) && (
-        <div className="folder-source-tabs" role="tablist">
+        <ScrollRow className="folder-source-tabs" role="tablist">
           <button
             role="tab"
             aria-selected={tab === "all"}
@@ -319,7 +323,7 @@ export default function FolderPage({
               <small>{row.metas.length}</small>
             </button>
           ))}
-        </div>
+        </ScrollRow>
       )}
 
       {data === null ? (

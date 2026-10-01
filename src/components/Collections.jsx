@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
-import { Busy, Empty, Modal, Poster, Rail } from "./UI.jsx";
+import { Busy, Empty, Modal, Poster, Rail, ScrollRow } from "./UI.jsx";
 import {
   SHAPES,
   TMDB_PRESETS,
@@ -153,7 +153,7 @@ export function PinnedCollections({ state, onOpen }) {
           عرض المجموعة
         </button>
       </div>
-      <div className="folder-row">
+      <ScrollRow className="folder-row">
         {c.folders.map((f) => (
           <button
             key={f.id}
@@ -164,7 +164,7 @@ export function PinnedCollections({ state, onOpen }) {
             <strong dir="auto">{f.title}</strong>
           </button>
         ))}
-      </div>
+      </ScrollRow>
     </section>
   ));
 }
