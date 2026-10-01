@@ -6,6 +6,7 @@ import {
   Play,
   Star,
   ChevronLeft,
+  ChevronRight,
   Check,
 } from "lucide-react";
 import { WatchedContext } from "../lib/watched.js";
@@ -128,8 +129,89 @@ export function Poster({ meta, onOpen, progress }) {
     </button>
   );
 }
+/**
+ * A horizontal row moved with arrows instead of a scrollbar. Each arrow
+ * moves most of a screen; an arrow hides at its end of the row, and both
+ * hide when everything fits. Wheel, touchpad and keyboard focus still
+ * scroll it. The page is right-to-left, so "next" moves toward the left.
+ */
+export function ScrollRow({
+  as: Tag = "div",
+  className = "",
+  children,
+  ...rest
+}) {
+  const ref = useRef(null);
+  const [edges, setEdges] = useState({ start: true, end: true });
+  const measure = () => {
+    const el = ref.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const pos = Math.abs(el.scrollLeft);
+    const next = { start: pos <= 2, end: max <= 2 || pos >= max - 2 };
+    setEdges((was) =>
+      was.start === next.start && was.end === next.end ? was : next,
+    );
+  };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const resize = new ResizeObserver(measure);
+    resize.observe(el);
+    const mutate = new MutationObserver(measure);
+    mutate.observe(el, { childList: true });
+    return () => {
+      el.removeEventListener("scroll", measure);
+      resize.disconnect();
+      mutate.disconnect();
+    };
+  }, []);
+  const move = (forward) => {
+    const el = ref.current;
+    if (!el) return;
+    const rtl = getComputedStyle(el).direction === "rtl";
+    const step = Math.max(el.clientWidth * 0.85, 160);
+    el.scrollBy({
+      left: (forward ? 1 : -1) * (rtl ? -step : step),
+      behavior: document.querySelector(".reduced-motion") ? "auto" : "smooth",
+    });
+  };
+  return (
+    <div
+      className={`scroll-row-wrap ${edges.start ? "" : "can-back"} ${edges.end ? "" : "can-forward"}`}
+    >
+      {!edges.start && (
+        <button
+          type="button"
+          className="scroll-arrow scroll-back"
+          aria-label="السابق"
+          title="السابق"
+          onClick={() => move(false)}
+        >
+          <ChevronRight size={22} />
+        </button>
+      )}
+      <Tag ref={ref} className={`scroll-row ${className}`} {...rest}>
+        {children}
+      </Tag>
+      {!edges.end && (
+        <button
+          type="button"
+          className="scroll-arrow scroll-forward"
+          aria-label="التالي"
+          title="التالي"
+          onClick={() => move(true)}
+        >
+          <ChevronLeft size={22} />
+        </button>
+      )}
+    </div>
+  );
+}
+const RAIL_LIMIT = 60;
 export function Rail({ title, subtitle, metas, onOpen, onMore, progressMap }) {
-  const [expanded, setExpanded] = useState(false);
   return (
     <section className="rail">
       <div className="section-heading">
@@ -137,17 +219,14 @@ export function Rail({ title, subtitle, metas, onOpen, onMore, progressMap }) {
           <h2>{title}</h2>
           {subtitle && <span>{subtitle}</span>}
         </div>
-        {(onMore || metas.length > 14) && (
-          <button
-            className="text-button"
-            onClick={onMore || (() => setExpanded(!expanded))}
-          >
+        {onMore && (
+          <button className="text-button" onClick={onMore}>
             عرض الكل <ChevronLeft size={16} />
           </button>
         )}
       </div>
-      <div className="poster-row">
-        {metas.slice(0, expanded ? metas.length : 14).map((m, i) => (
+      <ScrollRow className="poster-row">
+        {metas.slice(0, RAIL_LIMIT).map((m, i) => (
           <Poster
             key={`${m.type}:${m.id}:${i}`}
             meta={m}
@@ -155,7 +234,7 @@ export function Rail({ title, subtitle, metas, onOpen, onMore, progressMap }) {
             progress={progressMap?.[titleKey(m)]}
           />
         ))}
-      </div>
+      </ScrollRow>
     </section>
   );
 }

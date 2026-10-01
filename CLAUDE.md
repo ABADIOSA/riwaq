@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.17.1-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.18.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -62,6 +62,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - A profile's `hideAdult` (`core/adult.mjs`) skips addons declaring `behaviorHints.adult` and titles flagged adult or with an adult genre, in catalogs, collection rows and AI results. Turning it off passes the Settings room lock.
 - A title opens on its own page (`Details.jsx` rendered inside the content area, not a dialog). The current view stays mounted and hidden (`title-open`), and going back (button, Escape or any navigation) restores its scroll position. Sources load only after Play (`openSources`), or by clicking the selected episode again, unless `sourcesOnOpen` is on or the app sent the viewer to choose a source (`showSources`). The makers, cast and series rows still sit above the sources.
 - Artwork (`core/artwork.mjs`, `client.artwork`): the addon's images and metahub's always. TMDB images come with the viewer's key: Arabic posters and logos first, textless backdrops first. Fanart.tv comes with theirs: backgrounds, posters and logos join those tabs, and clear art, character art, thumbs, banners and discs make the fan art tab. Keys stay in main; images come only from image.tmdb.org, assets.fanart.tv, images.metahub.space and the addon's HTTPS images. Missing keys are reported in `needs`, failing sources in `failed`, and a Fanart.tv 404 is not a failure. `openArtwork` opens only those three hosts in the browser. A backdrop can become the Ambience wallpaper.
+- Horizontal rows use `ScrollRow` (`UI.jsx`) with arrows instead of a scrollbar: the scrollbar is hidden, each arrow moves about 85% of the visible width, and an arrow hides at its end (both when everything fits). The page is RTL, so "next" scrolls toward the left. Wheel, touchpad and focus still scroll. A row's wrapper has `min-width: 0` so grid and flex parents cannot stretch it. Rails show up to 60 titles; "عرض الكل" remains only where a full catalog page exists.
 - No user account was authenticated in provider tests. Distinguish mocked tests, live catalog tests and actual native playback in reports.
 
 ## Good next contributions
