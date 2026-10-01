@@ -40,3 +40,8 @@ The source smoke exercises the Arabic update UI at 1440×960 and 980×680 with a
 ## References
 
 Harbor informed the check/download/ready panel states and channel choice; Nuvio Desktop informed the in-app download/install flow. This implementation is original, using Node's Ed25519 verification and electron-builder's [NSIS installer](https://www.electron.build/nsis/) with Riwaq's existing release selector. No GPL updater implementation was copied.
+
+
+## Discovery fallback (0.17.1)
+
+GitHub's anonymous API allows 60 requests an hour per address, and carriers that share one address among many subscribers can exhaust it. When the API refuses or fails, Riwaq reads `https://github.com/ABADIOSA/riwaq/releases.atom`. That request refuses redirects and is capped at 2 MB. The feed only names versions: the signed `riwaq-update.json` is then fetched and verified exactly as before, and its channel decides eligibility, since the feed carries no prerelease flag. A failed check is retried after 20 minutes.

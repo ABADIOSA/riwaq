@@ -8,6 +8,10 @@ import {
   Updates,
   pickLatest,
   compareVersions,
+  describeUpdateError,
+  parseReleaseFeed,
+  FEED_MAX,
+  RELEASES_FEED,
   REPO,
 } from "../core/updates.mjs";
 import {
@@ -23,6 +27,9 @@ import {
 } from "../core/update-package.mjs";
 
 const INTERVAL = 4 * 60 * 60 * 1000;
+// After a failed check (a rate limit or a dropped connection), try again
+// sooner than the regular interval.
+const RETRY = 20 * 60 * 1000;
 const busyStates = new Set([
   "checking",
   "downloading",
@@ -67,6 +74,7 @@ export class DesktopUpdates extends Updates {
       transferred: 0,
       total: 0,
       error: "",
+      detail: "",
       verified: false,
     };
     this.manifest = null;
@@ -186,10 +194,12 @@ export class DesktopUpdates extends Updates {
     if (this.checking) return this.checking;
     if (busyStates.has(this.runtime.status) || this.runtime.status === "ready")
       return this.publicState();
+    const wait =
+      this.store.failed || this.runtime.status === "error" ? RETRY : INTERVAL;
     if (
       !force &&
       (this.store.enabled === false ||
-        (this.store.checkedAt && now - this.store.checkedAt < INTERVAL))
+        (this.store.checkedAt && now - this.store.checkedAt < wait))
     )
       return this.publicState();
     this.checking = this.checkRelease(now).finally(() => {
@@ -197,9 +207,8 @@ export class DesktopUpdates extends Updates {
     });
     return this.checking;
   }
-  async checkRelease(now) {
-    this.manifest = this.envelope = null;
-    this.set({ status: "checking", error: "", verified: false, percent: 0 });
+  /** The releases list: GitHub's API first, its website feed if refused. */
+  async releaseList() {
     try {
       const releases = await this.client.request(
         `https://api.github.com/repos/${REPO}/releases?per_page=30`,
@@ -210,8 +219,48 @@ export class DesktopUpdates extends Updates {
           },
         },
       );
+      return { releases: Array.isArray(releases) ? releases : [], via: "api" };
+    } catch (apiError) {
+      const api = describeUpdateError(apiError, "GitHub API");
+      try {
+        const response = await this.fetcher(RELEASES_FEED, {
+          redirect: "error",
+          signal: AbortSignal.timeout(20000),
+          headers: {
+            Accept: "application/atom+xml",
+            "User-Agent": `Riwaq/${this.current}`,
+          },
+        });
+        if (!response.ok) {
+          await response.body?.cancel?.();
+          const error = new Error(`HTTP ${response.status}`);
+          error.status = response.status;
+          throw error;
+        }
+        const text = await response.text();
+        if (text.length > FEED_MAX) throw new Error("feed too large");
+        return { releases: parseReleaseFeed(text), via: "feed", api };
+      } catch (feedError) {
+        const feed = describeUpdateError(feedError, "موجز الإصدارات");
+        const error = new Error(api.message);
+        error.detail = [api.code, feed.code].filter(Boolean).join(" · ");
+        throw error;
+      }
+    }
+  }
+  async checkRelease(now) {
+    this.manifest = this.envelope = null;
+    this.set({
+      status: "checking",
+      error: "",
+      detail: "",
+      verified: false,
+      percent: 0,
+    });
+    try {
+      const { releases, via, api } = await this.releaseList();
       const channel = this.publicState().channel;
-      const list = (Array.isArray(releases) ? releases : []).filter(
+      const list = releases.filter(
         (r) =>
           channel !== "stable" ||
           (!r.prerelease && !String(r.tag_name).includes("-")),
@@ -219,33 +268,65 @@ export class DesktopUpdates extends Updates {
       const latest = pickLatest(list);
       this.store.latest = latest;
       this.store.failed = false;
+      // Reached through the feed: say so quietly, it is not an error.
+      const detail = via === "feed" ? `عبر موجز الإصدارات (${api.code})` : "";
       if (!latest || compareVersions(latest.version, this.current) <= 0)
-        this.set({ status: "current" });
+        this.set({ status: "current", detail });
       else {
         const release = list.find((r) => r.tag_name === `v${latest.version}`);
-        if (!release?.assets?.some((a) => a.name === MANIFEST_NAME))
-          this.set({ status: "manual" });
+        if (
+          via === "api" &&
+          !release?.assets?.some((a) => a.name === MANIFEST_NAME)
+        )
+          this.set({ status: "manual", detail });
         else {
-          const envelope = await readManifest(assetUrl(latest.version), {
-            signal: AbortSignal.timeout(20000),
-            fetcher: this.fetcher,
-          });
-          this.manifest = verifyManifest(envelope, this.publicKey, {
-            version: latest.version,
-            channel,
-          });
-          this.envelope = envelope;
-          this.set({
-            status: "available",
-            verified: true,
-            total: this.manifest.size,
-          });
+          let envelope;
+          try {
+            envelope = await readManifest(assetUrl(latest.version), {
+              signal: AbortSignal.timeout(20000),
+              fetcher: this.fetcher,
+            });
+          } catch (error) {
+            // The feed cannot list assets: a release without a signed
+            // manifest is opened by hand, as with the API.
+            if (via === "feed" && error.status === 404) {
+              this.set({ status: "manual", detail });
+              envelope = null;
+            } else throw error;
+          }
+          if (envelope) {
+            // The feed has no prerelease flag; the signed channel decides.
+            const signed = verifyManifest(envelope, this.publicKey, {
+              version: latest.version,
+            });
+            if (!eligiblePackage(signed, this.current, channel))
+              this.set({ status: "current", detail });
+            else {
+              this.manifest = verifyManifest(envelope, this.publicKey, {
+                version: latest.version,
+                channel,
+              });
+              this.envelope = envelope;
+              this.set({
+                status: "available",
+                verified: true,
+                total: this.manifest.size,
+                detail,
+              });
+            }
+          }
         }
       }
     } catch (error) {
       this.store.failed = true;
       this.manifest = this.envelope = null;
-      this.set({ status: "error", error: quietError(error), verified: false });
+      const described = describeUpdateError(error);
+      this.set({
+        status: "error",
+        error: described.message,
+        detail: error.detail || described.code,
+        verified: false,
+      });
     }
     this.store.checkedAt = now;
     this.client.persist();
@@ -345,9 +426,11 @@ export class DesktopUpdates extends Updates {
       });
     } catch (error) {
       await unlink(partial).catch(() => {});
+      const described = describeUpdateError(error, "تنزيل الحزمة");
       this.set({
         status: this.controller.signal.aborted ? "available" : "error",
-        error: this.controller.signal.aborted ? "" : quietError(error),
+        error: this.controller.signal.aborted ? "" : described.message,
+        detail: this.controller.signal.aborted ? "" : described.code,
         percent: 0,
         transferred: 0,
       });

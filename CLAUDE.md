@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.17.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.17.1-win-x64.exe`.
 
 ## Design and invariants
 
@@ -32,7 +32,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Scrobbling is a mode of opt-in history tracking. One viewing is one play: in scrobble mode the completion queue stands down, and a write-ahead entry is held while its stop is in flight. A reply may only write into the account that sent the request.
 - A manual watched mark is not playback: it keeps the record's `updated` time and stores `markedAt`.
 - Library and Live TV search use `core/arabic.mjs`; counts shown to viewers use `arabicCount()`. Dates added from 0.5 use the Gregorian calendar with Latin digits.
-- Updates authenticate Ed25519 metadata with assets/update-public-key.pem and verify package size/SHA-512 after download AND before execution. Never accept renderer paths, change the trust key casually, or publish unsigned metadata. Only installed NSIS copies self-update. Preserve shutdown deferral, opt-out controls and progress saving before installation. Read docs/UPDATES.md.
+- Updates authenticate Ed25519 metadata with assets/update-public-key.pem and verify package size/SHA-512 after download AND before execution. Never accept renderer paths, change the trust key casually, or publish unsigned metadata. Only installed NSIS copies self-update. Release discovery reads the GitHub API and, when it refuses (the anonymous limit is shared behind carrier NAT), the github.com `releases.atom` feed (`parseReleaseFeed`, no redirects, 2 MB). Discovery never relaxes signature, version, channel, size or SHA-512 checks; the signed channel decides eligibility. Errors are described by `describeUpdateError` with a short code (status, never an address), and a failed check is retried after 20 minutes instead of four hours. Preserve shutdown deferral, opt-out controls and progress saving before installation. Read docs/UPDATES.md.
 - Version labels in the interface come from the running version, never a literal.
 - Listings load one catalog per request through `catalogPlan`, so rows appear as addons answer. Keep catalog requests pooled, never in lockstep batches, and keep addon URLs out of the plan.
 - Subtitles and audio live in a side panel beside the picture (`PlayerDock.jsx`); the surface shrinks for it and is never hidden. Addon subtitle URLs stay in main: the interface sees opaque keys, and MPV tracks report an addon subtitle by that key. `core/subtitles.mjs` owns language names, ranking (language first, kind as tiebreaker), cue parsing, quick sync and style validation.

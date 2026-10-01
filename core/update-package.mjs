@@ -131,7 +131,11 @@ export async function fetchUpdate(url, { signal, fetcher = fetch } = {}) {
     }
     if (!response.ok) {
       await response.body?.cancel();
-      throw new Error("تعذّر تنزيل التحديث؛ تحقق من الاتصال وحاول مجدداً");
+      const error = new Error(
+        "تعذّر تنزيل التحديث؛ تحقق من الاتصال وحاول مجدداً",
+      );
+      error.status = response.status;
+      throw error;
     }
     return response;
   }
