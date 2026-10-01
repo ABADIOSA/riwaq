@@ -1,5 +1,28 @@
 # Verification — Riwaq 0.20.0
 
+## 0.23.0 — sources in a window
+
+Before merging 0.22.1, the owner asked that pressing Play show the sources in a popup window. 0.23.0 carries that and the 0.22.1 resolution fix below.
+
+- `sourcesPopup` (default on) makes Play open the sources section inside a `Modal`.
+- The heading (with the quality filter and refresh) is sticky while the list scrolls, and the close button stays visible.
+- A started stream closes the window, and so do Escape and the close button; the title page stays.
+- "اعرض المصادر" reopens the window without a new stream request.
+- With `sourcesOnOpen`, or with `sourcesPopup` off, the sources stay on the page as in 0.17.
+
+Executed:
+
+- `npm test`: **378 passing, 0 failing** (377 + 1 in `tests/performance.test.mjs`). The order test in `tests/credits-more.test.mjs` now checks where the sources section is placed instead of where its markup is written. The new test covers the setting's default and validation, that `sourcesOnOpen` keeps the page layout, and that a started stream closes the window.
+- Rendered in Chromium with a mocked bridge at 980×680 and 1440×960, with 12 mocked sources, including the two from the owner's screenshot:
+  - before Play there is no dialog, and the hint says sources open in a window;
+  - after Play, 12 sources are in the dialog and none are on the page, with the HiDt release shown as 1080p and the FraMeSToR remux as 4K;
+  - after the list scrolled 600 px, the close button stayed inside the dialog and the heading stayed 27 px from its top;
+  - Escape closed only the dialog, "اعرض المصادر" reopened it, and pressing a source's play button sent `play` and closed it;
+  - with `sourcesPopup` off, the 12 sources were on the page;
+  - no page errors, no overflow.
+
+Not executed: Windows, real addon responses, real playback after choosing a source.
+
 ## 0.22.1 — resolution from the stated line count
 
 The owner sent a screenshot of two sources for The Fantastic Four: First Steps, both marked 4K. The addon labelled the first "HD" and the second "4K".

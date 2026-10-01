@@ -78,3 +78,23 @@ test("rows render in steps and card styles carry no per-card blur", () => {
     "the artwork variable stays off the app root",
   );
 });
+
+test("sources open in a window by default, and the viewer can keep them on the page", async () => {
+  const { DEFAULT_SETTINGS, safeSettings } =
+    await import("../core/protocol.mjs");
+  assert.equal(DEFAULT_SETTINGS.sourcesPopup, true);
+  assert.equal(safeSettings({ sourcesPopup: false }).sourcesPopup, false);
+  assert.equal(safeSettings({ sourcesPopup: "no" }).sourcesPopup, true);
+  const details = readFileSync(
+    new URL("../src/components/Details.jsx", import.meta.url),
+    "utf8",
+  );
+  // Showing sources on opening keeps them on the page; a started stream
+  // closes the window.
+  assert.match(
+    details,
+    /sourcesPopup !== false &&\s*state\.settings\.sourcesOnOpen !== true/,
+  );
+  assert.match(details, /if \(ok\) setSourcesOpen\(false\)/);
+  assert.match(details, /className="sources-modal"/);
+});

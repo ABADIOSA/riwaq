@@ -99,6 +99,12 @@ export function DetailsPage({ state, update }) {
         onChange={(sourcesOnOpen) => update("settings", { sourcesOnOpen })}
       />
       <Toggle
+        on={s.sourcesPopup !== false}
+        title="المصادر في نافذة منبثقة"
+        text="ضغطة «تشغيل» تفتح المصادر في نافذة فوق صفحة العمل، وتنقفل لحالها أول ما يبدأ التشغيل. أطفئه لتظهر المصادر أسفل الصفحة. لا يعمل مع «عرض المصادر مباشرة»."
+        onChange={(sourcesPopup) => update("settings", { sourcesPopup })}
+      />
+      <Toggle
         on={s.spoilerGuard === "titles"}
         title="الحماية من الحرق"
         text="تبقى أسماء الحلقات التي لم تصلها ضبابية، فلا يكشف اسم حلقة ما يحدث فيها. الحلقة التي أنت فيها والتالية لها وما أكملته يبقى واضحاً، ومرور المؤشر يُظهر الاسم متى أردت."

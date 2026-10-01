@@ -47,7 +47,7 @@ import { TitleCountdown } from "./Countdown.jsx";
 import { releaseTarget } from "../../core/countdown.mjs";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
-import { IconButton, Busy, Empty, ScrollRow } from "./UI.jsx";
+import { IconButton, Busy, Empty, Modal, ScrollRow } from "./UI.jsx";
 import { TitleLogo } from "./TitleLogo.jsx";
 import { call } from "../lib/api.js";
 import {
@@ -100,6 +100,14 @@ export default function Details({
     [showSources, setShowSources] = useState(
       selection.showSources === true || state.settings.sourcesOnOpen === true,
     );
+  // Play opens the sources in a window over the page, unless the viewer
+  // keeps them on the page (sourcesPopup off) or shows them on opening.
+  const popupMode =
+    state.settings.sourcesPopup !== false &&
+    state.settings.sourcesOnOpen !== true;
+  const [sourcesOpen, setSourcesOpen] = useState(
+    popupMode && selection.showSources === true,
+  );
   const sourcesRef = useRef(null);
   // Credits wait for the addon's metadata so its IMDb ID is settled.
   const { credits, error: creditsError } = useCredits(meta, !loading);
@@ -200,6 +208,10 @@ export default function Details({
   }, [onClose]);
   const openSources = () => {
     setShowSources(true);
+    if (popupMode) {
+      setSourcesOpen(true);
+      return;
+    }
     setTimeout(
       () =>
         sourcesRef.current?.scrollIntoView({
@@ -231,6 +243,7 @@ export default function Details({
       profileId: state.profiles?.active,
     });
     setPlaying("");
+    if (ok) setSourcesOpen(false);
     if (ok && !ok.external) {
       notice("بدأ التشغيل في مشغل رِواق المدمج");
       setSubLoading(true);
@@ -276,6 +289,253 @@ export default function Details({
     : resuming
       ? `متابعة من ${clock(saved.position)}`
       : "تشغيل";
+  // The sources, on the page or inside the window that Play opens.
+  const sourcesSection = (
+    <section className="streams" ref={sourcesRef}>
+      <div className="section-heading">
+        <div>
+          <h2>
+            اختر مصدر المشاهدة
+            {currentEpisode ? ` · ${episodeLabel(currentEpisode)}` : ""}
+          </h2>
+          <span>
+            {result
+              ? `${shown.length} مصدر جاهز${dropped.length ? ` · ${dropped.length} مستبعد` : ""}`
+              : "مرتبة بمحرّك رِواق: الجودة واللغة والموثوقية"}
+          </span>
+        </div>
+        <div className="button-row">
+          <select
+            aria-label="فلترة جودة المصادر"
+            value={quality}
+            onChange={(e) => setQuality(e.target.value)}
+          >
+            <option value="">كل الجودات</option>
+            {(result?.groups || []).map((g) => (
+              <option key={g.tier} value={g.tier}>
+                {g.label} ({g.count})
+              </option>
+            ))}
+          </select>
+          <IconButton
+            title="تحديث المصادر"
+            onClick={() => setRequest((x) => x + 1)}
+          >
+            <RefreshCw size={17} />
+          </IconButton>
+        </div>
+      </div>
+      {result?.modeFallback && (
+        <p className="stream-pref-note">
+          لا توجد مصادر من النوع الذي اخترته في «اختيار المصدر»، فنعرض كل
+          المصادر.
+        </p>
+      )}
+      {result?.filter && (
+        <p className="stream-pref-note">
+          {result.filter.fallback
+            ? `لا مصدر يطابق مرشح «${result.filter.name}»، فنعرض الأفضل المتاح.`
+            : `مرشح «${result.filter.name}» مفعّل: ${result.filter.matched} مطابق.`}
+          {!result.filter.fallback && outside.length > 0 && (
+            <button
+              className="text-button"
+              onClick={() => setShowOutside(!showOutside)}
+            >
+              {showOutside
+                ? "أخفِ غير المطابق"
+                : `اعرض ${outside.length} غير مطابق`}
+            </button>
+          )}
+        </p>
+      )}
+      {streamsLoading ? (
+        <Busy text="نبحث في إضافاتك عن المصادر…" />
+      ) : shown.length ? (
+        <div
+          className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""}`}
+        >
+          {shown.map((s, i) => (
+            <div
+              key={s.key}
+              className={`stream ${i === 0 ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
+            >
+              <button
+                className="stream-play"
+                disabled={!s.supported || !!playing}
+                onClick={() => playStream(s)}
+              >
+                <span className="stream-quality">
+                  {!chip("resolution") ? (
+                    <Play size={20} />
+                  ) : s.resolution === 2160 ? (
+                    "4K"
+                  ) : s.resolution ? (
+                    `${s.resolution}p`
+                  ) : (
+                    <Play size={20} />
+                  )}
+                </span>
+                <span className="stream-info">
+                  <b dir="auto">{s.name}</b>
+                  {settings.pickerReleaseName !== false && (
+                    <span dir="auto">{s.title || s.provider}</span>
+                  )}
+                  <small>
+                    {chip("resolution") &&
+                      chipArt(art, "resolution", s.resolution).map((src) => (
+                        <img
+                          key={src}
+                          className="badge-art"
+                          src={src}
+                          alt={`${s.resolution}p`}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                        />
+                      ))}
+                    {(s.badges || []).map((b) => (
+                      <RuleBadge key={b.label} badge={b} />
+                    ))}
+                    {chip("hdr") && s.hdr && (
+                      <ArtChip
+                        images={chipArt(art, "hdr", s.hdr)}
+                        label={s.hdr}
+                      >
+                        <em className="tag-hdr">{s.hdr}</em>
+                      </ArtChip>
+                    )}
+                    {chip("codec") && s.codec && (
+                      <ArtChip
+                        images={chipArt(art, "codec", s.codec)}
+                        label={s.codec}
+                      >
+                        <em>{s.codec}</em>
+                      </ArtChip>
+                    )}
+                    {chip("source") && s.source && (
+                      <ArtChip
+                        images={chipArt(art, "source", s.source)}
+                        label={s.source}
+                      >
+                        <em>{s.source}</em>
+                      </ArtChip>
+                    )}
+                    {chip("audio") && s.audio && (
+                      <ArtChip
+                        images={[
+                          ...chipArt(art, "audio", s.audio),
+                          ...(chipArt(art, "audio", s.audio).length
+                            ? chipArt(art, "channels", s.channels)
+                            : []),
+                        ]}
+                        label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
+                      >
+                        <em>
+                          {s.audio}
+                          {s.channels ? ` ${s.channels}` : ""}
+                        </em>
+                      </ArtChip>
+                    )}
+                    {chip("size") && s.sizeLabel && <em>{s.sizeLabel}</em>}
+                    {chip("cached") && s.cached && (
+                      <em className="tag-cached">
+                        <Zap size={11} /> {s.debrid || "مخزّن"}
+                      </em>
+                    )}
+                    {chip("seeders") &&
+                      s.seeders !== null &&
+                      s.seeders !== undefined && (
+                        <em>
+                          <Users size={11} /> {s.seeders}
+                        </em>
+                      )}
+                    {chip("group") && s.trustedGroup && (
+                      <em className="tag-trusted">
+                        <ShieldCheck size={11} /> {s.group}
+                      </em>
+                    )}
+                    {chip("arabic") && s.arabicDub && (
+                      <em className="tag-arabic">دبلجة عربية</em>
+                    )}
+                    {chip("arabic") && s.arabicSub && (
+                      <em className="tag-arabic">ترجمة عربية</em>
+                    )}
+                    {s.torrent && <em>Stremio Service</em>}
+                    {s.external && <em>رابط خارجي</em>}
+                    {!s.supported && <em>صيغة غير مدعومة</em>}
+                  </small>
+                  {explained === s.key && (
+                    <small className="stream-why" dir="auto">
+                      {s.reasons.map((r) => (
+                        <em
+                          key={r.code}
+                          className={r.points < 0 ? "minus" : "plus"}
+                        >
+                          {r.label} {r.points > 0 ? "+" : ""}
+                          {r.points}
+                        </em>
+                      ))}
+                    </small>
+                  )}
+                </span>
+                <span className="stream-action">
+                  {i === 0 && <small>الأعلى ترتيباً</small>}
+                  {playing === s.key ? (
+                    <LoaderCircle className="spin" size={22} />
+                  ) : (
+                    <Play size={20} fill="currentColor" />
+                  )}
+                </span>
+              </button>
+              <button
+                className="stream-why-toggle"
+                title="لماذا هذا الترتيب؟"
+                aria-label="لماذا هذا الترتيب؟"
+                aria-expanded={explained === s.key}
+                onClick={() => setExplained(explained === s.key ? "" : s.key)}
+              >
+                <Info size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Empty
+          icon={Puzzle}
+          title={
+            result?.providers ? "لا توجد مصادر مطابقة" : "أضف مصادر المشاهدة"
+          }
+        >
+          {result?.providers
+            ? "جرّب تغيير فلتر الجودة أو تحديث المصادر."
+            : "اربط حساب ستريميو أو أضف رابط إضافة تدعم مصادر التشغيل. Cinemeta يعرض معلومات الأعمال فقط."}
+        </Empty>
+      )}
+      {dropped.length > 0 && (
+        <div className="dropped-block">
+          <button
+            className="text-button"
+            onClick={() => setShowDropped(!showDropped)}
+          >
+            <EyeOff size={15} /> {showDropped ? "إخفاء" : "عرض"}{" "}
+            {dropped.length} مصدراً استبعده المحرّك
+          </button>
+          {showDropped && (
+            <ul className="dropped-list">
+              {dropped.slice(0, 40).map((entry, index) => (
+                <li key={index}>
+                  <b dir="auto">{entry.name}</b>
+                  <span>{entry.reasons.map((r) => r.label).join("، ")}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {result?.failures.length > 0 && (
+        <p className="inline-warning">لم تستجب: {result.failures.join("، ")}</p>
+      )}
+    </section>
+  );
   return (
     <article className="title-page">
       <div className="title-hero">
@@ -634,11 +894,12 @@ export default function Details({
           credits={credits}
           onOpenTitle={(title) => onOpenTitle?.(title)}
         />
-        {!showSources && !loading && (
+        {(!showSources || (popupMode && !sourcesOpen)) && !loading && (
           <div className="sources-closed">
             <Play size={18} />
             <span>
-              المصادر تظهر بعد ما تضغط «{playLabel}»
+              المصادر تظهر {popupMode ? "في نافذة " : ""}بعد ما تضغط «
+              {playLabel}»
               {videos.length > 0 ? "، أو تضغط الحلقة المختارة مرة ثانية" : ""}.
             </span>
             <button className="secondary small" onClick={openSources}>
@@ -646,264 +907,17 @@ export default function Details({
             </button>
           </div>
         )}
-        {showSources && (
-          <section className="streams" ref={sourcesRef}>
-            <div className="section-heading">
-              <div>
-                <h2>
-                  اختر مصدر المشاهدة
-                  {currentEpisode ? ` · ${episodeLabel(currentEpisode)}` : ""}
-                </h2>
-                <span>
-                  {result
-                    ? `${shown.length} مصدر جاهز${dropped.length ? ` · ${dropped.length} مستبعد` : ""}`
-                    : "مرتبة بمحرّك رِواق: الجودة واللغة والموثوقية"}
-                </span>
-              </div>
-              <div className="button-row">
-                <select
-                  aria-label="فلترة جودة المصادر"
-                  value={quality}
-                  onChange={(e) => setQuality(e.target.value)}
+        {showSources &&
+          (popupMode
+            ? sourcesOpen && (
+                <Modal
+                  className="sources-modal"
+                  onClose={() => setSourcesOpen(false)}
                 >
-                  <option value="">كل الجودات</option>
-                  {(result?.groups || []).map((g) => (
-                    <option key={g.tier} value={g.tier}>
-                      {g.label} ({g.count})
-                    </option>
-                  ))}
-                </select>
-                <IconButton
-                  title="تحديث المصادر"
-                  onClick={() => setRequest((x) => x + 1)}
-                >
-                  <RefreshCw size={17} />
-                </IconButton>
-              </div>
-            </div>
-            {result?.modeFallback && (
-              <p className="stream-pref-note">
-                لا توجد مصادر من النوع الذي اخترته في «اختيار المصدر»، فنعرض كل
-                المصادر.
-              </p>
-            )}
-            {result?.filter && (
-              <p className="stream-pref-note">
-                {result.filter.fallback
-                  ? `لا مصدر يطابق مرشح «${result.filter.name}»، فنعرض الأفضل المتاح.`
-                  : `مرشح «${result.filter.name}» مفعّل: ${result.filter.matched} مطابق.`}
-                {!result.filter.fallback && outside.length > 0 && (
-                  <button
-                    className="text-button"
-                    onClick={() => setShowOutside(!showOutside)}
-                  >
-                    {showOutside
-                      ? "أخفِ غير المطابق"
-                      : `اعرض ${outside.length} غير مطابق`}
-                  </button>
-                )}
-              </p>
-            )}
-            {streamsLoading ? (
-              <Busy text="نبحث في إضافاتك عن المصادر…" />
-            ) : shown.length ? (
-              <div
-                className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""}`}
-              >
-                {shown.map((s, i) => (
-                  <div
-                    key={s.key}
-                    className={`stream ${i === 0 ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
-                  >
-                    <button
-                      className="stream-play"
-                      disabled={!s.supported || !!playing}
-                      onClick={() => playStream(s)}
-                    >
-                      <span className="stream-quality">
-                        {!chip("resolution") ? (
-                          <Play size={20} />
-                        ) : s.resolution === 2160 ? (
-                          "4K"
-                        ) : s.resolution ? (
-                          `${s.resolution}p`
-                        ) : (
-                          <Play size={20} />
-                        )}
-                      </span>
-                      <span className="stream-info">
-                        <b dir="auto">{s.name}</b>
-                        {settings.pickerReleaseName !== false && (
-                          <span dir="auto">{s.title || s.provider}</span>
-                        )}
-                        <small>
-                          {chip("resolution") &&
-                            chipArt(art, "resolution", s.resolution).map(
-                              (src) => (
-                                <img
-                                  key={src}
-                                  className="badge-art"
-                                  src={src}
-                                  alt={`${s.resolution}p`}
-                                  loading="lazy"
-                                  referrerPolicy="no-referrer"
-                                />
-                              ),
-                            )}
-                          {(s.badges || []).map((b) => (
-                            <RuleBadge key={b.label} badge={b} />
-                          ))}
-                          {chip("hdr") && s.hdr && (
-                            <ArtChip
-                              images={chipArt(art, "hdr", s.hdr)}
-                              label={s.hdr}
-                            >
-                              <em className="tag-hdr">{s.hdr}</em>
-                            </ArtChip>
-                          )}
-                          {chip("codec") && s.codec && (
-                            <ArtChip
-                              images={chipArt(art, "codec", s.codec)}
-                              label={s.codec}
-                            >
-                              <em>{s.codec}</em>
-                            </ArtChip>
-                          )}
-                          {chip("source") && s.source && (
-                            <ArtChip
-                              images={chipArt(art, "source", s.source)}
-                              label={s.source}
-                            >
-                              <em>{s.source}</em>
-                            </ArtChip>
-                          )}
-                          {chip("audio") && s.audio && (
-                            <ArtChip
-                              images={[
-                                ...chipArt(art, "audio", s.audio),
-                                ...(chipArt(art, "audio", s.audio).length
-                                  ? chipArt(art, "channels", s.channels)
-                                  : []),
-                              ]}
-                              label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
-                            >
-                              <em>
-                                {s.audio}
-                                {s.channels ? ` ${s.channels}` : ""}
-                              </em>
-                            </ArtChip>
-                          )}
-                          {chip("size") && s.sizeLabel && (
-                            <em>{s.sizeLabel}</em>
-                          )}
-                          {chip("cached") && s.cached && (
-                            <em className="tag-cached">
-                              <Zap size={11} /> {s.debrid || "مخزّن"}
-                            </em>
-                          )}
-                          {chip("seeders") &&
-                            s.seeders !== null &&
-                            s.seeders !== undefined && (
-                              <em>
-                                <Users size={11} /> {s.seeders}
-                              </em>
-                            )}
-                          {chip("group") && s.trustedGroup && (
-                            <em className="tag-trusted">
-                              <ShieldCheck size={11} /> {s.group}
-                            </em>
-                          )}
-                          {chip("arabic") && s.arabicDub && (
-                            <em className="tag-arabic">دبلجة عربية</em>
-                          )}
-                          {chip("arabic") && s.arabicSub && (
-                            <em className="tag-arabic">ترجمة عربية</em>
-                          )}
-                          {s.torrent && <em>Stremio Service</em>}
-                          {s.external && <em>رابط خارجي</em>}
-                          {!s.supported && <em>صيغة غير مدعومة</em>}
-                        </small>
-                        {explained === s.key && (
-                          <small className="stream-why" dir="auto">
-                            {s.reasons.map((r) => (
-                              <em
-                                key={r.code}
-                                className={r.points < 0 ? "minus" : "plus"}
-                              >
-                                {r.label} {r.points > 0 ? "+" : ""}
-                                {r.points}
-                              </em>
-                            ))}
-                          </small>
-                        )}
-                      </span>
-                      <span className="stream-action">
-                        {i === 0 && <small>الأعلى ترتيباً</small>}
-                        {playing === s.key ? (
-                          <LoaderCircle className="spin" size={22} />
-                        ) : (
-                          <Play size={20} fill="currentColor" />
-                        )}
-                      </span>
-                    </button>
-                    <button
-                      className="stream-why-toggle"
-                      title="لماذا هذا الترتيب؟"
-                      aria-label="لماذا هذا الترتيب؟"
-                      aria-expanded={explained === s.key}
-                      onClick={() =>
-                        setExplained(explained === s.key ? "" : s.key)
-                      }
-                    >
-                      <Info size={15} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <Empty
-                icon={Puzzle}
-                title={
-                  result?.providers
-                    ? "لا توجد مصادر مطابقة"
-                    : "أضف مصادر المشاهدة"
-                }
-              >
-                {result?.providers
-                  ? "جرّب تغيير فلتر الجودة أو تحديث المصادر."
-                  : "اربط حساب ستريميو أو أضف رابط إضافة تدعم مصادر التشغيل. Cinemeta يعرض معلومات الأعمال فقط."}
-              </Empty>
-            )}
-            {dropped.length > 0 && (
-              <div className="dropped-block">
-                <button
-                  className="text-button"
-                  onClick={() => setShowDropped(!showDropped)}
-                >
-                  <EyeOff size={15} /> {showDropped ? "إخفاء" : "عرض"}{" "}
-                  {dropped.length} مصدراً استبعده المحرّك
-                </button>
-                {showDropped && (
-                  <ul className="dropped-list">
-                    {dropped.slice(0, 40).map((entry, index) => (
-                      <li key={index}>
-                        <b dir="auto">{entry.name}</b>
-                        <span>
-                          {entry.reasons.map((r) => r.label).join("، ")}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            {result?.failures.length > 0 && (
-              <p className="inline-warning">
-                لم تستجب: {result.failures.join("، ")}
-              </p>
-            )}
-          </section>
-        )}
+                  {sourcesSection}
+                </Modal>
+              )
+            : sourcesSection)}
         {(subLoading || subs.length > 0) && (
           <section className="subtitle-section">
             <div className="section-heading">
