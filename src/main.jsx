@@ -11,6 +11,7 @@ import "./title.css";
 import "./identity.css";
 import "./collections.css";
 import "./window.css";
+import "./hero.css";
 // The same page runs the player HUD in its transparent window (#hud).
 createRoot(document.getElementById("root")).render(
   location.hash === "#hud" ? <Hud /> : <App />,

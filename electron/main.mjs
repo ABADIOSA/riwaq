@@ -918,6 +918,11 @@ const methods = {
   aiTest: () => client.ai.test(),
   // A film's release date in the viewer's region, for its countdown.
   releaseDates: (a) => client.releaseDates({ id: String(a?.id || "") }),
+  titleLogos: (a) =>
+    client.titleLogos({
+      type: String(a?.type || ""),
+      id: String(a?.id || "").slice(0, 120),
+    }),
   // TMDB's stills and descriptions for one season, with the viewer's key.
   seasonDetails: (a) =>
     client.seasonDetails({

@@ -39,6 +39,7 @@ import { ExploreModal, PeopleRow } from "./components/Credits.jsx";
 import AiSearchRow from "./components/AiSearch.jsx";
 import { PrayerChip } from "./components/Prayer.jsx";
 import { CountdownRail } from "./components/Countdown.jsx";
+import HomeHero from "./components/HomeHero.jsx";
 import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
 import Addons from "./components/Addons.jsx";
@@ -495,8 +496,10 @@ export default function App() {
   const heroItems = shownRows
     .flatMap((r) => r.metas)
     .filter((m) => m.background)
-    .slice(0, 5);
-  const hero = heroItems[heroIndex] || shownRows[0]?.metas?.[0];
+    .filter((m, i, all) => all.findIndex((x) => x.id === m.id) === i)
+    .slice(0, 8);
+  const hero =
+    heroItems[heroIndex % (heroItems.length || 1)] || shownRows[0]?.metas?.[0];
   const favorite = (meta) => update("favorite", meta);
   const more = (row) => {
     setCatalog(row.key);
@@ -787,71 +790,16 @@ export default function App() {
                 state.settings.showHero !== false &&
                 homeSections.includes("hero") &&
                 hero && (
-                  <section
-                    className="hero"
-                    style={{
-                      backgroundImage: imgUrl(hero.background)
-                        ? `url("${imgUrl(hero.background)}")`
-                        : undefined,
-                    }}
-                  >
-                    <div className="hero-gradient" />
-                    <div className="hero-content">
-                      <span className="eyebrow">
-                        <span /> من عالم السينما إلى رِواقك
-                      </span>
-                      <h1 dir="auto">{hero.name}</h1>
-                      <div className="hero-meta">
-                        {hero.imdbRating && (
-                          <span className="hero-rating">
-                            <Star size={15} fill="currentColor" />{" "}
-                            {hero.imdbRating}
-                          </span>
-                        )}
-                        <span>{hero.releaseInfo}</span>
-                        <span>{typeName(hero.type)}</span>
-                        {hero.genres?.slice(0, 2).map((g) => (
-                          <span key={g}>{g}</span>
-                        ))}
-                      </div>
-                      <p dir="auto">
-                        {hero.description ||
-                          "اكتشف التفاصيل، واختر مصدر المشاهدة المناسب من إضافاتك."}
-                      </p>
-                      <div className="button-row">
-                        <button className="primary" onClick={() => open(hero)}>
-                          <Play fill="currentColor" size={18} />
-                          استكشف وشاهد
-                        </button>
-                        <button
-                          className="secondary"
-                          onClick={() => favorite(hero)}
-                        >
-                          {favorites.some((m) => m.id === hero.id) ? (
-                            <Check size={20} />
-                          ) : (
-                            <Plus size={20} />
-                          )}
-                          مكتبتي
-                        </button>
-                      </div>
-                    </div>
-                    <div className="hero-footer">
-                      <span>
-                        اختيارات من إضافاتك <span className="hero-line" />
-                      </span>
-                      <div className="hero-pages">
-                        {heroItems.map((m, i) => (
-                          <button
-                            key={i}
-                            aria-label={`عرض ${m.name}`}
-                            className={i === heroIndex ? "selected" : ""}
-                            onClick={() => setHeroIndex(i)}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </section>
+                  <HomeHero
+                    items={heroItems.length ? heroItems : [hero]}
+                    index={heroIndex}
+                    setIndex={setHeroIndex}
+                    settings={state.settings}
+                    favorites={favorites}
+                    running={!selected && !player.active && !playerOpen}
+                    onOpen={open}
+                    onFavorite={favorite}
+                  />
                 )}
               {view === "home" && !state.user && !loading && (
                 <div className="connect-banner">

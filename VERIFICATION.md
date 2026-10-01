@@ -1,5 +1,30 @@
 # Verification — Riwaq 0.20.0
 
+## 0.21.0 — title logos, hero arrows, prayer popover
+
+The owner asked why the hero typed a title's name instead of its logo (Arabic or original language), and why the hero had no arrows. They added that clicking the prayer chip was broken: its popover opened beneath the hero.
+
+Executed:
+
+- `npm test`: **372 passing, 0 failing** (367 + 5 in `tests/logos.test.mjs`). They cover:
+  - Arabic-first and original-first ranking, with French and other languages left out;
+  - only validated IMDb/TMDB IDs and languages enter requests;
+  - fallback from TMDB to the addon logo, then metahub, with credential-bearing addon logos refused;
+  - setting validation;
+  - `Client.titleLogos` against a fake TMDB: one `find` and one `images` call per title and mode, nothing without a key, nothing in text mode.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge at 980×680 and 1440×960, with four hero titles:
+  - one has a mocked TMDB Arabic logo, one has no logo anywhere (metahub 404), one has only metahub's logo;
+  - the hero showed the TMDB logo with the name as alt text, then the typed name, then the metahub logo;
+  - the arrows went next and previous, and the left arrow key went next;
+  - left untouched for 9.5 s it turned to the next title; hovered for 12 s it did not;
+  - the prayer popover is the topmost element at its centre and bottom corner;
+  - the title page showed the same logo;
+  - no page errors, no horizontal overflow.
+- Found by the render and fixed: the title page lacked the `TitleLogo` import, which blanked the app on opening a title.
+
+Not executed: real TMDB logos, Windows.
+
 ## 0.20.0 — countdowns to upcoming titles
 
 The owner shared a YouTube live countdown and, asked what it was (YouTube is blocked in this build environment), said it was the countdown to Avengers: Doomsday. Riwaq now counts down to any upcoming film or next episode, and can pin it to the home page.

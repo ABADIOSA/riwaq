@@ -26,6 +26,7 @@ const allowed = new Set([
   "artwork",
   "seasonDetails",
   "releaseDates",
+  "titleLogos",
   "openArtwork",
   "aiTest",
   "aiSearch",

@@ -31,6 +31,12 @@ import {
   parseTmdbImages,
   tmdbImagesRequest,
 } from "./artwork.mjs";
+import {
+  logoFindRequest,
+  logoImagesRequest,
+  parseLogoFind,
+  pickLogos,
+} from "./logos.mjs";
 import { isAdultAddon, withoutAdult } from "./adult.mjs";
 import { DataHub } from "./data-hub.mjs";
 import { Credits } from "./credits.mjs";
@@ -1328,6 +1334,57 @@ export class Client {
       await this.tmdbCall(`movie/${tmdbId}/release_dates`),
       region,
     );
+  }
+  /**
+   * A title's logos from TMDB in the viewer's order (core/logos.mjs), for
+   * the hero and the title page. Without a TMDB key the page uses the
+   * addon's logo and metahub's, so the answer is empty and names the need.
+   */
+  async titleLogos({ type, id }) {
+    if (!["movie", "series"].includes(type) || typeof id !== "string")
+      throw new Error("العنوان غير صالح");
+    const mode = this.state.settings.titleLogos || "arabic";
+    if (mode === "text") return { logos: [], needs: [] };
+    const entry = this.state.providers?.tmdb;
+    if (!entry?.key || entry.enabled === false)
+      return { logos: [], needs: ["tmdb"] };
+    const imdb = id.split(":")[0];
+    const cache = (this.logoCache ||= new Map());
+    const cacheKey = `${type}:${imdb}:${mode}`;
+    const hit = cache.get(cacheKey);
+    if (hit && Date.now() - hit.at < 43200000) return hit.value;
+    let found = null;
+    const tmdbMatch = /^tmdb:(\d{1,10})$/.exec(id);
+    if (tmdbMatch) {
+      const details = await this.tmdbCall(
+        `${type === "series" ? "tv" : "movie"}/${tmdbMatch[1]}`,
+      );
+      found = parseLogoFind(
+        { [type === "series" ? "tv_results" : "movie_results"]: [details] },
+        type,
+      );
+    } else {
+      const request = logoFindRequest(imdb);
+      if (!request) return { logos: [], needs: [] };
+      found = parseLogoFind(
+        await this.tmdbCall(request.path, request.params),
+        type,
+      );
+    }
+    const images = found
+      ? logoImagesRequest(type, found.tmdbId, found.original)
+      : null;
+    const logos = images
+      ? pickLogos(
+          await this.tmdbCall(images.path, images.params),
+          mode,
+          found.original,
+        )
+      : [];
+    const value = { logos, needs: [] };
+    if (cache.size > 400) cache.delete(cache.keys().next().value);
+    cache.set(cacheKey, { at: Date.now(), value });
+    return value;
   }
   async metadataOf(type, id) {
     for (const addon of this.enabled().filter((a) =>
