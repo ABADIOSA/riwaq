@@ -16,6 +16,14 @@ import { applyStreamPrefs } from "./stream-prefs.mjs";
 import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
+import {
+  fanartRequest,
+  mergeArtwork,
+  metaArtwork,
+  parseFanart,
+  parseTmdbImages,
+  tmdbImagesRequest,
+} from "./artwork.mjs";
 import { isAdultAddon, withoutAdult } from "./adult.mjs";
 import { DataHub } from "./data-hub.mjs";
 import { Credits } from "./credits.mjs";
@@ -1178,6 +1186,74 @@ export class Client {
         throw error;
       return this.metadataOf(type === "movie" ? "series" : "movie", id);
     }
+  }
+  /**
+   * A title's artwork gallery (core/artwork.mjs): the addon's images and
+   * metahub's always, TMDB's with the viewer's key, Fanart.tv's with theirs.
+   * A failing source is named in `failed` and never blocks the others.
+   */
+  async artwork({ type, id }) {
+    if (!["movie", "series"].includes(type) || typeof id !== "string")
+      throw new Error("العنوان غير صالح");
+    const cacheKey = `${type}:${id}`;
+    const hit = (this.artworkCache ||= new Map()).get(cacheKey);
+    if (hit && Date.now() - hit.at < 1800000) return hit.value;
+    const meta =
+      this.metas.get(cacheKey) ||
+      (await this.metadataOf(type, id).catch(() => ({ id, type })));
+    const active = (p) => {
+      const entry = this.state.providers?.[p];
+      return !!entry?.key && entry.enabled !== false;
+    };
+    const parts = [metaArtwork(meta)];
+    const failed = [];
+    const needs = [];
+    const imdb = /^tt\d{5,12}$/.test(meta.id || "") ? meta.id : "";
+    let tmdbId = meta.tmdbId;
+    let tvdbId = meta.tvdbId || meta.tvdb_id;
+    if (active("tmdb")) {
+      try {
+        if (!tmdbId && imdb) {
+          const found = await this.tmdbCall(`find/${imdb}`, {
+            external_source: "imdb_id",
+          });
+          tmdbId =
+            found?.[type === "series" ? "tv_results" : "movie_results"]?.[0]
+              ?.id;
+        }
+        const request = tmdbImagesRequest(type, tmdbId);
+        if (request) {
+          parts.push(
+            parseTmdbImages(await this.tmdbCall(request.path, request.params)),
+          );
+          if (type === "series" && !tvdbId) {
+            const ids = await this.tmdbCall(`tv/${tmdbId}/external_ids`).catch(
+              () => null,
+            );
+            tvdbId = ids?.tvdb_id;
+          }
+        }
+      } catch {
+        failed.push("TMDB");
+      }
+    } else needs.push("tmdb");
+    if (active("fanart")) {
+      const path = fanartRequest(type, { imdb, tmdbId, tvdbId });
+      if (path)
+        try {
+          parts.push(parseFanart(await this.dataHub.request("fanart", path)));
+        } catch (error) {
+          // Fanart.tv answers 404 for a title it has no art for.
+          if (!/HTTP 404/.test(error.message)) failed.push("Fanart.tv");
+        }
+    } else needs.push("fanart");
+    const value = { ...mergeArtwork(...parts), needs, failed };
+    if (!failed.length) {
+      if (this.artworkCache.size > 200)
+        this.artworkCache.delete(this.artworkCache.keys().next().value);
+      this.artworkCache.set(cacheKey, { at: Date.now(), value });
+    }
+    return value;
   }
   async metadataOf(type, id) {
     for (const addon of this.enabled().filter((a) =>

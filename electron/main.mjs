@@ -36,6 +36,7 @@ import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
+import { artworkHost } from "../core/artwork.mjs";
 import { AI_PROVIDERS } from "../core/ai-search.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
 import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
@@ -865,6 +866,16 @@ const methods = {
     });
   },
   aiTest: () => client.ai.test(),
+  // A title's artwork gallery; keys stay here and only image URLs return.
+  artwork: (a) =>
+    client.artwork({ type: String(a?.type || ""), id: String(a?.id || "") }),
+  // Opens one gallery image in the browser, only from the artwork hosts.
+  openArtwork: async (a) => {
+    const url = String(a?.url || "");
+    if (!artworkHost(url)) throw new Error("رابط الصورة غير مسموح");
+    await shell.openExternal(url);
+    return true;
+  },
   aiSearch: (a) => client.ai.search({ query: String(a?.query || "") }),
   streamServerSave: (a) => {
     client.profiles.gate("settings");

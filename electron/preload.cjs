@@ -23,6 +23,8 @@ const allowed = new Set([
   "streamServerSave",
   "aiSave",
   "badgePackFetch",
+  "artwork",
+  "openArtwork",
   "aiTest",
   "aiSearch",
   "hudPanel",
