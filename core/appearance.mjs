@@ -213,6 +213,9 @@ export const PRESETS = [
 ];
 
 export const DEFAULT_APPEARANCE = {
+  // Riwaq's own look (arched cards, khatam stars, mashrabiya, Naskh
+  // headings) or the classic rectangular one.
+  identity: "riwaq",
   preset: "riwaq",
   colors: { ...PRESETS[0].colors },
   gradient: "off",
@@ -312,6 +315,7 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
     ["off", "lift", "glow", "shine"],
     next.posterHover,
   );
+  next.identity = choose(input.identity, ["riwaq", "classic"], next.identity);
   if (typeof input.posterTitles === "boolean")
     next.posterTitles = input.posterTitles;
   if (typeof input.posterWatched === "boolean")
@@ -481,6 +485,7 @@ export function themeVariables(input) {
 export function themeClasses(input) {
   const a = safeAppearance(input);
   return [
+    `identity-${a.identity}`,
     `radius-${a.radius}`,
     `density-${a.density}`,
     `hover-${a.posterHover}`,

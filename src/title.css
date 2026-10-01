@@ -440,3 +440,110 @@
 .scroll-row-wrap:has(> .episode-list) .scroll-arrow {
   top: 30%;
 }
+
+/* Prayer times: the chip in the top bar, its card, and "ends at". */
+.prayer-chip-box {
+  position: relative;
+}
+.prayer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1px solid #ffffff14;
+  background: #ffffff06;
+  color: var(--text);
+  white-space: nowrap;
+}
+.prayer-chip svg {
+  color: var(--accent);
+}
+.prayer-chip small {
+  color: var(--muted, #8b929c);
+}
+.prayer-chip.soon {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.prayer-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 40;
+  width: 250px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid #ffffff18;
+  background: color-mix(in srgb, var(--bg, #101215) 94%, #fff 6%);
+  box-shadow: 0 18px 40px #000a;
+}
+.prayer-pop-head {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.prayer-pop-head small {
+  color: var(--muted, #8b929c);
+}
+.prayer-pop ul,
+.prayer-today {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.prayer-pop li,
+.prayer-today li {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 10px;
+}
+.prayer-pop li.next {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.prayer-pop li.past,
+.prayer-pop li.sunrise {
+  opacity: 0.55;
+}
+.prayer-today {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  margin-top: 12px;
+}
+.prayer-today li {
+  background: #ffffff05;
+  border: 1px solid #ffffff0c;
+}
+.prayer-custom {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin: 10px 0;
+}
+.prayer-custom label {
+  display: grid;
+  gap: 6px;
+}
+.ends-at {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: var(--muted, #8b929c);
+  font-size: 13px;
+}
+.ends-at svg {
+  flex: none;
+  color: var(--accent);
+}
+.ends-at.crosses {
+  color: var(--text);
+}
+.ends-at span svg {
+  display: inline;
+  vertical-align: -2px;
+}

@@ -41,6 +41,8 @@ const shuffled = new Map();
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { spoilerIds } from "../../core/spoilers.mjs";
 import { episodeDetails } from "../../core/season-details.mjs";
+import { runtimeMinutes } from "../../core/prayer.mjs";
+import { EndsAt } from "./Prayer.jsx";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
 import { IconButton, Busy, Empty, ScrollRow } from "./UI.jsx";
@@ -253,6 +255,19 @@ export default function Details({
   const currentEpisode = videos.find((v) => v.id === videoId);
   const saved = state.progress[`${meta.type}:${videoId}`];
   const resuming = saved && !isCompleted(saved) && saved.position > 30;
+  // How long the viewing would take from where the viewer would start.
+  const totalMinutes =
+    (currentEpisode &&
+      episodeDetails(
+        currentEpisode,
+        seasonInfo?.episodes?.[currentEpisode.episode],
+      ).runtime) ||
+    runtimeMinutes(meta.runtime) ||
+    (saved?.duration > 0 ? Math.round(saved.duration / 60) : 0);
+  const remainingMinutes = Math.max(
+    0,
+    Math.round(totalMinutes - (resuming ? saved.position / 60 : 0)),
+  );
   const playLabel = currentEpisode
     ? `${resuming ? "متابعة" : "تشغيل"} ${episodeLabel(currentEpisode)}`
     : resuming
@@ -403,6 +418,9 @@ export default function Details({
                 : "أضف إلى الطابور"}
             </button>
           </div>
+          {!loading && (
+            <EndsAt minutes={remainingMinutes} settings={state.settings} />
+          )}
           {error && <p className="inline-warning">{error}</p>}
         </div>
       </div>

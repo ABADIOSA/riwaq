@@ -8,6 +8,7 @@ import {
   WindowPage,
 } from "./settings/LookPages.jsx";
 import { useWindowState } from "./WindowChrome.jsx";
+import { PrayerPage } from "./Prayer.jsx";
 import {
   HomeServersPage,
   P2PPage,
@@ -83,6 +84,7 @@ import {
   BookMarked,
   Gamepad2,
   Trophy,
+  MoonStar,
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -324,6 +326,12 @@ const GROUPS = [
         MonitorPlay,
       ],
       ["subtitles", "الصوت والترجمة", "عربي لغة حجم توقيت مسارات", Subtitles],
+      [
+        "prayer",
+        "أوقات الصلاة",
+        "صلاة أذان مواقيت أم القرى إيقاف تنبيه رمضان",
+        MoonStar,
+      ],
     ],
   },
   {
@@ -676,6 +684,7 @@ export default function SettingsStudio({
                 <HomeServersPage state={state} update={update} />
               )}
               {id === "p2p" && <P2PPage notice={notice} />}
+              {id === "prayer" && <PrayerPage state={state} update={update} />}
               {id === "library" && (
                 <LibraryPage state={state} update={update} />
               )}
