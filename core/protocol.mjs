@@ -103,6 +103,8 @@ export const DEFAULT_SETTINGS = {
   hudHidden: [],
   // Award trophies grouped by family on details pages.
   awardIcons: true,
+  // A title's sources appear after Play; true shows them on opening.
+  sourcesOnOpen: false,
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -287,6 +289,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "pickerReleaseName",
     "badgesOn",
     "awardIcons",
+    "sourcesOnOpen",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (

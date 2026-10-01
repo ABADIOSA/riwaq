@@ -93,6 +93,12 @@ export function DetailsPage({ state, update }) {
         />
       </label>
       <Toggle
+        on={s.sourcesOnOpen === true}
+        title="عرض المصادر مباشرة عند فتح العمل"
+        text="افتراضياً تفتح صفحة العمل بمعلوماته ومعرضه، والمصادر تظهر بعد ضغط «تشغيل». فعّل هذا لتظهر المصادر فور فتح الصفحة."
+        onChange={(sourcesOnOpen) => update("settings", { sourcesOnOpen })}
+      />
+      <Toggle
         on={s.spoilerGuard === "titles"}
         title="الحماية من الحرق"
         text="تبقى أسماء الحلقات التي لم تصلها ضبابية، فلا يكشف اسم حلقة ما يحدث فيها. الحلقة التي أنت فيها والتالية لها وما أكملته يبقى واضحاً، ومرور المؤشر يُظهر الاسم متى أردت."

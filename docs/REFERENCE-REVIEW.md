@@ -49,6 +49,10 @@ Nuvio HTPC (UmbraProjects/NuvioDesktop, GPL-3.0) at `b775bf5` (Release 1.15.0), 
 - **Backup.** Its settings backup is a zip of `preferences/*.properties`.
 - **Riwaq 0.12's Nuvio link.** It reads those stores directly and never keeps or runs plugin code.
 
+## Title pages and artwork, 2026-10-01 (0.17)
+
+Harbor, Nuvio and Stremio open a title on a page of its own. Nuvio and Stremio show sources there at once; Riwaq now follows the owner's wish and shows them after Play, with an option for the old behaviour. The artwork gallery uses TMDB's image endpoint and fanart.tv's community art with the viewer's own keys. Nothing was copied from the reference apps.
+
 ## Badge packs from a link, 2026-09-30 (0.16)
 
 Harbor's packs tab imports a `badges.json` link. Its community packs, such as `harbor.site/badges/harbor-light.json`, are Nuvio-format files (`filters` with `name`, `pattern`, `imageURL`, colours and `tagStyle`). A filter named after a built-in kind replaces that kind's picture; the rest become rules. Riwaq follows the same behaviour in its own code, and also reads Harbor exports (`overrides` + `rules`). It adds HTTPS-only pictures, link checks in main and a matching deadline. Nuvio's `StreamBadgeRules.kt` confirmed the field names.

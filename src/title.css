@@ -1,0 +1,293 @@
+/* A title's own page (Details.jsx): it replaces the current view inside the
+   content area; the view stays mounted underneath, hidden. */
+.content.title-open > :not(.title-page):not(.topbar):not(.update-banner) {
+  display: none !important;
+}
+.title-page {
+  position: relative;
+  padding: 0 0 40px;
+}
+.title-hero {
+  position: relative;
+  min-height: 460px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+.title-page .detail-backdrop {
+  height: auto;
+  inset: 0;
+  opacity: 0.6;
+  border-radius: 0;
+  background-position: center 25%;
+}
+.title-page .detail-backdrop:after {
+  background:
+    linear-gradient(0deg, var(--bg, #101216) 2%, transparent 70%),
+    linear-gradient(
+      270deg,
+      color-mix(in srgb, var(--bg, #101216) 92%, transparent) 15%,
+      transparent 75%
+    );
+}
+.title-page .detail-content {
+  position: relative;
+  width: 100%;
+  padding: 26px 42px 30px;
+}
+.title-page .detail-title-logo {
+  max-height: 120px;
+  max-width: min(440px, 70%);
+}
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 28px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid #ffffff1a;
+  background: #0006;
+  color: var(--text);
+  backdrop-filter: blur(10px);
+}
+.back-button:hover {
+  border-color: var(--accent);
+}
+.title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 6px;
+}
+.title-actions .secondary {
+  margin: 0;
+}
+.title-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 26px;
+  font-size: 16px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+.title-body {
+  padding: 8px 42px 0;
+  display: grid;
+  gap: 8px;
+}
+.title-body > section {
+  margin: 14px 0;
+}
+.sources-closed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px dashed #ffffff1c;
+  color: var(--muted, #8b929c);
+  margin: 10px 0;
+}
+.sources-closed svg {
+  color: var(--accent);
+}
+.sources-closed span {
+  flex: 1;
+  min-width: 220px;
+}
+.streams {
+  scroll-margin-top: 90px;
+}
+
+/* About the work. */
+.title-facts dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+}
+.title-facts dl > div {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #ffffff05;
+  border: 1px solid #ffffff0c;
+}
+.title-facts dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted, #8b929c);
+  margin-bottom: 6px;
+}
+.title-facts dt svg {
+  color: var(--accent);
+}
+.title-facts dd {
+  margin: 0;
+  line-height: 1.7;
+}
+
+/* Artwork gallery. */
+.title-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.title-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1px solid #ffffff12;
+  background: #ffffff05;
+  color: var(--text);
+}
+.title-tabs button small {
+  opacity: 0.6;
+}
+.title-tabs button.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.gallery-langs {
+  margin-bottom: 10px;
+}
+.gallery-grid {
+  display: grid;
+  gap: 10px;
+}
+.gallery-backdrops,
+.gallery-fanart {
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.gallery-posters {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+.gallery-logos {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.gallery-item,
+.gallery-skeleton {
+  position: relative;
+  display: block;
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #ffffff10;
+  background: #ffffff06;
+}
+.gallery-backdrops .gallery-item,
+.gallery-backdrops .gallery-skeleton,
+.gallery-fanart .gallery-item,
+.gallery-fanart .gallery-skeleton {
+  aspect-ratio: 16 / 9;
+}
+.gallery-posters .gallery-item,
+.gallery-posters .gallery-skeleton {
+  aspect-ratio: 2 / 3;
+}
+.gallery-logos .gallery-item,
+.gallery-logos .gallery-skeleton {
+  aspect-ratio: 5 / 2;
+  background:
+    repeating-conic-gradient(#ffffff08 0 25%, transparent 0 50%) 0 0 / 18px 18px,
+    #1b1e23;
+}
+.gallery-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.25s;
+}
+.gallery-logos .gallery-item img,
+.gallery-fanart .gallery-item img {
+  object-fit: contain;
+  padding: 10px;
+}
+.gallery-item:hover img {
+  transform: scale(1.04);
+}
+.gallery-item:hover {
+  border-color: var(--accent);
+}
+.gallery-item.broken {
+  display: none;
+}
+.gallery-item em {
+  position: absolute;
+  inset-inline-start: 8px;
+  bottom: 8px;
+  font-style: normal;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #000a;
+}
+.gallery-skeleton {
+  animation: gallery-pulse 1.4s ease-in-out infinite;
+}
+@keyframes gallery-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+.reduced-motion .gallery-skeleton {
+  animation: none;
+}
+.gallery-empty,
+.gallery-note,
+.gallery-credit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.gallery-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 30px;
+  background: #000000e6;
+  outline: none;
+}
+.gallery-viewer img {
+  max-width: 100%;
+  max-height: calc(100vh - 140px);
+  object-fit: contain;
+  border-radius: 8px;
+}
+.gallery-viewer img.viewer-logos,
+.gallery-viewer img.viewer-fanart {
+  background: repeating-conic-gradient(#ffffff10 0 25%, transparent 0 50%) 0 0 /
+    22px 22px;
+  padding: 16px;
+}
+.viewer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: min(980px, 100%);
+  color: #d4d7dc;
+  font-size: 13px;
+}
+.viewer-bar .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

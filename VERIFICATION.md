@@ -1,4 +1,31 @@
-# Verification — Riwaq 0.16.0
+# Verification — Riwaq 0.17.0
+
+## 0.17.0 — a page for every title, sources after Play, an artwork gallery
+
+The owner asked for a standalone page per title with all its information and a gallery of backgrounds, posters, logos and fan art, and for sources to appear only after pressing Play.
+
+Executed:
+
+- `npm test`: **347 passing, 0 failing** (340 + 7 new in `tests/artwork.test.mjs`), all mocked. They cover:
+  - TMDB image ordering and sizes, including whole SVG logos;
+  - Fanart.tv tabs, previews, likes and the host filter;
+  - the keyless addon and metahub images, merging and the browser-open host list;
+  - the `sourcesOnOpen` setting;
+  - the client gathering TMDB and Fanart.tv art with keys never in the result, then caching it;
+  - missing keys named, and a Fanart.tv 404 not counted as a failure.
+- The makers-above-sources check now matches the streams section by class alone.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge at 980×680 and 1440×960, using generated images:
+  - a poster opens a page, not a dialog, with the home view hidden;
+  - no stream request is made until Play, then exactly one, and the sources appear;
+  - "about" lists seven facts, and the gallery shows 7 backdrops, 9 posters (3 when filtered to Arabic), 2 logos and 4 fan art kinds;
+  - the viewer moves with the arrow keys and sets a backdrop as the wallpaper;
+  - Escape closes the viewer, then the page, and the home view returns at the same scroll position (300);
+  - in a series, picking an episode requests nothing, and clicking it again shows its sources under "م1 · ح2";
+  - the back button works;
+  - no page errors, no horizontal overflow.
+
+Not executed: live TMDB or Fanart.tv image requests with real keys; anything on Windows.
 
 ## 0.16.0 — badge packs from a link
 

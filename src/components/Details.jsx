@@ -21,7 +21,16 @@ import {
   Clapperboard,
   Folders,
   Shuffle,
+  ArrowRight,
+  Calendar,
+  Clock,
+  Globe2,
+  Award as AwardIcon,
+  Languages,
+  PenLine,
+  Video,
 } from "lucide-react";
+import ArtworkGallery from "./ArtworkGallery.jsx";
 import { AddToCollection } from "./Collections.jsx";
 import { titlePlaces } from "../../core/collections.mjs";
 import { trailerOf } from "../../core/credits.mjs";
@@ -33,7 +42,7 @@ import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { spoilerIds } from "../../core/spoilers.mjs";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
-import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
+import { IconButton, Busy, Empty } from "./UI.jsx";
 import { call } from "../lib/api.js";
 import {
   queueKey,
@@ -59,6 +68,7 @@ export default function Details({
   notice,
   onPlayer,
   onOpenTitle,
+  onSettings,
 }) {
   const [meta, setMeta] = useState(selection.meta),
     [loading, setLoading] = useState(true),
@@ -77,7 +87,13 @@ export default function Details({
     [subLoading, setSubLoading] = useState(false),
     [request, setRequest] = useState(0),
     [explore, setExplore] = useState(null),
-    [collecting, setCollecting] = useState(false);
+    [collecting, setCollecting] = useState(false),
+    // Sources load only once the viewer presses play, unless they asked for
+    // them on opening (Details pages settings) or were sent here to choose.
+    [showSources, setShowSources] = useState(
+      selection.showSources === true || state.settings.sourcesOnOpen === true,
+    );
+  const sourcesRef = useRef(null);
   // Credits wait for the addon's metadata so its IMDb ID is settled.
   const { credits, error: creditsError } = useCredits(meta, !loading);
   useEffect(() => {
@@ -130,7 +146,7 @@ export default function Details({
     }
   }, [selection.videoId]);
   useEffect(() => {
-    if (!videoId) return;
+    if (!videoId || !showSources) return;
     let current = true;
     setResult(null);
     setSubs([]);
@@ -148,7 +164,32 @@ export default function Details({
     return () => {
       current = false;
     };
-  }, [videoId, request]);
+  }, [videoId, request, showSources]);
+  // Escape goes back from the page unless a dialog or the viewer has it.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (
+        e.key !== "Escape" ||
+        e.defaultPrevented ||
+        document.querySelector("dialog[open], .gallery-viewer")
+      )
+        return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const openSources = () => {
+    setShowSources(true);
+    setTimeout(
+      () =>
+        sourcesRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        }),
+      60,
+    );
+  };
   const videos = episodeList(meta),
     // Titles of episodes not reached yet stay hidden when the viewer asks.
     spoilers =
@@ -195,142 +236,163 @@ export default function Details({
   const chip = (kind) => settings.badgesOn !== false && !hiddenKinds.has(kind);
   const art = settings.badgeArt || {};
   const dropped = result?.dropped || [];
+  const currentEpisode = videos.find((v) => v.id === videoId);
+  const saved = state.progress[`${meta.type}:${videoId}`];
+  const resuming = saved && !isCompleted(saved) && saved.position > 30;
+  const playLabel = currentEpisode
+    ? `${resuming ? "متابعة" : "تشغيل"} ${episodeLabel(currentEpisode)}`
+    : resuming
+      ? `متابعة من ${clock(saved.position)}`
+      : "تشغيل";
   return (
-    <Modal onClose={onClose} className="details-modal">
-      <div
-        className="detail-backdrop"
-        style={{
-          backgroundImage: imgUrl(meta.background)
-            ? `url("${imgUrl(meta.background)}")`
-            : undefined,
-        }}
-      />
-      <div className="detail-content">
-        <span className="eyebrow">{typeName(meta.type)} · من إضافاتك</span>
-        {meta.logo && (
-          <img
-            className="detail-title-logo"
-            src={imgUrl(meta.logo)}
-            alt=""
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        )}
-        <h1 dir="auto">{meta.name}</h1>
-        <div className="hero-meta">
-          {meta.imdbRating && (
-            <span className="hero-rating">
-              <Star size={15} />
-              {meta.imdbRating}
-            </span>
-          )}
-          <span>{meta.releaseInfo}</span>
-          <span>{meta.runtime}</span>
-          {meta.genres?.slice(0, 3).map((g) => (
-            <span key={g}>{g}</span>
-          ))}
-        </div>
-        {meta.ratings?.length > 0 && (
-          <div className="ratings-strip">
-            {meta.ratings.map((r) => (
-              <span key={r.source}>
-                <small>{r.source}</small>
-                <b>{r.value}</b>
-              </span>
-            ))}
-          </div>
-        )}
-        {meta.watchProviders?.length > 0 && (
-          <div className="watch-providers">
-            <small>متاح في منطقتك عبر</small>
-            {meta.watchProviders.map((p) => (
-              <span key={p.name}>
-                {p.logo && <img src={p.logo} alt="" />}
-                {p.name}
-              </span>
-            ))}
-            <small>TMDB / JustWatch</small>
-          </div>
-        )}
-        {meta.dataFailures?.length > 0 && (
-          <p className="subtle">
-            تعذّر إثراء البيانات من {meta.dataFailures.join("، ")}. بيانات
-            الإضافة ما زالت متاحة.
-          </p>
-        )}
-        <p className="synopsis" dir="auto">
-          {meta.description}
-        </p>
-        {state.settings.awardIcons !== false && credits?.awards?.length > 0 && (
-          <AwardTrophies awards={credits.awards} />
-        )}
-        {meta.cast?.length > 0 && !credits?.cast?.length && (
-          <p className="cast" dir="auto">
-            {meta.cast.slice(0, 5).join(" · ")}
-          </p>
-        )}
-        <button className="secondary" onClick={() => onFavorite(meta)}>
-          {isFavorite ? <Check size={18} /> : <Plus size={18} />}{" "}
-          {isFavorite ? "في مكتبتي" : "أضف إلى مكتبتي"}
-        </button>
-        <button className="secondary" onClick={() => setCollecting(true)}>
-          <Folders size={18} />
-          {titlePlaces(state.collections, meta).length
-            ? "في مجموعاتك"
-            : "أضف لمجموعة"}
-        </button>
-        {trailerOf(meta) && (
-          <button
-            className="secondary"
-            onClick={() => act("openTrailer", { type: meta.type, id: meta.id })}
-          >
-            <Clapperboard size={18} /> الإعلان
-          </button>
-        )}
-        <button
-          className="secondary queue-add"
-          disabled={
-            !videoId ||
-            loading ||
-            (state.queue || []).some(
-              (q) => q.key === queueKey(meta.type, videoId),
-            )
-          }
-          onClick={async () => {
-            const episode = videos.find((v) => v.id === videoId);
-            const label = episode
-              ? (episode.season === 0
-                  ? "إضافات خاصة"
-                  : "الموسم " + (episode.season ?? 1)) +
-                " · الحلقة " +
-                (episode.episode ?? "")
-              : "";
-            if (
-              await update("queueEdit", { action: "add", meta, videoId, label })
-            )
-              notice("أضيف إلى طابور المشاهدة في مكتبتي");
+    <article className="title-page">
+      <div className="title-hero">
+        <div
+          className="detail-backdrop"
+          style={{
+            backgroundImage: imgUrl(meta.background)
+              ? `url("${imgUrl(meta.background)}")`
+              : undefined,
           }}
-        >
-          <ListPlus size={18} />
-          {(state.queue || []).some(
-            (q) => q.key === queueKey(meta.type, videoId),
-          )
-            ? "في طابور المشاهدة"
-            : "أضف إلى الطابور"}
-        </button>
-        {error && <p className="inline-warning">{error}</p>}
-        <CastRail credits={credits} onExplore={setExplore} />
-        {/* The makers sit above the sources, as the owner asked. */}
-        <CreditsFacts
-          credits={credits}
-          error={creditsError}
-          onExplore={setExplore}
         />
-        <CollectionRails
-          credits={credits}
-          onOpenTitle={(title) => onOpenTitle?.(title)}
-        />
+        <div className="detail-content">
+          <button className="back-button" onClick={onClose}>
+            <ArrowRight size={18} /> رجوع
+          </button>
+          <span className="eyebrow">{typeName(meta.type)} · من إضافاتك</span>
+          {meta.logo && (
+            <img
+              className="detail-title-logo"
+              src={imgUrl(meta.logo)}
+              alt=""
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          )}
+          <h1 dir="auto">{meta.name}</h1>
+          <div className="hero-meta">
+            {meta.imdbRating && (
+              <span className="hero-rating">
+                <Star size={15} />
+                {meta.imdbRating}
+              </span>
+            )}
+            <span>{meta.releaseInfo}</span>
+            <span>{meta.runtime}</span>
+            {meta.genres?.slice(0, 3).map((g) => (
+              <span key={g}>{g}</span>
+            ))}
+          </div>
+          {meta.ratings?.length > 0 && (
+            <div className="ratings-strip">
+              {meta.ratings.map((r) => (
+                <span key={r.source}>
+                  <small>{r.source}</small>
+                  <b>{r.value}</b>
+                </span>
+              ))}
+            </div>
+          )}
+          {meta.watchProviders?.length > 0 && (
+            <div className="watch-providers">
+              <small>متاح في منطقتك عبر</small>
+              {meta.watchProviders.map((p) => (
+                <span key={p.name}>
+                  {p.logo && <img src={p.logo} alt="" />}
+                  {p.name}
+                </span>
+              ))}
+              <small>TMDB / JustWatch</small>
+            </div>
+          )}
+          {meta.dataFailures?.length > 0 && (
+            <p className="subtle">
+              تعذّر إثراء البيانات من {meta.dataFailures.join("، ")}. بيانات
+              الإضافة ما زالت متاحة.
+            </p>
+          )}
+          <p className="synopsis" dir="auto">
+            {meta.description}
+          </p>
+          {state.settings.awardIcons !== false &&
+            credits?.awards?.length > 0 && (
+              <AwardTrophies awards={credits.awards} />
+            )}
+          {meta.cast?.length > 0 && !credits?.cast?.length && (
+            <p className="cast" dir="auto">
+              {meta.cast.slice(0, 5).join(" · ")}
+            </p>
+          )}
+          <div className="title-actions">
+            <button
+              className="primary title-play"
+              disabled={loading || !videoId}
+              onClick={openSources}
+            >
+              <Play size={20} fill="currentColor" /> {playLabel}
+            </button>
+            <button className="secondary" onClick={() => onFavorite(meta)}>
+              {isFavorite ? <Check size={18} /> : <Plus size={18} />}{" "}
+              {isFavorite ? "في مكتبتي" : "أضف إلى مكتبتي"}
+            </button>
+            <button className="secondary" onClick={() => setCollecting(true)}>
+              <Folders size={18} />
+              {titlePlaces(state.collections, meta).length
+                ? "في مجموعاتك"
+                : "أضف لمجموعة"}
+            </button>
+            {trailerOf(meta) && (
+              <button
+                className="secondary"
+                onClick={() =>
+                  act("openTrailer", { type: meta.type, id: meta.id })
+                }
+              >
+                <Clapperboard size={18} /> الإعلان
+              </button>
+            )}
+            <button
+              className="secondary queue-add"
+              disabled={
+                !videoId ||
+                loading ||
+                (state.queue || []).some(
+                  (q) => q.key === queueKey(meta.type, videoId),
+                )
+              }
+              onClick={async () => {
+                const episode = videos.find((v) => v.id === videoId);
+                const label = episode
+                  ? (episode.season === 0
+                      ? "إضافات خاصة"
+                      : "الموسم " + (episode.season ?? 1)) +
+                    " · الحلقة " +
+                    (episode.episode ?? "")
+                  : "";
+                if (
+                  await update("queueEdit", {
+                    action: "add",
+                    meta,
+                    videoId,
+                    label,
+                  })
+                )
+                  notice("أضيف إلى طابور المشاهدة في مكتبتي");
+              }}
+            >
+              <ListPlus size={18} />
+              {(state.queue || []).some(
+                (q) => q.key === queueKey(meta.type, videoId),
+              )
+                ? "في طابور المشاهدة"
+                : "أضف إلى الطابور"}
+            </button>
+          </div>
+          {error && <p className="inline-warning">{error}</p>}
+        </div>
+      </div>
+      <div className="title-body">
         {loading ? (
           <Busy text="جاري تحميل التفاصيل…" />
         ) : (
@@ -414,7 +476,14 @@ export default function Details({
                       disabled={
                         v.released && Date.parse(v.released) > Date.now()
                       }
-                      onClick={() => setVideoId(v.id)}
+                      onClick={() =>
+                        videoId === v.id ? openSources() : setVideoId(v.id)
+                      }
+                      title={
+                        videoId === v.id && !showSources
+                          ? "اضغط مرة أخرى لعرض المصادر"
+                          : undefined
+                      }
                     >
                       <span className="episode-number">
                         {String(v.episode || 1).padStart(2, "0")}
@@ -463,257 +532,287 @@ export default function Details({
             </section>
           )
         )}
-        <section className="streams">
-          <div className="section-heading">
-            <div>
-              <h2>اختر مصدر المشاهدة</h2>
-              <span>
-                {result
-                  ? `${shown.length} مصدر جاهز${dropped.length ? ` · ${dropped.length} مستبعد` : ""}`
-                  : "مرتبة بمحرّك رِواق: الجودة واللغة والموثوقية"}
-              </span>
-            </div>
-            <div className="button-row">
-              <select
-                aria-label="فلترة جودة المصادر"
-                value={quality}
-                onChange={(e) => setQuality(e.target.value)}
-              >
-                <option value="">كل الجودات</option>
-                {(result?.groups || []).map((g) => (
-                  <option key={g.tier} value={g.tier}>
-                    {g.label} ({g.count})
-                  </option>
-                ))}
-              </select>
-              <IconButton
-                title="تحديث المصادر"
-                onClick={() => setRequest((x) => x + 1)}
-              >
-                <RefreshCw size={17} />
-              </IconButton>
-            </div>
+        <CastRail credits={credits} onExplore={setExplore} />
+        {/* The makers sit above the sources, as the owner asked. */}
+        <CreditsFacts
+          credits={credits}
+          error={creditsError}
+          onExplore={setExplore}
+        />
+        <CollectionRails
+          credits={credits}
+          onOpenTitle={(title) => onOpenTitle?.(title)}
+        />
+        {!showSources && !loading && (
+          <div className="sources-closed">
+            <Play size={18} />
+            <span>
+              المصادر تظهر بعد ما تضغط «{playLabel}»
+              {videos.length > 0 ? "، أو تضغط الحلقة المختارة مرة ثانية" : ""}.
+            </span>
+            <button className="secondary small" onClick={openSources}>
+              اعرض المصادر
+            </button>
           </div>
-          {result?.modeFallback && (
-            <p className="stream-pref-note">
-              لا توجد مصادر من النوع الذي اخترته في «اختيار المصدر»، فنعرض كل
-              المصادر.
-            </p>
-          )}
-          {result?.filter && (
-            <p className="stream-pref-note">
-              {result.filter.fallback
-                ? `لا مصدر يطابق مرشح «${result.filter.name}»، فنعرض الأفضل المتاح.`
-                : `مرشح «${result.filter.name}» مفعّل: ${result.filter.matched} مطابق.`}
-              {!result.filter.fallback && outside.length > 0 && (
+        )}
+        {showSources && (
+          <section className="streams" ref={sourcesRef}>
+            <div className="section-heading">
+              <div>
+                <h2>
+                  اختر مصدر المشاهدة
+                  {currentEpisode ? ` · ${episodeLabel(currentEpisode)}` : ""}
+                </h2>
+                <span>
+                  {result
+                    ? `${shown.length} مصدر جاهز${dropped.length ? ` · ${dropped.length} مستبعد` : ""}`
+                    : "مرتبة بمحرّك رِواق: الجودة واللغة والموثوقية"}
+                </span>
+              </div>
+              <div className="button-row">
+                <select
+                  aria-label="فلترة جودة المصادر"
+                  value={quality}
+                  onChange={(e) => setQuality(e.target.value)}
+                >
+                  <option value="">كل الجودات</option>
+                  {(result?.groups || []).map((g) => (
+                    <option key={g.tier} value={g.tier}>
+                      {g.label} ({g.count})
+                    </option>
+                  ))}
+                </select>
+                <IconButton
+                  title="تحديث المصادر"
+                  onClick={() => setRequest((x) => x + 1)}
+                >
+                  <RefreshCw size={17} />
+                </IconButton>
+              </div>
+            </div>
+            {result?.modeFallback && (
+              <p className="stream-pref-note">
+                لا توجد مصادر من النوع الذي اخترته في «اختيار المصدر»، فنعرض كل
+                المصادر.
+              </p>
+            )}
+            {result?.filter && (
+              <p className="stream-pref-note">
+                {result.filter.fallback
+                  ? `لا مصدر يطابق مرشح «${result.filter.name}»، فنعرض الأفضل المتاح.`
+                  : `مرشح «${result.filter.name}» مفعّل: ${result.filter.matched} مطابق.`}
+                {!result.filter.fallback && outside.length > 0 && (
+                  <button
+                    className="text-button"
+                    onClick={() => setShowOutside(!showOutside)}
+                  >
+                    {showOutside
+                      ? "أخفِ غير المطابق"
+                      : `اعرض ${outside.length} غير مطابق`}
+                  </button>
+                )}
+              </p>
+            )}
+            {streamsLoading ? (
+              <Busy text="نبحث في إضافاتك عن المصادر…" />
+            ) : shown.length ? (
+              <div
+                className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""}`}
+              >
+                {shown.map((s, i) => (
+                  <div
+                    key={s.key}
+                    className={`stream ${i === 0 ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
+                  >
+                    <button
+                      className="stream-play"
+                      disabled={!s.supported || !!playing}
+                      onClick={() => playStream(s)}
+                    >
+                      <span className="stream-quality">
+                        {!chip("resolution") ? (
+                          <Play size={20} />
+                        ) : s.resolution === 2160 ? (
+                          "4K"
+                        ) : s.resolution ? (
+                          `${s.resolution}p`
+                        ) : (
+                          <Play size={20} />
+                        )}
+                      </span>
+                      <span className="stream-info">
+                        <b dir="auto">{s.name}</b>
+                        {settings.pickerReleaseName !== false && (
+                          <span dir="auto">{s.title || s.provider}</span>
+                        )}
+                        <small>
+                          {chip("resolution") &&
+                            chipArt(art, "resolution", s.resolution).map(
+                              (src) => (
+                                <img
+                                  key={src}
+                                  className="badge-art"
+                                  src={src}
+                                  alt={`${s.resolution}p`}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ),
+                            )}
+                          {(s.badges || []).map((b) => (
+                            <RuleBadge key={b.label} badge={b} />
+                          ))}
+                          {chip("hdr") && s.hdr && (
+                            <ArtChip
+                              images={chipArt(art, "hdr", s.hdr)}
+                              label={s.hdr}
+                            >
+                              <em className="tag-hdr">{s.hdr}</em>
+                            </ArtChip>
+                          )}
+                          {chip("codec") && s.codec && (
+                            <ArtChip
+                              images={chipArt(art, "codec", s.codec)}
+                              label={s.codec}
+                            >
+                              <em>{s.codec}</em>
+                            </ArtChip>
+                          )}
+                          {chip("source") && s.source && (
+                            <ArtChip
+                              images={chipArt(art, "source", s.source)}
+                              label={s.source}
+                            >
+                              <em>{s.source}</em>
+                            </ArtChip>
+                          )}
+                          {chip("audio") && s.audio && (
+                            <ArtChip
+                              images={[
+                                ...chipArt(art, "audio", s.audio),
+                                ...(chipArt(art, "audio", s.audio).length
+                                  ? chipArt(art, "channels", s.channels)
+                                  : []),
+                              ]}
+                              label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
+                            >
+                              <em>
+                                {s.audio}
+                                {s.channels ? ` ${s.channels}` : ""}
+                              </em>
+                            </ArtChip>
+                          )}
+                          {chip("size") && s.sizeLabel && (
+                            <em>{s.sizeLabel}</em>
+                          )}
+                          {chip("cached") && s.cached && (
+                            <em className="tag-cached">
+                              <Zap size={11} /> {s.debrid || "مخزّن"}
+                            </em>
+                          )}
+                          {chip("seeders") &&
+                            s.seeders !== null &&
+                            s.seeders !== undefined && (
+                              <em>
+                                <Users size={11} /> {s.seeders}
+                              </em>
+                            )}
+                          {chip("group") && s.trustedGroup && (
+                            <em className="tag-trusted">
+                              <ShieldCheck size={11} /> {s.group}
+                            </em>
+                          )}
+                          {chip("arabic") && s.arabicDub && (
+                            <em className="tag-arabic">دبلجة عربية</em>
+                          )}
+                          {chip("arabic") && s.arabicSub && (
+                            <em className="tag-arabic">ترجمة عربية</em>
+                          )}
+                          {s.torrent && <em>Stremio Service</em>}
+                          {s.external && <em>رابط خارجي</em>}
+                          {!s.supported && <em>صيغة غير مدعومة</em>}
+                        </small>
+                        {explained === s.key && (
+                          <small className="stream-why" dir="auto">
+                            {s.reasons.map((r) => (
+                              <em
+                                key={r.code}
+                                className={r.points < 0 ? "minus" : "plus"}
+                              >
+                                {r.label} {r.points > 0 ? "+" : ""}
+                                {r.points}
+                              </em>
+                            ))}
+                          </small>
+                        )}
+                      </span>
+                      <span className="stream-action">
+                        {i === 0 && <small>الأعلى ترتيباً</small>}
+                        {playing === s.key ? (
+                          <LoaderCircle className="spin" size={22} />
+                        ) : (
+                          <Play size={20} fill="currentColor" />
+                        )}
+                      </span>
+                    </button>
+                    <button
+                      className="stream-why-toggle"
+                      title="لماذا هذا الترتيب؟"
+                      aria-label="لماذا هذا الترتيب؟"
+                      aria-expanded={explained === s.key}
+                      onClick={() =>
+                        setExplained(explained === s.key ? "" : s.key)
+                      }
+                    >
+                      <Info size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Empty
+                icon={Puzzle}
+                title={
+                  result?.providers
+                    ? "لا توجد مصادر مطابقة"
+                    : "أضف مصادر المشاهدة"
+                }
+              >
+                {result?.providers
+                  ? "جرّب تغيير فلتر الجودة أو تحديث المصادر."
+                  : "اربط حساب ستريميو أو أضف رابط إضافة تدعم مصادر التشغيل. Cinemeta يعرض معلومات الأعمال فقط."}
+              </Empty>
+            )}
+            {dropped.length > 0 && (
+              <div className="dropped-block">
                 <button
                   className="text-button"
-                  onClick={() => setShowOutside(!showOutside)}
+                  onClick={() => setShowDropped(!showDropped)}
                 >
-                  {showOutside
-                    ? "أخفِ غير المطابق"
-                    : `اعرض ${outside.length} غير مطابق`}
+                  <EyeOff size={15} /> {showDropped ? "إخفاء" : "عرض"}{" "}
+                  {dropped.length} مصدراً استبعده المحرّك
                 </button>
-              )}
-            </p>
-          )}
-          {streamsLoading ? (
-            <Busy text="نبحث في إضافاتك عن المصادر…" />
-          ) : shown.length ? (
-            <div
-              className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""}`}
-            >
-              {shown.map((s, i) => (
-                <div
-                  key={s.key}
-                  className={`stream ${i === 0 ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
-                >
-                  <button
-                    className="stream-play"
-                    disabled={!s.supported || !!playing}
-                    onClick={() => playStream(s)}
-                  >
-                    <span className="stream-quality">
-                      {!chip("resolution") ? (
-                        <Play size={20} />
-                      ) : s.resolution === 2160 ? (
-                        "4K"
-                      ) : s.resolution ? (
-                        `${s.resolution}p`
-                      ) : (
-                        <Play size={20} />
-                      )}
-                    </span>
-                    <span className="stream-info">
-                      <b dir="auto">{s.name}</b>
-                      {settings.pickerReleaseName !== false && (
-                        <span dir="auto">{s.title || s.provider}</span>
-                      )}
-                      <small>
-                        {chip("resolution") &&
-                          chipArt(art, "resolution", s.resolution).map(
-                            (src) => (
-                              <img
-                                key={src}
-                                className="badge-art"
-                                src={src}
-                                alt={`${s.resolution}p`}
-                                loading="lazy"
-                                referrerPolicy="no-referrer"
-                              />
-                            ),
-                          )}
-                        {(s.badges || []).map((b) => (
-                          <RuleBadge key={b.label} badge={b} />
-                        ))}
-                        {chip("hdr") && s.hdr && (
-                          <ArtChip
-                            images={chipArt(art, "hdr", s.hdr)}
-                            label={s.hdr}
-                          >
-                            <em className="tag-hdr">{s.hdr}</em>
-                          </ArtChip>
-                        )}
-                        {chip("codec") && s.codec && (
-                          <ArtChip
-                            images={chipArt(art, "codec", s.codec)}
-                            label={s.codec}
-                          >
-                            <em>{s.codec}</em>
-                          </ArtChip>
-                        )}
-                        {chip("source") && s.source && (
-                          <ArtChip
-                            images={chipArt(art, "source", s.source)}
-                            label={s.source}
-                          >
-                            <em>{s.source}</em>
-                          </ArtChip>
-                        )}
-                        {chip("audio") && s.audio && (
-                          <ArtChip
-                            images={[
-                              ...chipArt(art, "audio", s.audio),
-                              ...(chipArt(art, "audio", s.audio).length
-                                ? chipArt(art, "channels", s.channels)
-                                : []),
-                            ]}
-                            label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
-                          >
-                            <em>
-                              {s.audio}
-                              {s.channels ? ` ${s.channels}` : ""}
-                            </em>
-                          </ArtChip>
-                        )}
-                        {chip("size") && s.sizeLabel && <em>{s.sizeLabel}</em>}
-                        {chip("cached") && s.cached && (
-                          <em className="tag-cached">
-                            <Zap size={11} /> {s.debrid || "مخزّن"}
-                          </em>
-                        )}
-                        {chip("seeders") &&
-                          s.seeders !== null &&
-                          s.seeders !== undefined && (
-                            <em>
-                              <Users size={11} /> {s.seeders}
-                            </em>
-                          )}
-                        {chip("group") && s.trustedGroup && (
-                          <em className="tag-trusted">
-                            <ShieldCheck size={11} /> {s.group}
-                          </em>
-                        )}
-                        {chip("arabic") && s.arabicDub && (
-                          <em className="tag-arabic">دبلجة عربية</em>
-                        )}
-                        {chip("arabic") && s.arabicSub && (
-                          <em className="tag-arabic">ترجمة عربية</em>
-                        )}
-                        {s.torrent && <em>Stremio Service</em>}
-                        {s.external && <em>رابط خارجي</em>}
-                        {!s.supported && <em>صيغة غير مدعومة</em>}
-                      </small>
-                      {explained === s.key && (
-                        <small className="stream-why" dir="auto">
-                          {s.reasons.map((r) => (
-                            <em
-                              key={r.code}
-                              className={r.points < 0 ? "minus" : "plus"}
-                            >
-                              {r.label} {r.points > 0 ? "+" : ""}
-                              {r.points}
-                            </em>
-                          ))}
-                        </small>
-                      )}
-                    </span>
-                    <span className="stream-action">
-                      {i === 0 && <small>الأعلى ترتيباً</small>}
-                      {playing === s.key ? (
-                        <LoaderCircle className="spin" size={22} />
-                      ) : (
-                        <Play size={20} fill="currentColor" />
-                      )}
-                    </span>
-                  </button>
-                  <button
-                    className="stream-why-toggle"
-                    title="لماذا هذا الترتيب؟"
-                    aria-label="لماذا هذا الترتيب؟"
-                    aria-expanded={explained === s.key}
-                    onClick={() =>
-                      setExplained(explained === s.key ? "" : s.key)
-                    }
-                  >
-                    <Info size={15} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Empty
-              icon={Puzzle}
-              title={
-                result?.providers
-                  ? "لا توجد مصادر مطابقة"
-                  : "أضف مصادر المشاهدة"
-              }
-            >
-              {result?.providers
-                ? "جرّب تغيير فلتر الجودة أو تحديث المصادر."
-                : "اربط حساب ستريميو أو أضف رابط إضافة تدعم مصادر التشغيل. Cinemeta يعرض معلومات الأعمال فقط."}
-            </Empty>
-          )}
-          {dropped.length > 0 && (
-            <div className="dropped-block">
-              <button
-                className="text-button"
-                onClick={() => setShowDropped(!showDropped)}
-              >
-                <EyeOff size={15} /> {showDropped ? "إخفاء" : "عرض"}{" "}
-                {dropped.length} مصدراً استبعده المحرّك
-              </button>
-              {showDropped && (
-                <ul className="dropped-list">
-                  {dropped.slice(0, 40).map((entry, index) => (
-                    <li key={index}>
-                      <b dir="auto">{entry.name}</b>
-                      <span>
-                        {entry.reasons.map((r) => r.label).join("، ")}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-          {result?.failures.length > 0 && (
-            <p className="inline-warning">
-              لم تستجب: {result.failures.join("، ")}
-            </p>
-          )}
-        </section>
+                {showDropped && (
+                  <ul className="dropped-list">
+                    {dropped.slice(0, 40).map((entry, index) => (
+                      <li key={index}>
+                        <b dir="auto">{entry.name}</b>
+                        <span>
+                          {entry.reasons.map((r) => r.label).join("، ")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            {result?.failures.length > 0 && (
+              <p className="inline-warning">
+                لم تستجب: {result.failures.join("، ")}
+              </p>
+            )}
+          </section>
+        )}
         {(subLoading || subs.length > 0) && (
           <section className="subtitle-section">
             <div className="section-heading">
@@ -741,6 +840,14 @@ export default function Details({
             )}
           </section>
         )}
+        <TitleFacts meta={meta} credits={credits} />
+        <ArtworkGallery
+          meta={meta}
+          state={state}
+          update={update}
+          notice={notice}
+          onSettings={onSettings}
+        />
       </div>
       {collecting && (
         <AddToCollection
@@ -760,7 +867,71 @@ export default function Details({
           }}
         />
       )}
-    </Modal>
+    </article>
+  );
+}
+
+/** "م1 · ح3" for an episode, "خاصة · ح2" for a special. */
+function episodeLabel(v) {
+  return `${(v.season ?? 1) === 0 ? "خاصة" : `م${v.season ?? 1}`} · ح${v.episode ?? 1}`;
+}
+
+const list = (value) =>
+  (Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/,\s*/)
+      : []
+  )
+    .map((x) => String(x).trim())
+    .filter(Boolean);
+
+/** What the addon and the data providers say about the work, in one place. */
+function TitleFacts({ meta, credits }) {
+  const released = meta.released ? new Date(meta.released) : null;
+  const facts = [
+    [
+      Calendar,
+      "تاريخ العرض",
+      released && !Number.isNaN(released.getTime())
+        ? released.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })
+        : meta.releaseInfo || meta.year,
+    ],
+    [Clock, "المدة", meta.runtime],
+    [Video, "الإخراج", list(meta.director).slice(0, 4).join("، ")],
+    [PenLine, "الكتابة", list(meta.writer).slice(0, 4).join("، ")],
+    [
+      Globe2,
+      "بلد الإنتاج",
+      list(meta.country).join("، ") ||
+        (credits?.countries || [])
+          .map((c) => c.name)
+          .slice(0, 4)
+          .join("، "),
+    ],
+    [Languages, "اللغة", list(meta.language).join("، ")],
+    [AwardIcon, "الجوائز", meta.awards],
+    [Folders, "التصنيفات", list(meta.genres || meta.genre).join("، ")],
+  ].filter(([, , value]) => value);
+  if (!facts.length) return null;
+  return (
+    <section className="title-facts">
+      <h2>عن العمل</h2>
+      <dl>
+        {facts.map(([Icon, label, value]) => (
+          <div key={label}>
+            <dt>
+              <Icon size={15} /> {label}
+            </dt>
+            <dd dir="auto">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 

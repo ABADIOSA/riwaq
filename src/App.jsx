@@ -180,7 +180,7 @@ export default function App() {
         return;
       const stream = result.streams.find((s) => s.supported && !s.external);
       if (!stream) {
-        setSelected({ meta: details, videoId: targetId });
+        setSelected({ meta: details, videoId: targetId, showSources: true });
         notice("اختر مصدراً للمتابعة؛ بقي العنوان في الطابور");
         return;
       }
@@ -401,7 +401,19 @@ export default function App() {
       call("setAppIcon", {}).catch(() => {});
     }
   }, [ready, look.appIcon, look.colors.accent, look.colors.bg]);
-  const open = (meta, videoId) => setSelected({ meta, videoId });
+  // A title opens on its own page over the current view, which stays mounted
+  // underneath; going back returns to where the viewer was scrolled.
+  const scrollBefore = useRef(0);
+  const openTitle = (next) => {
+    if (!selected) scrollBefore.current = window.scrollY;
+    setSelected(next);
+    window.scrollTo(0, 0);
+  };
+  const closeTitle = () => {
+    setSelected(null);
+    requestAnimationFrame(() => window.scrollTo(0, scrollBefore.current));
+  };
+  const open = (meta, videoId) => openTitle({ meta, videoId });
   const activeProfile = state.profiles?.list?.find(
     (p) => p.id === state.profiles.active,
   );
@@ -418,6 +430,7 @@ export default function App() {
       setUnlockRoom(room);
       return;
     }
+    setSelected(null);
     setView(v);
     setCatalog("");
     setFilter("");
@@ -669,7 +682,9 @@ export default function App() {
             </button>
           </div>
         </aside>
-        <main className={player.active ? "content with-player" : "content"}>
+        <main
+          className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""}`}
+        >
           {!player.active &&
             view !== "settings" &&
             ["available", "downloading", "ready"].includes(
@@ -738,6 +753,25 @@ export default function App() {
               <FolderOpen size={20} />
             </IconButton>
           </header>
+          {selected && (
+            <Details
+              key={`${selected.meta.type}:${selected.meta.id}`}
+              selection={selected}
+              state={state}
+              onClose={closeTitle}
+              onFavorite={favorite}
+              update={update}
+              act={act}
+              notice={notice}
+              onPlayer={() => setPlayerOpen(true)}
+              onOpenTitle={(meta) => openTitle({ meta })}
+              onSettings={(tab) => {
+                closeTitle();
+                setSettingsTab(tab);
+                navigate("settings");
+              }}
+            />
+          )}
           {["home", "discover", "search"].includes(view) && (
             <>
               {view === "home" &&
@@ -1165,20 +1199,7 @@ export default function App() {
             notice={notice}
           />
         )}
-        {selected && (
-          <Details
-            key={`${selected.meta.type}:${selected.meta.id}`}
-            selection={selected}
-            state={state}
-            onClose={() => setSelected(null)}
-            onFavorite={favorite}
-            update={update}
-            act={act}
-            notice={notice}
-            onPlayer={() => setPlayerOpen(true)}
-            onOpenTitle={(meta) => setSelected({ meta })}
-          />
-        )}
+
         {nuvioOpen && (
           <NuvioLink
             act={act}
@@ -1194,7 +1215,7 @@ export default function App() {
             onClose={() => setExplore(null)}
             onOpenTitle={(meta) => {
               setExplore(null);
-              setSelected({ meta });
+              openTitle({ meta });
             }}
           />
         )}

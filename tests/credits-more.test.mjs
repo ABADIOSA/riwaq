@@ -248,7 +248,7 @@ test("new actions stay off the HUD bridge", () => {
 test("the makers sit above the sources on the details page", () => {
   const details = read("src/components/Details.jsx");
   const makers = details.indexOf("<CreditsFacts");
-  const streams = details.indexOf('<section className="streams">');
+  const streams = details.indexOf('<section className="streams"');
   assert.ok(makers > 0 && streams > 0 && makers < streams);
   assert.ok(details.indexOf("<CollectionRails") < streams);
 });
