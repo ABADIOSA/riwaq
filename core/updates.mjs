@@ -96,6 +96,109 @@ export function pickLatest(releases) {
   return latest;
 }
 
+/**
+ * The releases feed on github.com itself, read when the API refuses: the
+ * API's anonymous limit (60 an hour per address) is shared by everyone
+ * behind a carrier's NAT, while the website feed is not counted against it.
+ */
+export const RELEASES_FEED = `https://github.com/${REPO}/releases.atom`;
+export const FEED_MAX = 2_000_000;
+
+const xmlText = (value) =>
+  String(value || "")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .trim();
+
+/**
+ * Releases from the Atom feed, shaped like the API's list so `pickLatest`
+ * reads them. The feed has no prerelease flag, so a version is taken as a
+ * prerelease only when it says so ("-beta"); the signed manifest's channel
+ * still decides what a stable copy may install.
+ */
+export function parseReleaseFeed(xml) {
+  if (typeof xml !== "string" || xml.length > FEED_MAX) return [];
+  const out = [];
+  for (const entry of xml.split(/<entry[\s>]/).slice(1)) {
+    const body = entry.split("</entry>")[0];
+    const href =
+      body.match(
+        /<link[^>]*href="(https:\/\/github\.com\/[^"]+\/releases\/tag\/[^"]+)"/,
+      )?.[1] || "";
+    const tag =
+      decodeURIComponent(href.split("/releases/tag/")[1] || "") ||
+      xmlText(body.match(/<id>([^<]*)<\/id>/)?.[1])
+        .split("/")
+        .pop();
+    const version = parseVersion(tag);
+    if (!version) continue;
+    const url = `https://github.com/${REPO}/releases/tag/${encodeURIComponent(tag)}`;
+    out.push({
+      tag_name: tag,
+      html_url: url,
+      name: xmlText(body.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1]) || tag,
+      prerelease: version.pre.length > 0,
+      draft: false,
+      published_at:
+        xmlText(body.match(/<updated>([^<]*)<\/updated>/)?.[1]) || null,
+    });
+  }
+  return out;
+}
+
+/**
+ * What went wrong with an update check, in words a viewer can act on, plus
+ * a short technical note (status codes only, never addresses or keys).
+ */
+export function describeUpdateError(error, where = "GitHub") {
+  const message = String(error?.message || "");
+  const status =
+    Number(error?.status) || Number(message.match(/HTTP (\d{3})/)?.[1]) || 0;
+  if (status === 403 || status === 429)
+    return {
+      message:
+        "GitHub حدّ مؤقتاً عدد الطلبات من شبكتك (الحد 60 طلباً في الساعة لكل عنوان، وقد تتشاركه شبكة الجوال مع غيرك). نعيد المحاولة تلقائياً بعد قليل.",
+      code: `${where} · HTTP ${status}`,
+    };
+  if (status === 404)
+    return {
+      message: "لم نجد ملف التحديث في صفحة الإصدار.",
+      code: `${where} · HTTP 404`,
+    };
+  if (status >= 500)
+    return {
+      message: "خوادم GitHub لا تستجيب الآن. نعيد المحاولة تلقائياً بعد قليل.",
+      code: `${where} · HTTP ${status}`,
+    };
+  if (error?.name === "TimeoutError" || /timeout|timed out|مهلة/i.test(message))
+    return {
+      message: "انتهت مهلة الاتصال بـ GitHub. تحقق من الاتصال وحاول مجدداً.",
+      code: `${where} · مهلة`,
+    };
+  if (
+    /تعذّر الاتصال|fetch failed|ENOTFOUND|ECONNRESET|EAI_AGAIN|network/i.test(
+      message,
+    )
+  )
+    return {
+      message:
+        "تعذّر الوصول إلى GitHub. تحقق من اتصالك بالإنترنت وحاول مجدداً.",
+      code: `${where} · لا اتصال`,
+    };
+  if (/[\u0600-\u06ff]/.test(message) && !/https?:|\\\\/.test(message))
+    return { message, code: "" };
+  return {
+    message:
+      "تعذّر إكمال التحديث؛ تحقق من الاتصال والمساحة المتاحة ثم حاول مجدداً",
+    code: "",
+  };
+}
+
 export class Updates {
   constructor(client) {
     this.client = client;
@@ -164,7 +267,8 @@ export class Updates {
   }
   /** The page main may open: validated again at use, never taken from React. */
   releaseUrl() {
-    const url = this.store.latest?.url;
+    // After a failed check the stored release may be stale: open the list.
+    const url = this.store.failed ? "" : this.store.latest?.url;
     return releaseUrlOk(url) ? url : `https://github.com/${REPO}/releases`;
   }
 }

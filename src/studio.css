@@ -1932,3 +1932,13 @@ em.tag-custom {
 .rule-list .pack-samples {
   margin: 0;
 }
+
+/* Update errors carry a short technical reason. */
+.update-error p {
+  margin: 0 0 4px;
+}
+.update-detail {
+  display: block;
+  opacity: 0.75;
+  font-size: 12px;
+}

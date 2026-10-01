@@ -1,4 +1,29 @@
-# Verification — Riwaq 0.17.0
+# Verification — Riwaq 0.17.1
+
+## 0.17.1 — update checks that survive GitHub's rate limit
+
+The owner's installed 0.16.0 showed "لم يكتمل التحديث" with "المتاح 0.16.0" after 0.17.0 was published.
+
+Diagnosis from the code (not a Windows log):
+- The stored latest version stayed 0.16.0, so the release list request failed before the new list was stored.
+- The generic message appears only for a non-Arabic error. That points to an HTTP status from the anonymous GitHub API: most likely its 60-per-hour limit, which carrier NAT shares, or a server error.
+
+Executed:
+
+- `npm test`: **353 passing, 0 failing** (347 + 6 new in `tests/update-fallback.test.mjs`, mocked). They cover:
+  - the Atom feed read like the API list;
+  - a 403 from the API falling back to the feed and still verifying the signed manifest;
+  - a tampered manifest refused through the feed;
+  - a release without a manifest left manual, and a beta never offered on the stable channel;
+  - a specific reason and code when both routes fail, with a retry after 20 minutes but not after 10;
+  - error descriptions that never carry addresses.
+- Existing updater tests are unchanged and pass.
+- `npm run check` and `npm run build` pass.
+
+Not executed:
+- The github.com feed was not fetched live: this build environment's proxy refuses github.com paths outside the session's API scope, so the parser was tested against a fixture in GitHub's documented feed shape.
+- No Windows run.
+- An installed 0.16.0 still checks with its old updater, so it needs the limit to reset or a manual download to reach this version.
 
 ## 0.17.0 — a page for every title, sources after Play, an artwork gallery
 

@@ -80,7 +80,8 @@ export default function UpdatesCard({ state, update, act }) {
             {info.latest && (
               <>
                 {" "}
-                · المتاح <b dir="ltr">{info.latest.version}</b>
+                · {info.available ? "المتاح" : "آخر إصدار"}{" "}
+                <b dir="ltr">{info.latest.version}</b>
               </>
             )}
           </p>
@@ -100,9 +101,22 @@ export default function UpdatesCard({ state, update, act }) {
         </p>
       )}
       {info.error && (
-        <p role="alert" className="inline-warning">
-          {info.error}
-        </p>
+        <div role="alert" className="inline-warning update-error">
+          <p>{info.error}</p>
+          {info.detail && (
+            <small dir="auto" className="update-detail">
+              السبب التقني: {info.detail}
+            </small>
+          )}
+          {status === "error" && (
+            <button className="text-button" onClick={() => act("openUpdate")}>
+              <ArrowUpRight size={15} /> أو نزّل آخر إصدار يدوياً من GitHub
+            </button>
+          )}
+        </div>
+      )}
+      {!info.error && info.detail && (
+        <p className="subtle update-detail">{info.detail}</p>
       )}
       {["downloading", "verifying", "ready"].includes(status) && (
         <div className="update-progress-area">
