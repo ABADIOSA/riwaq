@@ -52,3 +52,8 @@
   opacity: 0.6;
   font-size: 10px;
 }
+.settings-subhead {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  color: var(--muted, #9aa0a8);
+}

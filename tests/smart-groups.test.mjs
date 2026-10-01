@@ -6,7 +6,8 @@ import {
   cleanSmartHidden,
   groupOf,
   groupRows,
-  smartHomeOn,
+  homeLayout,
+  groupsBesideFeed,
 } from "../core/smart-groups.mjs";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 
@@ -90,12 +91,13 @@ test("a group's all-shelf takes one title from each catalog in turn, once each",
   assert.equal(blendRows([a, b], 2).length, 2);
 });
 
-test("Riwaq's sections stand in until the viewer builds collections", () => {
+test("Riwaq's rows stand in until the viewer builds collections", () => {
   assert.equal(DEFAULT_SETTINGS.homeGrouping, "auto");
-  assert.equal(smartHomeOn("auto", []), true);
-  assert.equal(smartHomeOn("auto", [{ id: "c" }]), false);
-  assert.equal(smartHomeOn("smart", [{ id: "c" }]), true);
-  assert.equal(smartHomeOn("rows", []), false);
+  assert.equal(homeLayout("auto", []), "riwaq");
+  assert.equal(homeLayout("auto", [{ id: "c" }]), "rows");
+  assert.equal(homeLayout("riwaq", [{ id: "c" }]), "riwaq");
+  assert.equal(homeLayout("groups", []), "groups");
+  assert.equal(homeLayout("rows", []), "rows");
   assert.equal(safeSettings({ homeGrouping: "rows" }).homeGrouping, "rows");
   assert.equal(safeSettings({ homeGrouping: "tiles" }).homeGrouping, "auto");
   assert.deepEqual(cleanSmartHidden(["live", "live", "nope", 3]), ["live"]);
@@ -103,4 +105,10 @@ test("Riwaq's sections stand in until the viewer builds collections", () => {
     "sports",
   ]);
   assert.equal(SMART_IDS.length, 9);
+  // Under Riwaq's rows, films and series come from the rows themselves, and
+  // anime too when TMDB supplies it.
+  assert.ok(!groupsBesideFeed(false).includes("movies"));
+  assert.ok(groupsBesideFeed(false).includes("anime"));
+  assert.ok(!groupsBesideFeed(true).includes("anime"));
+  assert.ok(groupsBesideFeed(true).includes("arabic"));
 });

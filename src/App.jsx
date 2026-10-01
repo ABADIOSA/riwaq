@@ -57,7 +57,12 @@ import { PrayerChip } from "./components/Prayer.jsx";
 import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
-import { groupRows, smartHomeOn } from "../core/smart-groups.mjs";
+import {
+  groupRows,
+  groupsBesideFeed,
+  homeLayout,
+  SMART_IDS,
+} from "../core/smart-groups.mjs";
 import { arabicCount, CATALOGS } from "../core/arabic.mjs";
 import AmbientLayer from "./components/Ambient.jsx";
 import { WatchedContext } from "./lib/watched.js";
@@ -319,6 +324,16 @@ export default function App() {
   const addonSignature = state.addons
     .map((a) => `${a.key}:${a.enabled}`)
     .join("|");
+  // Home's layout: Riwaq's own rows (core/feed.mjs) until the viewer builds
+  // collections, the addons' groups, or one row per catalog.
+  const tmdbOn = (state.providers || []).some(
+    (p) => p.id === "tmdb" && p.configured && p.enabled,
+  );
+  const layout = homeLayout(state.settings.homeGrouping, state.collections);
+  const feedSignature =
+    layout === "riwaq"
+      ? `${tmdbOn}|${(state.settings.feedHidden || []).join(",")}`
+      : "off";
   useEffect(() => {
     if (!ready || !["home", "discover", "search"].includes(view)) return;
     let current = true;
@@ -328,6 +343,7 @@ export default function App() {
     setFailures([]);
     setHeroIndex(0);
     const args = {
+      feed: view === "home" && feedSignature !== "off",
       type: view === "home" ? "" : filter,
       search: view === "search" ? query : "",
       catalogKey: view !== "home" ? catalog : "",
@@ -393,6 +409,7 @@ export default function App() {
     query,
     catalog,
     addonSignature,
+    feedSignature,
     refresh,
     state.profiles?.active,
   ]);
@@ -552,7 +569,19 @@ export default function App() {
           ),
     [rowGroups, group],
   );
-  const smartHome = smartHomeOn(state.settings.homeGrouping, state.collections);
+  const feedRows = useMemo(() => shownRows.filter((r) => r.feed), [shownRows]);
+  const addonRows = useMemo(
+    () => shownRows.filter((r) => !r.feed),
+    [shownRows],
+  );
+  // Under Riwaq's rows, only the addon groups those rows do not cover.
+  const besideFeed = useMemo(() => {
+    const keep = groupsBesideFeed(tmdbOn);
+    return [
+      ...(state.settings.smartHidden || []),
+      ...SMART_IDS.filter((id) => !keep.includes(id)),
+    ];
+  }, [tmdbOn, state.settings.smartHidden]);
   const catalogRails = useMemo(
     () =>
       shownRows
@@ -600,13 +629,16 @@ export default function App() {
         type: filter,
         search: view === "search" ? query : "",
         skip: rows[0].metas.length,
+        // Riwaq's TMDB rows page by number; their pages lose unmatched titles.
+        page: (rows[0].page || 1) + 1,
       });
       const next = result.rows[0];
       if (next)
         setRows((old) => [
           {
             ...old[0],
-            hasMore: next.metas.length > 0,
+            page: (old[0].page || 1) + 1,
+            hasMore: next.hasMore ?? next.metas.length > 0,
             metas: [
               ...new Map(
                 [...old[0].metas, ...next.metas].map((m) => [m.id, m]),
@@ -890,6 +922,7 @@ export default function App() {
                     running={!selected && !player.active && !playerOpen}
                     onOpen={openStable}
                     onFavorite={favoriteStable}
+                    fromRiwaq={feedRows.length > 0}
                   />
                 )}
               {view === "home" && !state.user && !loading && (
@@ -1083,15 +1116,32 @@ export default function App() {
                               />
                             )}
                             {id === "catalogs" &&
-                              (smartHome ? (
+                              (layout === "rows" ? (
+                                catalogRails
+                              ) : layout === "riwaq" && feedRows.length ? (
+                                <>
+                                  {feedRows.map((row) => (
+                                    <CatalogRail
+                                      key={row.key}
+                                      row={row}
+                                      onOpen={openStable}
+                                      onMore={moreStable}
+                                    />
+                                  ))}
+                                  <SmartShelves
+                                    rows={addonRows}
+                                    hidden={besideFeed}
+                                    onOpen={openStable}
+                                    onMore={moreStable}
+                                  />
+                                </>
+                              ) : (
                                 <SmartShelves
-                                  rows={shownRows}
+                                  rows={addonRows}
                                   hidden={state.settings.smartHidden}
                                   onOpen={openStable}
                                   onMore={moreStable}
                                 />
-                              ) : (
-                                catalogRails
                               ))}
                           </React.Fragment>
                         ))

@@ -11,6 +11,7 @@ import { cleanHudHidden } from "./hud-layout.mjs";
 import { PRAYER_CITIES, PRAYER_METHODS } from "./prayer.mjs";
 import { LOGO_MODES } from "./logos.mjs";
 import { HOME_GROUPING, cleanSmartHidden } from "./smart-groups.mjs";
+import { cleanFeedHidden } from "./feed.mjs";
 import { cleanCountdowns } from "./countdown.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
@@ -126,11 +127,13 @@ export const DEFAULT_SETTINGS = {
   titleLogos: "arabic",
   // The home hero moves to the next title on its own, paused on hover.
   heroAutoplay: true,
-  // Addon catalogs on home (core/smart-groups.mjs): Riwaq's sections until
-  // the viewer builds collections ("auto"), always ("smart"), or one row per
-  // catalog ("rows"); and the sections the viewer hid.
+  // Home's layout (core/smart-groups.mjs, core/feed.mjs): Riwaq's own rows
+  // until the viewer builds collections ("auto"), always ("riwaq"), the
+  // addons' catalogs gathered into groups ("groups"), or one row per catalog
+  // ("rows"); the groups and Riwaq rows the viewer hid.
   homeGrouping: "auto",
   smartHidden: [],
+  feedHidden: [],
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -426,6 +429,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.prayerCity = DEFAULT_SETTINGS.prayerCity;
   if (Array.isArray(input.smartHidden))
     next.smartHidden = cleanSmartHidden(input.smartHidden);
+  if (Array.isArray(input.feedHidden))
+    next.feedHidden = cleanFeedHidden(input.feedHidden);
   if (Array.isArray(input.countdowns))
     next.countdowns = cleanCountdowns(input.countdowns);
   if (Array.isArray(input.hudHidden))

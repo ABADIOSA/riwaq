@@ -1,27 +1,37 @@
 # Verification — Riwaq 0.20.0
 
-## 0.25.0 — Riwaq's sections on home and Discover
+## 0.25.0 — home by Riwaq's own categories, Discover by groups
 
-The owner asked for a default organisation of home for viewers who build no collections or who have so many addons that one row per catalog spoils the page. They asked for the same on Discover, whose tabs showed one per addon type (screenshot: arabcity-akwam, wecima, youtube, Berserk, DC, Marvel, Starwars, Sport…).
+The owner asked for a default home organisation for viewers who build no collections or who have so many addons that one row per catalog spoils the page, and the same for Discover's tabs (screenshot: arabcity-akwam, wecima, youtube, Berserk, DC, Marvel, Starwars, Sport…).
+
+- A first version grouped the addon catalogs into shelves. The owner replied that they meant Harbor's approach: titles arranged by the app's own categories, not by addon.
+- Harbor's home builds TMDB rows with a key and Cinemeta genre rows without one, and was studied for behaviour only.
+- 0.25.0 therefore puts Riwaq's own rows (`core/feed.mjs`) first on home, and keeps the addon groups only for what those rows do not cover.
 
 Executed:
 
-- `npm test`: **389 passing, 0 failing** (385 + 4 in `tests/smart-groups.test.mjs`). They cover:
-  - the owner's catalogs from the screenshot classified into groups, including list-addon types judged by their titles;
-  - an Arabic word containing "لك" not counted as a suggestion;
-  - group order, kept row order, and empty and hidden groups;
-  - the all-shelf interleaving titles once each;
-  - `auto`/`smart`/`rows` with and without collections;
-  - settings validation.
+- `npm test`: **394 passing, 0 failing**. New since 0.24.1: 4 in `tests/smart-groups.test.mjs` and 5 in `tests/feed.test.mjs`. They cover:
+  - the owner's catalogs classified into groups;
+  - layouts with and without collections;
+  - the groups kept beside the feed;
+  - feed plans with and without a key, carrying keys and labels only;
+  - hidden rows;
+  - TMDB trending, chart, upcoming and Arabic/Korean discover requests;
+  - backdrops from chart results;
+  - Cinemeta URLs by genre and skip;
+  - `Client.catalogPlan`/`catalog` serving `feed:` keys from a fake TMDB and a fake Cinemeta, including planning a single feed row for its full page.
 - `npm run check`, `npm run build` and `tests/undefined-names.test.mjs` pass.
-- Rendered in Chromium with a mocked bridge at 1440×960 and 980×680, with 22 catalogs modelled on the owner's:
-  - Home showed 9 shelves: مقترحة لك, أفلام, مسلسلات, عربي, أنمي, قنوات وبث مباشر, رياضة, يوتيوب وفيديو and أخرى.
-  - The عربي shelf had chips for الكل, ArabCity-AlooyTV, ArabCity-Akwam, Akwam and WeCima. Its first card changed from "ArabCity-AlooyTV 1" (blended) to "WeCima 1" on the WeCima chip, and its "عرض الكل" opened the WeCima page with 20 cards.
-  - Discover showed 10 tabs with counts (الكل 22, then 2/6/3/4/1/2/2/1/1). "عربي" left exactly the four Arabic catalog rails.
-  - With `homeGrouping: "rows"`, or `auto` with a collection, home went back to 22 catalog rails.
+- Rendered in Chromium at 1440×960 with a mocked bridge, 12 addon catalogs modelled on the owner's and mocked feed rows:
+  - With a TMDB key, home showed the 21 TMDB rows in order (رائج هذا الأسبوع … قريباً في السينما). Below them were shelves for مقترحة لك, عربي, قنوات وبث مباشر, رياضة and يوتيوب وفيديو (no films, series or anime shelves). The hero was taken from the first feed row.
+  - Without a key, home showed the 16 Cinemeta rows, with an anime shelf among the addon shelves.
+  - A feed row's "عرض الكل" showed 15 cards, and "تحميل المزيد" requested page 2 and showed 30.
+  - Discover never requested the feed and showed only addon catalogs.
+  - The settings card listed 21 Riwaq rows, and hiding "رعب" saved `feedHidden: ["horror"]`.
   - No page errors, no overflow.
+- Found by the render and fixed: a feed row's full page planned no catalog, because `catalogPlan` with a `catalogKey` only searched addons.
+- The earlier Discover group tabs render from the first version still applies: 10 tabs with counts, and "عربي" left only the Arabic catalogs.
 
-Not executed: Windows, the owner's real addons (the grouping is a heuristic from names and types).
+Not executed: real TMDB or Cinemeta responses (Cinemeta is blocked from this build environment), the first-load cost of matching TMDB rows to IMDb IDs on a real key, Windows.
 
 ## 0.24.1 — Discover without a sideways scrollbar, "عرض الكل" restored
 

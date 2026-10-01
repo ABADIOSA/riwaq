@@ -137,6 +137,11 @@ export function tmdbItems(body, source) {
         /^\/[\w.-]{1,120}$/.test(r.poster_path)
           ? r.poster_path
           : "",
+      backdrop:
+        typeof r?.backdrop_path === "string" &&
+        /^\/[\w.-]{1,120}$/.test(r.backdrop_path)
+          ? r.backdrop_path
+          : "",
     });
   }
   const by = {

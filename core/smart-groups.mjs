@@ -30,8 +30,13 @@ export const SMART_GROUPS = [
 export const SMART_IDS = SMART_GROUPS.map(([id]) => id);
 export const GROUP_NAME = Object.fromEntries(SMART_GROUPS);
 
-/** How home lays out addon catalogs. */
-export const HOME_GROUPING = ["auto", "smart", "rows"];
+/**
+ * How home lays out titles: Riwaq's own rows (core/feed.mjs) with the
+ * addons' groups the rows do not cover, the addons' groups alone, or one
+ * row per addon catalog. "auto" is Riwaq's rows until the viewer builds
+ * collections of their own.
+ */
+export const HOME_GROUPING = ["auto", "riwaq", "groups", "rows"];
 
 const WORDS = {
   foryou:
@@ -108,12 +113,22 @@ export function blendRows(rows = [], limit = 60) {
   return interleave(rows.map((r) => r.metas || [])).slice(0, limit);
 }
 
-/** Whether home shows Riwaq's sections instead of one row per catalog. */
-export function smartHomeOn(mode, collections = []) {
-  if (mode === "smart") return true;
-  if (mode === "rows") return false;
-  // "auto": Riwaq's sections until the viewer builds collections of their own.
-  return !(Array.isArray(collections) && collections.length);
+/** The layout home uses now: "riwaq", "groups" or "rows". */
+export function homeLayout(mode, collections = []) {
+  if (mode === "riwaq" || mode === "groups" || mode === "rows") return mode;
+  return Array.isArray(collections) && collections.length ? "rows" : "riwaq";
+}
+
+/**
+ * The addon groups shown under Riwaq's rows: films and series come from
+ * Riwaq's rows, and so do Arabic and anime when TMDB supplies them.
+ */
+export function groupsBesideFeed(feedHasLanguages) {
+  return SMART_IDS.filter(
+    (id) =>
+      !["movies", "series"].includes(id) &&
+      !(feedHasLanguages && ["anime"].includes(id)),
+  );
 }
 
 /** The hidden-group list from settings, validated. */
