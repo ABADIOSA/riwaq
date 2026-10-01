@@ -98,3 +98,17 @@ test("sources open in a window by default, and the viewer can keep them on the p
   assert.match(details, /if \(ok\) setSourcesOpen\(false\)/);
   assert.match(details, /className="sources-modal"/);
 });
+
+test("discover's type tabs scroll with arrows, and the page never scrolls sideways", () => {
+  const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  assert.match(app, /<ScrollRow className="filter-tabs"/);
+  const styles = readFileSync(
+    new URL("../src/styles.css", import.meta.url),
+    "utf8",
+  );
+  const content = styles.match(/\n\.content \{[^}]*\}/)[0];
+  assert.match(content, /overflow-x: clip/);
+  const tabs = styles.match(/\n\.filter-tabs button \{[^}]*\}/)[0];
+  assert.match(tabs, /flex: none/);
+  assert.match(tabs, /text-overflow: ellipsis/);
+});

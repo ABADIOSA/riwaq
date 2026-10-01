@@ -42,7 +42,14 @@ import {
 } from "lucide-react";
 import { api, call } from "./lib/api.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
-import { IconButton, Busy, Empty, Poster, Rail } from "./components/UI.jsx";
+import {
+  IconButton,
+  Busy,
+  Empty,
+  Poster,
+  Rail,
+  ScrollRow,
+} from "./components/UI.jsx";
 import Details from "./components/Details.jsx";
 import { ExploreModal, PeopleRow } from "./components/Credits.jsx";
 import AiSearchRow from "./components/AiSearch.jsx";
@@ -909,7 +916,7 @@ export default function App() {
                   </div>
                 )}
                 {view !== "home" && !catalog && (
-                  <div className="filter-tabs">
+                  <ScrollRow className="filter-tabs" role="tablist">
                     {[
                       ["", "الكل"],
                       ["movie", "أفلام"],
@@ -921,12 +928,15 @@ export default function App() {
                       <button
                         className={filter === t ? "selected" : ""}
                         key={t}
+                        role="tab"
+                        aria-selected={filter === t}
+                        title={label}
                         onClick={() => setFilter(t)}
                       >
                         {label}
                       </button>
                     ))}
-                  </div>
+                  </ScrollRow>
                 )}
                 {view === "search" && query && !catalog && (
                   <>
@@ -972,7 +982,7 @@ export default function App() {
                     {catalog ? (
                       <>
                         <div className="poster-grid">
-                          {liveRows
+                          {shownRows
                             .flatMap((r) => r.metas)
                             .map((m, i) => (
                               <Poster
