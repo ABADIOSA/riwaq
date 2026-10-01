@@ -35,6 +35,7 @@ React (sandboxed, RTL)
 - 0.17: `Details.jsx` became a page inside the content area (`title-open` hides the view underneath; `openTitle`/`closeTitle` in `App.jsx` keep its scroll), with sources gated behind Play; `core/artwork.mjs` and `client.artwork` (IPC `artwork`, `openArtwork`) feed `src/components/ArtworkGallery.jsx`; styles in `src/title.css`.
 - 0.18: `ScrollRow` in `src/components/UI.jsx` gives every horizontal row (rails, cast, people, series works, up next, folder tiles, episodes, folder and library tabs) arrows instead of a scrollbar.
 - 0.19: `src/identity.css` (Riwaq identity), `core/prayer.mjs` with `src/components/Prayer.jsx` (chip, ends-at, settings) and `checkPrayer` in main, `core/season-details.mjs` with `client.seasonDetails` (IPC `seasonDetails`) for episode cards.
+- 0.20: `core/countdown.mjs` with `src/components/Countdown.jsx` (title countdown, home rail) and `client.releaseDates` (IPC `releaseDates`).
 - `core/collection-sources.mjs` (0.12.1): TMDB and Trakt request builders and result parsers for folder sources; the client fetches them with the viewer's own key or client ID and matches TMDB results to IMDb IDs.
 - `core/nuvio.mjs` (0.12): Java `.properties` parsing, the Nuvio backup zip reader (known stores only), and one Nuvio profile's addons, collections, plugin repositories (without code) and library. Main locates Nuvio Desktop's folder from the environment and holds the snapshot between preview and import.
 - `core/home.mjs` (0.12): home sections and catalog row order/visibility by opaque plan keys.

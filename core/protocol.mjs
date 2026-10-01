@@ -9,6 +9,7 @@ import {
 import { cleanServices } from "./services.mjs";
 import { cleanHudHidden } from "./hud-layout.mjs";
 import { PRAYER_CITIES, PRAYER_METHODS } from "./prayer.mjs";
+import { cleanCountdowns } from "./countdown.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -115,6 +116,8 @@ export const DEFAULT_SETTINGS = {
   prayerWarn: true,
   prayerHeadsUp: true,
   prayerPause: false,
+  // Countdowns pinned to the home page (core/countdown.mjs).
+  countdowns: [],
 };
 export const keyFor = (value) =>
   createHash("sha256").update(value).digest("hex").slice(0, 24);
@@ -404,6 +407,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
   }
   if (next.prayerCity === "custom" && !next.prayerCustom)
     next.prayerCity = DEFAULT_SETTINGS.prayerCity;
+  if (Array.isArray(input.countdowns))
+    next.countdowns = cleanCountdowns(input.countdowns);
   if (Array.isArray(input.hudHidden))
     next.hudHidden = cleanHudHidden(input.hudHidden);
   if (Array.isArray(input.badgeRules))
