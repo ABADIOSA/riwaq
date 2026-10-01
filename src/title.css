@@ -325,7 +325,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s, filter 0.2s;
+  transition:
+    transform 0.3s,
+    filter 0.2s;
 }
 .episode-card:not(:disabled):hover .episode-still img {
   transform: scale(1.04);
@@ -413,7 +415,9 @@
 }
 .episode-card.selected {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 10px 26px #0007;
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 10px 26px #0007;
 }
 .episode-card.selected .episode-title {
   color: var(--accent);
