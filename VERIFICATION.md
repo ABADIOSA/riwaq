@@ -1,4 +1,27 @@
-# Verification — Riwaq 0.19.0
+# Verification — Riwaq 0.20.0
+
+## 0.20.0 — countdowns to upcoming titles
+
+The owner shared a YouTube live countdown and, asked what it was (YouTube is blocked in this build environment), said it was the countdown to Avengers: Doomsday. Riwaq now counts down to any upcoming film or next episode, and can pin it to the home page.
+
+Executed:
+
+- `npm test`: **367 passing, 0 failing** (363 + 4 in `tests/countdown.test.mjs`). They cover:
+  - local-midnight targets and the remaining days, hours, minutes and seconds;
+  - a series' nearest numbered unaired episode;
+  - TMDB's Saudi theatrical date chosen over digital;
+  - pinned list validation and the limit of 12.
+  - The home-section count test now expects 7 sections.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge and a fixed clock (2026-10-01 15:20, Asia/Riyadh) at 980×680 and 1440×960, for a film released 2026-12-18 with a mocked Saudi cinema date of 2026-12-17:
+  - the title page reads "السينما في السعودية بعد" with 76 days 08:39:56, then 08:39:53 three seconds later;
+  - it lists both dates and hides "ends at";
+  - pinning adds the home section right after the hero, and the home card ticks;
+  - removing it clears both;
+  - no page errors, no horizontal overflow.
+- Found by the render and fixed: in the Riwaq identity a long Latin hero title was cut at the hero's fixed height. Titles now scale with the window and stay within two lines.
+
+Not executed: real TMDB release dates, Windows.
 
 ## 0.19.0 — Riwaq's own identity, prayer times, episodes with stills
 

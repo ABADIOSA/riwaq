@@ -7,6 +7,7 @@
 
 export const HOME_SECTIONS = [
   ["hero", "الواجهة الكبيرة"],
+  ["countdowns", "العد التنازلي"],
   ["continue", "نكمل الحكاية"],
   ["upnext", "الحلقات التالية"],
   ["collections", "المجموعات المثبّتة"],

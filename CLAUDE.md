@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.19.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.20.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -70,6 +70,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - Where they appear: the top bar chip (`PrayerChip`), and `EndsAt` on title pages ("if started now it ends at…" plus prayers crossed).
   - During a viewing, main's `checkPrayer`: a heads-up five minutes before, and a notice at the time. It pauses only when `prayerPause` is on, which is off by default.
 - Episode cards show the addon's `thumbnail`, `overview`/`description` and `rating`. With a TMDB key, `seasonDetails` (`core/season-details.mjs`) reads the season in the metadata language, fills missing descriptions from English, and caches by season. Stills come only from the addon's HTTPS images or image.tmdb.org. Spoiler protection blurs still, title and description.
+- Countdowns (`core/countdown.mjs`, `Countdown.jsx`): a title page shows one when a film or series is not out yet, or a series has an unaired numbered episode. Dates are calendar days counted to local midnight. With a TMDB key, `releaseDates` reads the film's date in the viewer's region (theatrical first) and shows it beside the worldwide one. Pinned countdowns are per-profile `countdowns` (at most 12, HTTPS pictures, validated by `cleanCountdowns`). They appear in the `countdowns` home section, which the first pin adds after the hero. The clock ticks once a second only while the page is visible.
 - No user account was authenticated in provider tests. Distinguish mocked tests, live catalog tests and actual native playback in reports.
 
 ## Good next contributions

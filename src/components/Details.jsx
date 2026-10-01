@@ -43,6 +43,8 @@ import { spoilerIds } from "../../core/spoilers.mjs";
 import { episodeDetails } from "../../core/season-details.mjs";
 import { runtimeMinutes } from "../../core/prayer.mjs";
 import { EndsAt } from "./Prayer.jsx";
+import { TitleCountdown } from "./Countdown.jsx";
+import { releaseTarget } from "../../core/countdown.mjs";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
 import { IconButton, Busy, Empty, ScrollRow } from "./UI.jsx";
@@ -418,8 +420,20 @@ export default function Details({
                 : "أضف إلى الطابور"}
             </button>
           </div>
+          {!loading &&
+            !(
+              meta.type === "movie" &&
+              releaseTarget(meta, new Date(), -new Date().getTimezoneOffset())
+            ) && (
+              <EndsAt minutes={remainingMinutes} settings={state.settings} />
+            )}
           {!loading && (
-            <EndsAt minutes={remainingMinutes} settings={state.settings} />
+            <TitleCountdown
+              meta={meta}
+              state={state}
+              update={update}
+              notice={notice}
+            />
           )}
           {error && <p className="inline-warning">{error}</p>}
         </div>

@@ -16,6 +16,7 @@ import { applyStreamPrefs } from "./stream-prefs.mjs";
 import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
+import { parseReleaseDates } from "./countdown.mjs";
 import {
   fillOverviews,
   needsEnglish,
@@ -1303,6 +1304,30 @@ export class Client {
     if (cache.size > 200) cache.delete(cache.keys().next().value);
     cache.set(key, { at: Date.now(), value });
     return value;
+  }
+  /**
+   * A film's release date in the viewer's region from TMDB (Saudi cinemas by
+   * default), for its countdown. Without a TMDB key there is none.
+   */
+  async releaseDates({ id }) {
+    const entry = this.state.providers?.tmdb;
+    if (!entry?.key || entry.enabled === false) return null;
+    if (!/^tt\d{5,12}$/.test(id || "")) return null;
+    const region = /^[A-Z]{2}$/.test(this.state.settings.region || "")
+      ? this.state.settings.region
+      : "SA";
+    let tmdbId = this.metas.get(`movie:${id}`)?.tmdbId;
+    if (!tmdbId) {
+      const found = await this.tmdbCall(`find/${id}`, {
+        external_source: "imdb_id",
+      });
+      tmdbId = found?.movie_results?.[0]?.id;
+    }
+    if (!tmdbId) return null;
+    return parseReleaseDates(
+      await this.tmdbCall(`movie/${tmdbId}/release_dates`),
+      region,
+    );
   }
   async metadataOf(type, id) {
     for (const addon of this.enabled().filter((a) =>

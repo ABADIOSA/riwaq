@@ -38,6 +38,7 @@ import Details from "./components/Details.jsx";
 import { ExploreModal, PeopleRow } from "./components/Credits.jsx";
 import AiSearchRow from "./components/AiSearch.jsx";
 import { PrayerChip } from "./components/Prayer.jsx";
+import { CountdownRail } from "./components/Countdown.jsx";
 import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
 import Addons from "./components/Addons.jsx";
@@ -1003,6 +1004,13 @@ export default function App() {
                             )}
                             {id === "upnext" && (
                               <UpNextRail items={upNext} onOpen={open} />
+                            )}
+                            {id === "countdowns" && (
+                              <CountdownRail
+                                state={state}
+                                update={update}
+                                onOpen={(meta) => open(meta)}
+                              />
                             )}
                             {id === "services" && (
                               <ServiceRails
