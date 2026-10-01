@@ -135,6 +135,9 @@ export function playerArgs({
   return args;
 }
 
+/** How often a change of position alone reaches the interface. */
+export const POSITION_MS = 250;
+
 const PROPERTIES = [
   ["time-pos", "position"],
   ["duration", "duration"],
@@ -450,6 +453,34 @@ export class Player {
     else if (name === "riwaq-next" || name === "riwaq-prev")
       this.onEvent({ type: name === "riwaq-next" ? "next" : "previous" });
   }
+  /**
+   * MPV reports the position on every frame. Sending each one redrew the
+   * whole interface and the HUD up to sixty times a second, so a change of
+   * position alone goes out at most every POSITION_MS; any other change goes
+   * out at once and carries the latest position with it.
+   */
+  publish(positionOnly = false) {
+    const now = Date.now();
+    if (!positionOnly) {
+      clearTimeout(this.publishTimer);
+      this.publishTimer = null;
+      this.lastPublish = now;
+      this.onState(this.state);
+      return;
+    }
+    if (this.publishTimer) return;
+    const wait = POSITION_MS - (now - (this.lastPublish || 0));
+    if (wait <= 0) {
+      this.lastPublish = now;
+      this.onState(this.state);
+      return;
+    }
+    this.publishTimer = setTimeout(() => {
+      this.publishTimer = null;
+      this.lastPublish = Date.now();
+      if (this.state.active) this.onState(this.state);
+    }, wait);
+  }
   event(event) {
     if (event.event === "client-message" && typeof event.args?.[0] === "string")
       this.message(event.args[0]);
@@ -485,7 +516,7 @@ export class Player {
       if (event.name === "core-idle") this.coreIdle = event.data;
       if (event.name === "core-idle" || event.name === "pause")
         this.state.loading = !!this.coreIdle && !this.state.pause;
-      this.onState(this.state);
+      this.publish(event.name === "time-pos");
     }
     if (event.event === "file-loaded") {
       // The controller script may not have been listening when full screen

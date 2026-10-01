@@ -130,15 +130,22 @@
   background: color-mix(in srgb, var(--panel, #131518) 80%, transparent);
   backdrop-filter: blur(18px);
 }
+/* The artwork glow is drawn tiny and scaled up: a 4% layer blurred by 3px
+   and stretched thirty times looks like a 90px blur of the whole window,
+   at a fraction of the cost, and changing the artwork stays cheap. */
 .ambience-layer {
   position: fixed;
-  inset: -12%;
+  top: -12vh;
+  left: -12vw;
+  width: 4.1vw;
+  height: 4.1vh;
   z-index: -1;
   background: var(--ambient-image) center / cover no-repeat;
-  filter: blur(90px) saturate(1.5);
+  filter: blur(3px) saturate(1.5);
   opacity: 0.24;
   pointer-events: none;
-  transition: background-image 0.8s ease;
+  transform: scale(30);
+  transform-origin: 0 0;
 }
 
 /* Logo & icon. */

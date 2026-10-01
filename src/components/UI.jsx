@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext } from "react";
+import React, { memo, useState, useEffect, useRef, useContext } from "react";
 import {
   LoaderCircle,
   Film,
@@ -74,7 +74,9 @@ export function Modal({ children, onClose, className = "" }) {
     </dialog>
   );
 }
-export function Poster({ meta, onOpen, progress }) {
+// Cards and rows re-render only when their own props change: a playback
+// tick or a hero turn must not redraw thousands of posters.
+export const Poster = memo(function Poster({ meta, onOpen, progress }) {
   const finished = useContext(WatchedContext);
   const seen = finished?.has(`${meta.type}:${meta.id}`);
   return (
@@ -128,7 +130,7 @@ export function Poster({ meta, onOpen, progress }) {
       </span>
     </button>
   );
-}
+});
 /**
  * A horizontal row moved with arrows instead of a scrollbar. Each arrow
  * moves most of a screen; an arrow hides at its end of the row, and both
@@ -139,9 +141,12 @@ export function ScrollRow({
   as: Tag = "div",
   className = "",
   children,
+  onNearEnd,
   ...rest
 }) {
   const ref = useRef(null);
+  const nearEnd = useRef(onNearEnd);
+  nearEnd.current = onNearEnd;
   const [edges, setEdges] = useState({ start: true, end: true });
   const measure = () => {
     const el = ref.current;
@@ -149,6 +154,15 @@ export function ScrollRow({
     const max = el.scrollWidth - el.clientWidth;
     const pos = Math.abs(el.scrollLeft);
     const next = { start: pos <= 2, end: max <= 2 || pos >= max - 2 };
+    // Within a screen and a half of the end: a row that renders in steps
+    // adds its next cards before the viewer reaches them.
+    // A row off screen is not laid out and measures zero: it waits.
+    if (
+      nearEnd.current &&
+      el.clientWidth > 0 &&
+      max - pos <= el.clientWidth * 1.5
+    )
+      nearEnd.current();
     setEdges((was) =>
       was.start === next.start && was.end === next.end ? was : next,
     );
@@ -211,7 +225,20 @@ export function ScrollRow({
   );
 }
 const RAIL_LIMIT = 60;
-export function Rail({ title, subtitle, metas, onOpen, onMore, progressMap }) {
+// A rail renders its first cards and adds more as the viewer moves along
+// it, so a home page of a hundred catalogs is not six thousand cards.
+const RAIL_FIRST = 12;
+const RAIL_STEP = 12;
+export const Rail = memo(function Rail({
+  title,
+  subtitle,
+  metas,
+  onOpen,
+  onMore,
+  progressMap,
+}) {
+  const total = Math.min(metas.length, RAIL_LIMIT);
+  const [count, setCount] = useState(RAIL_FIRST);
   return (
     <section className="rail">
       <div className="section-heading">
@@ -225,8 +252,15 @@ export function Rail({ title, subtitle, metas, onOpen, onMore, progressMap }) {
           </button>
         )}
       </div>
-      <ScrollRow className="poster-row">
-        {metas.slice(0, RAIL_LIMIT).map((m, i) => (
+      <ScrollRow
+        className="poster-row"
+        onNearEnd={
+          count < total
+            ? () => setCount((c) => Math.min(total, c + RAIL_STEP))
+            : undefined
+        }
+      >
+        {metas.slice(0, Math.min(count, total)).map((m, i) => (
           <Poster
             key={`${m.type}:${m.id}:${i}`}
             meta={m}
@@ -237,4 +271,4 @@ export function Rail({ title, subtitle, metas, onOpen, onMore, progressMap }) {
       </ScrollRow>
     </section>
   );
-}
+});

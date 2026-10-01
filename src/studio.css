@@ -188,9 +188,10 @@ body:has(.theater:not(.mini-theater)) {
   box-shadow: 0 9px 22px #0003;
   border-radius: 13px;
 }
+/* A solid tint, not a blur: thousands of small backdrop blurs made every
+   scroll repaint the posters underneath them. */
 .cardstyle-glass .rating {
-  backdrop-filter: blur(12px);
-  background: #111a;
+  background: #101215d9;
   border: 1px solid #fff2;
   border-radius: 8px;
 }

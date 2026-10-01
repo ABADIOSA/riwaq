@@ -1,5 +1,40 @@
 # Verification — Riwaq 0.20.0
 
+## 0.22.0 — lighter and faster
+
+The owner said Riwaq felt heavy and slow. I measured a mocked home page in headless Chromium at 1440×960: 100 addon catalogs of 60 titles each, artwork ambience on, using `scratchpad/ui/perf.mjs`. These are renderer measurements without a GPU, and not Windows ones.
+
+| | before | after |
+|---|---|---|
+| Home page fully loaded | 20.3 s (19.2 s of long tasks) | 3.6–4.0 s (2.7 s) |
+| DOM elements / poster cards | 127,513 / 6,002 | 52,921 / 2,450 |
+| 3 s of 30 Hz player updates: frame rate / long tasks | 4 fps / 63.2 s | 58–60 fps / 0 s |
+| 10 hero turns, extra time | 16.9 s | 0.7–1.0 s (scripting 55–74 ms, style 65 ms, layout 52–64 ms in total) |
+
+Causes found and fixed:
+
+- **Player updates:** `electron/player.mjs` emitted the whole player state on every MPV `time-pos` change, which happens on every frame. Each emission re-rendered the whole app, including every mounted rail, and the HUD.
+- **Rails:** every rail mounted 60 cards.
+- **Re-renders:** nothing was memoized, and callbacks were new on every render.
+- **The finished set:** its identity changed on every progress save, so every card re-rendered.
+- **Rating badges:** each poster's badge carried a `backdrop-filter`.
+- **Ambience:** the layer blurred a full-window image by 90 px, and its variable sat on the app root, so every hero turn restyled the whole document.
+
+Executed:
+
+- `npm test`: **376 passing, 0 failing** (372 + 4 in `tests/performance.test.mjs`). They cover:
+  - sixty position updates in a burst produce one immediate and one coalesced emission with the latest position;
+  - a pause change goes out at once and folds in a pending position;
+  - a pending position is dropped when the viewing stops;
+  - source checks that `Rail` and `Poster` are memoized, that rails start at 12 cards, that the glass rating has no backdrop filter, that rails keep `content-visibility`, and that the ambient variable is off the app root.
+- `npm run check` and `npm run build` pass. The startup bundle went from 612 KB to 437 KB. Settings, add-ons, library, live TV and folder pages are separate chunks, and each opened without errors in Chromium.
+- In Chromium:
+  - a catalog rail grew to its 60 cards as its forward arrow was pressed;
+  - the hover frame on an arched card is not clipped;
+  - the 0.21 hero and logo render check and the 0.20 countdown render check still pass, with no page errors and no overflow.
+
+Not executed: Windows, a real GPU, real MPV playback (the 4 Hz position updates in the HUD were not watched on a real film), and a real account with many add-ons.
+
 ## 0.21.0 — title logos, hero arrows, prayer popover
 
 The owner asked why the hero typed a title's name instead of its logo (Arabic or original language), and why the hero had no arrows. They added that clicking the prayer chip was broken: its popover opened beneath the hero.
