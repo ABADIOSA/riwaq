@@ -316,13 +316,25 @@ function parseSeeders(text) {
   return match ? Number(match[1]) : null;
 }
 
+// "1080p", "2160i" or a bare "1080", but never a size or a rate such as
+// "720 MB" or "1080 kbps".
+const linesRx = (n) =>
+  new RegExp(
+    `\\b${n}(?:[pi]\\b|\\b(?![.,]\\d|\\s*(?:[kmgt]i?b|[km]bps|fps|hz)\\b))`,
+    "i",
+  );
+const LINES = [4320, 2160, 1440, 1080, 720].map((n) => [n, linesRx(n)]);
+
 function parseResolution(text, source) {
-  if (/\b(4320[pi]?|8k)\b/i.test(text)) return 4320;
-  if (/\b(2160[pi]?|4k|uhd)\b/i.test(text)) return 2160;
-  if (/\b(1440[pi]?|2k)\b/i.test(text)) return 1440;
-  if (/\b(1080[pi]|1080)\b/i.test(text) || /\bfhd\b/i.test(text)) return 1080;
-  if (/\b(720[pi]|720)\b/i.test(text)) return 720;
+  // A stated number of lines wins over words. "1080p UHD BluRay" is a 1080p
+  // encode made from a 4K disc (often with Dolby Vision and HDR10), and
+  // "4K remaster" names how the film was restored, not this file.
+  for (const [n, rx] of LINES) if (rx.test(text)) return n;
   if (/\b(480[pi]|576[pi]|360[pi])\b/i.test(text)) return 480;
+  if (/\b8k\b/i.test(text)) return 4320;
+  if (/\b(4k|uhd)\b/i.test(text)) return 2160;
+  if (/\b2k\b/i.test(text)) return 1440;
+  if (/\bfhd\b/i.test(text)) return 1080;
   // Without an explicit marker the source format is the only honest hint.
   if (["CAM", "TS", "TC", "SCR"].includes(source)) return 480;
   if (source === "DVDRip") return 480;

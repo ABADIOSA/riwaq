@@ -694,3 +694,36 @@
 .identity-riwaq .countdown-remove {
   top: 24%;
 }
+
+/* Sources in a window over the title page (sourcesPopup). The list
+   scrolls under a fixed heading, so the close button and the quality
+   filter stay in reach. */
+.modal.sources-modal {
+  width: min(1120px, calc(100vw - 50px));
+  max-height: 88vh;
+  overflow: hidden;
+}
+.sources-modal > .modal-inner {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  padding: 26px 30px 0;
+}
+.sources-modal .streams {
+  margin: 0;
+  padding: 0 0 30px;
+  border-top: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+/* Room for the close button on the left of the heading. */
+.sources-modal .streams > .section-heading {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding-inline-end: 56px;
+  padding-bottom: 12px;
+  align-items: center;
+  background: #171a1f;
+}

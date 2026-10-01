@@ -1,5 +1,50 @@
 # Verification — Riwaq 0.20.0
 
+## 0.23.0 — sources in a window
+
+Before merging 0.22.1, the owner asked that pressing Play show the sources in a popup window. 0.23.0 carries that and the 0.22.1 resolution fix below.
+
+- `sourcesPopup` (default on) makes Play open the sources section inside a `Modal`.
+- The heading (with the quality filter and refresh) is sticky while the list scrolls, and the close button stays visible.
+- A started stream closes the window, and so do Escape and the close button; the title page stays.
+- "اعرض المصادر" reopens the window without a new stream request.
+- With `sourcesOnOpen`, or with `sourcesPopup` off, the sources stay on the page as in 0.17.
+
+Executed:
+
+- `npm test`: **378 passing, 0 failing** (377 + 1 in `tests/performance.test.mjs`). The order test in `tests/credits-more.test.mjs` now checks where the sources section is placed instead of where its markup is written. The new test covers the setting's default and validation, that `sourcesOnOpen` keeps the page layout, and that a started stream closes the window.
+- Rendered in Chromium with a mocked bridge at 980×680 and 1440×960, with 12 mocked sources, including the two from the owner's screenshot:
+  - before Play there is no dialog, and the hint says sources open in a window;
+  - after Play, 12 sources are in the dialog and none are on the page, with the HiDt release shown as 1080p and the FraMeSToR remux as 4K;
+  - after the list scrolled 600 px, the close button stayed inside the dialog and the heading stayed 27 px from its top;
+  - Escape closed only the dialog, "اعرض المصادر" reopened it, and pressing a source's play button sent `play` and closed it;
+  - with `sourcesPopup` off, the 12 sources were on the page;
+  - no page errors, no overflow.
+
+Not executed: Windows, real addon responses, real playback after choosing a source.
+
+## 0.22.1 — resolution from the stated line count
+
+The owner sent a screenshot of two sources for The Fantastic Four: First Steps, both marked 4K. The addon labelled the first "HD" and the second "4K".
+
+- The first stream's chips name the group HiDt, BluRay, x265, HDR10 and Dolby Vision at 12.29 GB. That matches HiDt's "1080p UHD BluRay … DV HDR10 x265" releases.
+- `parseResolution` tested `2160|4k|uhd` before `1080`, so "UHD", which names the 4K disc the encode came from, made it 2160.
+- It now takes a stated line count first, highest first: `4320`, `2160`, `1440`, `1080`, `720` with `p`/`i`, or bare when not followed by a size, rate, frame rate or decimal. Only then does it read words: `8K`, `4K`/`UHD`, `2K`, `FHD`, `HD`.
+- The owner's imported NardBadges pack defines its 4K badge the same way (`2160|4k|uhd` without `1080|720`). Its picture replaces the built-in resolution chip, so the chip follows the corrected value.
+
+Executed:
+
+- `npm test`: **377 passing, 0 failing** (376 + 1 in `tests/stream-engine.test.mjs`). The new test covers:
+  - the HiDt-style filename gives 1080, DV+HDR10, tier `1080p_HDR`;
+  - a FraMeSToR 2160p UHD remux stays 2160;
+  - "4K Remastered 1080p" gives 1080;
+  - "UHD BluRay" alone gives 2160;
+  - "4K … 720 MB" and "1080 kbps 4K" give 2160;
+  - "1080i", "FHD" and "HD" give 1080, 1080 and 720.
+- The existing remux, scoring and badge-pack tests still pass.
+
+Not executed: the owner's actual addon response, Windows.
+
 ## 0.22.0 — lighter and faster
 
 The owner said Riwaq felt heavy and slow. I measured a mocked home page in headless Chromium at 1440×960: 100 addon catalogs of 60 titles each, artwork ambience on, using `scratchpad/ui/perf.mjs`. These are renderer measurements without a GPU, and not Windows ones.

@@ -108,6 +108,8 @@ export const DEFAULT_SETTINGS = {
   awardIcons: true,
   // A title's sources appear after Play; true shows them on opening.
   sourcesOnOpen: false,
+  // Play shows the sources in a window over the title page.
+  sourcesPopup: true,
   // Prayer times, computed on this machine (core/prayer.mjs).
   prayerOn: true,
   prayerCity: "jeddah",
@@ -308,6 +310,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "badgesOn",
     "awardIcons",
     "sourcesOnOpen",
+    "sourcesPopup",
     "prayerOn",
     "prayerWarn",
     "prayerHeadsUp",
