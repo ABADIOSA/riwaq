@@ -48,6 +48,7 @@ import { releaseTarget } from "../../core/countdown.mjs";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
 import { IconButton, Busy, Empty, ScrollRow } from "./UI.jsx";
+import { TitleLogo } from "./TitleLogo.jsx";
 import { call } from "../lib/api.js";
 import {
   queueKey,
@@ -291,17 +292,11 @@ export default function Details({
             <ArrowRight size={18} /> رجوع
           </button>
           <span className="eyebrow">{typeName(meta.type)} · من إضافاتك</span>
-          {meta.logo && (
-            <img
-              className="detail-title-logo"
-              src={imgUrl(meta.logo)}
-              alt=""
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          )}
-          <h1 dir="auto">{meta.name}</h1>
+          <TitleLogo
+            meta={meta}
+            mode={state.settings.titleLogos || "arabic"}
+            className="detail-title"
+          />
           <div className="hero-meta">
             {meta.imdbRating && (
               <span className="hero-rating">

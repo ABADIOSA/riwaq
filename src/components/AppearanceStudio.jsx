@@ -467,6 +467,39 @@ export default function AppearanceStudio({ state, update, part = "" }) {
           </label>
 
           <div className="studio-field">
+            اسم العمل في العرض الرئيسي وصفحة العمل
+            {pick(
+              "titleLogos",
+              [
+                ["arabic", "شعار عربي أولاً"],
+                ["original", "شعار بلغته الأصلية"],
+                ["text", "اسم مكتوب"],
+              ],
+              s.titleLogos || "arabic",
+              (titleLogos) => update("settings", { titleLogos }),
+            )}
+            <small>
+              يُقرأ الشعار من TMDB بمفتاحك، وبدونه من شعار الإضافة أو metahub.
+              إذا ما وُجد شعار يظهر الاسم مكتوباً.
+            </small>
+          </div>
+          <div className="studio-field">
+            تقليب العرض الرئيسي
+            {pick(
+              "heroAutoplay",
+              [
+                ["on", "كل 9 ثوانٍ"],
+                ["off", "بالأسهم فقط"],
+              ],
+              s.heroAutoplay === false ? "off" : "on",
+              (id) => update("settings", { heroAutoplay: id === "on" }),
+            )}
+            <small>
+              يتوقف حين يكون المؤشر فوقه، ولا يتقلب مع تقليل الحركة.
+            </small>
+          </div>
+
+          <div className="studio-field">
             عناصر القائمة
             <div className="choice-row">
               {HIDEABLE_NAV.map(([id, label]) => {
