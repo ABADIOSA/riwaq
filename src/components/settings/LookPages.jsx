@@ -359,7 +359,10 @@ export function AmbiencePage({ state, update }) {
       </section>
       <section className="settings-card">
         <h2>أجواء العمل المعروض</h2>
-        <p>توهّج خافت بألوان العمل الذي أمامك، في الرئيسية وصفحة التفاصيل.</p>
+        <p>
+          توهّج خافت بألوان العمل خلف رِواق. يتبع العمل اللي تحت مؤشر الفأرة، أو
+          الواجهة الرئيسية وصفحة العمل المفتوحة.
+        </p>
         <Choices
           options={[
             ["off", "بدون"],
@@ -369,6 +372,105 @@ export function AmbiencePage({ state, update }) {
           onPick={(ambient) => set({ ambient })}
         />
       </section>
+      {a.ambient === "artwork" && (
+        <section className="settings-card">
+          <h2>تفاعل التوهّج</h2>
+          <div className="studio-field">
+            يتبع
+            <Choices
+              options={[
+                ["hover", "العمل تحت المؤشر"],
+                ["hero", "الواجهة وصفحة العمل فقط"],
+              ]}
+              value={a.ambientFollow}
+              onPick={(ambientFollow) => set({ ambientFollow })}
+            />
+          </div>
+          {a.ambientFollow === "hover" && (
+            <>
+              <label className="studio-field">
+                <span>
+                  مدة التوقف قبل التغيير <b>{a.ambientDelay} ملّي ثانية</b>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="1500"
+                  step="50"
+                  value={a.ambientDelay}
+                  onChange={(e) =>
+                    set({ ambientDelay: Number(e.target.value) })
+                  }
+                />
+                <small>
+                  أقصر يعني أسرع، وأطول يمنع الوميض وأنت تمر على صف كامل.
+                </small>
+              </label>
+              <div className="studio-field">
+                لما يطلع المؤشر من البطاقات
+                <Choices
+                  options={[
+                    ["return", "يرجع لعمل الواجهة"],
+                    ["stay", "يبقى على آخر عمل"],
+                  ]}
+                  value={a.ambientLeave}
+                  onPick={(ambientLeave) => set({ ambientLeave })}
+                />
+              </div>
+            </>
+          )}
+          <div className="studio-field">
+            الصورة
+            <Choices
+              options={[
+                ["backdrop", "خلفية العمل"],
+                ["poster", "البوستر"],
+              ]}
+              value={a.ambientImage}
+              onPick={(ambientImage) => set({ ambientImage })}
+            />
+          </div>
+          <div className="studio-field">
+            النعومة
+            <Choices
+              options={[
+                ["soft", "خفيفة"],
+                ["medium", "متوسطة"],
+                ["strong", "قوية"],
+              ]}
+              value={a.ambientBlur}
+              onPick={(ambientBlur) => set({ ambientBlur })}
+            />
+          </div>
+          <label className="studio-field">
+            <span>
+              القوة <b>{a.ambientStrength}%</b>
+            </span>
+            <input
+              type="range"
+              min="5"
+              max="60"
+              step="1"
+              value={a.ambientStrength}
+              onChange={(e) => set({ ambientStrength: Number(e.target.value) })}
+            />
+          </label>
+          <label className="studio-field">
+            <span>
+              سرعة الانتقال <b>{a.ambientFade} ملّي ثانية</b>
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="2000"
+              step="100"
+              value={a.ambientFade}
+              onChange={(e) => set({ ambientFade: Number(e.target.value) })}
+            />
+            <small>مع «تقليل الحركة» يتغيّر التوهّج فوراً بلا انتقال.</small>
+          </label>
+        </section>
+      )}
     </>
   );
 }

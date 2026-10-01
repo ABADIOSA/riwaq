@@ -130,22 +130,30 @@
   background: color-mix(in srgb, var(--panel, #131518) 80%, transparent);
   backdrop-filter: blur(18px);
 }
-/* The artwork glow is drawn tiny and scaled up: a 4% layer blurred by 3px
-   and stretched thirty times looks like a 90px blur of the whole window,
-   at a fraction of the cost, and changing the artwork stays cheap. */
-.ambience-layer {
+/* The artwork glow (core/ambient.mjs, Ambient.jsx): two layers that
+   crossfade. Each is drawn tiny and scaled up, so a 3 px blur of a 4%
+   layer stretched thirty times reads as a 90 px blur of the window at a
+   fraction of the cost. Size, scale, blur, strength and fade come inline
+   from the viewer's settings; nothing is set on the app root. */
+.ambience-stack {
   position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ambience-layer {
+  position: absolute;
   top: -12vh;
   left: -12vw;
   width: 4.1vw;
   height: 4.1vh;
-  z-index: -1;
-  background: var(--ambient-image) center / cover no-repeat;
+  background: center / cover no-repeat;
   filter: blur(3px) saturate(1.5);
-  opacity: 0.24;
-  pointer-events: none;
+  opacity: 0;
   transform: scale(30);
   transform-origin: 0 0;
+  will-change: opacity;
 }
 
 /* Logo & icon. */

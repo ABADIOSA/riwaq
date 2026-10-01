@@ -1,5 +1,25 @@
 # Verification — Riwaq 0.20.0
 
+## 0.24.0 — the artwork glow follows the pointer
+
+The owner noticed that the artwork glow was tied to the hero's title. They asked for it to follow the title under the mouse, with settings to customise it.
+
+Executed:
+
+- `npm test`: **382 passing, 0 failing** (378 + 4 in `tests/ambient.test.mjs`). They cover:
+  - defaults (follow the pointer, return on leave) and field-by-field validation of all seven settings;
+  - every blur choice covering the window (size × scale ≥ 120);
+  - card art: backdrop first, metahub's backdrop for an IMDb ID without one, HTTP and credential-bearing addresses refused, and data attributes read safely;
+  - layer styles carrying their own picture, strength and fade, with no `ambient` variable among the root's theme variables.
+- `npm run check` and `npm run build` pass.
+- Rendered in Chromium with a mocked bridge at 1440×960: three cards with distinct blue, red and green artwork, a 250 ms delay and no fade. The blue title was on the hero.
+  - Follow the pointer, return on leave: 100 ms on the red card kept blue. At 550 ms it was red, then green on the green card, then back to blue (the hero) 900 ms after the pointer left.
+  - Stay, with posters: the red poster, then the green poster, and still the green poster after leaving.
+  - Hero only: blue throughout.
+  - Two layers, no page errors.
+
+Not executed: Windows, a real GPU's cost for the crossfade, real artwork.
+
 ## 0.23.0 — sources in a window
 
 Before merging 0.22.1, the owner asked that pressing Play show the sources in a popup window. 0.23.0 carries that and the 0.22.1 resolution fix below.

@@ -49,6 +49,7 @@ import AiSearchRow from "./components/AiSearch.jsx";
 import { PrayerChip } from "./components/Prayer.jsx";
 import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
+import AmbientLayer from "./components/Ambient.jsx";
 import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
 import PlayerView from "./components/PlayerView.jsx";
@@ -627,13 +628,11 @@ export default function App() {
           controls={state.settings.windowControls}
           title="رِواق"
         />
-        {ambientArt && (
-          // The picture is set on the layer itself: a variable on the app
-          // root would restyle every element each time the hero turns.
-          <div
-            className="ambience-layer"
-            aria-hidden="true"
-            style={{ "--ambient-image": `url("${ambientArt}")` }}
+        {appearance.ambient === "artwork" && (
+          <AmbientLayer
+            appearance={appearance}
+            fallback={ambientArt}
+            reduceMotion={!!state.settings.reduceMotion}
           />
         )}
         <Screensaver

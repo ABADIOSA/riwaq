@@ -238,6 +238,14 @@ export const DEFAULT_APPEARANCE = {
   wallpaperDim: 70,
   wallpaperBlur: 0,
   ambient: "off",
+  // How the glow follows the viewer (core/ambient.mjs).
+  ambientFollow: "hover",
+  ambientDelay: 250,
+  ambientLeave: "return",
+  ambientImage: "backdrop",
+  ambientStrength: 24,
+  ambientBlur: "medium",
+  ambientFade: 700,
   // Logo: the full mark and name, the mark alone, the name alone, or the
   // viewer's own image; the mark follows the accent colour or stays gold.
   logoStyle: "full",
@@ -339,6 +347,37 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
   if ("wallpaperBlur" in input)
     next.wallpaperBlur = number(input.wallpaperBlur, 0, 24, next.wallpaperBlur);
   next.ambient = choose(input.ambient, ["off", "artwork"], next.ambient);
+  next.ambientFollow = choose(
+    input.ambientFollow,
+    ["hover", "hero"],
+    next.ambientFollow,
+  );
+  next.ambientLeave = choose(
+    input.ambientLeave,
+    ["return", "stay"],
+    next.ambientLeave,
+  );
+  next.ambientImage = choose(
+    input.ambientImage,
+    ["backdrop", "poster"],
+    next.ambientImage,
+  );
+  next.ambientBlur = choose(
+    input.ambientBlur,
+    ["soft", "medium", "strong"],
+    next.ambientBlur,
+  );
+  if ("ambientDelay" in input)
+    next.ambientDelay = number(input.ambientDelay, 0, 1500, next.ambientDelay);
+  if ("ambientStrength" in input)
+    next.ambientStrength = number(
+      input.ambientStrength,
+      5,
+      60,
+      next.ambientStrength,
+    );
+  if ("ambientFade" in input)
+    next.ambientFade = number(input.ambientFade, 0, 2000, next.ambientFade);
   next.logoStyle = choose(
     input.logoStyle,
     ["full", "mark", "name", "image"],
