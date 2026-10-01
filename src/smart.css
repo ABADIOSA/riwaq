@@ -109,3 +109,19 @@
 .suggest-empty {
   padding: 12px 0;
 }
+
+/* Setting up a Trakt app, step by step. */
+.trakt-steps {
+  margin: 4px 0 0;
+  padding-inline-start: 20px;
+  display: grid;
+  gap: 4px;
+  line-height: 1.7;
+}
+.trakt-steps code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #ffffff10;
+  font-size: 11px;
+  user-select: all;
+}

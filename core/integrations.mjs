@@ -1,11 +1,55 @@
 import { keyFor, validateManifest, mergeAddons } from "./protocol.mjs";
 
-const POST = (body) => ({
+const POST = (body, headers = {}) => ({
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", ...headers },
   body: JSON.stringify(body),
   redirect: "error",
 });
+const TRAKT_ACTIVATE = "https://trakt.tv/activate";
+/** Trakt's own activation page from its reply, or the usual one. */
+function traktActivation(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      (url.hostname === "trakt.tv" || url.hostname.endsWith(".trakt.tv"))
+      ? url.toString()
+      : TRAKT_ACTIVATE;
+  } catch {
+    return TRAKT_ACTIVATE;
+  }
+}
+/**
+ * Trakt's answers in words the viewer can act on. Without this an English
+ * "HTTP 403" became the app's generic "could not complete" message. The
+ * status stays on the error (`status`) for code that acts on it.
+ */
+export function traktProblem(error, stage = "api") {
+  const code = Number(/^HTTP (\d{3})$/.exec(error?.message || "")?.[1]);
+  if (!code) return error;
+  const said = (message) => Object.assign(new Error(message), { status: code });
+  if (stage === "connect" && (code === 401 || code === 403))
+    return said(
+      `رفض تراكت بيانات التطبيق (${code}). تحقق من Client ID وClient Secret في إعدادات تراكت، وأن التطبيق ما زال موجوداً في حسابك.`,
+    );
+  const text = {
+    401: "انتهت جلسة تراكت أو أُلغيت (401). افصل الحساب واربطه من جديد.",
+    403: "رفض تراكت الطلب (403). تحقق من Client ID في إعدادات تراكت، أو افصل الحساب واربطه من جديد.",
+    404: "لم يجد تراكت ما طُلب (404).",
+    420: "وصل حسابك في تراكت لحدّ الحساب المجاني (420).",
+    423: "حساب تراكت مقفل أو موقوف (423). راجع حسابك على موقع تراكت.",
+    426: "هذه الميزة تحتاج حساب VIP في تراكت (426).",
+    429: "طلبات كثيرة على تراكت (429). انتظر دقيقة ثم أعد المحاولة.",
+  }[code];
+  return said(
+    text ||
+      (code >= 500
+        ? `خوادم تراكت لا تستجيب الآن (${code}). جرّب بعد قليل.`
+        : `ردّ تراكت برمز ${code}.`),
+  );
+}
 const poster = (id) =>
   /^tt\d+$/.test(id || "")
     ? `https://images.metahub.space/poster/medium/${id}/img`
@@ -204,10 +248,14 @@ export class Integrations {
       throw new Error("احفظ بيانات تطبيق المنصة أولاً");
     const data =
       id === "trakt"
-        ? await this.client.request(
-            "https://auth.trakt.tv/oauth/device/code",
-            POST({ client_id: s.clientId }),
-          )
+        ? await this.client
+            .request(
+              "https://auth.trakt.tv/oauth/device/code",
+              POST({ client_id: s.clientId }, this.traktHeaders(s)),
+            )
+            .catch((error) => {
+              throw traktProblem(error, "connect");
+            })
         : await this.simkl("/oauth/pin", false);
     if (!data.user_code) throw new Error("تعذّر الحصول على رمز الربط");
     const interval = Math.max(5, Number(data.interval) || 5);
@@ -225,7 +273,7 @@ export class Integrations {
       interval,
       url:
         id === "trakt"
-          ? "https://auth.trakt.tv/activate"
+          ? traktActivation(data.verification_url)
           : "https://simkl.com/pin/",
       expiresIn: data.expires_in || 600,
     };
@@ -246,11 +294,14 @@ export class Integrations {
         id === "trakt"
           ? await this.client.request(
               "https://auth.trakt.tv/oauth/device/token",
-              POST({
-                code: d.device_code,
-                client_id: s.clientId,
-                client_secret: s.clientSecret,
-              }),
+              POST(
+                {
+                  code: d.device_code,
+                  client_id: s.clientId,
+                  client_secret: s.clientSecret,
+                },
+                this.traktHeaders(s),
+              ),
             )
           : await this.simkl(
               `/oauth/pin/${encodeURIComponent(d.user_code)}`,
@@ -275,6 +326,18 @@ export class Integrations {
         return { pending: true, interval: d.interval };
       }
       this.devices.delete(id);
+      // Trakt's device answers: 404 unknown code, 409 already used, 410
+      // expired, 418 denied by the viewer.
+      const why = {
+        "HTTP 404": "لم يتعرف تراكت على رمز الربط. ابدأ من جديد.",
+        "HTTP 409": "استُخدم رمز الربط من قبل. ابدأ من جديد.",
+        "HTTP 410": "انتهت صلاحية رمز الربط. ابدأ من جديد.",
+        "HTTP 418":
+          "رُفض الربط من صفحة تراكت. ابدأ من جديد إذا كان ذلك بالخطأ.",
+      }[error.message];
+      if (why) throw new Error(why);
+      if (/^HTTP \d{3}$/.test(error.message))
+        throw traktProblem(error, "connect");
       throw new Error("تعذّر الربط أو تم رفضه. ابدأ من جديد.");
     } finally {
       d.busy = false;
@@ -289,16 +352,23 @@ export class Integrations {
     ) {
       if (!this.refreshing)
         this.refreshing = (async () => {
-          const token = await this.client.request(
-            "https://auth.trakt.tv/oauth/token",
-            POST({
-              refresh_token: s.token.refresh_token,
-              client_id: s.clientId,
-              client_secret: s.clientSecret,
-              redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
-              grant_type: "refresh_token",
-            }),
-          );
+          const token = await this.client
+            .request(
+              "https://auth.trakt.tv/oauth/token",
+              POST(
+                {
+                  refresh_token: s.token.refresh_token,
+                  client_id: s.clientId,
+                  client_secret: s.clientSecret,
+                  redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
+                  grant_type: "refresh_token",
+                },
+                this.traktHeaders(s),
+              ),
+            )
+            .catch((error) => {
+              throw traktProblem(error);
+            });
           if (!token.access_token || !token.refresh_token)
             throw new Error("أعد ربط Trakt");
           if (this.get("trakt") !== s)
@@ -319,15 +389,29 @@ export class Integrations {
         : body
           ? POST(body)
           : { redirect: "error" };
-    return this.client.request("https://api.trakt.tv" + path, {
-      ...options,
-      headers: {
-        ...options.headers,
-        "trakt-api-version": "2",
-        "trakt-api-key": s.clientId,
-        Authorization: `Bearer ${s.token.access_token}`,
-      },
-    });
+    return this.client
+      .request("https://api.trakt.tv" + path, {
+        ...options,
+        headers: {
+          ...options.headers,
+          ...this.traktHeaders(s),
+          Authorization: `Bearer ${s.token.access_token}`,
+        },
+      })
+      .catch((error) => {
+        throw traktProblem(error);
+      });
+  }
+  /**
+   * Trakt sits behind Cloudflare, which answers 403 to requests without a
+   * User-Agent naming the app. Every Trakt request carries one.
+   */
+  traktHeaders(s = this.get("trakt")) {
+    return {
+      "User-Agent": `Riwaq/${String(this.client.version || "dev").replace(/[^\w.-]/g, "")} (+https://github.com/ABADIOSA/riwaq)`,
+      "trakt-api-version": "2",
+      "trakt-api-key": s.clientId,
+    };
   }
   /**
    * Trakt's suggestions for the signed-in viewer, films or series. Read
@@ -384,6 +468,7 @@ export class Integrations {
     return this.client.request(url.toString(), {
       redirect: "error",
       headers: {
+        "User-Agent": this.traktHeaders(s)["User-Agent"],
         "simkl-api-key": s.clientId,
         ...(authed ? { Authorization: `Bearer ${s.token.access_token}` } : {}),
       },
@@ -586,7 +671,8 @@ export class Integrations {
     const job = this.trakt(`/scrobble/${event}`, body).then(
       () => watched && settle(true),
       // 409 means Trakt already recorded this play moments ago.
-      (error) => watched && settle(error.message === "HTTP 409"),
+      (error) =>
+        watched && settle(error.status === 409 || error.message === "HTTP 409"),
     );
     this.inflight.add(job);
     job.finally(() => this.inflight.delete(job));

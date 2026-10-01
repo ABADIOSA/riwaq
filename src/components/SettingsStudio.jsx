@@ -1540,6 +1540,22 @@ function IntegrationCard({ integration: s, update, act, notice }) {
               </>
             )}
           </div>
+          {id === "trakt" && (
+            <ol className="subtle trakt-steps">
+              <li>
+                افتح صفحة تطبيقاتك في تراكت (زر «إعدادات الخدمة» فوق) وأنشئ
+                تطبيقاً جديداً بأي اسم.
+              </li>
+              <li>
+                في خانة Redirect URI اكتب:{" "}
+                <code dir="ltr">urn:ietf:wg:oauth:2.0:oob</code>
+              </li>
+              <li>
+                انسخ Client ID وClient Secret هنا، واحفظ، ثم اضغط «ربط» وأدخل
+                الرمز في صفحة تراكت.
+              </li>
+            </ol>
+          )}
           {id === "letterboxd" && (
             <p className="subtle">
               عند الربط يُرسل اسم المستخدم العام إلى api.stremboxd.com لجلب
