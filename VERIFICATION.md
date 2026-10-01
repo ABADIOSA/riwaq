@@ -1,4 +1,12 @@
-# Verification — Riwaq 0.20.0
+# Verification — Riwaq
+
+## 2026-10-02 — review of 0.25.1 (unreleased fixes)
+
+- 407 Node tests passed (402 baseline): subtitle filename requests over local HTTP, scheduler retry timing, target-profile protection edits, and list sync across profile switches.
+- Vite build and repository Prettier check passed.
+- Windows source smoke passed via `node scripts/test-packaged.mjs --source --offline`: DPAPI available, MPV decoded Y4M, native child surface and parent visible at 2560×1440, queue item consumed. No installer build or release in this review.
+- The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
+- Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
 ## 0.25.1 — Trakt connection
 
