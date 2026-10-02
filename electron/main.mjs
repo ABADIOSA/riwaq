@@ -32,6 +32,7 @@ import {
   parseCues,
   preferredLanguages,
 } from "../core/subtitles.mjs";
+import { matchTrack, seriesOf, trackIdentity } from "../core/series-memory.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
@@ -644,7 +645,11 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     (!progress.duration || progress.position / progress.duration < 0.95)
       ? progress.position
       : 0;
-  nowPlaying = { key, type: meta.type, id: videoId };
+  // A new object per viewing: late replies compare it by identity.
+  const series = seriesOf(meta);
+  nowPlaying = { key, type: meta.type, id: videoId, series };
+  if (series && stream.memory)
+    client.rememberSeries(series, { source: stream.memory });
   return player.start({
     executable: executable(),
     settings: client.state.settings,
@@ -680,28 +685,78 @@ async function playChannel({ key, start = 0, stop = 0 }) {
   });
 }
 /**
- * When the file carries no subtitle in the viewer's first language, load the
- * best one an addon offers. Track lists arrive just after the file loads.
+ * After a file loads: the series' remembered audio and subtitle choices
+ * first (core/series-memory.mjs), then, when the file carries no subtitle in
+ * the viewer's first language, the best one an addon offers. Track lists
+ * arrive just after the file loads. The viewing is captured by identity and
+ * checked after every wait, so a reply for an earlier source of the same
+ * episode is never applied to the one now playing.
  */
 function autoSubtitle(videoId) {
   const settings = client.state.settings;
-  if (settings.autoSubtitles === "off" || nowPlaying?.id !== videoId) return;
+  const viewing = nowPlaying;
+  if (viewing?.id !== videoId) return;
+  const current = () =>
+    nowPlaying === viewing &&
+    player.videoId === videoId &&
+    !!player.state.active;
   setTimeout(async () => {
     try {
-      if (player.videoId !== videoId || !player.state.active) return;
+      if (!current()) return;
+      const memory = client.seriesChoice(viewing.series);
+      const tracks = player.state.tracks || [];
+      const restored = [];
+      // Track IDs repeat across types, so "already selected" checks both.
+      const selected = (type, id) =>
+        tracks.some((t) => t.type === type && t.id === id && t.selected);
+      const audio = matchTrack(tracks, "audio", memory?.audio);
+      if (audio !== null && !selected("audio", audio)) {
+        player.command({ action: "aid", value: audio });
+        restored.push("الصوت");
+      }
+      const sub = matchTrack(tracks, "sub", memory?.subtitle);
+      const subOn = tracks.some((t) => t.type === "sub" && t.selected);
+      if (sub === "no" ? subOn : sub !== null && !selected("sub", sub)) {
+        player.command({ action: "sid", value: sub });
+        restored.push(sub === "no" ? "إيقاف الترجمة" : "الترجمة");
+      }
+      if (restored.length)
+        emit(
+          "notice",
+          `رجّعنا اختيارك السابق في هذا المسلسل: ${restored.join(" و")}.`,
+        );
+      // A subtitle restored from the file, or turned off on purpose, stands.
+      if (sub !== null) return;
+      // An addon subtitle chosen last episode asks the addons again in that
+      // language, even with automatic subtitles off.
+      const wanted =
+        memory?.subtitle?.external && memory.subtitle.lang
+          ? [memory.subtitle.lang]
+          : [];
+      if (settings.autoSubtitles === "off" && !wanted.length) return;
       const list = await client.getSubtitles({
-        type: nowPlaying.type,
-        id: nowPlaying.id,
-        streamKey: nowPlaying.key,
+        type: viewing.type,
+        id: viewing.id,
+        streamKey: viewing.key,
       });
-      if (player.videoId !== videoId || !player.state.active) return;
+      if (!current()) return;
+      const languages = [
+        ...wanted,
+        ...preferredLanguages(settings.subtitleLanguage).filter(
+          (code) => !wanted.includes(code),
+        ),
+      ];
       const pick = automaticSubtitle({
         tracks: player.state.tracks || [],
         addons: list,
-        languages: preferredLanguages(settings.subtitleLanguage),
-        kind: settings.subtitleKind,
+        languages,
+        kind: memory?.subtitle?.forced
+          ? "forced"
+          : memory?.subtitle?.hi
+            ? "sdh"
+            : settings.subtitleKind,
       });
-      if (!pick) return;
+      if (!pick || !current()) return;
       player.addSubtitle(client.subtitles.get(pick.key), {
         key: pick.key,
         ...client.subtitleInfo.get(pick.key),
@@ -714,6 +769,26 @@ function autoSubtitle(videoId) {
       /* Subtitles are a convenience; playback carries on without them. */
     }
   }, 1500);
+}
+/**
+ * The viewer picked an audio or subtitle track in a series: remember it by
+ * language, title and flags for the next episode. Only the viewer's own
+ * choices arrive here; tracks Riwaq selects itself are never recorded.
+ */
+function rememberTrack(kind, value, info) {
+  const series = nowPlaying?.series;
+  if (!series || !player.state.active) return;
+  const track =
+    info ||
+    (value === "no"
+      ? "no"
+      : (player.state.tracks || []).find(
+          (t) =>
+            t.type === (kind === "audio" ? "audio" : "sub") && t.id === value,
+        ));
+  const identity = trackIdentity(track);
+  if (!identity || (kind === "audio" && identity.off)) return;
+  client.rememberSeries(series, { [kind]: identity });
 }
 const methods = {
   init: () => client.init(),
@@ -815,6 +890,7 @@ const methods = {
     const result = await client.getStreams({
       type: nowPlaying.type,
       id: nowPlaying.id,
+      seriesId: nowPlaying.series,
     });
     remember(nowPlaying, result);
     return { ...result, current: nowPlaying.key };
@@ -1134,7 +1210,14 @@ const methods = {
     } else emit("playerRequest", { type: a.type });
     return true;
   },
-  playerCommand: (a) => player.command(a),
+  forgetSeries: (a) =>
+    client.forgetSeries(typeof a?.seriesId === "string" ? a.seriesId : ""),
+  playerCommand: (a) => {
+    const result = player.command(a);
+    if (a?.action === "aid") rememberTrack("audio", a.value);
+    else if (a?.action === "sid") rememberTrack("subtitle", a.value);
+    return result;
+  },
   trickplay,
   stop: async () => {
     await player.stop();
@@ -1143,11 +1226,18 @@ const methods = {
   subtitle: (a) => {
     const url = client.subtitles.get(a?.key);
     if (!url) throw new Error("الترجمة غير متاحة");
+    const info = client.subtitleInfo.get(a.key) || {};
     player.addSubtitle(url, {
       key: a.key,
-      ...client.subtitleInfo.get(a.key),
+      ...info,
       secondary: a.secondary === true,
     });
+    if (a.secondary !== true)
+      rememberTrack("subtitle", null, {
+        lang: info.lang,
+        title: info.label,
+        external: true,
+      });
     return true;
   },
   localSubtitle: async () => {
@@ -1556,6 +1646,7 @@ app
       player = new Player({
         host: videoHost,
         inputConf: join(root, "assets", "player-input.conf"),
+        settingsNow: () => client.state.settings,
         onFullscreen: () => window.setFullScreen(!window.isFullScreen()),
         onEscape: () => {
           if (window.isFullScreen()) window.setFullScreen(false);

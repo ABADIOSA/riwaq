@@ -13,6 +13,7 @@ import { LOGO_MODES } from "./logos.mjs";
 import { HOME_GROUPING, cleanSmartHidden } from "./smart-groups.mjs";
 import { cleanFeedHidden } from "./feed.mjs";
 import { cleanCountdowns } from "./countdown.mjs";
+import { cleanSeriesMemory } from "./series-memory.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -46,6 +47,8 @@ export const DEFAULT_SETTINGS = {
   subtitlePosition: 95,
   pauseOnMinimize: true,
   seekStep: 10,
+  // The long step (Shift with the arrows), in seconds.
+  seekLongStep: 60,
   seekThumbnails: "local",
   holdSpeed: 2,
   streamSafety: "strict",
@@ -121,6 +124,10 @@ export const DEFAULT_SETTINGS = {
   prayerWarn: true,
   prayerHeadsUp: true,
   prayerPause: false,
+  // A series' source, audio and subtitle choices carried to its next
+  // episode (core/series-memory.mjs). Identities only, never links.
+  rememberSeries: true,
+  seriesMemory: {},
   // Countdowns pinned to the home page (core/countdown.mjs).
   countdowns: [],
   // Logos in place of typed names (core/logos.mjs): arabic, original, text.
@@ -325,6 +332,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "prayerHeadsUp",
     "prayerPause",
     "heroAutoplay",
+    "rememberSeries",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (
@@ -370,7 +378,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     cardSize: ["compact", "comfortable", "large"],
     metadataLanguage: ["ar-SA", "en-US", "ja-JP", "fr-FR"],
     region: ["SA", "AE", "EG", "US", "GB"],
-    seekStep: [5, 10, 30],
+    seekStep: [5, 10, 15, 30],
+    seekLongStep: [30, 60, 90, 120, 300],
     holdSpeed: [0, 1.5, 2, 3],
     subtitleKind: ["standard", "sdh", "forced"],
     autoSubtitles: ["off", "preferred"],
@@ -431,6 +440,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.smartHidden = cleanSmartHidden(input.smartHidden);
   if (Array.isArray(input.feedHidden))
     next.feedHidden = cleanFeedHidden(input.feedHidden);
+  if (input.seriesMemory && typeof input.seriesMemory === "object")
+    next.seriesMemory = cleanSeriesMemory(input.seriesMemory);
   if (Array.isArray(input.countdowns))
     next.countdowns = cleanCountdowns(input.countdowns);
   if (Array.isArray(input.hudHidden))

@@ -88,7 +88,7 @@ import {
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
-import { arabicCount, CATALOGS } from "../../core/arabic.mjs";
+import { arabicCount, CATALOGS, SERIES } from "../../core/arabic.mjs";
 import {
   SMART_GROUPS,
   groupOf as catalogGroup,
@@ -451,7 +451,7 @@ const GROUPS = [
       [
         "playback",
         "المشغل",
-        "HDR الجودة تسريع العتاد متابعة إيقاف معاينة تسريع",
+        "HDR الجودة تسريع العتاد متابعة إيقاف معاينة تسريع تقديم خطوة تذكر مسلسل",
         MonitorPlay,
       ],
       ["subtitles", "الصوت والترجمة", "عربي لغة حجم توقيت مسارات", Subtitles],
@@ -997,6 +997,32 @@ export default function SettingsStudio({
                       "تشغيل التالي في الطابور، ثم الحلقة التالية إذا كان الطابور فارغاً، بأول مصدر متوافق. مغلق افتراضياً.",
                     )}
                     {toggle(
+                      "rememberSeries",
+                      "تذكّر اختياراتك لكل مسلسل",
+                      "الحلقة التالية تبدأ بنفس الإضافة وفريق الإصدار، ونفس لغة الصوت والترجمة التي اخترتها. يُحفظ الاسم والجودة واللغة فقط، بدون روابط، ولكل ملف شخصي وحده.",
+                    )}
+                    {Object.keys(s.seriesMemory || {}).length > 0 && (
+                      <div className="setting-row">
+                        <div>
+                          <b>المسلسلات المحفوظة</b>
+                          <p>
+                            اختياراتك محفوظة لـ
+                            {arabicCount(
+                              Object.keys(s.seriesMemory).length,
+                              SERIES,
+                            )}
+                            .
+                          </p>
+                        </div>
+                        <button
+                          className="secondary small"
+                          onClick={() => update("forgetSeries", {})}
+                        >
+                          انسَ الكل
+                        </button>
+                      </div>
+                    )}
+                    {toggle(
                       "pauseOnMinimize",
                       "إيقاف مؤقت عند تصغير التطبيق",
                       "تتوقف المشاهدة عندما تصغر نافذة رِواق.",
@@ -1016,11 +1042,23 @@ export default function SettingsStudio({
                         ["off", "بدون معاينة"],
                       ],
                     )}
-                    {select("seekStep", "خطوة التقديم والرجوع", [
+                    {select("seekStep", "خطوة التقديم القصيرة (الأسهم)", [
                       [5, "5 ثوانٍ"],
                       [10, "10 ثوانٍ"],
+                      [15, "15 ثانية"],
                       [30, "30 ثانية"],
                     ])}
+                    {select(
+                      "seekLongStep",
+                      "الخطوة الطويلة (Shift مع الأسهم)",
+                      [
+                        [30, "30 ثانية"],
+                        [60, "دقيقة"],
+                        [90, "دقيقة ونصف"],
+                        [120, "دقيقتان"],
+                        [300, "5 دقائق"],
+                      ],
+                    )}
                     {select("liveBufferSeconds", "مخزون البث المباشر", [
                       [2, "ثانيتان · أقل تأخير"],
                       [4, "4 ثوانٍ"],

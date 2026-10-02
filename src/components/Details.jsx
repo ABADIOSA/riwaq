@@ -29,6 +29,7 @@ import {
   Languages,
   PenLine,
   Video,
+  History,
 } from "lucide-react";
 import ArtworkGallery from "./ArtworkGallery.jsx";
 import { AddToCollection } from "./Collections.jsx";
@@ -166,7 +167,7 @@ export default function Details({
     setResult(null);
     setSubs([]);
     setStreamsLoading(true);
-    call("streams", { type: meta.type, id: videoId })
+    call("streams", { type: meta.type, id: videoId, seriesId: meta.id })
       .then((r) => {
         if (current) setResult(r);
       })
@@ -331,6 +332,21 @@ export default function Details({
           المصادر.
         </p>
       )}
+      {result?.remembered > 0 && (
+        <p className="stream-pref-note">
+          قدّمنا نفس الإضافة وفريق الإصدار الذي شاهدت منه هذا المسلسل آخر مرة.
+          <button
+            className="text-button"
+            onClick={() =>
+              update("forgetSeries", { seriesId: meta.id })
+                .then(() => setRequest((x) => x + 1))
+                .catch(() => {})
+            }
+          >
+            انسَ اختياري
+          </button>
+        </p>
+      )}
       {result?.filter && (
         <p className="stream-pref-note">
           {result.filter.fallback
@@ -392,6 +408,14 @@ export default function Details({
                           referrerPolicy="no-referrer"
                         />
                       ))}
+                    {s.remembered && (
+                      <em
+                        className="tag-remembered"
+                        title="نفس مصدر الحلقة السابقة"
+                      >
+                        <History size={11} /> مصدرك السابق
+                      </em>
+                    )}
                     {(s.badges || []).map((b) => (
                       <RuleBadge key={b.label} badge={b} />
                     ))}

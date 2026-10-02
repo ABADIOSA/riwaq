@@ -13,6 +13,12 @@ import {
 } from "./protocol.mjs";
 import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
 import { applyStreamPrefs } from "./stream-prefs.mjs";
+import {
+  forgetSeries,
+  preferRemembered,
+  rememberSeries,
+  sourceIdentity,
+} from "./series-memory.mjs";
 import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
@@ -1510,7 +1516,50 @@ export class Client {
     if (Number.isFinite(runtime) && runtime > 0) requested.runtime = runtime;
     return { requested };
   }
-  async getStreams({ type, id }) {
+  /**
+   * The series an episode ID belongs to: the title's own ID when the caller
+   * names it and the episode sits under it, otherwise IMDb-style
+   * "tt…:season:episode" without its numbers. "" for films.
+   */
+  seriesOf(type, id, seriesId) {
+    if (type !== "series" || typeof id !== "string") return "";
+    if (
+      typeof seriesId === "string" &&
+      /^[\w:.-]{1,120}$/.test(seriesId) &&
+      id.startsWith(`${seriesId}:`)
+    )
+      return seriesId;
+    const m = id.match(/^(tt\d{1,12}):\d+:\d+$/);
+    return m ? m[1] : "";
+  }
+  /** A series' remembered choice, or null when remembering is off. */
+  seriesChoice(seriesId) {
+    const settings = this.state.settings;
+    if (!seriesId || settings.rememberSeries === false) return null;
+    return settings.seriesMemory?.[seriesId] || null;
+  }
+  /** Stores what the viewer chose for a series (identities, never links). */
+  rememberSeries(seriesId, patch) {
+    const settings = this.state.settings;
+    if (!seriesId || settings.rememberSeries === false) return false;
+    settings.seriesMemory = rememberSeries(
+      settings.seriesMemory,
+      seriesId,
+      patch,
+    );
+    this.persist();
+    return true;
+  }
+  /** Forgets one series' choices, or every series' when none is named. */
+  forgetSeries(seriesId) {
+    this.state.settings.seriesMemory = forgetSeries(
+      this.state.settings.seriesMemory,
+      typeof seriesId === "string" ? seriesId : "",
+    );
+    this.persist();
+    return this.publicState();
+  }
+  async getStreams({ type, id, seriesId }) {
     const failures = [];
     const addons = this.enabled().filter((a) =>
       accepts(a.manifest, "stream", type, id),
@@ -1599,12 +1648,24 @@ export class Client {
         addonId: stream.addonId,
       };
     });
+    // What a played source is remembered by, kept beside its link in main.
+    for (const r of ranked) {
+      const raw = this.streams.get(r.key);
+      if (raw) raw.memory = sourceIdentity(r);
+    }
     // The viewer's source mode, saved filter and order, then their badges.
     const settings = this.state.settings;
     const prefs = applyStreamPrefs(
       ranked,
       settings,
       this.enabled().map((a) => a.manifest.id),
+    );
+    // The source this series was last watched from comes first (inside the
+    // filter), so the next episode keeps the same release.
+    const series = this.seriesOf(type, id, seriesId);
+    const remembered = preferRemembered(
+      prefs.streams,
+      this.seriesChoice(series)?.source,
     );
     // Badge matching gets a time budget so no stream title can hold up the
     // picker.
@@ -1647,7 +1708,7 @@ export class Client {
     });
     const streams = [
       ...home,
-      ...prefs.streams.map((s) => {
+      ...remembered.streams.map((s) => {
         const badges = ruleBadges(s, rules, badgeDeadline);
         return badges.length ? { ...s, badges } : s;
       }),
@@ -1671,6 +1732,7 @@ export class Client {
       mode: prefs.mode,
       modeFallback: prefs.modeFallback,
       filter: prefs.filter,
+      remembered: remembered.remembered,
     };
   }
   /**

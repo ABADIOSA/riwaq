@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.25.1-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.26.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -64,6 +64,14 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Seek previews (`core/trickplay.mjs`, `electron/thumbnails.mjs`). The HUD asks `trickplay` with a time only after the pointer rests on the timeline. Main grabs one scaled JPEG with a second, silent MPV (`--vo=image --frames=1`) and returns a data URL. The source URL and headers stay on `player.source` in main and never reach the interface.
   - Modes: `seekThumbnails` is `local` (the default: files, localhost and private-network hosts), `all`, or `off`. `local` never covers the torrent streaming server's origin or remote hosts. Live never has previews.
   - Frames are shared per slice (about 200 a film, at least 5 s apart), one grab runs at a time and a newer request replaces it, and three failures in a row stop previews for that viewing. Temporary files are removed.
+- Seek keys never carry a fixed step. `inputConf` binds them to `script-message riwaq-seek <back|forward|backLong|forwardLong>`, and `Player.message` reads `seekStep`/`seekLongStep` from `settingsNow()` through `seekAmount` at the press. The interface arrows (Shift for long) use the same helper. Keep `assets/player-input.conf` equal to `inputConf({})` (a test checks).
+- Series memory (`core/series-memory.mjs`), per profile in `settings.seriesMemory`, on unless `rememberSeries` is false, at most 200 series:
+  - What is kept: a source by addon ID, release group, tier and source, never a link; audio and subtitle tracks by language, title and flags, or subtitles off; never a track number.
+  - Sources: `getStreams` moves the remembered source first inside its filter band, with a `remembered` reason the interface shows.
+  - Recording: main records the source in `play`. It records tracks only from the viewer's own `playerCommand` aid/sid and `subtitle` picks, never from tracks Riwaq selects itself.
+  - Restoring: `autoSubtitle` restores the tracks, then asks addons. It captures `nowPlaying` by identity and re-checks it after every wait, so a late reply never lands on a different source.
+  - A forced-only track never stands in for full subtitles.
+  - `forgetSeries` is main-window only.
 - Holding the primary button on the picture sets MPV speed to `holdSpeed` (0, 1.5, 2 or 3) until release. The click that ends a hold never toggles pause.
 - Episode shuffle (`core/shuffle.mjs`) picks released, numbered, unwatched episodes (or all, when asked), never the current one, with no repeat until each has come up once in the session.
 - `hideWatched` hides finished films (`watchedTitles`/`withoutWatched` in `core/library.mjs`) live at render time on home, discover, collections and folder pages. It never applies in search, the library, continue watching, up next or hand-picked folder titles. Series are never hidden, since a row cannot know every episode.

@@ -29,6 +29,15 @@ Harbor (MIT) at `a821e27` on `beta-branch`: a theme studio with a preset gallery
 
 Harbor beta (`src-tauri/src/mpv.rs`, MIT): MPV embedded with `input-cursor=no` and its child windows pushed to `HWND_BOTTOM` under a transparent WebView2, so the web controls draw over the picture and the page owns the pointer. Nuvio HTPC (`native/windows/player_bridge.cpp`, GPL-3.0): a container window with a transparent WebView2 HUD over MPV, the pointer hidden with `ShowCursor` from the HUD's thread, and system media controls. Riwaq 0.8 reaches the same outcome in Electron with a transparent owned window over the surface; no code was copied. Player behaviours taken as ideas: an in-player sources panel, an episodes panel, stream failover, a next-episode card and media keys.
 
+## Community requests, 2026-10-02 (0.26)
+
+The PR #34 review read open enhancement requests in Harbor's and Nuvio's issue trackers. Riwaq took two of them, by request only (no code was read for these):
+
+- Keeping the source between episodes ([Harbor #1419](https://github.com/harborstremio/harbor/issues/1419)). Riwaq keeps the addon, release group and quality instead of a link, so an expired URL is never replayed.
+- Remembering audio and subtitle tracks per series ([Nuvio #611](https://github.com/NuvioMedia/NuvioDesktop/issues/611)). Riwaq matches by language, title and flags, never by track number.
+
+Different seek lengths ([Nuvio #803](https://github.com/NuvioMedia/NuvioDesktop/issues/803)) became a short and a long step shared by every input.
+
 ## Credits and the pointer, 2026-09-29 (0.10)
 
 The owner asked for a title page like Harbor's and Nuvio's with cast, directors, production companies and filming locations, each opening to who they are and what else they made. Neither project's source was re-read for this round; the page is built from the owner's description and two public data sources. Wikidata supplies every viewer with crew, companies, filming locations (P915), settings, countries, awards and reverse links to other works, keyed by IMDb IDs so a work opens straight in Riwaq; TMDB, with the viewer's own key, adds portraits, characters, biographies and a fallback when Wikidata's query service is down. The pointer now hides with Win32 `ShowCursor` on the thread that owns the HUD, the mechanism noted in Nuvio HTPC above; the code is Riwaq's own.

@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { webUrl } from "../core/protocol.mjs";
 import { detectSegments, activeSegment } from "../core/skip-segments.mjs";
+import { seekAmount } from "../core/hotkeys.mjs";
 
 /**
  * Picture profiles built from MPV's own scalers and filters. Riwaq ships no
@@ -181,8 +182,11 @@ export class Player {
     inputConf,
     onFullscreen,
     onEscape,
+    settingsNow,
   }) {
     this.host = host;
+    // The viewer's settings as they are now; seek keys read the step here.
+    this.settingsNow = settingsNow;
     this.inputConf = inputConf;
     this.onFullscreen = onFullscreen;
     this.onEscape = onEscape;
@@ -437,8 +441,15 @@ export class Player {
       "no-osd",
     ]);
   }
-  message(name) {
-    if (name === "riwaq-fullscreen") this.onFullscreen?.();
+  message(name, arg) {
+    if (name === "riwaq-seek") {
+      const seconds = seekAmount(
+        arg,
+        this.settingsNow?.() || this.settings || {},
+      );
+      if (seconds && this.state.active)
+        this.send(["seek", seconds, "relative"]);
+    } else if (name === "riwaq-fullscreen") this.onFullscreen?.();
     // Escape leaves full screen before it closes anything.
     else if (name === "riwaq-stop")
       this.state.fullscreen && this.onEscape ? this.onEscape() : this.stop();
@@ -483,7 +494,7 @@ export class Player {
   }
   event(event) {
     if (event.event === "client-message" && typeof event.args?.[0] === "string")
-      this.message(event.args[0]);
+      this.message(event.args[0], event.args[1]);
     if (event.event === "property-change") {
       if (event.name === "track-list") this.rawTracks = event.data || [];
       const mapping = PROPERTIES.find(([name]) => name === event.name);

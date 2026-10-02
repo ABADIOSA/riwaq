@@ -91,6 +91,7 @@ const allowed = new Set([
   "importAddons",
   "profileCreate",
   "profileUpdate",
+  "forgetSeries",
   "profileRemove",
   "profileSwitch",
   "profilePin",

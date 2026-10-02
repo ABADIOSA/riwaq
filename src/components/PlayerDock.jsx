@@ -759,6 +759,7 @@ function SourcesRoom({ act }) {
                       s.audio,
                       s.sizeLabel,
                       s.cached && "مخزّن",
+                      s.remembered && "مصدرك السابق",
                     ]
                       .filter(Boolean)
                       .join(" · ")}
