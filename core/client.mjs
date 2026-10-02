@@ -927,6 +927,11 @@ export class Client {
   }
   queueEdit(input) {
     this.profiles.gate("library");
+    if (
+      input.profileId !== undefined &&
+      input.profileId !== this.profiles.store.active
+    )
+      throw new Error("تغير الملف الشخصي؛ أعد إضافة الجلسة من الملف المطلوب");
     this.state.queue = editQueue(this.state.queue || [], input);
     this.persist();
     return this.publicState();

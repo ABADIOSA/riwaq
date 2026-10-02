@@ -1,0 +1,859 @@
+/* A separate composition for Riwaq: a masthead, a session desk and a timeline.
+   The previous layouts remain available through interfaceStyle: classic. */
+.app.experience-riwaq {
+  --session-gutter: clamp(24px, 3.8vw, 76px);
+}
+.app.experience-riwaq .content {
+  margin: 0;
+  padding-top: 82px;
+}
+.app.experience-riwaq.chrome-bar .content {
+  padding-top: 118px;
+}
+.app.experience-riwaq .topbar {
+  position: relative;
+  top: auto;
+  height: 66px;
+  margin: 0;
+  padding: 0 var(--session-gutter);
+  background: transparent;
+  border-bottom: 0;
+}
+.app.experience-riwaq .topbar-title {
+  color: var(--muted);
+  font-size: 12px;
+}
+.app.experience-riwaq .page-body {
+  padding-inline: var(--session-gutter);
+}
+.app.experience-riwaq .search-box {
+  width: 310px;
+  border-radius: 5px;
+  background: transparent;
+  border-color: var(--line);
+}
+.app.experience-riwaq .connect-banner {
+  margin: 22px var(--session-gutter);
+  border-radius: 7px;
+}
+.app.experience-riwaq .poster-image {
+  border-radius: var(--poster-radius, 9px);
+}
+.app.experience-riwaq .poster-image::before {
+  border-radius: var(--poster-radius, 9px);
+}
+.app.experience-riwaq .section-heading h2::before {
+  display: none;
+}
+.app.experience-riwaq .section-heading h2 {
+  font-family: var(--font);
+  font-size: 23px;
+  font-weight: 650;
+}
+.app.experience-riwaq .poster-card {
+  border-radius: 9px;
+}
+.app.experience-riwaq .rail {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+  margin-top: 28px;
+}
+.riwaq-masthead {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 35;
+  height: 82px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 0 var(--session-gutter);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.chrome-bar .riwaq-masthead {
+  top: 36px;
+}
+.riwaq-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  padding: 0;
+  text-align: start;
+  min-width: 146px;
+}
+.riwaq-wordmark b {
+  font-size: 32px;
+  line-height: 1;
+  font-weight: 800;
+}
+.riwaq-custom-logo {
+  max-height: 48px;
+  max-width: 155px;
+  object-fit: contain;
+}
+.riwaq-wordmark b > span {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 9px;
+}
+.riwaq-monogram {
+  display: flex;
+  gap: 3px;
+  height: 35px;
+  align-items: end;
+  transform: skewY(-12deg);
+}
+.riwaq-monogram i {
+  display: block;
+  width: 9px;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 7px 7px 0 0;
+}
+.riwaq-monogram i:nth-child(2) {
+  height: 76%;
+  opacity: 0.7;
+}
+.riwaq-monogram i:nth-child(3) {
+  height: 50%;
+  opacity: 0.4;
+}
+.riwaq-destinations {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  gap: 18px;
+  margin-inline: auto;
+}
+.riwaq-destination {
+  position: relative;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 5px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.riwaq-destination:hover,
+.riwaq-destination.selected {
+  color: var(--text);
+}
+.riwaq-destination.selected::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 3px;
+  background: var(--accent);
+}
+.riwaq-destination.selected svg {
+  color: var(--accent);
+}
+.riwaq-utilities {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.riwaq-tool,
+.riwaq-utilities .profile-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 8px;
+  margin: 0;
+  color: var(--muted);
+  width: auto;
+  font-size: 11px;
+}
+.riwaq-tool:hover,
+.riwaq-tool.selected {
+  background: var(--raised);
+  color: var(--text);
+}
+.riwaq-update-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.riwaq-more {
+  position: relative;
+}
+.riwaq-tools-panel {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 47px;
+  width: 405px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 18px 65px #0008;
+  padding: 20px;
+  border-radius: 12px;
+}
+.riwaq-tools-panel > p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+.riwaq-tools-panel > div {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+}
+.riwaq-tools-panel button {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: start;
+  text-align: start;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  padding: 14px 10px;
+  color: var(--text);
+}
+.riwaq-tools-panel button:hover {
+  border-color: var(--accent);
+  background: var(--raised);
+}
+.riwaq-tools-panel svg {
+  color: var(--accent);
+  width: 21px;
+}
+.riwaq-tools-panel b {
+  font-size: 12px;
+}
+.riwaq-tools-panel small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.8;
+}
+.session-home {
+  padding: 24px var(--session-gutter) 10px;
+  max-width: 1800px;
+  margin-inline: auto;
+}
+.session-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 25px;
+  align-items: end;
+  margin-bottom: 30px;
+}
+.session-kicker {
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 2px;
+  display: block;
+  direction: ltr;
+  text-align: start;
+}
+.session-heading h1 {
+  font: 750 clamp(38px, 4.3vw, 68px)/1.5 var(--font, "Segoe UI");
+  margin: 6px 0 0;
+  letter-spacing: -1.5px;
+}
+.session-heading p {
+  color: var(--muted);
+  margin: 1px 0 0;
+  font-size: 15px;
+}
+.session-edition {
+  display: block;
+  font-size: 12px;
+  padding-bottom: 6px;
+  white-space: nowrap;
+}
+.session-edition i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  margin-inline-end: 8px;
+}
+.session-edition > span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 10px;
+}
+.session-workspace {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 22px;
+}
+.session-builder {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 31px;
+  background: var(--panel);
+}
+.session-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.session-step > span {
+  font-size: 11px;
+  align-self: start;
+  border: 1px solid var(--line);
+  padding: 5px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+.session-step > svg {
+  color: var(--accent);
+  margin-inline-start: auto;
+}
+.session-step h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+}
+.session-step p {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 8px 0 0;
+  line-height: 1.8;
+}
+.session-budgets {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 9px;
+  margin: 25px 0 27px;
+}
+.session-budgets button {
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 7px;
+  background: transparent;
+  padding: 17px 3px;
+}
+.session-budgets b {
+  display: block;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1;
+}
+.session-budgets span {
+  display: block;
+  font-size: 10px;
+  margin-top: 10px;
+}
+.session-budgets button:hover,
+.session-moods button:hover {
+  border-color: var(--accent);
+}
+.session-budgets button.chosen {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.mood-step {
+  margin-bottom: 15px;
+}
+.session-moods {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.session-moods button {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 30px;
+  padding: 9px 12px;
+  background: transparent;
+  font-size: 11px;
+}
+.session-moods button.chosen {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.session-moods button.chosen svg {
+  color: var(--accent);
+}
+.session-build-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-top: 29px;
+  border-top: 1px solid var(--line);
+  padding-top: 23px;
+}
+.session-build {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 12px 20px;
+  border-radius: 7px;
+  border: 0;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 650;
+}
+.session-build:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.session-build-row > span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.8;
+}
+.session-preview {
+  position: relative;
+  isolation: isolate;
+  min-height: 420px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line));
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 25px 28px;
+  display: flex;
+  flex-direction: column;
+}
+.session-preview-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.6px;
+}
+.session-preview-top > span:last-child {
+  color: var(--accent);
+}
+.session-poster-stack {
+  display: flex;
+  justify-content: center;
+  height: 175px;
+  margin-top: 27px;
+  direction: ltr;
+}
+.session-poster-stack > div {
+  width: 128px;
+  height: 179px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--raised);
+  box-shadow: 0 12px 28px #0005;
+  border: 1px solid #ffffff20;
+}
+.session-poster-stack img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.session-stack-0 {
+  transform: rotate(-13deg) translateX(22px);
+  z-index: 1;
+}
+.session-stack-1 {
+  transform: translateY(-7px);
+  z-index: 2;
+}
+.session-stack-2 {
+  transform: rotate(13deg) translateX(-22px);
+  z-index: 1;
+}
+.session-preview-caption {
+  position: relative;
+  z-index: 2;
+  margin-top: auto;
+  padding-top: 25px;
+}
+.session-preview-caption > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.session-preview-caption h2 {
+  font-size: 33px;
+  line-height: 1.6;
+  margin: 0;
+}
+.session-preview-caption p {
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 360px;
+  line-height: 1.9;
+  margin: 2px 0 0;
+}
+.session-preview-orbit {
+  position: absolute;
+  z-index: -1;
+  inset-inline-end: -12px;
+  bottom: -150px;
+  font-family: "Sakkal Majalla", serif;
+  font-size: 460px;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.07;
+  pointer-events: none;
+}
+.session-status {
+  font-size: 12px;
+  margin: 20px 0;
+  color: var(--muted);
+}
+.session-result {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  margin-top: 25px;
+  padding: 27px 30px;
+  background: var(--panel);
+}
+.session-result > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 23px;
+}
+.session-result h2 {
+  font-size: 25px;
+  margin: 8px 0 0;
+}
+.session-total {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: end;
+}
+.session-total b {
+  font-size: 17px;
+  color: var(--accent);
+}
+.session-total span {
+  font-size: 11px;
+  color: var(--muted);
+}
+.session-pick {
+  display: flex;
+  align-items: center;
+  gap: 19px;
+}
+.session-pick-number {
+  color: var(--muted);
+  font-size: 11px;
+}
+.session-pick-art {
+  width: 57px;
+  height: 80px;
+  padding: 0;
+  border: 0;
+  flex-shrink: 0;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--raised);
+}
+.session-pick-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.session-pick-copy {
+  flex: 1;
+  min-width: 0;
+}
+.session-pick-copy > span {
+  color: var(--accent);
+  font-size: 10px;
+}
+.session-pick-copy > button {
+  display: block;
+  max-width: 100%;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 7px 0;
+}
+.session-pick-copy p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.8;
+  margin: 0;
+}
+.session-pick-time {
+  text-align: center;
+  min-width: 74px;
+}
+.session-pick-time b {
+  display: block;
+  font-size: 26px;
+  font-weight: 400;
+}
+.session-pick-time span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.session-replace {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 10px 13px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.session-intermission {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+  padding: 19px 0 19px 19px;
+  margin-inline-start: 7px;
+}
+.session-result footer {
+  margin-top: 25px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.session-result footer .secondary {
+  font-size: 11px;
+}
+.session-result footer small {
+  color: var(--muted);
+  font-size: 10px;
+  max-width: 300px;
+  line-height: 1.8;
+  margin-inline-start: auto;
+}
+.session-result > p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.9;
+}
+.session-result .session-footnote {
+  font-size: 10px;
+  margin-bottom: 0;
+}
+.session-spin {
+  animation: session-spin 1s linear infinite;
+}
+@keyframes session-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Settings become a horizontal index rather than another long sidebar. */
+.experience-riwaq .studio-layout {
+  display: block;
+}
+.experience-riwaq .studio-main {
+  min-width: 0;
+}
+.studio-index {
+  margin-bottom: 28px;
+}
+.studio-index > .settings-search {
+  max-width: 380px;
+  margin-bottom: 20px;
+}
+.studio-index-groups {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.studio-index-groups > button {
+  display: flex;
+  align-items: start;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--panel);
+  text-align: start;
+}
+.studio-index-groups > button.selected {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.studio-index-groups > button.selected svg {
+  color: var(--accent);
+}
+.studio-index-groups b {
+  font-size: 13px;
+}
+.studio-index-groups small {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.studio-index-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 17px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.studio-index-pages > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  padding: 9px 11px;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.studio-index-pages > button.selected {
+  background: var(--raised);
+  color: var(--text);
+  border-color: var(--line);
+}
+.studio-index-pages > button:hover {
+  color: var(--accent);
+}
+.experience-riwaq button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+@media (max-width: 1150px) {
+  .studio-index-groups {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .riwaq-masthead {
+    gap: 15px;
+  }
+  .riwaq-destinations {
+    gap: 12px;
+  }
+  .riwaq-utilities .profile-button span {
+    display: none;
+  }
+  .session-builder {
+    padding: 23px;
+  }
+  .session-workspace {
+    grid-template-columns: 1.15fr 1fr;
+    gap: 16px;
+  }
+  .session-build-row {
+    gap: 12px;
+  }
+  .session-build-row > span {
+    font-size: 9px;
+  }
+  .session-poster-stack > div {
+    width: 106px;
+    height: 153px;
+  }
+  .session-preview {
+    padding: 22px;
+  }
+  .session-step p {
+    max-width: 290px;
+  }
+  .session-heading h1 {
+    font-size: 46px;
+  }
+  .session-result footer {
+    flex-wrap: wrap;
+  }
+  .session-result footer small {
+    max-width: none;
+    width: 100%;
+    margin-inline-start: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-spin {
+    animation: none;
+  }
+}
+.app.experience-riwaq .title-page {
+  scroll-margin-top: 85px;
+}
+@media (max-height: 780px) {
+  .session-home {
+    padding-top: 4px;
+  }
+  .session-heading {
+    margin-bottom: 20px;
+  }
+  .session-heading h1 {
+    font-size: 36px;
+  }
+  .session-heading p {
+    font-size: 12px;
+  }
+  .session-builder {
+    padding: 18px;
+  }
+  .session-step h2 {
+    font-size: 17px;
+  }
+  .session-budgets {
+    margin: 16px 0 18px;
+  }
+  .session-budgets button {
+    padding: 12px 3px;
+  }
+  .session-budgets b {
+    font-size: 23px;
+  }
+  .session-moods {
+    gap: 6px;
+  }
+  .session-moods button {
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+  .session-build-row {
+    margin-top: 18px;
+    padding-top: 16px;
+  }
+  .session-preview {
+    min-height: 340px;
+  }
+  .session-poster-stack {
+    height: 140px;
+    margin-top: 18px;
+  }
+  .session-poster-stack > div {
+    width: 102px;
+    height: 144px;
+  }
+  .session-preview-caption h2 {
+    font-size: 26px;
+  }
+}
+.reduced-motion .session-spin {
+  animation: none;
+}
