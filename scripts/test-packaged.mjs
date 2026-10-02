@@ -99,7 +99,7 @@ try {
     loaded = await evaluate(
       offlineMode
         ? `!!document.querySelector('.profile-button')`
-        : `!!document.querySelector('.hero') && document.querySelectorAll('.poster-card').length > 0`,
+        : `!!document.querySelector('.hero, .session-home') && document.querySelectorAll('.poster-card').length > 0`,
     );
     if (loaded) break;
     await new Promise((r) => setTimeout(r, 250));

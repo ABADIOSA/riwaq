@@ -1,5 +1,14 @@
 # Verification — Riwaq
 
+## 2026-10-03 — Riwaq sessions and navigation (unreleased, based on 0.26.0)
+
+- **427 Node tests pass**, zero failures (419 merged baseline + 8 session tests). New coverage includes strict runtime parsing, measured remaining time, released/unwatched episodes, budget and intermission constraints, alternatives, metadata concurrency/cancellation/failure, malformed metadata, validated profile preferences and rejection of a late queue write after a profile switch.
+- Vite production build and repository Prettier check pass.
+- `node scripts/test-session-ui.mjs` runs the real Electron main/IPC and production renderer with an isolated data directory and a local HTTP Stremio addon fixture. Home and settings were checked at **1440×1000 and 980×680**, with screenshots inspected, no horizontal overflow and zero renderer exceptions. It exercises session creation, replacement, queue persistence, title navigation, Escape on the tools panel, the classic/new layout switch and budget persistence across reload.
+- The UI test caught a startup race that reset a saved budget to 90 before profile state loaded. The session component now mounts only once startup is ready.
+- `node scripts/test-packaged.mjs --source --offline` passed on Windows: DPAPI available; MPV decoded the Y4M fixture; native child and parent visible at **2560×1440**; queue entry consumed. The runner now accepts either the classic hero or the new session home as the ready state.
+- These are source Electron/production-renderer checks, **not a newly packaged installer or an upgrade test**. Fixture titles and artwork in screenshots are synthetic. Live third-party account flows, arbitrary real addon runtime metadata, HDR and multiple monitors were not revalidated here. The planner does not verify source availability before proposing a title.
+
 ## 2026-10-02 — review of 0.25.1 (unreleased fixes)
 
 - 407 Node tests passed (402 baseline): subtitle filename requests over local HTTP, scheduler retry timing, target-profile protection edits, and list sync across profile switches.

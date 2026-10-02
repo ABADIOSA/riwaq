@@ -13,6 +13,9 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 
 ## Design and invariants
 
+- The default `interfaceStyle: riwaq` uses a horizontal masthead, session home and settings category cards; `classic` keeps the previous layouts. Keep both usable at 980×680. Appearance controls specific to the classic hero/sidebar appear only in classic mode.
+- Session planning (`core/session.mjs`, `SessionHome.jsx`) uses up to 18 titles and three concurrent metadata reads. Never invent missing runtime, promise source availability, or send the library to an AI service. Include five-minute intervals inside the budget; mark series-average runtimes as estimates. Plans are transient and queue writes are explicit. Mount after `ready`, key by profile, ignore obsolete reads, and keep the optional `queueEdit.profileId` check before mutation. See docs/RIWAQ-SESSIONS.md.
+- Session UI verification: build, then `node scripts/test-session-ui.mjs` on Windows. It uses an isolated profile and local HTTP addon, with real IPC. Select the main renderer, never the HUD. Run the native MPV smoke separately; UI fixture success does not verify live accounts or real addon streams.
 - Keep the Arabic interface, RTL geometry and all three navigation layouts usable at 980×680 and larger.
 - `electron/video-host.mjs` owns a Win32 WS_CHILD surface. MPV receives its HWND using `--wid`. React reports its viewport rectangle; main calculates the physical scale. Native video must hide beneath HTML dialogs and restore afterward.
 - Use only the narrow `riwaq` IPC allowlist. Never expose filesystem, shell, raw native handles or provider URLs with secrets to React.

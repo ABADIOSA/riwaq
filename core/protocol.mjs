@@ -36,6 +36,9 @@ export const DEFAULT_SETTINGS = {
   serverUrl: "http://127.0.0.1:11470",
   autoplay: false,
   layout: "cinematic",
+  interfaceStyle: "riwaq",
+  sessionBudget: 90,
+  sessionMood: "any",
   cardStyle: "glass",
   cardSize: "comfortable",
   showHero: true,
@@ -366,6 +369,9 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.serverUrl = webUrl(input.serverUrl).toString().replace(/\/$/, "");
   for (const [key, values] of Object.entries({
     layout: ["cinematic", "sidebar", "topbar"],
+    interfaceStyle: ["riwaq", "classic"],
+    sessionBudget: [30, 60, 90, 120, 180],
+    sessionMood: ["any", "light", "thrill", "wonder", "depth"],
     streamSafety: ["strict", "balanced", "off"],
     skipIntro: ["off", "button", "auto"],
     seekThumbnails: ["off", "local", "all"],

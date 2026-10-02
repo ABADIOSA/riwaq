@@ -56,6 +56,8 @@ import AiSearchRow from "./components/AiSearch.jsx";
 import { PrayerChip } from "./components/Prayer.jsx";
 import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
+import RiwaqNav from "./components/RiwaqNav.jsx";
+import SessionHome from "./components/SessionHome.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
 import TraktSuggestions from "./components/Suggestions.jsx";
 import {
@@ -673,6 +675,7 @@ export default function App() {
     }
   };
   const appearance = resolveAppearance(state.settings);
+  const riwaqExperience = state.settings.interfaceStyle !== "classic";
   const barShown = win.frame !== "native" && !win.fullscreen;
   // The artwork glow follows what is on screen: an open title, else the hero.
   const ambientArt =
@@ -685,7 +688,7 @@ export default function App() {
         style={{
           ...themeVariables(appearance),
         }}
-        className={`app ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
+        className={`app ${riwaqExperience ? "experience-riwaq" : "experience-classic"} ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
         onMouseDown={(e) => {
           if (
             !state.settings.dragAnywhere ||
@@ -721,114 +724,133 @@ export default function App() {
           items={shownRows.flatMap((r) => r.metas).concat(favorites)}
           blocked={player.active}
         />
-        <aside className="sidebar">
-          <div className="brand">
-            {appearance.logoStyle === "image" ? (
-              <img
-                className="brand-image"
-                src={appearance.logoImage}
-                alt="رِواق"
-              />
-            ) : (
-              <>
-                <span className="brand-mark">
-                  <span />
-                  <span />
-                  <span />
-                </span>
-                <div className="brand-name">
-                  <b>رِواق</b>
-                  <small>RIWAQ</small>
-                </div>
-              </>
-            )}
-          </div>
-          <span className="nav-label">مساحتك السينمائية</span>
-          <nav>
-            {[
-              [Home, "home", "الرئيسية"],
-              [Compass, "discover", "اكتشف"],
-              [Library, "library", "مكتبتي"],
-              [Folders, "collections", "المجموعات"],
-              [Tv, "live", "بث مباشر"],
-              [Puzzle, "addons", "الإضافات"],
-            ]
-              .filter(
-                ([, id]) => !appearance.navHidden.includes(id) || view === id,
-              )
-              .map(([Icon, id, label]) => (
-                <button
-                  key={id}
-                  className={
-                    view === id || (view === "folder" && folderFrom === id)
-                      ? "nav-item active"
-                      : "nav-item"
-                  }
-                  onClick={() => navigate(id)}
-                >
-                  <Icon size={20} />
-                  <span>{label}</span>
-                  {isLocked(id === "collections" ? "library" : id) && (
-                    <Lock size={13} className="nav-lock" />
-                  )}
-                  {id === "library" && favorites.length > 0 && (
-                    <small>{favorites.length}</small>
-                  )}
-                  {id === "addons" && <small>{state.addons.length}</small>}
-                  {id === "collections" && state.collections?.length > 0 && (
-                    <small>{state.collections.length}</small>
-                  )}
-                </button>
-              ))}
-          </nav>
-          <div className="sidebar-note">
-            <span className="status-dot" /> إضافاتك. اختياراتك. تجربتك.
-            <p>متوافق مع إضافات ستريميو</p>
-          </div>
-          <div className="sidebar-bottom">
-            <button
-              className={view === "settings" ? "nav-item active" : "nav-item"}
-              onClick={() => navigate("settings")}
-            >
-              <Settings size={20} />
-              الإعدادات
-              {state.update?.available && (
-                <small className="update-dot" title="يتوفر إصدار جديد">
-                  جديد
-                </small>
+        {riwaqExperience ? (
+          <RiwaqNav
+            view={view}
+            navigate={navigate}
+            appearance={appearance}
+            profile={activeProfile}
+            user={state.user}
+            onProfiles={() => setProfilesOpen(true)}
+            onAccount={() => setAccount(true)}
+            isLocked={isLocked}
+            updateAvailable={state.update?.available}
+          />
+        ) : (
+          <aside className="sidebar">
+            <div className="brand">
+              {appearance.logoStyle === "image" ? (
+                <img
+                  className="brand-image"
+                  src={appearance.logoImage}
+                  alt="رِواق"
+                />
+              ) : (
+                <>
+                  <span className="brand-mark">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                  <div className="brand-name">
+                    <b>رِواق</b>
+                    <small>RIWAQ</small>
+                  </div>
+                </>
               )}
-            </button>
-            <button
-              className="profile-button"
-              onClick={() => setProfilesOpen(true)}
-              title="تبديل الملف الشخصي"
-            >
-              <Users size={17} />
-              <span>{activeProfile?.name || "المشاهد"}</span>
-              {state.profiles?.list?.length > 1 && (
-                <small>{state.profiles.list.length}</small>
-              )}
-            </button>
-            <button className="account-button" onClick={() => setAccount(true)}>
-              <span className="avatar">
-                {state.user ? (
-                  (state.user.name || state.user.email || "R")[0].toUpperCase()
-                ) : (
-                  <LogIn size={19} />
+            </div>
+            <span className="nav-label">مساحتك السينمائية</span>
+            <nav>
+              {[
+                [Home, "home", "الرئيسية"],
+                [Compass, "discover", "اكتشف"],
+                [Library, "library", "مكتبتي"],
+                [Folders, "collections", "المجموعات"],
+                [Tv, "live", "بث مباشر"],
+                [Puzzle, "addons", "الإضافات"],
+              ]
+                .filter(
+                  ([, id]) => !appearance.navHidden.includes(id) || view === id,
+                )
+                .map(([Icon, id, label]) => (
+                  <button
+                    key={id}
+                    className={
+                      view === id || (view === "folder" && folderFrom === id)
+                        ? "nav-item active"
+                        : "nav-item"
+                    }
+                    onClick={() => navigate(id)}
+                  >
+                    <Icon size={20} />
+                    <span>{label}</span>
+                    {isLocked(id === "collections" ? "library" : id) && (
+                      <Lock size={13} className="nav-lock" />
+                    )}
+                    {id === "library" && favorites.length > 0 && (
+                      <small>{favorites.length}</small>
+                    )}
+                    {id === "addons" && <small>{state.addons.length}</small>}
+                    {id === "collections" && state.collections?.length > 0 && (
+                      <small>{state.collections.length}</small>
+                    )}
+                  </button>
+                ))}
+            </nav>
+            <div className="sidebar-note">
+              <span className="status-dot" /> إضافاتك. اختياراتك. تجربتك.
+              <p>متوافق مع إضافات ستريميو</p>
+            </div>
+            <div className="sidebar-bottom">
+              <button
+                className={view === "settings" ? "nav-item active" : "nav-item"}
+                onClick={() => navigate("settings")}
+              >
+                <Settings size={20} />
+                الإعدادات
+                {state.update?.available && (
+                  <small className="update-dot" title="يتوفر إصدار جديد">
+                    جديد
+                  </small>
                 )}
-              </span>
-              <span>
-                <b>{state.user?.name || "حساب ستريميو"}</b>
-                <small>
-                  {state.user
-                    ? "متصل • الإضافات مستوردة"
-                    : "اربط حسابك وانقل إضافاتك"}
-                </small>
-              </span>
-              <ChevronLeft size={16} />
-            </button>
-          </div>
-        </aside>
+              </button>
+              <button
+                className="profile-button"
+                onClick={() => setProfilesOpen(true)}
+                title="تبديل الملف الشخصي"
+              >
+                <Users size={17} />
+                <span>{activeProfile?.name || "المشاهد"}</span>
+                {state.profiles?.list?.length > 1 && (
+                  <small>{state.profiles.list.length}</small>
+                )}
+              </button>
+              <button
+                className="account-button"
+                onClick={() => setAccount(true)}
+              >
+                <span className="avatar">
+                  {state.user ? (
+                    (state.user.name ||
+                      state.user.email ||
+                      "R")[0].toUpperCase()
+                  ) : (
+                    <LogIn size={19} />
+                  )}
+                </span>
+                <span>
+                  <b>{state.user?.name || "حساب ستريميو"}</b>
+                  <small>
+                    {state.user
+                      ? "متصل • الإضافات مستوردة"
+                      : "اربط حسابك وانقل إضافاتك"}
+                  </small>
+                </span>
+                <ChevronLeft size={16} />
+              </button>
+            </div>
+          </aside>
+        )}
         <main
           className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""}`}
         >
@@ -869,7 +891,10 @@ export default function App() {
             )}
           <header className={`topbar ${scrolled ? "scrolled" : ""}`}>
             <div className="topbar-title">
-              <span className="tiny-dot" /> تجربة مشاهدة، على ذوقك
+              <span className="tiny-dot" />{" "}
+              {riwaqExperience
+                ? "أهلاً بك في مساحتك."
+                : "تجربة مشاهدة، على ذوقك"}
             </div>
             <form
               className="search-box"
@@ -930,6 +955,7 @@ export default function App() {
           {["home", "discover", "search"].includes(view) && (
             <>
               {view === "home" &&
+                !riwaqExperience &&
                 state.settings.showHero !== false &&
                 homeSections.includes("hero") &&
                 hero && (
@@ -945,6 +971,16 @@ export default function App() {
                     fromRiwaq={feedRows.length > 0}
                   />
                 )}
+              {view === "home" && riwaqExperience && ready && (
+                <SessionHome
+                  key={state.profiles?.active || "default"}
+                  state={state}
+                  rows={shownRows}
+                  onOpen={openStable}
+                  update={update}
+                  notice={notice}
+                />
+              )}
               {view === "home" && !state.user && !loading && (
                 <div className="connect-banner">
                   <span className="banner-icon">
