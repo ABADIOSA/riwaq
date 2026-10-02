@@ -59,6 +59,7 @@ import HomeHero from "./components/HomeHero.jsx";
 import RiwaqNav from "./components/RiwaqNav.jsx";
 import SessionHome from "./components/SessionHome.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
+import DiscoverSections from "./components/DiscoverSections.jsx";
 import TraktSuggestions from "./components/Suggestions.jsx";
 import {
   groupRows,
@@ -131,6 +132,8 @@ export default function App() {
     [filter, setFilter] = useState(""),
     // Discover and search tabs: one of Riwaq's groups, or "all".
     [group, setGroup] = useState("all"),
+    // Discover's section (core/discover.mjs), kept between visits.
+    [discoverTab, setDiscoverTab] = useState("movies"),
     [catalog, setCatalog] = useState(""),
     [rows, setRows] = useState([]),
     [failures, setFailures] = useState([]),
@@ -390,6 +393,7 @@ export default function App() {
     setHeroIndex(0);
     const args = {
       feed: view === "home" && feedSignature !== "off",
+      ...(view === "discover" && !catalog ? { discover: discoverTab } : {}),
       type: view === "home" ? "" : filter,
       search: view === "search" ? query : "",
       catalogKey: view !== "home" ? catalog : "",
@@ -456,6 +460,7 @@ export default function App() {
     catalog,
     addonSignature,
     feedSignature,
+    view === "discover" ? `${discoverTab}|${tmdbOn}` : "",
     refresh,
     state.profiles?.active,
   ]);
@@ -1068,7 +1073,7 @@ export default function App() {
                     </IconButton>
                   </div>
                 )}
-                {view !== "home" && !catalog && rowGroups.length > 0 && (
+                {view === "search" && !catalog && rowGroups.length > 0 && (
                   // Riwaq's groups instead of one tab per addon type: a
                   // dozen addons used to give twenty tabs.
                   <ScrollRow className="filter-tabs" role="tablist">
@@ -1115,7 +1120,13 @@ export default function App() {
                         <div className="skeleton" key={i} />
                       ))}
                     </div>
-                    <Busy text="نحمّل الكتالوجات من إضافاتك…" />
+                    <Busy
+                      text={
+                        view === "discover"
+                          ? "نجهّز لك الأعمال…"
+                          : "نحمّل الكتالوجات من إضافاتك…"
+                      }
+                    />
                   </div>
                 ) : loadError ? (
                   <Empty
@@ -1251,11 +1262,28 @@ export default function App() {
                               ))}
                           </React.Fragment>
                         ))
+                    ) : view === "discover" ? (
+                      <DiscoverSections
+                        tab={discoverTab}
+                        setTab={setDiscoverTab}
+                        rows={shownRows}
+                        tmdb={tmdbOn}
+                        loading={loading}
+                        onOpen={openStable}
+                        onMore={moreStable}
+                        onSettings={settingsStable}
+                      />
                     ) : (
                       catalogRails
                     )}
                     {loading && (
-                      <Busy text="نحمّل بقية الكتالوجات من إضافاتك…" />
+                      <Busy
+                        text={
+                          view === "discover"
+                            ? "نكمل تجهيز بقية الأعمال…"
+                            : "نحمّل بقية الكتالوجات من إضافاتك…"
+                        }
+                      />
                     )}
                     {!loading && !rows.some((r) => r.metas.length) && (
                       <Empty
@@ -1284,7 +1312,10 @@ export default function App() {
                     {failures.length > 0 && (
                       <div className="inline-warning">
                         <AlertCircle size={16} />
-                        بعض الإضافات لم تستجب: {failures.join("، ")}
+                        {/* Discover names no addon, not even a failing one. */}
+                        {view === "discover"
+                          ? "بعض الأعمال لم تصل بعد."
+                          : `بعض الإضافات لم تستجب: ${failures.join("، ")}`}
                         <button onClick={() => setRefresh((x) => x + 1)}>
                           إعادة المحاولة
                         </button>

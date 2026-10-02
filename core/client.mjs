@@ -13,6 +13,7 @@ import {
 } from "./protocol.mjs";
 import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
 import { applyStreamPrefs } from "./stream-prefs.mjs";
+import { discoverCinemetaUrl, discoverPlan, discoverRow } from "./discover.mjs";
 import {
   forgetSeries,
   preferRemembered,
@@ -1164,10 +1165,22 @@ export class Client {
       type: cat.type,
     }));
     // One of Riwaq's own rows opened on its full page.
-    if (String(args.catalogKey || "").startsWith(FEED_PREFIX))
-      return feedPlan({ tmdb: this.tmdbActive() }).filter(
-        (r) => r.key === args.catalogKey,
-      );
+    if (String(args.catalogKey || "").startsWith(FEED_PREFIX)) {
+      const tmdb = this.tmdbActive();
+      const own = discoverRow(args.catalogKey, { tmdb });
+      return own
+        ? discoverPlan({ tmdb, tab: own.tab }).filter(
+            (r) => r.key === args.catalogKey,
+          )
+        : feedPlan({ tmdb }).filter((r) => r.key === args.catalogKey);
+    }
+    // Discover asks for one of Riwaq's sections, then the addons' catalogs,
+    // which the page folds into its sections (core/discover.mjs).
+    if (typeof args.discover === "string" && !args.search && !args.catalogKey)
+      return [
+        ...discoverPlan({ tmdb: this.tmdbActive(), tab: args.discover }),
+        ...addons,
+      ];
     // Home asks for Riwaq's own rows first (core/feed.mjs).
     if (args.feed !== true || args.search || args.catalogKey) return addons;
     return [
@@ -1189,7 +1202,7 @@ export class Client {
    */
   async feedCatalog(key, { page = 1, skip = 0 } = {}) {
     const tmdb = this.tmdbActive();
-    const row = feedRow(key, { tmdb });
+    const row = feedRow(key, { tmdb }) || discoverRow(key, { tmdb });
     if (!row) return { rows: [], failures: [] };
     const base = {
       key,
@@ -1198,6 +1211,7 @@ export class Client {
       type: row.type,
       feed: true,
       page,
+      ...(row.tab ? { tab: row.tab } : {}),
     };
     if (tmdb) {
       const result = await this.tmdbRow(row.source, this.enabled(), page);
@@ -1208,7 +1222,10 @@ export class Client {
       };
     }
     try {
-      const data = await this.cached(cinemetaUrl(row, skip), {
+      const url = row.tab
+        ? discoverCinemetaUrl(row, skip)
+        : cinemetaUrl(row, skip);
+      const data = await this.cached(url, {
         ttl: 600000,
         failFor: 120000,
         timeout: 10000,
