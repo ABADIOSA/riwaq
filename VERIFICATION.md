@@ -10,7 +10,7 @@
 
 ## 0.27.0 — next episode ready, per-series skip
 
-Owner request: develop further, and review PR #36. PR #36 was reviewed (427 tests, build, mocked-bridge render at 980×680 and 1440×960 with no errors or overflow) and not merged. This release is built on main without it.
+Owner request: develop further, and review PR #36. PR #36 was reviewed (427 tests, build, mocked-bridge render at 980×680 and 1440×960 with no errors or overflow) and merged on the owner's instruction. This branch merged locally with it passes 433 tests.
 
 Executed:
 
