@@ -17,6 +17,32 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.28.0 — Discover arranged by Riwaq
+
+Owner request: arrange Discover by Riwaq's own categories, as home is, and name no addon there.
+
+Executed:
+
+- `npm test`: **440 passing, 0 failing** (433 + 7 in `tests/discover.test.mjs`). They cover:
+  - the sections with and without a TMDB key;
+  - unique `d-` keys that never collide with home's rows;
+  - every TMDB row building a valid request, with "recent" windows from today;
+  - plan entries carrying only opaque keys and Riwaq's labels;
+  - the Cinemeta URLs;
+  - addon catalogs folded into sections without names or keys that open them, and de-duplicated against Riwaq's rows;
+  - the tabs offered;
+  - `Client.catalogPlan({ discover })`, the full-page plan and `catalog` serving a Discover row, through a mocked `request`;
+  - the generic failure notice in `App.jsx`.
+- `npm run check` and `npm run build` pass.
+- Headless Chromium render with a mocked bridge, at 980×680 with TMDB and at 1440×960 without:
+  - three addon catalogs with distinctive names were loaded alongside, plus a failing addon;
+  - the page text never contained any addon or catalog name, and the failure read "بعض الأعمال لم تصل بعد";
+  - the tabs were correct, the hint showed for Arabic without a key, and the sports tab came from an addon catalog;
+  - "عرض الكل" opened the paged full page;
+  - 0 errors, 0 horizontal overflow.
+
+Not executed: live TMDB or Cinemeta (both blocked here), Windows.
+
 ## 0.27.0 — next episode ready, per-series skip
 
 Owner request: develop further, and review PR #36. PR #36 was reviewed (427 tests, build, mocked-bridge render at 980×680 and 1440×960 with no errors or overflow) and merged on the owner's instruction. This branch merged locally with it passes 433 tests.

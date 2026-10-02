@@ -42,6 +42,9 @@ React (sandboxed, RTL)
 - 0.22: performance. `Player.publish` (`electron/player.mjs`) sends a position-only change at most every `POSITION_MS` (250 ms). `Rail` and `Poster` are memoized and a rail renders 12 cards at a time (`ScrollRow` `onNearEnd`). `CatalogRail` and stable handlers in `App.jsx` keep re-renders local. `.rail` uses `content-visibility: auto`. Settings, add-ons, library, live TV and folder pages are `React.lazy` chunks.
 - 0.24: `core/ambient.mjs` and `src/components/Ambient.jsx`. The artwork glow follows the card under the pointer. Cards carry `data-ambient` attributes read by one delegated listener, and two layers crossfade. Settings live in the Ambience page (`LookPages.jsx`).
 - 0.25: `core/smart-groups.mjs` and `src/components/SmartHome.jsx` group addon catalogs into Riwaq's sections. They drive the home shelves (`homeGrouping`, `smartHidden`) and the Discover/search tabs (`group` state in `App.jsx`).
+- 0.28: `core/discover.mjs` defines Discover's sections and rows.
+  - `Client.catalogPlan({ discover })` and `feedCatalog` serve them as `feed:d-` keys.
+  - `DiscoverSections.jsx` draws the tabs, Riwaq's rows and the anonymous blended addon rows (`blendedSection`).
 - 0.27: `core/prefetch.mjs` decides when and what to prefetch.
   - `App.jsx` keeps one `prefetchRef` entry (from, target, profile, time, promise), and `advance` consumes it.
   - `skipPreferences` in `core/skip-segments.mjs` applies `skipExcept`, and `Player.refreshSkip` reads it through `skipPrefs`.
