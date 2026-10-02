@@ -205,6 +205,7 @@ export default function App() {
       const result = await call("streams", {
         type: details.type,
         id: targetId,
+        seriesId: details.id,
       });
       if (
         stateRef.current.profiles?.active !== profileId ||

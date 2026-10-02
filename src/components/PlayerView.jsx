@@ -22,6 +22,7 @@ import { IconButton } from "./UI.jsx";
 import PlayerDock from "./PlayerDock.jsx";
 import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
+import { seekAmount } from "../../core/hotkeys.mjs";
 
 export default function PlayerView({
   player,
@@ -95,10 +96,15 @@ export default function PlayerView({
         e.preventDefault();
         command("exitFullscreen");
       }
-      if (e.key === "ArrowRight")
-        command("seek", (player.position || 0) + state.settings.seekStep);
-      if (e.key === "ArrowLeft")
-        command("seek", (player.position || 0) - state.settings.seekStep);
+      // The same steps as MPV's own keys (core/hotkeys.mjs seekAmount).
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft")
+        command(
+          "seekBy",
+          seekAmount(
+            `${e.key === "ArrowRight" ? "forward" : "back"}${e.shiftKey ? "Long" : ""}`,
+            state.settings,
+          ),
+        );
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -108,6 +114,7 @@ export default function PlayerView({
     player.overlay,
     hidden,
     state.settings.seekStep,
+    state.settings.seekLongStep,
   ]);
   // A right click or C inside MPV asks for the panel; the mini player has none.
   useEffect(() => {

@@ -1,5 +1,34 @@
 # Verification — Riwaq 0.20.0
 
+## 0.26.0 — series memory and one seek step
+
+The owner asked for further development and a look at PR #34. That review (Codex, `codex/review-0.25-stability`, CI green, 407 tests passing locally) left two open playback findings. This release fixes both and adds the two most requested community items it listed: Harbor #1419 (keep the source) and Nuvio #611 (remember audio and subtitle tracks).
+
+Executed:
+
+- `npm test`: **414 passing, 0 failing** (402 + 12 in `tests/series-memory.test.mjs`). They cover:
+  - `inputConf` no longer containing a fixed `seek N`, and the shipped `assets/player-input.conf` matching it;
+  - `seekAmount` for both steps, with out-of-range fallbacks;
+  - the running `Player` reading the step from `settingsNow` at each `riwaq-seek` message;
+  - `safeSettings` for `seekStep`, `seekLongStep`, `rememberSeries` and `seriesMemory`;
+  - source and track identities that never carry a URL;
+  - track matching by language, title and flags, with forced versus full kept apart and "off" remembered;
+  - the memory capped at 200, newest first, merged per series and forgettable;
+  - `preferRemembered` staying inside the filter band;
+  - `Client.getStreams` putting the remembered release of episode 1 first for episode 2, so the first supported stream (the one autoplay takes) is the same release. This runs on a mocked addon `request`.
+  - The stale-subtitle guard and the record-only-viewer-choices rule in `electron/main.mjs`, checked by reading the source, since main needs Electron.
+- `npm run check` and `npm run build` pass.
+- Headless Chromium render with a mocked bridge (`scratchpad/ui/render-29.mjs`) at 980×680 (sources popup) and 1440×960 (sources on page):
+  - the "مصدرك السابق" chip appears on the first source only;
+  - the note above the list is shown, and "انسَ اختياري" sends `forgetSeries` with the series ID;
+  - the settings toggle, the long-step select and the "المسلسلات المحفوظة" row are present;
+  - 0 page errors and 0 horizontal overflow.
+
+Not executed:
+
+- No real MPV viewing of consecutive episodes on Windows. Track restoring and the keyboard seek through MPV's script message were not exercised with a real file or MPV build.
+- No live addon streams.
+
 ## 0.25.1 — Trakt connection
 
 The owner reported problems connecting to and talking with Trakt, with a screenshot of the generic toast "تعذّر إكمال العملية. تحقق من الاتصال والإعدادات ثم أعد المحاولة."

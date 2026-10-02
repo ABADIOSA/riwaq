@@ -14,23 +14,28 @@ export const HOTKEY_ACTIONS = [
     command: "cycle pause",
     binding: "SPACE",
   },
-  { id: "seekBack", label: "رجوع قصير", command: "seek -10", binding: "LEFT" },
+  {
+    id: "seekBack",
+    label: "رجوع قصير",
+    command: "script-message riwaq-seek back",
+    binding: "LEFT",
+  },
   {
     id: "seekForward",
     label: "تقديم قصير",
-    command: "seek 10",
+    command: "script-message riwaq-seek forward",
     binding: "RIGHT",
   },
   {
     id: "seekBackLong",
     label: "رجوع طويل",
-    command: "seek -60",
+    command: "script-message riwaq-seek backLong",
     binding: "Shift+LEFT",
   },
   {
     id: "seekForwardLong",
     label: "تقديم طويل",
-    command: "seek 60",
+    command: "script-message riwaq-seek forwardLong",
     binding: "Shift+RIGHT",
   },
   {
@@ -185,6 +190,23 @@ export const HOTKEY_ACTIONS = [
     binding: "ESC",
   },
 ];
+
+/**
+ * Seconds a seek key moves, from the viewer's settings at the moment of the
+ * press. The arrow keys ask main through a script message instead of carrying
+ * a fixed "seek 10", so the keyboard, the on-screen buttons and the HUD all
+ * use the same step, and a changed step applies without restarting MPV.
+ */
+export const SEEK_DIRECTIONS = ["back", "forward", "backLong", "forwardLong"];
+export function seekAmount(direction, settings = {}) {
+  if (!SEEK_DIRECTIONS.includes(direction)) return 0;
+  const long = direction.endsWith("Long");
+  const step = Number(long ? settings.seekLongStep : settings.seekStep);
+  const fallback = long ? 60 : 10;
+  const seconds =
+    Number.isFinite(step) && step > 0 && step <= 600 ? step : fallback;
+  return direction.startsWith("back") ? -seconds : seconds;
+}
 
 // MPV accepts these verbatim; anything else risks an input.conf that silently
 // fails to parse and leaves the viewer with no keyboard at all.

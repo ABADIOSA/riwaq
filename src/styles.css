@@ -1827,6 +1827,10 @@ button.secondary {
   color: #7fd6a2;
   border-color: #7fd6a240;
 }
+.stream-info em.tag-remembered {
+  color: #7dd3fc;
+  border-color: #7dd3fc48;
+}
 .stream-info em.tag-trusted {
   color: #8fbcf0;
   border-color: #8fbcf040;

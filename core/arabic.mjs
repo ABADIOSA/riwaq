@@ -59,6 +59,14 @@ export const CATALOGS = {
   many: "{n} كتالوجاً",
   other: "{n} كتالوج",
 };
+export const SERIES = {
+  zero: "لا مسلسلات",
+  one: "مسلسل واحد",
+  two: "مسلسلين",
+  few: "{n} مسلسلات",
+  many: "{n} مسلسلاً",
+  other: "{n} مسلسل",
+};
 export const MINUTES = {
   zero: "أقل من دقيقة",
   one: "دقيقة واحدة",
