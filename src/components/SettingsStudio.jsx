@@ -1192,6 +1192,24 @@ export default function SettingsStudio({
                       ["button", "إظهار زر تخطي"],
                       ["auto", "تخطٍ تلقائي"],
                     ])}
+                    {(s.skipExcept || []).length > 0 && (
+                      <div className="setting-row">
+                        <div>
+                          <b>مسلسلات بلا تخطٍّ تلقائي</b>
+                          <p>
+                            يظهر فيها زر التخطي فقط:{" "}
+                            {arabicCount(s.skipExcept.length, SERIES)}. غيّرها
+                            من صفحة كل مسلسل.
+                          </p>
+                        </div>
+                        <button
+                          className="secondary small"
+                          onClick={() => save("skipExcept", [])}
+                        >
+                          أعد التخطي للكل
+                        </button>
+                      </div>
+                    )}
                   </section>
                   <section className="settings-card">
                     <h2>لقطات الشاشة</h2>

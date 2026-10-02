@@ -14,6 +14,7 @@ import { HOME_GROUPING, cleanSmartHidden } from "./smart-groups.mjs";
 import { cleanFeedHidden } from "./feed.mjs";
 import { cleanCountdowns } from "./countdown.mjs";
 import { cleanSeriesMemory } from "./series-memory.mjs";
+import { cleanSkipExcept } from "./skip-segments.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -59,6 +60,8 @@ export const DEFAULT_SETTINGS = {
   streamSizeLimit: 0,
   skipIntro: "button",
   skipOutro: "off",
+  // Series whose intro and outro are never skipped on their own.
+  skipExcept: [],
   shaderPath: "",
   sleepTimer: 0,
   shader: "none",
@@ -446,6 +449,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.smartHidden = cleanSmartHidden(input.smartHidden);
   if (Array.isArray(input.feedHidden))
     next.feedHidden = cleanFeedHidden(input.feedHidden);
+  if (Array.isArray(input.skipExcept))
+    next.skipExcept = cleanSkipExcept(input.skipExcept);
   if (input.seriesMemory && typeof input.seriesMemory === "object")
     next.seriesMemory = cleanSeriesMemory(input.seriesMemory);
   if (Array.isArray(input.countdowns))

@@ -183,8 +183,10 @@ export class Player {
     onFullscreen,
     onEscape,
     settingsNow,
+    skipPrefs,
   }) {
     this.host = host;
+    this.skipPrefs = skipPrefs;
     // The viewer's settings as they are now; seek keys read the step here.
     this.settingsNow = settingsNow;
     this.inputConf = inputConf;
@@ -560,19 +562,18 @@ export class Player {
     this.refreshSkip();
   }
   refreshSkip() {
-    const next = activeSegment(
-      this.state.segments,
-      this.state.position,
-      this.settings || {},
-    );
+    // Main's live preferences (a series excluded from skipping, a changed
+    // setting) when it supplies them, else those the viewing started with.
+    const prefs = this.skipPrefs?.() || this.settings || {};
+    const next = activeSegment(this.state.segments, this.state.position, prefs);
     const changed = JSON.stringify(next) !== JSON.stringify(this.state.skip);
     this.state.skip = next;
     if (changed) this.onState(this.state);
     if (
       next &&
       this.state.abLoop === null &&
-      ((next.kind === "intro" && this.settings?.skipIntro === "auto") ||
-        (next.kind === "outro" && this.settings?.skipOutro === "auto"))
+      ((next.kind === "intro" && prefs.skipIntro === "auto") ||
+        (next.kind === "outro" && prefs.skipOutro === "auto"))
     )
       this.send(["seek", next.end, "absolute"]);
   }

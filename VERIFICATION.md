@@ -17,6 +17,24 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.27.0 — next episode ready, per-series skip
+
+Owner request: develop further, and review PR #36. PR #36 was reviewed (427 tests, build, mocked-bridge render at 980×680 and 1440×960 with no errors or overflow) and merged on the owner's instruction. This branch merged locally with it passes 433 tests.
+
+Executed:
+
+- `npm test`: **425 passing, 0 failing** (419 + 6 in `tests/next-episode.test.mjs`). They cover:
+  - `prefetchDue`: autoplay on, a series, more than two minutes long, and four minutes left or 90% watched; never live, films or unknown durations;
+  - `prefetchTarget`: the queue head first, otherwise the next released episode, and nothing after the last;
+  - `prefetched`: used only for the same title and profile within ten minutes;
+  - `advance` using the early answer and asking again when it has no playable source, and the effect asking once per episode and profile (checked by reading `src/App.jsx`);
+  - `skipPreferences` and `cleanSkipExcept`: an excluded series turns "auto" into "button" and never turns skipping on;
+  - the `Player` reading live skip preferences, so an exclusion stops the automatic seek at once while the button stays.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render at 980×680 on a series page with `skipIntro: "auto"`: the "تخطٍّ تلقائي للمقدمة هنا" toggle shows, starts checked, and adds the series to `skipExcept`; 0 errors, 0 overflow.
+
+Not executed: real consecutive episodes with MPV on Windows, real addons, real chapter-based intros.
+
 ## 0.26.0 — series memory and one seek step
 
 The owner asked for further development and a look at PR #34. That review (Codex, `codex/review-0.25-stability`, CI green, 407 tests passing locally) left two open playback findings. This release fixes both and adds the two most requested community items it listed: Harbor #1419 (keep the source) and Nuvio #611 (remember audio and subtitle tracks).

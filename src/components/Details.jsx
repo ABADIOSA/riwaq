@@ -776,6 +776,29 @@ export default function Details({
                     />
                     تشمل المشاهدة
                   </label>
+                  {(settings.skipIntro === "auto" ||
+                    settings.skipOutro === "auto") && (
+                    <label
+                      className="episode-shuffle-all"
+                      title="عند الإيقاف يظهر زر التخطي بدل التخطي التلقائي في هذا المسلسل"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!(settings.skipExcept || []).includes(meta.id)}
+                        onChange={(e) => {
+                          const rest = (settings.skipExcept || []).filter(
+                            (id) => id !== meta.id,
+                          );
+                          update("settings", {
+                            skipExcept: e.target.checked
+                              ? rest
+                              : [...rest, meta.id],
+                          });
+                        }}
+                      />
+                      تخطٍّ تلقائي للمقدمة هنا
+                    </label>
+                  )}
                 </div>
                 <select
                   aria-label="الموسم"

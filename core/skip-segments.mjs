@@ -141,3 +141,33 @@ export function activeSegment(segments, position, preferences = {}) {
     remaining: Math.max(0, Math.round(found.end - at)),
   };
 }
+
+/** Series the viewer excluded from automatic skipping (Nuvio #771). */
+export const SKIP_EXCEPT_LIMIT = 300;
+export function cleanSkipExcept(input) {
+  return Array.isArray(input)
+    ? [
+        ...new Set(
+          input.filter(
+            (id) => typeof id === "string" && /^[\w:.-]{1,120}$/.test(id),
+          ),
+        ),
+      ].slice(-SKIP_EXCEPT_LIMIT)
+    : [];
+}
+
+/**
+ * The skip preferences for a viewing: the viewer's own, except that a series
+ * they excluded offers the button instead of skipping on its own. Skipping by
+ * hand always stays available.
+ */
+export function skipPreferences(settings = {}, seriesId = "") {
+  if (!seriesId || !cleanSkipExcept(settings.skipExcept).includes(seriesId))
+    return settings;
+  const manual = (mode) => (mode === "auto" ? "button" : mode);
+  return {
+    ...settings,
+    skipIntro: manual(settings.skipIntro ?? "button"),
+    skipOutro: manual(settings.skipOutro ?? "off"),
+  };
+}
