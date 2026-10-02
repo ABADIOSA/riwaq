@@ -476,6 +476,7 @@ export class Integrations {
   }
   async sync(id) {
     const s = this.get(id);
+    const owner = this.client.profiles.store.active;
     let lists = [];
     if (id === "letterboxd") {
       if (!s.username) throw new Error("أدخل اسم مستخدم Letterboxd");
@@ -539,6 +540,10 @@ export class Integrations {
         });
     }
     if (this.get(id) !== s) throw new Error("تغير الحساب أثناء المزامنة");
+    if (this.client.profiles.store.active !== owner)
+      throw new Error(
+        "تغير الملف الشخصي أثناء المزامنة؛ أعد المحاولة من الملف المطلوب",
+      );
     this.client.state.connectedLists = [
       ...(this.client.state.connectedLists || []).filter(
         (l) => l.service !== id,

@@ -92,6 +92,54 @@ const limited = () => {
   throw new Error("HTTP 403");
 };
 
+test("the running scheduler retries a failed check within twenty-one minutes", async (t) => {
+  const r = await rig({ api: limited });
+  t.mock.timers.enable({
+    apis: ["setTimeout", "setInterval", "Date"],
+    now: 1800000000000,
+  });
+  t.after(() => r.updater.stop());
+  r.updater.start();
+  t.mock.timers.tick(12000);
+  await r.updater.checking;
+  assert.equal(r.updater.publicState().status, "error");
+  const before = r.requests.length;
+  t.mock.timers.tick(19 * 60000);
+  assert.equal(r.requests.length, before);
+  t.mock.timers.tick(2 * 60000);
+  await r.updater.checking;
+  assert.ok(
+    r.requests.length > before,
+    "retry runs without reopening or a manual check",
+  );
+  r.updater.stop();
+  const stopped = r.requests.length;
+  t.mock.timers.tick(5 * 3600000);
+  assert.equal(r.requests.length, stopped);
+});
+
+test("scheduler ticks do not turn healthy or disabled checks into minute-by-minute network requests", async (t) => {
+  const r = await rig({ api: () => [] });
+  t.mock.timers.enable({
+    apis: ["setTimeout", "setInterval", "Date"],
+    now: 1800000000000,
+  });
+  t.after(() => r.updater.stop());
+  r.updater.start();
+  r.updater.start();
+  t.mock.timers.tick(12000);
+  await r.updater.checking;
+  assert.equal(r.requests.length, 1);
+  t.mock.timers.tick(3 * 3600000);
+  assert.equal(r.requests.length, 1);
+  t.mock.timers.tick(61 * 60000);
+  await r.updater.checking;
+  assert.equal(r.requests.length, 2);
+  await r.updater.configure({ enabled: false });
+  t.mock.timers.tick(5 * 3600000);
+  assert.equal(r.requests.length, 2);
+});
+
 test("the releases feed is read like the API's list", () => {
   const list = parseReleaseFeed(feed("0.17.0", "0.16.0", "0.18.0-beta.1"));
   assert.deepEqual(

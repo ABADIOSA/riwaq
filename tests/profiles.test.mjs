@@ -19,6 +19,52 @@ function client(initial = {}) {
   return { instance, saved: () => saved };
 }
 
+test("protection edits require the target PIN before changing any fields", () => {
+  const { instance, saved } = client();
+  const p = instance.profiles;
+  p.setPin({ id: "default", pin: "1234" });
+  p.update({
+    id: "default",
+    lockedRooms: ["settings", "live"],
+    hideAdult: true,
+  });
+  p.lock();
+  const before = structuredClone(saved());
+  for (const pin of [undefined, "0000"])
+    assert.throws(
+      () =>
+        p.update({
+          id: "default",
+          name: "changed",
+          lockedRooms: [],
+          hideAdult: false,
+          pin,
+        }),
+      /رمز حماية/,
+    );
+  assert.deepEqual(saved(), before);
+  assert.equal(p.find("default").name, before.profiles.list[0].name);
+  assert.equal(p.isLocked("live"), true);
+  p.create({ name: "guest" });
+  const guest = p.store.list.find((entry) => entry.id !== "default");
+  p.switch({ id: guest.id });
+  assert.equal(p.unlocked, true);
+  assert.throws(
+    () => p.update({ id: "default", lockedRooms: [] }),
+    /رمز حماية/,
+  );
+  assert.throws(
+    () => p.update({ id: "default", hideAdult: false }),
+    /رمز حماية/,
+  );
+  p.update({ id: "default", lockedRooms: ["settings"], pin: "1234" });
+  assert.deepEqual(p.find("default").lockedRooms, ["settings"]);
+  p.switch({ id: "default", pin: "1234" });
+  p.unlock("1234");
+  p.update({ id: "default", lockedRooms: [], hideAdult: false });
+  assert.equal(p.find("default").hideAdult, false);
+});
+
 test("a first run creates one profile and adopts the data already stored", () => {
   const { instance } = client({
     favorites: [{ id: "tt1", type: "movie", name: "قديم" }],

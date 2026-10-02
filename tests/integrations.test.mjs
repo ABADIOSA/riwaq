@@ -5,6 +5,35 @@ import { parseCsv } from "../core/integrations.mjs";
 const create = (request, initial = {}) =>
   new Client({ load: () => structuredClone(initial), save: () => {}, request });
 
+test("an in-flight list sync cannot replace another profile's connected lists", async () => {
+  for (const service of ["trakt", "simkl"]) {
+    const c = create(async () => ({}));
+    let release;
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    if (service === "trakt") {
+      c.integrations.trakt = async (path) =>
+        path === "/users/settings" ? pending : [];
+    } else c.integrations.simkl = () => pending;
+    const syncing = c.integrations.sync(service);
+    c.profiles.create({ name: "second" });
+    const second = c.profiles.store.list.find((p) => p.id !== "default").id;
+    c.profiles.switch({ id: second });
+    const ownLists = [
+      { key: "own", service, name: "Second profile", metas: [] },
+    ];
+    c.state.connectedLists = ownLists;
+    release(
+      service === "trakt" ? { user: { username: "test" } } : { movies: [] },
+    );
+    await assert.rejects(syncing, /تغير الملف الشخصي/);
+    assert.deepEqual(c.state.connectedLists, ownLists);
+    c.profiles.switch({ id: "default" });
+    assert.deepEqual(c.state.connectedLists, []);
+  }
+});
+
 test("provider secrets stay outside renderer state and removal disables access", async () => {
   const c = create(async () => ({}));
   c.dataHub.save({ id: "tmdb", key: "private-test-value" });

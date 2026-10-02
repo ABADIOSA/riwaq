@@ -194,10 +194,22 @@ export default function Profiles({
                           const rooms = new Set(profile.lockedRooms || []);
                           if (event.target.checked) rooms.add(id);
                           else rooms.delete(id);
-                          update("profileUpdate", {
-                            id: profile.id,
-                            lockedRooms: [...rooms],
-                          });
+                          const values = { lockedRooms: [...rooms] };
+                          if (
+                            profile.id === profiles.active &&
+                            profiles.unlocked
+                          )
+                            update("profileUpdate", {
+                              id: profile.id,
+                              ...values,
+                            });
+                          else
+                            setChallenge({
+                              profile,
+                              intent: "update",
+                              pin: "",
+                              values,
+                            });
                         }}
                       />
                       {label}
@@ -237,15 +249,27 @@ export default function Profiles({
           onSubmit={async (event) => {
             event.preventDefault();
             const result = await update(
-              challenge.intent === "switch" ? "profileSwitch" : "profileRemove",
-              { id: challenge.profile.id, pin: challenge.pin },
+              {
+                switch: "profileSwitch",
+                remove: "profileRemove",
+                update: "profileUpdate",
+              }[challenge.intent],
+              {
+                id: challenge.profile.id,
+                pin: challenge.pin,
+                ...challenge.values,
+              },
             );
             if (result) setChallenge(null);
           }}
         >
           <h3>
-            {challenge.intent === "switch" ? "الدخول إلى" : "حذف"} «
-            {challenge.profile.name}»
+            {
+              { switch: "الدخول إلى", remove: "حذف", update: "تعديل حماية" }[
+                challenge.intent
+              ]
+            }{" "}
+            «{challenge.profile.name}»
           </h3>
           <label>
             رمز الحماية

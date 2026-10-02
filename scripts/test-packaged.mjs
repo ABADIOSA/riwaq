@@ -5,13 +5,21 @@ import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import assert from "node:assert/strict";
 
-const executable = resolve(process.argv[2] || "release/win-unpacked/Riwaq.exe");
+const sourceMode = process.argv.includes("--source");
+const offlineMode = process.argv.includes("--offline");
+const executable = resolve(
+  sourceMode
+    ? "node_modules/electron/dist/electron.exe"
+    : process.argv[2] || "release/win-unpacked/Riwaq.exe",
+);
 // The build under test must report the version this checkout declares; a
 // literal here goes stale with every release.
 const expectedVersion = JSON.parse(
   readFileSync(resolve("package.json"), "utf8"),
 ).version;
-const output = resolve(".cache/packaged-test");
+const output = resolve(
+  sourceMode ? ".cache/native-source-test" : ".cache/packaged-test",
+);
 mkdirSync(output, { recursive: true });
 const listener = createServer();
 await new Promise((r) => listener.listen(0, "127.0.0.1", r));
@@ -23,27 +31,37 @@ const env = {
 };
 delete env.RIWAQ_SMOKE;
 delete env.ELECTRON_RUN_AS_NODE;
-const child = spawn(executable, [`--remote-debugging-port=${port}`], {
-  env,
-  windowsHide: true,
-  stdio: "ignore",
-});
+const child = spawn(
+  executable,
+  [...(sourceMode ? ["."] : []), `--remote-debugging-port=${port}`],
+  {
+    env,
+    // This is a GUI visibility test: SW_HIDE hides the first native window
+    // on Windows, making IsWindowVisible fail even when the video decodes.
+    windowsHide: false,
+    stdio: "ignore",
+  },
+);
 let websocket,
   id = 0;
 let fixtureServer;
 try {
   const start = Date.now();
   let targets;
+  const mainPage = (target) =>
+    target.type === "page" &&
+    target.url.includes("/dist/index.html") &&
+    !target.url.endsWith("#hud");
   while (Date.now() - start < 60000) {
     try {
       targets = await fetch(`http://127.0.0.1:${port}/json`).then((r) =>
         r.json(),
       );
-      if (targets.some((t) => t.type === "page")) break;
+      if (targets.some(mainPage)) break;
     } catch {}
     await new Promise((r) => setTimeout(r, 250));
   }
-  const target = targets?.find((t) => t.type === "page");
+  const target = targets?.find(mainPage);
   assert.ok(target, "Packaged renderer started");
   websocket = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r, j) => {
@@ -79,12 +97,17 @@ try {
   let loaded = false;
   for (let i = 0; i < 160; i++) {
     loaded = await evaluate(
-      `!!document.querySelector('.hero') && document.querySelectorAll('.poster-card').length > 0`,
+      offlineMode
+        ? `!!document.querySelector('.profile-button')`
+        : `!!document.querySelector('.hero') && document.querySelectorAll('.poster-card').length > 0`,
     );
     if (loaded) break;
     await new Promise((r) => setTimeout(r, 250));
   }
-  assert.ok(loaded, "Packaged app loads live catalogs");
+  assert.ok(
+    loaded,
+    offlineMode ? "Application shell loads" : "Application loads live catalogs",
+  );
   const diagnostics = await evaluate(`window.riwaq.call('diagnostics')`);
   assert.equal(diagnostics.mpv, true);
   assert.equal(diagnostics.encryption, true);
@@ -162,6 +185,8 @@ try {
     await new Promise((r) => setTimeout(r, 200));
   }
   assert.ok(decoded, "Packaged MPV decodes actual video");
+  // Keep the short fixture alive while inspecting window/HUD transitions.
+  await evaluate(`window.riwaq.call('playerCommand',{action:'pause'})`);
   const afterPlay = await evaluate(`window.riwaq.call('init')`);
   assert.deepEqual(
     afterPlay.queue,
@@ -184,16 +209,21 @@ try {
   await evaluate(`window.riwaq.call('stop')`);
   const result = {
     passed: true,
+    mode: sourceMode ? "source" : "packaged",
     packagedFile: executable.split(/[\\/]/).pop(),
     checks: [
-      "Portable application starts",
+      sourceMode
+        ? "Electron application starts from source"
+        : "Portable application starts",
       `Version ${expectedVersion} and per-profile queue are present`,
-      "Loaded queue entry is consumed by packaged player",
-      "Live catalogs render",
+      "Loaded queue entry is consumed by the player",
+      offlineMode
+        ? "Application shell renders (external catalogs not asserted)"
+        : "Live catalogs render",
       "Bundled MPV is found",
       "Windows encryption is available",
       "Fresh profile contains no test data",
-      "Packaged native module creates child video surface",
+      "Native module creates child video surface",
       "Bundled MPV decodes a real video fixture inside the application",
       "Native surface is visible and Chromium siblings clip correctly",
     ],

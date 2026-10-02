@@ -481,8 +481,12 @@ export class DesktopUpdates extends Updates {
     clearInterval(this.timer);
   }
   start() {
+    clearTimeout(this.startTimer);
+    clearInterval(this.timer);
     this.startTimer = setTimeout(() => void this.check(), 12000);
-    this.timer = setInterval(() => void this.check(), INTERVAL);
+    // check() enforces the four-hour cadence and twenty-minute retry. A
+    // four-hour timer here would prevent the retry from ever running on time.
+    this.timer = setInterval(() => void this.check(), 60 * 1000);
     this.startTimer.unref?.();
     this.timer.unref?.();
   }

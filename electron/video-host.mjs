@@ -149,6 +149,7 @@ export class VideoHost {
       visible: this.visible,
       rectangle: this.rectangle,
       nativeVisible: !!this.handle && isVisible(this.handle),
+      parentVisible: isVisible(this.parent),
       siblingsClipped,
     };
   }

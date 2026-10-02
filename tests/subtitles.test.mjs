@@ -21,6 +21,81 @@ import { Client } from "../core/client.mjs";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 import { Player, playerArgs } from "../electron/player.mjs";
 import { HOTKEY_ACTIONS, inputConf } from "../core/hotkeys.mjs";
+import { createServer } from "node:http";
+
+test("subtitle addons receive the selected release filename, with per-source caching", async (t) => {
+  const received = [];
+  const server = createServer((req, res) => {
+    received.push(
+      new URLSearchParams(
+        req.url
+          .split("/")
+          .at(-1)
+          .replace(/\.json$/, ""),
+      ),
+    );
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ subtitles: [] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(resolve);
+      }),
+  );
+  const c = new Client({ load: () => ({}), save() {} });
+  c.state.addons = [
+    {
+      enabled: true,
+      transportUrl: `http://127.0.0.1:${server.address().port}/manifest.json`,
+      manifest: {
+        id: "fixture",
+        name: "Subtitle fixture",
+        resources: ["subtitles"],
+        types: ["movie"],
+      },
+    },
+  ];
+  c.streams.set("first", {
+    url: "https://video.test/private?token=hidden",
+    behaviorHints: {
+      filename: "D:\\Private\\فيلم & Friends.2026.Extended.mkv",
+      videoHash: "0123456789abcdef",
+      videoSize: 12345678,
+    },
+  });
+  c.streams.set("second", {
+    behaviorHints: { filename: "Film.Theatrical.mkv" },
+  });
+  const request = (streamKey) =>
+    c.getSubtitles({ type: "movie", id: "tt123", streamKey });
+  await request("first");
+  await request("first");
+  await request("second");
+  assert.equal(received.length, 2);
+  assert.equal(received[0].get("filename"), "فيلم & Friends.2026.Extended.mkv");
+  assert.equal(received[0].get("videoHash"), "0123456789abcdef");
+  assert.equal(received[0].get("videoSize"), "12345678");
+  assert.equal(received[1].get("filename"), "Film.Theatrical.mkv");
+  for (const [i, filename] of [
+    undefined,
+    "https://video.test/file.mkv?token=hidden",
+    "bad\nname.mkv",
+    "x".repeat(513),
+  ].entries()) {
+    c.streams.set(`invalid-${i}`, {
+      url: "https://video.test/file.mkv?token=hidden",
+      behaviorHints: { filename },
+    });
+    await request(`invalid-${i}`);
+    assert.equal(received.at(-1).has("filename"), false);
+  }
+  assert.ok(
+    received.every((params) => !/Private|token|hidden/.test(params.toString())),
+  );
+});
 
 test("language tags of every common shape become one code with an Arabic name", () => {
   for (const tag of ["ar", "ara", "Arabic", "ar-SA", "AR"])

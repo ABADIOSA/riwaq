@@ -177,8 +177,22 @@ export class Profiles {
     this.client.persist();
     return this.client.publicState();
   }
-  update({ id, name, avatar, lockedRooms, hideAdult }) {
+  update({ id, name, avatar, lockedRooms, hideAdult, pin }) {
     const profile = this.find(id);
+    // Protect the target profile, even when a different profile is active.
+    // Check before mutating any fields so a refused edit is atomic.
+    if (
+      profile.pin &&
+      (Array.isArray(lockedRooms) ||
+        (hideAdult === false &&
+          profile.hideAdult &&
+          profile.lockedRooms?.includes("settings"))) &&
+      !(id === this.store.active && this.unlocked) &&
+      !matchesPin(profile.pin, pin || "")
+    )
+      throw new Error(
+        "هذا الملف محمي. أدخل رمز حماية هذا الملف لتعديل الحماية",
+      );
     if (name !== undefined) {
       const label = String(name).trim();
       if (!label || label.length > 40)
@@ -192,8 +206,6 @@ export class Profiles {
         LOCKABLE_ROOMS.includes(room),
       );
     if (typeof hideAdult === "boolean" && hideAdult !== !!profile.hideAdult) {
-      // Showing adult content again is a settings change, behind its lock.
-      if (!hideAdult) this.gate("settings");
       profile.hideAdult = hideAdult;
     }
     this.client.persist();

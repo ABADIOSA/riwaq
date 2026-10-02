@@ -1688,6 +1688,18 @@ export class Client {
       extras.videoHash = selected.behaviorHints.videoHash;
     if (selected?.behaviorHints?.videoSize)
       extras.videoSize = selected.behaviorHints.videoSize;
+    // Addons use the release filename to match the cut, not just the title.
+    // Never derive it from a signed playback URL or forward a local directory.
+    const filename = selected?.behaviorHints?.filename;
+    if (
+      typeof filename === "string" &&
+      filename.length <= 512 &&
+      !/[\u0000-\u001f\u007f]|^[a-z][a-z\d+.-]*:\/\//i.test(filename.trim())
+    ) {
+      const basename = filename.trim().split(/[\\/]/).at(-1);
+      if (basename && basename !== "." && basename !== "..")
+        extras.filename = basename;
+    }
     const providers = this.enabled().filter((a) =>
       accepts(a.manifest, "subtitles", type, id),
     );
