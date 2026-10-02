@@ -36,6 +36,8 @@ The PR #34 review read open enhancement requests in Harbor's and Nuvio's issue t
 - Keeping the source between episodes ([Harbor #1419](https://github.com/harborstremio/harbor/issues/1419)). Riwaq keeps the addon, release group and quality instead of a link, so an expired URL is never replayed.
 - Remembering audio and subtitle tracks per series ([Nuvio #611](https://github.com/NuvioMedia/NuvioDesktop/issues/611)). Riwaq matches by language, title and flags, never by track number.
 
+0.27 took two more from the same list: getting the next episode ready before the current one ends ([Nuvio #808](https://github.com/NuvioMedia/NuvioDesktop/issues/808)), as a request for sources only, and turning automatic intro skipping off for one series ([Nuvio #771](https://github.com/NuvioMedia/NuvioDesktop/issues/771)), keeping the manual button.
+
 Different seek lengths ([Nuvio #803](https://github.com/NuvioMedia/NuvioDesktop/issues/803)) became a short and a long step shared by every input.
 
 ## Credits and the pointer, 2026-09-29 (0.10)

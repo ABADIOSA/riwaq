@@ -33,6 +33,7 @@ import {
   preferredLanguages,
 } from "../core/subtitles.mjs";
 import { matchTrack, seriesOf, trackIdentity } from "../core/series-memory.mjs";
+import { skipPreferences } from "../core/skip-segments.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
@@ -1647,6 +1648,8 @@ app
         host: videoHost,
         inputConf: join(root, "assets", "player-input.conf"),
         settingsNow: () => client.state.settings,
+        skipPrefs: () =>
+          skipPreferences(client.state.settings, nowPlaying?.series),
         onFullscreen: () => window.setFullScreen(!window.isFullScreen()),
         onEscape: () => {
           if (window.isFullScreen()) window.setFullScreen(false);

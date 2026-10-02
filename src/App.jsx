@@ -72,6 +72,7 @@ import PlayerView from "./components/PlayerView.jsx";
 import PlayerPanel from "./components/PlayerPanel.jsx";
 import Profiles from "./components/Profiles.jsx";
 import { arrangeRows, visibleHomeSections } from "../core/home.mjs";
+import { prefetchDue, prefetchTarget, prefetched } from "../core/prefetch.mjs";
 // Rooms opened now and then load when first visited, so the start of the
 // app parses only what home needs.
 const Addons = lazy(() => import("./components/Addons.jsx"));
@@ -156,7 +157,9 @@ export default function App() {
     playerRef = useRef(null),
     toastTimer = useRef(),
     advancing = useRef(false),
-    advanceGeneration = useRef(0);
+    advanceGeneration = useRef(0),
+    // The next title's sources, asked for before the episode ends.
+    prefetchRef = useRef(null);
   stateRef.current = state;
   const notice = (message) => {
     setToast(message);
@@ -202,11 +205,21 @@ export default function App() {
       notice(
         queued ? "جاري تجهيز العنوان التالي في الطابور…" : "جاري تجهيز الحلقة…",
       );
-      const result = await call("streams", {
-        type: details.type,
+      // Sources fetched during the last minutes (core/prefetch.mjs) are used
+      // when they are for this title and profile and still fresh; an answer
+      // without a playable source is asked for again.
+      const early = prefetched(prefetchRef.current, {
         id: targetId,
-        seriesId: details.id,
+        profileId,
       });
+      prefetchRef.current = null;
+      let result = early ? await early.catch(() => null) : null;
+      if (!result?.streams?.some((s) => s.supported && !s.external))
+        result = await call("streams", {
+          type: details.type,
+          id: targetId,
+          seriesId: details.id,
+        });
       if (
         stateRef.current.profiles?.active !== profileId ||
         advanceGeneration.current !== generation
@@ -314,6 +327,35 @@ export default function App() {
       setPlayerOpen(false);
     }
   }, [player.active, player.videoId]);
+  // In an episode's last minutes with autoplay on, ask for the next title's
+  // sources once, so the end of the episode does not wait for every addon.
+  useEffect(() => {
+    if (!prefetchDue(player, state.settings)) return;
+    const profileId = state.profiles?.active;
+    const from = player.videoId;
+    const was = prefetchRef.current;
+    if (was?.from === from && was.profileId === profileId) return;
+    const entry = { from, profileId, at: Date.now(), id: null, promise: null };
+    prefetchRef.current = entry;
+    const queue = state.queue || [];
+    const meta = player.meta;
+    (async () => {
+      const details = queue.length
+        ? null
+        : await call("metadata", { type: meta.type, id: meta.id });
+      const target = prefetchTarget({
+        queue,
+        meta,
+        videoId: from,
+        videos: details ? releasedEpisodes(details) : [],
+      });
+      if (!target || prefetchRef.current !== entry) return;
+      entry.id = target.id;
+      entry.at = Date.now();
+      entry.promise = call("streams", target);
+      entry.promise.catch(() => {});
+    })().catch(() => {});
+  }, [player.position, player.videoId, player.active]);
   useEffect(() => {
     setSelected(null);
     setPlayerOpen(false);

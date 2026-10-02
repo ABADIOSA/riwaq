@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.26.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.27.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -72,6 +72,11 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - Restoring: `autoSubtitle` restores the tracks, then asks addons. It captures `nowPlaying` by identity and re-checks it after every wait, so a late reply never lands on a different source.
   - A forced-only track never stands in for full subtitles.
   - `forgetSeries` is main-window only.
+- Next-episode prefetch (`core/prefetch.mjs`):
+  - With autoplay on, a series viewing with four minutes left (or 90% watched) asks once for the sources of what autoplay will play: the queue head, else the next released episode.
+  - Only sources are asked for; nothing is downloaded or played early.
+  - `advance` uses the answer only for the same title and profile within ten minutes, and asks again when it holds no playable source.
+- Per-series skip exceptions: `skipExcept` lists series IDs (at most 300). `skipPreferences` turns their "auto" into "button" and never turns skipping on. The player reads `skipPrefs()` from main at every check, so a change applies during a viewing.
 - Holding the primary button on the picture sets MPV speed to `holdSpeed` (0, 1.5, 2 or 3) until release. The click that ends a hold never toggles pause.
 - Episode shuffle (`core/shuffle.mjs`) picks released, numbered, unwatched episodes (or all, when asked), never the current one, with no repeat until each has come up once in the session.
 - `hideWatched` hides finished films (`watchedTitles`/`withoutWatched` in `core/library.mjs`) live at render time on home, discover, collections and folder pages. It never applies in search, the library, continue watching, up next or hand-picked folder titles. Series are never hidden, since a row cannot know every episode.
