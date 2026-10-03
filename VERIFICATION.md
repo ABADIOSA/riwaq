@@ -17,6 +17,30 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.29.0 — what's new, shortcuts, settings search
+
+Executed:
+
+- `npm test`: **449 passing, 0 failing** (443 + 6 in `tests/whats-new.test.mjs`). They cover:
+  - every release carrying its own highlights (the newest entry must equal `package.json`'s version), unique and newest first;
+  - numeric version comparison and `seenVersion` validation;
+  - "what's new" opening after an update (a profile used before the feature last saw 0.28.1), at most four releases, never on a fresh install and never twice;
+  - the running version as the source and `seenVersion` written on close or silently;
+  - "?" ignored in text fields;
+  - binding labels for every playback key;
+  - settings search folding Arabic and requiring every word.
+- `npm run check` and `npm run build` pass.
+- Headless Chromium with a mocked bridge, at 980×680 in Riwaq's interface and 1440×960 in the classic one, plus a fresh profile:
+  - "what's new" showed 0.29.0 alone for a used profile with no record, and four releases for a profile that had seen 0.26.0;
+  - closing it wrote `seenVersion: "0.29.0"`;
+  - a fresh profile recorded the version without opening the window;
+  - "?" in the search box typed a character, while on the page it opened the shortcuts with 31 playback keys;
+  - "خصّص اختصارات المشاهدة" opened the hotkeys page;
+  - settings search found pages for "إقتراحات" and "خطوة تقديم", showed the empty state for "زرافة", and its button cleared the search;
+  - 0 errors, 0 overflow.
+
+Not executed: Windows.
+
 ## 0.28.1 — settings that did nothing
 
 Owner report: some settings buttons do not work because they come from older updates and do not match the current version.

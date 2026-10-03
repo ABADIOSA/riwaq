@@ -88,7 +88,12 @@ import {
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
-import { arabicCount, CATALOGS, SERIES } from "../../core/arabic.mjs";
+import {
+  arabicCount,
+  CATALOGS,
+  matchesWords,
+  SERIES,
+} from "../../core/arabic.mjs";
 import {
   SMART_GROUPS,
   groupOf as catalogGroup,
@@ -660,9 +665,7 @@ export default function SettingsStudio({
     setDraft(s);
   }, [s]);
   const visible = sections.filter(([id, title, keywords]) =>
-    search
-      ? `${title} ${keywords}`.toLowerCase().includes(search.toLowerCase())
-      : id === tab,
+    search ? matchesWords(`${title} ${keywords}`, search) : id === tab,
   );
   const save = (key, value) => update("settings", { [key]: value });
   const toggle = (key, title, description) => (
@@ -757,9 +760,7 @@ export default function SettingsStudio({
               {GROUPS.flatMap((group) => group.pages)
                 .filter(([id, title, keywords]) =>
                   search
-                    ? `${title} ${keywords}`
-                        .toLowerCase()
-                        .includes(search.toLowerCase())
+                    ? matchesWords(`${title} ${keywords}`, search)
                     : (
                         GROUPS.find((g) => g.pages.some(([p]) => p === tab)) ||
                         GROUPS[0]
@@ -794,10 +795,7 @@ export default function SettingsStudio({
             {GROUPS.map((group) => {
               const pages = group.pages.filter(
                 ([, title, keywords]) =>
-                  !search ||
-                  `${title} ${keywords}`
-                    .toLowerCase()
-                    .includes(search.toLowerCase()),
+                  !search || matchesWords(`${title} ${keywords}`, search),
               );
               if (!pages.length) return null;
               const expanded = !!search || open.has(group.id);
@@ -851,7 +849,16 @@ export default function SettingsStudio({
         )}
         <div className="studio-content">
           {visible.length === 0 && (
-            <div className="settings-card">لا توجد إعدادات بهذا الاسم.</div>
+            <div className="settings-card settings-empty">
+              <b>ما لقينا إعداداً بهذا الاسم.</b>
+              <p>
+                جرّب كلمة أقصر أو مرادفاً، مثل «ترجمة» أو «صلاة» أو «تراكت» أو
+                «شعار».
+              </p>
+              <button className="secondary small" onClick={() => setSearch("")}>
+                امسح البحث
+              </button>
+            </div>
           )}
           {visible.map(([id]) => (
             <React.Fragment key={id}>
