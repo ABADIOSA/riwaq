@@ -380,7 +380,13 @@ export function AmbiencePage({ state, update }) {
             <Choices
               options={[
                 ["hover", "العمل تحت المؤشر"],
-                ["hero", "الواجهة وصفحة العمل فقط"],
+                [
+                  "hero",
+                  // Riwaq's interface has no hero; only the title page glows.
+                  state.settings.interfaceStyle === "classic"
+                    ? "الواجهة وصفحة العمل فقط"
+                    : "صفحة العمل فقط",
+                ],
               ]}
               value={a.ambientFollow}
               onPick={(ambientFollow) => set({ ambientFollow })}

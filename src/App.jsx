@@ -725,9 +725,12 @@ export default function App() {
   const riwaqExperience = state.settings.interfaceStyle !== "classic";
   const barShown = win.frame !== "native" && !win.fullscreen;
   // The artwork glow follows what is on screen: an open title, else the hero.
+  // Riwaq's interface shows no hero, so its glow rests on the open title
+  // only instead of the backdrop of a hero nobody can see.
   const ambientArt =
     appearance.ambient === "artwork"
-      ? imgUrl(selected?.meta?.background) || imgUrl(hero?.background)
+      ? imgUrl(selected?.meta?.background) ||
+        (riwaqExperience ? "" : imgUrl(hero?.background))
       : "";
   return (
     <WatchedContext.Provider value={finished}>
