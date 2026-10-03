@@ -11,6 +11,13 @@ import { existsSync, statSync } from "node:fs";
 import { writeFile, readFile, unlink, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  HEALTH_LABELS,
+  classifyHealth,
+  duplicateAddons,
+  healthSummary,
+  isLocalAddon,
+} from "../core/addon-health.mjs";
+import {
   cleanRendererErrors,
   reportSettings,
   runCheck,
@@ -90,6 +97,37 @@ async function pool(items, size, fn) {
 }
 
 /**
+ * Every addon's manifest, probed at most six at a time: its health by key and
+ * name only (core/addon-health.mjs). Used by the Addons page and the report.
+ */
+export async function probeAddons(
+  addons,
+  { fetcher = fetch, version = "" } = {},
+) {
+  const headers = { "User-Agent": `Riwaq/${version} (health)` };
+  const results = await pool(addons, 6, async (a) => {
+    let status, ms;
+    try {
+      const r = await probe(fetcher, a.transportUrl, {
+        timeout: 8000,
+        headers,
+      });
+      status = r.status;
+      ms = r.ms;
+    } catch (error) {
+      status = error?.name === "TimeoutError" ? "timeout" : "error";
+    }
+    return {
+      key: a.key,
+      name: a.manifest?.name || a.manifest?.id || "?",
+      enabled: a.enabled !== false,
+      ...classifyHealth({ status, ms, local: isLocalAddon(a.transportUrl) }),
+    };
+  });
+  return { results, duplicates: duplicateAddons(addons) };
+}
+
+/**
  * The report. `deps` carries what main owns: the Electron app, the client,
  * the MPV executable, safeStorage, screen, the video host, the player and
  * the error log. `rendererErrors` come from the interface.
@@ -114,6 +152,14 @@ export async function runDiagnostics(deps) {
   const version = app.getVersion();
   const ua = { "User-Agent": `Riwaq/${version} (diagnostics)` };
   const updates = client.updates?.publicState?.(version) || {};
+  const traktHeaders = () => {
+    try {
+      const s = client.integrations?.get?.("trakt");
+      return s?.clientId ? client.integrations.traktHeaders(s) : {};
+    } catch {
+      return {};
+    }
+  };
 
   const appInfo = {
     version,
@@ -267,6 +313,16 @@ export async function runDiagnostics(deps) {
     const v = videoHost?.inspect?.();
     if (!v)
       return { status: "skip", detail: "لم يُنشأ بعد؛ يُنشأ مع أول مشاهدة" };
+    // Clipping is applied each time the surface is shown, so a hidden surface
+    // (no viewing) has nothing to judge yet.
+    if (!v.visible)
+      return {
+        status: v.embedded ? "ok" : "warn",
+        detail: v.embedded
+          ? "مدمج في نافذة رِواق، ومخفي الآن لعدم وجود مشاهدة؛ شغّل التشخيص أثناء المشاهدة لفحص القص"
+          : "السطح غير مدمج في نافذة رِواق",
+        data: v,
+      };
     const ok = v.embedded && v.siblingsClipped;
     return {
       status: ok ? "ok" : "warn",
@@ -330,10 +386,19 @@ export async function runDiagnostics(deps) {
       id,
       label,
       async () => {
+        // Trakt answers 403 to any request without the app's client ID, so
+        // it is probed with the viewer's own headers when they have one.
+        const traktKey = id === "net-trakt" && traktHeaders()["trakt-api-key"];
         const r = await probe(fetcher, url, {
           headers:
-            id === "net-trakt" ? { ...ua, "trakt-api-version": "2" } : ua,
+            id === "net-trakt"
+              ? traktKey
+                ? traktHeaders()
+                : { ...ua, "trakt-api-version": "2" }
+              : ua,
         });
+        if (id === "net-trakt" && !traktKey && r.status === 403)
+          return { detail: `متاح (${r.ms} ms)؛ يحتاج Client ID للطلبات` };
         if (okStatus.includes(r.status)) {
           const data = {};
           if (id === "net-github") {
@@ -367,32 +432,45 @@ export async function runDiagnostics(deps) {
     async () => {
       if (!addons.length)
         return { status: "warn", detail: "لا توجد إضافات مفعّلة" };
-      const results = await pool(addons, 4, async (a) => {
-        const name = clean(a.manifest?.name || a.manifest?.id || "?", 60);
-        try {
-          const r = await probe(fetcher, a.transportUrl, {
-            timeout: 8000,
-            headers: ua,
-          });
-          return { name, status: r.status, ms: r.ms };
-        } catch (error) {
-          return {
-            name,
-            status: error?.name === "TimeoutError" ? "timeout" : "error",
-          };
-        }
+      const { results, duplicates } = await probeAddons(addons, {
+        fetcher,
+        version,
       });
-      const failing = results.filter((r) => r.status !== 200);
+      const counts = healthSummary(results);
+      const named = (state) =>
+        results
+          .filter((r) => r.state === state)
+          .map((r) => `${clean(r.name, 60)} (${r.status})`)
+          .join("، ");
+      const parts = [];
+      if (counts.gone) parts.push(`${HEALTH_LABELS.gone}: ${named("gone")}`);
+      if (counts.down) parts.push(`${HEALTH_LABELS.down}: ${named("down")}`);
+      if (counts["needs-server"])
+        parts.push(
+          `${HEALTH_LABELS["needs-server"]}: ${named("needs-server")}`,
+        );
+      if (duplicates.length)
+        parts.push(
+          `مكررة: ${duplicates
+            .map((d) =>
+              clean(results.find((r) => r.key === d.key)?.name || "?", 60),
+            )
+            .join("، ")}`,
+        );
+      const bad = counts.gone + counts.down;
       return {
-        status: failing.length ? "warn" : "ok",
-        detail: failing.length
-          ? `${failing.length} من ${results.length} لا تستجيب: ${failing.map((f) => `${f.name} (${f.status})`).join("، ")}`
+        status: bad || duplicates.length ? "warn" : "ok",
+        detail: parts.length
+          ? `${results.length - bad - counts["needs-server"]} من ${results.length} تعمل · ${parts.join(" · ")}`
           : `كلها تستجيب (${results.length})`,
         data: {
+          ...counts,
+          duplicates: duplicates.length,
           slowest: results
             .filter((r) => r.ms)
             .sort((a, b) => b.ms - a.ms)
-            .slice(0, 3),
+            .slice(0, 3)
+            .map((r) => ({ name: clean(r.name, 60), ms: r.ms })),
         },
       };
     },

@@ -12,11 +12,21 @@ import {
   X,
   LoaderCircle,
   Link2,
+  Stethoscope,
 } from "lucide-react";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
 import { arabicCount } from "../../core/arabic.mjs";
+import { HEALTH_LABELS, healthSummary } from "../../core/addon-health.mjs";
+
+const ADDONS_FORMS = {
+  one: "إضافة واحدة",
+  two: "إضافتين",
+  few: "{n} إضافات",
+  many: "{n} إضافة",
+  other: "{n} إضافة",
+};
 export default function Addons({
   state,
   update,
@@ -29,6 +39,34 @@ export default function Addons({
   const [url, setUrl] = useState(""),
     [busy, setBusy] = useState(false),
     [operation, setOperation] = useState("");
+  // Addon health (core/addon-health.mjs): by key and name, from main.
+  const [health, setHealth] = useState(null),
+    [checking, setChecking] = useState(false),
+    [confirmGone, setConfirmGone] = useState(false);
+  const checkHealth = async () => {
+    setChecking(true);
+    setConfirmGone(false);
+    try {
+      setHealth(await call("addonsHealth"));
+    } catch (e) {
+      notice(e.message);
+    } finally {
+      setChecking(false);
+    }
+  };
+  const byKey = new Map((health?.results || []).map((r) => [r.key, r]));
+  const dupes = new Set((health?.duplicates || []).map((d) => d.key));
+  const installed = new Set(state.addons.map((a) => a.key));
+  const gone = (health?.results || []).filter(
+    (r) => r.state === "gone" && installed.has(r.key),
+  );
+  const down = (health?.results || []).filter(
+    (r) =>
+      r.state === "down" &&
+      installed.has(r.key) &&
+      state.addons.find((a) => a.key === r.key)?.enabled,
+  );
+  const counts = healthSummary(health?.results || []);
   const sync = async () => {
     setOperation("sync");
     const r = await act("sync");
@@ -119,6 +157,18 @@ export default function Addons({
         <div className="button-row">
           <button
             className="text-button"
+            disabled={checking || !state.addons.length}
+            onClick={checkHealth}
+          >
+            {checking ? (
+              <LoaderCircle className="spin" size={16} />
+            ) : (
+              <Stethoscope size={16} />
+            )}
+            {checking ? "نفحص…" : "افحص الإضافات"}
+          </button>
+          <button
+            className="text-button"
             disabled={!!operation}
             onClick={async () => {
               setOperation("import");
@@ -148,6 +198,79 @@ export default function Addons({
           </button>
         </div>
       </div>
+      {health && (
+        <div className="addon-health-summary">
+          <p className="addon-health-line">
+            {/* Each part in its own isolate, so "Stremio Service" cannot
+                reorder its neighbours. */}
+            {[
+              `${counts.ok + counts.slow} تعمل${counts.slow ? ` (منها ${counts.slow} بطيئة)` : ""}`,
+              counts.gone && `${counts.gone} توقفت نهائياً`,
+              counts.down && `${counts.down} لا تستجيب الآن`,
+              counts["needs-server"] &&
+                `${counts["needs-server"]} تحتاج Stremio Service`,
+              dupes.size && `${dupes.size} مكررة`,
+            ]
+              .filter(Boolean)
+              .map((part, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && " · "}
+                  {i === 0 ? (
+                    <b>
+                      <bdi>{part}</bdi>
+                    </b>
+                  ) : (
+                    <bdi>{part}</bdi>
+                  )}
+                </React.Fragment>
+              ))}
+          </p>
+          <div className="button-row">
+            {gone.length > 0 && (
+              <button
+                className={confirmGone ? "primary small" : "secondary small"}
+                onClick={async () => {
+                  if (!confirmGone) return setConfirmGone(true);
+                  const r = await update("removeAddons", {
+                    keys: gone.map((g) => g.key),
+                  });
+                  if (r)
+                    notice(
+                      `حذفنا ${arabicCount(gone.length, ADDONS_FORMS)} توقفت نهائياً`,
+                    );
+                  setConfirmGone(false);
+                }}
+              >
+                <X size={15} />
+                {confirmGone
+                  ? "اضغط مرة ثانية للتأكيد"
+                  : `احذف المتوقفة (${gone.length})`}
+              </button>
+            )}
+            {down.length > 0 && (
+              <button
+                className="secondary small"
+                onClick={async () => {
+                  for (const d of down)
+                    await update("updateAddon", {
+                      key: d.key,
+                      action: "toggle",
+                    });
+                  notice(
+                    `عطّلنا ${arabicCount(down.length, ADDONS_FORMS)} لا تستجيب؛ فعّلها متى رجعت`,
+                  );
+                }}
+              >
+                عطّل اللي ما تستجيب ({down.length})
+              </button>
+            )}
+          </div>
+          <p className="subtle">
+            «توقفت نهائياً» يعني رابط الإضافة لم يعد موجوداً (404). «لا تستجيب
+            الآن» قد تكون مؤقتة. الإضافات المحلية تحتاج تشغيل Stremio Service.
+          </p>
+        </div>
+      )}
       <div className="addon-list">
         {state.addons.map((a, i) => (
           <article
@@ -183,6 +306,17 @@ export default function Addons({
                   </span>
                 ))}
                 <span className="host">{a.host}</span>
+                {byKey.get(a.key) && (
+                  <span
+                    className={`addon-health health-${byKey.get(a.key).state}`}
+                    title={`${byKey.get(a.key).status}${byKey.get(a.key).ms ? ` · ${byKey.get(a.key).ms} ms` : ""}`}
+                  >
+                    {HEALTH_LABELS[byKey.get(a.key).state]}
+                  </span>
+                )}
+                {dupes.has(a.key) && (
+                  <span className="addon-health health-dupe">مكررة</span>
+                )}
               </div>
             </div>
             <div className="addon-actions">

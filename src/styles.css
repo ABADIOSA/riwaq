@@ -3200,3 +3200,37 @@ em.tag-custom.has-text:not(.badge-outlined) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* ---- Addon health (Addons page) ---- */
+.addon-health-summary {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+}
+.addon-health-summary p {
+  margin: 0;
+}
+.tags .addon-health {
+  border-color: transparent;
+}
+.tags .health-ok {
+  color: #7fd6a2;
+  background: #7fd6a214;
+}
+.tags .health-slow,
+.tags .health-dupe {
+  color: #e7b66e;
+  background: #e7b66e14;
+}
+.tags .health-gone,
+.tags .health-down {
+  color: #f08a8a;
+  background: #f08a8a14;
+}
+.tags .health-needs-server {
+  color: #8fbcf0;
+  background: #8fbcf014;
+}

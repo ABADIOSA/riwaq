@@ -31,7 +31,11 @@ const UNIX_USER = /(\/(?:home|Users)\/)[^/\s"']+/g;
 function hostOnly(match, scheme) {
   try {
     const url = new URL(match);
-    return url.hostname ? `${scheme}://${url.hostname}/…` : `${scheme}://…`;
+    // A port on this machine (the local Stremio Service) says which service.
+    const local = /^(127\.\d+\.\d+\.\d+|localhost)$/i.test(url.hostname);
+    const host =
+      local && url.port ? `${url.hostname}:${url.port}` : url.hostname;
+    return host ? `${scheme}://${host}/…` : `${scheme}://…`;
   } catch {
     return `${scheme}://…`;
   }

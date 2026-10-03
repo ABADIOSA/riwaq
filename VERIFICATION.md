@@ -17,6 +17,38 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.30.1 — first real diagnostic report
+
+The owner sent the first report from a real machine. It showed:
+
+- **System:** Windows 11 build 26200, i7-14700F, RTX-class NVIDIA GPU, two displays (one 10-bit at 240 Hz).
+- **Checks:** 11 ok and 4 warnings.
+  - DPAPI, data folder, MPV 0.41 version and the 30-frame decode passed on Windows. This is the first real run of these checks.
+  - Cinemeta, GitHub, TMDB, Wikidata and metahub were reachable.
+- **Errors:** none recorded.
+
+Findings and what changed:
+
+- **Video surface:** "not clipped" while hidden is a false alarm, because `bounds()` sets clipping when the surface is shown. A hidden, embedded surface is now ok and says to run the check during a viewing.
+- **Trakt 403:** the probe sent no `trakt-api-key`, which Trakt always refuses. It now sends the viewer's own Trakt headers, and without a client ID a 403 reads as "reachable, needs a client ID". The key never enters the report.
+- **Addons, 7 of 57 failing:**
+  - "Local Files" is served by the local Stremio Service, which was not running. It is now reported as "needs Stremio Service".
+  - Three answered 404 (gone), one timed out, and two failed (521 and a connection error).
+  - Two "AIOMetadata" entries are the same addon installed twice.
+  - New `core/addon-health.mjs` classifies each addon as ok, slow, gone, down or needs-server, and flags duplicates.
+  - The Addons page gained "افحص الإضافات" (IPC `addonsHealth`, behind the addons lock, results by key and name only), "احذف المتوقفة" (`removeAddons`, two-step confirm) and "عطّل اللي ما تستجيب".
+- **Sanitizer:** the local service's port is now kept in the report (`http://127.0.0.1:11470/…`).
+
+Executed:
+
+- `npm test`: **462 passing, 0 failing** (456 + 6 in `tests/addon-health.test.mjs`). They cover classification, duplicates, the probe returning no addresses, bulk removal behind the lock, main and preload wiring, and the four report fixes.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render of the Addons page at 980×680 and 1440×960:
+  - the health summary and per-addon chips appear;
+  - removal needs a second click and sends only the gone addon's key;
+  - disabling targets only the unresponsive addon;
+  - 0 errors and 0 overflow.
+
 ## 0.30.0 — full diagnostic
 
 Owner request: a settings button that runs a full diagnostic on Windows and produces results the owner can send back.
