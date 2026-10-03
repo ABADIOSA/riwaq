@@ -1,4 +1,5 @@
 import UpdatesCard from "./UpdatesCard.jsx";
+import DiagnosticsCard from "./DiagnosticsCard.jsx";
 import AppearanceStudio from "./AppearanceStudio.jsx";
 import {
   AmbiencePage,
@@ -634,7 +635,12 @@ const GROUPS = [
         "إصدار تحديث تنزيل تثبيت قناة بيتا تلقائي جديد",
         RefreshCw,
       ],
-      ["system", "الاتصال والتطبيق", "Stremio خدمة تشخيص MPV إصدار", Cpu],
+      [
+        "system",
+        "الاتصال والتطبيق",
+        "Stremio خدمة تشخيص فحص تقرير مشاكل أخطاء MPV إصدار",
+        Cpu,
+      ],
     ],
   },
 ];
@@ -1390,6 +1396,7 @@ export default function SettingsStudio({
               )}
               {id === "system" && (
                 <>
+                  <DiagnosticsCard notice={notice} />
                   <section className="settings-card">
                     <div className="section-heading">
                       <h2>الاتصال والتشخيص</h2>

@@ -17,6 +17,34 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.30.0 — full diagnostic
+
+Owner request: a settings button that runs a full diagnostic on Windows and produces results the owner can send back.
+
+Executed:
+
+- `npm test`: **456 passing, 0 failing** (449 + 7 in `tests/diagnose.test.mjs`). They cover:
+  - `sanitize`: addon URLs reduced to their host, query strings, 32+ character keys, JWTs, e-mails, the Windows user folder and the home folder;
+  - the error ring: capped and sanitized, with renderer errors re-sanitized;
+  - `runCheck`: never throws, times out by itself and clears its timer;
+  - `reportSettings`: choices only, never lists, paths or images;
+  - a full `runDiagnostics` with injected fakes for Electron, the client, MPV runs and the network:
+    - every area is checked;
+    - a dead addon is named with its timeout, a missing Stremio Service is a warning, and a 401 from TMDB without a key counts as reachable;
+    - the finished text holds no secret or addon path;
+    - missing DPAPI and MPV are reported as failures, not crashes;
+  - main gating the run behind the Settings lock, logging IPC, player and process errors, and keeping the methods off the HUD (source checks).
+- `npm run check` and `npm run build` pass.
+- Headless Chromium with a mocked bridge, at 980×680 (Riwaq's interface) and 1440×960 (classic):
+  - the settings search for "تشخيص" finds the card;
+  - while running it shows a busy label, then a summary and a list of checks;
+  - the interface's own recent errors are sent with the request;
+  - copy and save call main;
+  - the preview renders line by line;
+  - 0 errors and 0 overflow.
+
+Not executed: the diagnostic on a real Windows machine. MPV spawning, `statfs`, the GPU info and the network probes there will be first exercised by the owner's report.
+
 ## 0.29.0 — what's new, shortcuts, settings search
 
 Executed:

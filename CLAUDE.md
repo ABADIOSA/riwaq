@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.29.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.30.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -17,6 +17,11 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Session planning (`core/session.mjs`, `SessionHome.jsx`) uses up to 18 titles and three concurrent metadata reads. Never invent missing runtime, promise source availability, or send the library to an AI service. Include five-minute intervals inside the budget; mark series-average runtimes as estimates. Plans are transient and queue writes are explicit. Mount after `ready`, key by profile, ignore obsolete reads, and keep the optional `queueEdit.profileId` check before mutation. See docs/RIWAQ-SESSIONS.md.
 - Look options from before Riwaq's interface must work in it: its CSS (`session.css`) uses `--poster-radius`, `--radius` and `--accent-fill` rather than fixed values, `RiwaqNav` honours `logoStyle` and `logoTint`, and hero-only settings are not offered in it. `tests/settings-wiring.test.mjs` also checks that every IPC method the interface calls exists in the preload allowlist and main, and that every settings option is kept by `safeSettings`.
 - What's new (`core/whats-new.mjs`, `WhatsNew.jsx`): every release adds its highlights at the top of `WHATS_NEW` (a test requires the newest entry to equal the package version). It opens once per profile when the running version is newer than `seenVersion`, never on a fresh install; a profile used before 0.29 counts as having seen 0.28.1. Text ships in the app; nothing is fetched. "?" outside text fields opens the shortcuts (`ShortcutsHelp.jsx`, `bindingLabel`). Settings search uses `matchesWords` (every word, Arabic folded).
+- Full diagnostic (`core/diagnose.mjs`, `electron/diagnose.mjs`, `DiagnosticsCard.jsx`; IPC `diagnoseRun`/`diagnoseCopy`/`diagnoseSave`, main-window only, behind the Settings lock):
+  - Every check has its own timeout and never throws.
+  - Everything entering the report passes `sanitize`: addons by name only, URLs reduced to their host, keys, JWTs and e-mails replaced, the user folder shown as "~". `formatReport` sanitizes the finished text again.
+  - Main keeps an `ErrorLog` of IPC, player and process errors with their real messages; the interface keeps its own (`src/lib/diagnostics.js`) and sends it with the run.
+  - Nothing is sent anywhere: the viewer copies or saves the report.
 - Session UI verification: build, then `node scripts/test-session-ui.mjs` on Windows. It uses an isolated profile and local HTTP addon, with real IPC. Select the main renderer, never the HUD. Run the native MPV smoke separately; UI fixture success does not verify live accounts or real addon streams.
 - Keep the Arabic interface, RTL geometry and all three navigation layouts usable at 980×680 and larger.
 - `electron/video-host.mjs` owns a Win32 WS_CHILD surface. MPV receives its HWND using `--wid`. React reports its viewport rectangle; main calculates the physical scale. Native video must hide beneath HTML dialogs and restore afterward.

@@ -73,6 +73,9 @@ import {
   readNuvioZip,
 } from "../core/nuvio.mjs";
 import { DesktopUpdates } from "./updater.mjs";
+import { runDiagnostics } from "./diagnose.mjs";
+import { ErrorLog, formatReport } from "../core/diagnose.mjs";
+import { homedir } from "node:os";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 if (process.env.RIWAQ_DATA_DIR)
@@ -99,6 +102,17 @@ const nuvioReply = (stores, source) => {
 let watching = { active: false, pip: false, error: false };
 // What is playing from an addon stream: subtitle requests need its stream key.
 let nowPlaying = null;
+// Recent errors for the diagnostic report, sanitized as they are recorded:
+// the interface only ever shows a generic sentence for most of them.
+const errorLog = new ErrorLog();
+const logError = (where, error) =>
+  errorLog.add(where, error, { home: homedir() });
+process.on("unhandledRejection", (error) => logError("main:promise", error));
+process.on("uncaughtExceptionMonitor", (error) =>
+  logError("main:crash", error),
+);
+// The last full diagnostic, kept in main for copying and saving.
+let lastDiagnosis = null;
 // Playable sources per title in ranked order, for automatic failover.
 const ranked = new Map();
 function remember({ type, id }, result) {
@@ -1279,6 +1293,44 @@ const methods = {
     return client.publicState();
   },
   diagnostics,
+  // The full diagnostic (Settings → النظام): a sanitized report the viewer
+  // can copy or save and send; behind the Settings room lock.
+  diagnoseRun: async (a) => {
+    client.profiles.gate("settings");
+    const report = await runDiagnostics({
+      app,
+      client,
+      executable,
+      safeStorage,
+      screen,
+      videoHost,
+      player,
+      errors: errorLog,
+      rendererErrors: a?.rendererErrors,
+    });
+    const text = formatReport(report, { home: homedir() });
+    lastDiagnosis = { report, text };
+    return { report, text };
+  },
+  diagnoseCopy: () => {
+    if (!lastDiagnosis) throw new Error("شغّل التشخيص أولاً");
+    clipboard.writeText(lastDiagnosis.text);
+    return true;
+  },
+  diagnoseSave: async () => {
+    if (!lastDiagnosis) throw new Error("شغّل التشخيص أولاً");
+    const stamp = lastDiagnosis.report.generatedAt
+      .slice(0, 16)
+      .replace(/[:T]/g, "-");
+    const r = await dialog.showSaveDialog(window, {
+      title: "حفظ تقرير التشخيص",
+      defaultPath: `riwaq-diagnostics-${stamp}.txt`,
+      filters: [{ name: "Text", extensions: ["txt"] }],
+    });
+    if (r.canceled || !r.filePath) return false;
+    writeFileSync(r.filePath, lastDiagnosis.text, "utf8");
+    return true;
+  },
   updatesCheck: async () => {
     client.profiles.gate("settings");
     await client.updates.check({ current: app.getVersion(), force: true });
@@ -1658,6 +1710,7 @@ app
           // A new viewing, or the mini player opening or closing, decides the
           // window's full screen state; afterwards the viewer owns it.
           const failed = s.active && s.error && !watching.error;
+          if (failed) logError("player", s.error);
           const starting = s.active && !watching.active;
           const pipChanged =
             s.active && watching.active && s.pip !== watching.pip;
@@ -1798,6 +1851,7 @@ app
         try {
           return { ok: true, value: await methods[method](args) };
         } catch (error) {
+          logError(`ipc:${method}`, error);
           if (process.env.RIWAQ_SMOKE)
             console.error(`Smoke IPC ${method}: ${error.stack}`);
           return { ok: false, error: cleanError(error) };

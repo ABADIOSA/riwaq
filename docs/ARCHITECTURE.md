@@ -42,6 +42,10 @@ React (sandboxed, RTL)
 - 0.22: performance. `Player.publish` (`electron/player.mjs`) sends a position-only change at most every `POSITION_MS` (250 ms). `Rail` and `Poster` are memoized and a rail renders 12 cards at a time (`ScrollRow` `onNearEnd`). `CatalogRail` and stable handlers in `App.jsx` keep re-renders local. `.rail` uses `content-visibility: auto`. Settings, add-ons, library, live TV and folder pages are `React.lazy` chunks.
 - 0.24: `core/ambient.mjs` and `src/components/Ambient.jsx`. The artwork glow follows the card under the pointer. Cards carry `data-ambient` attributes read by one delegated listener, and two layers crossfade. Settings live in the Ambience page (`LookPages.jsx`).
 - 0.25: `core/smart-groups.mjs` and `src/components/SmartHome.jsx` group addon catalogs into Riwaq's sections. They drive the home shelves (`homeGrouping`, `smartHidden`) and the Discover/search tabs (`group` state in `App.jsx`).
+- 0.30: the full diagnostic.
+  - `electron/diagnose.mjs` (`runDiagnostics`) runs the checks.
+  - `core/diagnose.mjs` sanitizes, formats and summarizes the report.
+  - Main keeps an `ErrorLog` and the last report for copy and save; `DiagnosticsCard.jsx` sits on the System page.
 - 0.29: `core/whats-new.mjs` holds the release highlights; `App.jsx` opens `WhatsNew.jsx` once per version and profile (`seenVersion` in settings). `ShortcutsHelp.jsx` lists app keys and `publicHotkeys` through `bindingLabel` (`core/hotkeys.mjs`). Settings search uses `matchesWords` from `core/arabic.mjs`.
 - 0.28: `core/discover.mjs` defines Discover's sections and rows.
   - `Client.catalogPlan({ discover })` and `feedCatalog` serve them as `feed:d-` keys.
