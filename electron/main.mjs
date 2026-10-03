@@ -73,7 +73,7 @@ import {
   readNuvioZip,
 } from "../core/nuvio.mjs";
 import { DesktopUpdates } from "./updater.mjs";
-import { runDiagnostics } from "./diagnose.mjs";
+import { probeAddons, runDiagnostics } from "./diagnose.mjs";
 import { ErrorLog, formatReport } from "../core/diagnose.mjs";
 import { homedir } from "node:os";
 
@@ -951,6 +951,13 @@ const methods = {
   },
   install: (a) => client.install(a.url),
   updateAddon: (a) => client.updateAddon(a),
+  // Which addons still answer (core/addon-health.mjs): by key and name only,
+  // their addresses stay here.
+  addonsHealth: async () => {
+    client.profiles.gate("addons");
+    return probeAddons(client.state.addons, { version: app.getVersion() });
+  },
+  removeAddons: (a) => client.removeAddons({ keys: a?.keys }),
   settings: async (a) => {
     const state = client.settings(a);
     applyZoom();

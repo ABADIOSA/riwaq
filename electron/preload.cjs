@@ -93,6 +93,8 @@ const allowed = new Set([
   "profileUpdate",
   "forgetSeries",
   "diagnoseRun",
+  "addonsHealth",
+  "removeAddons",
   "diagnoseCopy",
   "diagnoseSave",
   "profileRemove",

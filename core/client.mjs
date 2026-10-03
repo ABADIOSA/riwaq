@@ -339,6 +339,19 @@ export class Client {
     this.persist();
     return this.publicState();
   }
+  /**
+   * Removes several addons at once (the Addons page's "remove the ones that
+   * stopped"), by their opaque keys. Behind the addons room lock.
+   */
+  removeAddons({ keys } = {}) {
+    this.profiles.gate("addons");
+    const drop = new Set(Array.isArray(keys) ? keys.map(String) : []);
+    if (!drop.size) return this.publicState();
+    this.state.addons = this.state.addons.filter((a) => !drop.has(a.key));
+    this.cache.clear();
+    this.persist();
+    return this.publicState();
+  }
   async authenticate(authKey) {
     if (
       typeof authKey !== "string" ||

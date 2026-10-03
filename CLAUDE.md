@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.30.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.30.1-win-x64.exe`.
 
 ## Design and invariants
 
@@ -22,6 +22,8 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - Everything entering the report passes `sanitize`: addons by name only, URLs reduced to their host, keys, JWTs and e-mails replaced, the user folder shown as "~". `formatReport` sanitizes the finished text again.
   - Main keeps an `ErrorLog` of IPC, player and process errors with their real messages; the interface keeps its own (`src/lib/diagnostics.js`) and sends it with the run.
   - Nothing is sent anywhere: the viewer copies or saves the report.
+  - Addon health (`core/addon-health.mjs`, `probeAddons`): ok, slow (>3 s), gone (404/410), down, needs-server (a loopback addon when the local service is off), and duplicates by manifest ID. IPC `addonsHealth` and `removeAddons` sit behind the addons lock and return keys and names, never addresses.
+  - A hidden video surface is not judged. Trakt is probed with the viewer's own headers.
 - Session UI verification: build, then `node scripts/test-session-ui.mjs` on Windows. It uses an isolated profile and local HTTP addon, with real IPC. Select the main renderer, never the HUD. Run the native MPV smoke separately; UI fixture success does not verify live accounts or real addon streams.
 - Keep the Arabic interface, RTL geometry and all three navigation layouts usable at 980×680 and larger.
 - `electron/video-host.mjs` owns a Win32 WS_CHILD surface. MPV receives its HWND using `--wid`. React reports its viewport rectangle; main calculates the physical scale. Native video must hide beneath HTML dialogs and restore afterward.
