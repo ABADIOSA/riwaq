@@ -273,3 +273,29 @@ export function publicHotkeys(custom = {}) {
     conflict: conflicts.some((entry) => entry.actions.includes(action.id)),
   }));
 }
+
+const KEY_NAMES = {
+  LEFT: "←",
+  RIGHT: "→",
+  UP: "↑",
+  DOWN: "↓",
+  SPACE: "مسافة",
+  ESC: "Esc",
+  BS: "Backspace",
+  TAB: "Tab",
+  ENTER: "Enter",
+  DEL: "Delete",
+  PGUP: "Page Up",
+  PGDWN: "Page Down",
+};
+
+/** An MPV binding ("Shift+LEFT") as keys a viewer reads ("Shift + ←"). */
+export function bindingLabel(binding = "") {
+  return String(binding)
+    .split("+")
+    .map(
+      (part) =>
+        KEY_NAMES[part] || (part.length === 1 ? part.toUpperCase() : part),
+    )
+    .join(" + ");
+}

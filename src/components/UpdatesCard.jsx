@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import WhatsNew from "./WhatsNew.jsx";
 import {
   RefreshCw,
   Download,
@@ -27,6 +28,7 @@ const bytes = (value) => `${(Number(value || 0) / 1024 ** 2).toFixed(1)} MB`;
 export default function UpdatesCard({ state, update, act }) {
   const info = state.update || {};
   const [busy, setBusy] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const status = info.status || "idle";
   const working =
     busy ||
@@ -76,7 +78,10 @@ export default function UpdatesCard({ state, update, act }) {
           <span className="eyebrow">RIWAQ · ALWAYS EVOLVING</span>
           <h2 aria-live="polite">{labels[status]}</h2>
           <p>
-            إصدارك <b dir="ltr">{info.current || "—"}</b>
+            إصدارك <b dir="ltr">{info.current || "—"}</b>{" "}
+            <button className="text-button" onClick={() => setNotesOpen(true)}>
+              ما الجديد؟
+            </button>
             {info.latest && (
               <>
                 {" "}
@@ -242,6 +247,13 @@ export default function UpdatesCard({ state, update, act }) {
             "ar-SA-u-ca-gregory-nu-latn",
           )}
         </p>
+      )}
+      {notesOpen && (
+        <WhatsNew
+          current={info.current}
+          all
+          onClose={() => setNotesOpen(false)}
+        />
       )}
     </section>
   );

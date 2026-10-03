@@ -15,6 +15,7 @@ import { cleanFeedHidden } from "./feed.mjs";
 import { cleanCountdowns } from "./countdown.mjs";
 import { cleanSeriesMemory } from "./series-memory.mjs";
 import { cleanSkipExcept } from "./skip-segments.mjs";
+import { cleanSeenVersion } from "./whats-new.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -133,6 +134,8 @@ export const DEFAULT_SETTINGS = {
   // A series' source, audio and subtitle choices carried to its next
   // episode (core/series-memory.mjs). Identities only, never links.
   rememberSeries: true,
+  // The last release whose highlights the viewer saw (core/whats-new.mjs).
+  seenVersion: "",
   seriesMemory: {},
   // Countdowns pinned to the home page (core/countdown.mjs).
   countdowns: [],
@@ -449,6 +452,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.smartHidden = cleanSmartHidden(input.smartHidden);
   if (Array.isArray(input.feedHidden))
     next.feedHidden = cleanFeedHidden(input.feedHidden);
+  if (typeof input.seenVersion === "string")
+    next.seenVersion = cleanSeenVersion(input.seenVersion);
   if (Array.isArray(input.skipExcept))
     next.skipExcept = cleanSkipExcept(input.skipExcept);
   if (input.seriesMemory && typeof input.seriesMemory === "object")

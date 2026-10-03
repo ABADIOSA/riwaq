@@ -3030,3 +3030,98 @@ em.tag-custom.has-text:not(.badge-outlined) {
   margin: 30px 0;
   text-align: center;
 }
+
+/* ---- What's new, shortcuts and settings search ---- */
+.whats-new .modal-inner,
+.shortcuts-help .modal-inner {
+  max-width: 640px;
+}
+.whats-new .eyebrow,
+.shortcuts-help .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.whats-new-list {
+  display: grid;
+  gap: 14px;
+  margin: 16px 0 20px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.whats-new-list section {
+  padding: 14px 16px;
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: 12px;
+}
+.whats-new-list header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.whats-new-list header bdi {
+  color: var(--muted, #999);
+  font-size: 12px;
+}
+.whats-new-list ul {
+  margin: 0;
+  padding-inline-start: 18px;
+  line-height: 1.9;
+  font-size: 13px;
+}
+.shortcuts-columns {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 22px;
+  margin: 14px 0 18px;
+  max-height: 56vh;
+  overflow-y: auto;
+}
+.shortcuts-columns h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.shortcuts-columns dl {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.shortcuts-columns dl > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.shortcuts-columns dt {
+  flex: none;
+  min-width: 92px;
+}
+.shortcuts-columns dd {
+  margin: 0;
+  color: var(--muted, #aaa);
+}
+.shortcuts-columns kbd {
+  display: inline-block;
+  padding: 3px 8px;
+  border: 1px solid var(--line, #ffffff22);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: #ffffff08;
+  font-family: inherit;
+  font-size: 11.5px;
+}
+.settings-empty {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.settings-empty p {
+  margin: 0;
+  color: var(--muted, #aaa);
+}
+@media (max-width: 1100px) {
+  .shortcuts-columns {
+    grid-template-columns: 1fr;
+  }
+}

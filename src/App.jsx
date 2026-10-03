@@ -60,6 +60,9 @@ import RiwaqNav from "./components/RiwaqNav.jsx";
 import SessionHome from "./components/SessionHome.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
 import DiscoverSections from "./components/DiscoverSections.jsx";
+import WhatsNew from "./components/WhatsNew.jsx";
+import ShortcutsHelp from "./components/ShortcutsHelp.jsx";
+import { lastSeen, shouldShowWhatsNew } from "../core/whats-new.mjs";
 import TraktSuggestions from "./components/Suggestions.jsx";
 import {
   groupRows,
@@ -146,6 +149,9 @@ export default function App() {
     [folderTarget, setFolderTarget] = useState(null),
     [folderFrom, setFolderFrom] = useState("home"),
     [nuvioOpen, setNuvioOpen] = useState(false),
+    // "What's new" after an update, and the keyboard shortcuts ("?").
+    [whatsNew, setWhatsNew] = useState(null),
+    [shortcutsOpen, setShortcutsOpen] = useState(false),
     [account, setAccount] = useState(false),
     [toast, setToast] = useState(""),
     [player, setPlayer] = useState({ active: false }),
@@ -470,10 +476,39 @@ export default function App() {
         e.preventDefault();
         searchRef.current?.focus();
       }
+      // "?" anywhere outside a text field opens the shortcuts.
+      const t = e.target;
+      if (
+        e.key === "?" &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !/^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName || "") &&
+        !t?.isContentEditable &&
+        !document.querySelector("dialog[open]")
+      ) {
+        e.preventDefault();
+        setShortcutsOpen(true);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+  // Once per profile and version: the highlights since the release the
+  // viewer last saw (core/whats-new.mjs). A fresh install just records it.
+  const runningVersion = state.update?.current || "";
+  useEffect(() => {
+    if (!ready || !runningVersion) return;
+    const used =
+      (state.favorites || []).length > 0 ||
+      Object.keys(state.progress || {}).length > 0;
+    const seenVersion = state.settings.seenVersion;
+    if (shouldShowWhatsNew({ seenVersion, used, current: runningVersion }))
+      setWhatsNew({
+        seen: lastSeen({ seenVersion, used, current: runningVersion }),
+      });
+    else if (seenVersion !== runningVersion)
+      call("settings", { seenVersion: runningVersion }).catch(() => {});
+  }, [ready, runningVersion, state.profiles?.active]);
   const [win] = useWindowState();
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -1458,6 +1493,27 @@ export default function App() {
           />
         )}
 
+        {whatsNew && (
+          <WhatsNew
+            current={runningVersion}
+            seen={whatsNew.seen}
+            onClose={() => {
+              setWhatsNew(null);
+              update("settings", { seenVersion: runningVersion });
+            }}
+          />
+        )}
+        {shortcutsOpen && (
+          <ShortcutsHelp
+            hotkeys={state.hotkeys || []}
+            onClose={() => setShortcutsOpen(false)}
+            onCustomize={() => {
+              setShortcutsOpen(false);
+              setSettingsTab("hotkeys");
+              navigate("settings");
+            }}
+          />
+        )}
         {nuvioOpen && (
           <NuvioLink
             act={act}

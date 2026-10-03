@@ -33,6 +33,17 @@ export function matchesArabic(haystack, needle) {
   return !folded || foldArabic(haystack).includes(folded);
 }
 
+/**
+ * True when every word of `query` appears in `haystack`, each folded:
+ * settings search, where "خطوة تقديم" should find a page holding both.
+ */
+export function matchesWords(haystack, query) {
+  return String(query || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((word) => matchesArabic(haystack, word));
+}
+
 const plural = new Intl.PluralRules("ar");
 /**
  * Arabic counts agree with their number: حلقة واحدة، حلقتان، 3 حلقات، 11 حلقة،
