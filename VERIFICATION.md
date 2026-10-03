@@ -17,6 +17,37 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.28.1 — settings that did nothing
+
+Owner report: some settings buttons do not work because they come from older updates and do not match the current version.
+
+How the problems were found (all scripts in the session scratchpad):
+
+- **Static wiring.** Every `call`/`act`/`update` method in `src` was checked against the preload allowlist and main's `methods`. None were missing; the three window buttons go through `windowControl`.
+  - Every `select` option and `toggle` in the settings components was checked through `safeSettings`: 78 values, all kept.
+- **Behavioural page audit.** In headless Chromium with a mocked bridge, in both interfaces, each of the 35 settings pages was opened. Every toggle, select and non-destructive button on it was pressed.
+  - Result: 0 page errors and 0 calls to methods main lacks.
+  - The update switches and the adult-content toggle stayed unchanged, because the mock does not emulate `updatesConfigure` or `profileUpdate`. Both were confirmed in code: they save and return the public state.
+- **Visual effect audit.** For each look option, the computed styles of sample elements were compared across values on home and on a title page.
+  - Six options had no effect in Riwaq's interface: card corners on the card frame, the corner style, the accent gradient, logo style, logo tint, and (only in the classic interface) the logo tint against the default accent.
+  - A targeted probe then measured each of these on the exact element. After the fixes, every value changes its element in Riwaq's interface: card frame radius 0→28 px, search box 4→18 px, gradient on the main button, monogram and name shown or hidden per logo style, gold tint against a blue accent.
+
+Fixed:
+
+- `session.css`: the card frame, search box and session button now follow `--poster-radius`, `--radius` and `--accent-fill`, plus a gold tint rule for the monogram.
+- `RiwaqNav.jsx`: honours `logoStyle`.
+- `HomeEditor`: hides the hero section in Riwaq's interface, and its move buttons skip it.
+- The hero-only glow mode no longer shows a hidden hero's art, and is labelled "صفحة العمل فقط".
+- `SessionHome.jsx`: Arabic plural forms (`arabicCount`) and an initial for a pick without a poster.
+
+Executed:
+
+- `npm test`: **443 passing, 0 failing** (440 + 3 in `tests/settings-wiring.test.mjs`). The new tests keep the IPC wiring, the option validation and these look fixes from regressing.
+- `npm run check` and `npm run build` pass.
+- The session page was re-rendered at 980×680 and 1440×960: 0 errors, 0 overflow.
+
+Not executed: Windows.
+
 ## 0.28.0 — Discover arranged by Riwaq
 
 Owner request: arrange Discover by Riwaq's own categories, as home is, and name no addon there.

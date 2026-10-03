@@ -64,14 +64,19 @@ export default function RiwaqNav({
           />
         ) : (
           <>
-            <span className="riwaq-monogram" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
-            <b>
-              رِواق<span>مساحة للحكاية</span>
-            </b>
+            {/* Logo style: the full mark and name, the mark or the name. */}
+            {appearance.logoStyle !== "name" && (
+              <span className="riwaq-monogram" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            )}
+            {appearance.logoStyle !== "mark" && (
+              <b>
+                رِواق<span>مساحة للحكاية</span>
+              </b>
+            )}
           </>
         )}
       </button>

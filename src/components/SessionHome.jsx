@@ -16,6 +16,10 @@ import {
 } from "../../core/session.mjs";
 import { call } from "../lib/api.js";
 import { imgUrl } from "../lib/helpers.js";
+import { arabicCount, MINUTES, WORKS } from "../../core/arabic.mjs";
+
+// The unit after a bare number: "5 دقائق", "45 دقيقة".
+const minuteUnit = (n) => (n >= 3 && n <= 10 ? "دقائق" : "دقيقة");
 
 const endTime = (minutes, started) =>
   new Intl.DateTimeFormat("ar-SA", {
@@ -237,10 +241,12 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
             </div>
             {plan.items.length > 0 && (
               <div className="session-total">
-                <b>{plan.minutes} دقيقة تقريباً</b>
+                <b>{arabicCount(plan.minutes, MINUTES)} تقريباً</b>
                 <span>
-                  تنتهي قرابة {endTime(plan.minutes, started)} · فسحة{" "}
-                  {plan.remaining} دقيقة
+                  تنتهي قرابة {endTime(plan.minutes, started)} ·{" "}
+                  {plan.remaining > 0
+                    ? `فسحة ${arabicCount(plan.remaining, MINUTES)}`
+                    : "بلا فسحة"}
                 </span>
               </div>
             )}
@@ -272,7 +278,23 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
                         onClick={() => onOpen(item.meta, item.videoId)}
                         aria-label={`فتح ${item.meta.name}`}
                       >
-                        <img src={imgUrl(item.meta.poster)} alt="" />
+                        {/* A title without a poster shows its initial. */}
+                        {imgUrl(item.meta.poster) ? (
+                          <img
+                            src={imgUrl(item.meta.poster)}
+                            alt=""
+                            onError={(e) => {
+                              e.currentTarget.style.visibility = "hidden";
+                            }}
+                          />
+                        ) : (
+                          <span
+                            className="session-pick-initial"
+                            aria-hidden="true"
+                          >
+                            {[...String(item.meta.name || "؟")][0]}
+                          </span>
+                        )}
                       </button>
                       <div className="session-pick-copy">
                         <span>
@@ -302,11 +324,12 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
                       <div className="session-pick-time">
                         <b>{item.minutes}</b>
                         <span>
+                          {minuteUnit(item.minutes)}
                           {item.estimated
-                            ? "دقيقة تقديرية"
+                            ? " تقديرية"
                             : item.origin === "continue"
-                              ? "دقيقة متبقية"
-                              : "دقيقة"}
+                              ? " متبقية"
+                              : ""}
                         </span>
                       </div>
                       <button
@@ -352,8 +375,8 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
           )}
           {result.skipped > 0 && (
             <p className="session-footnote">
-              استبعدنا {result.skipped} من الاختيارات التي لم تتوفر لها مدة أو
-              حلقة مناسبة
+              خارج الحساب: {arabicCount(result.skipped, WORKS)} بلا مدة معروفة
+              أو حلقة مناسبة
               {result.failures ? "؛ تعذّر أيضاً جلب بعض البيانات" : ""}.
             </p>
           )}

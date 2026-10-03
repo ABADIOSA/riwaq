@@ -28,7 +28,8 @@
 }
 .app.experience-riwaq .search-box {
   width: 310px;
-  border-radius: 5px;
+  /* The viewer's corner style (Appearance → Interface). */
+  border-radius: var(--radius, 5px);
   background: transparent;
   border-color: var(--line);
 }
@@ -51,7 +52,8 @@
   font-weight: 650;
 }
 .app.experience-riwaq .poster-card {
-  border-radius: 9px;
+  /* Follows "card corners" like the picture inside it. */
+  border-radius: var(--poster-radius, 9px);
 }
 .app.experience-riwaq .rail {
   border-top: 1px solid var(--line);
@@ -122,6 +124,10 @@
 .riwaq-monogram i:nth-child(3) {
   height: 50%;
   opacity: 0.4;
+}
+/* Logo tint "gold" keeps Riwaq's gold whatever the accent. */
+.app.logotint-gold .riwaq-monogram i {
+  background: #e7b66e;
 }
 .riwaq-destinations {
   display: flex;
@@ -403,10 +409,11 @@
   gap: 10px;
   min-height: 44px;
   padding: 12px 20px;
-  border-radius: 7px;
+  border-radius: var(--radius, 7px);
   border: 0;
-  background: var(--accent);
-  color: var(--bg);
+  /* The accent, or its gradient when the viewer chose one. */
+  background: var(--accent-fill, var(--accent));
+  color: var(--accent-ink, var(--bg));
   font-size: 12px;
   font-weight: 650;
 }
@@ -564,6 +571,15 @@
   border-radius: 5px;
   overflow: hidden;
   background: var(--raised);
+}
+.session-pick-art {
+  display: grid;
+  place-items: center;
+}
+.session-pick-initial {
+  color: var(--accent);
+  font-size: 26px;
+  font-weight: 700;
 }
 .session-pick-art img {
   width: 100%;

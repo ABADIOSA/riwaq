@@ -117,9 +117,16 @@ function HomeEditor({ state, update, notice }) {
       .catch(() => setPlan([]));
   }, [state.addons.map((a) => `${a.key}:${a.enabled}`).join("|")]);
   const visible = visibleHomeSections(s.homeSections, s.homeSeen);
+  // Riwaq's interface opens home with the session and has no big hero, so
+  // the hero is not offered there; it keeps its place for the classic one.
+  const riwaqHome = s.interfaceStyle !== "classic";
+  const offered = (id) => !(riwaqHome && id === "hero");
+  const shown = visible.filter(offered);
   const sections = [
-    ...visible,
-    ...HOME_SECTIONS.map(([id]) => id).filter((id) => !visible.includes(id)),
+    ...shown,
+    ...HOME_SECTIONS.map(([id]) => id).filter(
+      (id) => offered(id) && !visible.includes(id),
+    ),
   ];
   const label = Object.fromEntries(HOME_SECTIONS);
   // Saving records every section that exists now, so a section added in a
@@ -129,10 +136,14 @@ function HomeEditor({ state, update, notice }) {
       homeSections: next,
       homeSeen: HOME_SECTIONS.map(([id]) => id),
     });
+  // Moves past sections that are not offered here, so a hidden hero never
+  // makes a press look like nothing happened.
   const moveSection = (id, direction) => {
     const list = [...visible];
     const i = list.indexOf(id);
-    const j = i + (direction === "up" ? -1 : 1);
+    const step = direction === "up" ? -1 : 1;
+    let j = i + step;
+    while (j >= 0 && j < list.length && !offered(list[j])) j += step;
     if (i < 0 || j < 0 || j >= list.length) return;
     [list[i], list[j]] = [list[j], list[i]];
     saveSections(list);
@@ -167,7 +178,7 @@ function HomeEditor({ state, update, notice }) {
         <p>
           الرئيسية تعرض الأعمال بتصنيف رِواق نفسه، رائج وفي السينما والأعلى
           تقييماً وعربي وتركي وكوري وأنمي وأنواع الأفلام، لا صفاً لكل إضافة.
-          إضافاتك تبقى في «اكتشف» وهي اللي تجيب المصادر.
+          إضافاتك هي اللي تجيب المصادر، وكتالوجاتها تنضم لأقسام «اكتشف».
         </p>
         <div className="choice-row" role="radiogroup">
           {[
@@ -258,11 +269,15 @@ function HomeEditor({ state, update, notice }) {
       </section>
       <section className="settings-card">
         <h2>أقسام الرئيسية</h2>
-        <p>رتّب الأقسام كما تحب، وأخفِ ما لا تحتاجه.</p>
+        <p>
+          رتّب الأقسام كما تحب، وأخفِ ما لا تحتاجه.
+          {riwaqHome &&
+            " في واجهة رِواق تبدأ الرئيسية بـ«جلسة اليوم»، والواجهة الكبيرة تظهر في التخطيط السابق فقط."}
+        </p>
         <ol className="home-editor">
           {sections.map((id) => {
             const on = visible.includes(id);
-            const index = visible.indexOf(id);
+            const index = shown.indexOf(id);
             return (
               <li key={id} className={on ? "" : "off"}>
                 <span>{label[id]}</span>
@@ -276,7 +291,7 @@ function HomeEditor({ state, update, notice }) {
                   </button>
                   <button
                     title="أسفل"
-                    disabled={!on || index === visible.length - 1}
+                    disabled={!on || index === shown.length - 1}
                     onClick={() => moveSection(id, "down")}
                   >
                     <ArrowDown size={15} />
