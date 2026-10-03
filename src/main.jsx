@@ -14,6 +14,10 @@ import "./window.css";
 import "./hero.css";
 import "./smart.css";
 import "./session.css";
+import { watchErrors } from "./lib/diagnostics.js";
+
+// Recent interface errors for the diagnostic report (Settings → النظام).
+watchErrors();
 // The same page runs the player HUD in its transparent window (#hud).
 createRoot(document.getElementById("root")).render(
   location.hash === "#hud" ? <Hud /> : <App />,

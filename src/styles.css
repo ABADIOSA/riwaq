@@ -3125,3 +3125,78 @@ em.tag-custom.has-text:not(.badge-outlined) {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Full diagnostic (Settings → النظام) ---- */
+.diagnose-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.diagnose-card .section-heading span {
+  display: block;
+  color: var(--muted, #aaa);
+  font-size: 12.5px;
+  line-height: 1.8;
+  max-width: 560px;
+}
+.diagnose-summary {
+  margin: 14px 0 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #ffffff07;
+}
+.diagnose-summary.is-ok b {
+  color: #7fd6a2;
+}
+.diagnose-summary.is-warn b {
+  color: #e7b66e;
+}
+.diagnose-summary.is-fail b {
+  color: #f08a8a;
+}
+.diagnose-checks {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.diagnose-checks li {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.diagnose-checks li span {
+  color: var(--muted, #aaa);
+  overflow-wrap: anywhere;
+}
+.diagnose-checks li.is-ok svg {
+  color: #7fd6a2;
+}
+.diagnose-checks li.is-warn svg {
+  color: #e7b66e;
+}
+.diagnose-checks li.is-fail svg {
+  color: #f08a8a;
+}
+.diagnose-checks li.is-skip svg {
+  color: var(--muted, #888);
+}
+.diagnose-preview {
+  margin-top: 12px;
+}
+.diagnose-preview .diagnose-text {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background: #0006;
+  font-size: 11.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
