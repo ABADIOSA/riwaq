@@ -217,7 +217,13 @@ export class Player {
     if (!local) webUrl(url);
     if (!existsSync(executable))
       throw new Error("لم يتم العثور على MPV. اختر ملف mpv.exe من الإعدادات.");
+    // Starts are serialized: two plays close together (a double click, a
+    // pick while failover or autoplay starts one) both wait on the same old
+    // MPV, and only the newest may spawn, or the older one would keep
+    // playing into the surface with nothing owning it.
+    const token = (this.startToken = (this.startToken || 0) + 1);
     await this.stop();
+    if (token !== this.startToken) throw new Error("بدأ تشغيل مصدر آخر");
     // Kept in main only, for seek previews; never part of the HUD's state.
     this.source = { url, headers, local, live };
     this.meta = meta;
@@ -278,8 +284,14 @@ export class Player {
     );
     this.child = child;
     let processError = false;
-    child.once("error", () => {
+    let connected = false;
+    child.on("error", () => {
+      // After the pipe is up, an error (a failed kill) is not a failed start.
+      if (connected || this.child !== child) return;
       processError = true;
+      // A process that never started never exits: let it go, so the next
+      // play does not wait out the stop timeout on it.
+      this.child = null;
       this.state = { ...this.state, active: false, error: "تعذّر تشغيل MPV" };
       this.onState(this.state);
     });
@@ -298,6 +310,10 @@ export class Player {
       let attempts = 0;
       const connect = () => {
         if (processError || this.child !== child || attempts++ > 60) {
+          // MPV may still be opening the stream: without its pipe nothing can
+          // pause or stop it, so it must not be left playing. Its exit
+          // handler marks the viewing inactive.
+          if (this.child === child && !processError) child.kill();
           reject(new Error("تعذّر الاتصال بالمشغل"));
           return;
         }
@@ -307,6 +323,7 @@ export class Player {
           setTimeout(connect, 100);
         });
         socket.once("connect", () => {
+          connected = true;
           socket.removeAllListeners("error");
           socket.on("error", () => {});
           this.socket = socket;
@@ -562,20 +579,39 @@ export class Player {
     this.refreshSkip();
   }
   refreshSkip() {
+    // Runs on every position update: with no segments there is nothing to
+    // work out (and no preferences to read).
+    if (!this.state.segments?.length) {
+      if (this.state.skip) {
+        this.state.skip = null;
+        this.onState(this.state);
+      }
+      this.autoSkipped = null;
+      return;
+    }
     // Main's live preferences (a series excluded from skipping, a changed
     // setting) when it supplies them, else those the viewing started with.
     const prefs = this.skipPrefs?.() || this.settings || {};
     const next = activeSegment(this.state.segments, this.state.position, prefs);
-    const changed = JSON.stringify(next) !== JSON.stringify(this.state.skip);
+    const was = this.state.skip;
+    const changed = JSON.stringify(next) !== JSON.stringify(was);
     this.state.skip = next;
     if (changed) this.onState(this.state);
+    const segment = next ? `${next.kind}:${next.start}:${next.end}` : null;
+    // One seek per entry into a segment: MPV keeps reporting the old
+    // position until the seek lands, and a source that cannot seek would
+    // otherwise get a seek on every frame. Leaving the segment re-arms it.
+    if (!segment) this.autoSkipped = null;
     if (
       next &&
+      segment !== this.autoSkipped &&
       this.state.abLoop === null &&
       ((next.kind === "intro" && prefs.skipIntro === "auto") ||
         (next.kind === "outro" && prefs.skipOutro === "auto"))
-    )
+    ) {
+      this.autoSkipped = segment;
       this.send(["seek", next.end, "absolute"]);
+    }
   }
   setSleep(minutes) {
     this.clearSleep();
@@ -765,8 +801,10 @@ export class Player {
     }
   }
   subtitle(path, { secondary = false } = {}) {
+    // The second line is set once MPV lists the file, by its own track ID
+    // (a file with embedded tracks would make any fixed number wrong).
+    if (secondary) this.pendingSecondary = path;
     this.send(["sub-add", path, secondary ? "auto" : "select"]);
-    if (secondary) this.send(["set_property", "secondary-sid", 2]);
   }
   async stop() {
     const child = this.child;

@@ -1739,8 +1739,13 @@ app
           placeHud();
           updatePresence();
           client.integrations.observePlayback(s);
+          // At shutdown MPV exits after the window is gone: everything above
+          // (scrobbling, presence) still runs, the window calls do not.
+          if (!window || window.isDestroyed()) return;
           if (!s.active) {
-            videoHost.hide();
+            try {
+              videoHost.hide();
+            } catch {}
             if (window.isFullScreen()) window.setFullScreen(false);
           } else if (starting || pipChanged) {
             if (s.pip) {

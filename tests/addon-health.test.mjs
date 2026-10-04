@@ -108,7 +108,7 @@ test("several addons can be removed at once, behind the addons lock", () => {
     }),
     save: () => {},
   });
-  const keys = c.state.addons.map((a) => a.key);
+  const keys = c.publicState().addons.map((a) => a.key);
   c.removeAddons({ keys: [keys[0], keys[2], "unknown"] });
   assert.deepEqual(
     c.state.addons.map((a) => a.manifest.name),
@@ -234,5 +234,47 @@ test("report fixes: idle surface, Trakt with the viewer's client ID, local addon
   assert.equal(
     sanitize(`https://a.example:8443/${SECRET}`),
     "https://a.example/…",
+  );
+});
+
+test("health and removal work on addons as they are stored, without a key field", async () => {
+  // Stored addons are { transportUrl, manifest }; the interface names them
+  // by keyFor(transportUrl), as publicState does.
+  const stored = (id, name) => ({
+    transportUrl: `https://${id}.example/manifest.json`,
+    manifest: {
+      id,
+      name,
+      version: "1",
+      resources: ["stream"],
+      types: ["movie"],
+      catalogs: [],
+    },
+  });
+  const addons = [
+    stored("ok", "Ok"),
+    stored("gone", "Gone"),
+    stored("ok", "Ok"),
+  ];
+  const fetcher = async (url) => ({
+    status: url.includes("gone") ? 404 : 200,
+    body: null,
+    headers: { get: () => null },
+  });
+  const { results, duplicates } = await probeAddons(addons, { fetcher });
+  const c = new Client({ load: () => ({ addons }), save: () => {} });
+  const shown = c.publicState().addons.map((a) => a.key);
+  assert.deepEqual(
+    results.map((r) => r.key),
+    shown,
+    "the page can match every result to its addon",
+  );
+  assert.ok(results.every((r) => typeof r.key === "string" && r.key));
+  assert.deepEqual(duplicates, [{ key: shown[2], of: shown[0] }]);
+  const gone = results.find((r) => r.state === "gone").key;
+  c.removeAddons({ keys: [gone] });
+  assert.deepEqual(
+    c.state.addons.map((a) => a.manifest.name),
+    ["Ok", "Ok"],
   );
 });

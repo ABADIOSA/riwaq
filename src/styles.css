@@ -939,6 +939,107 @@ button.secondary {
   margin-top: 16px;
   max-width: 100%;
 }
+/* Finding a source in a long list (core/source-view.mjs). */
+.source-tools {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 16px;
+}
+.source-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--muted);
+}
+.source-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 10px 0;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.source-search:focus-within {
+  border-color: var(--accent);
+}
+.source-chips {
+  min-width: 0;
+}
+.source-chips button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.source-chips button.chosen {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.source-count {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.stream-section + .stream-section {
+  margin-top: 14px;
+}
+.stream-addon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 2px;
+  margin-bottom: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  text-align: start;
+}
+.stream-addon small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.stream-addon svg {
+  transition: transform 0.15s;
+}
+.stream-addon[aria-expanded="true"] svg {
+  transform: rotate(-90deg);
+}
+.source-none {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 18px 2px;
+}
+@media (max-width: 1100px) {
+  .source-tools {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .source-chips {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
 .count-badge {
   border: 1px solid #ffffff12;
   background: #ffffff05;

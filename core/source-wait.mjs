@@ -83,11 +83,28 @@ export function gatherSources(
             graceTimer = timer(show, grace);
         });
   });
-  return { ready, done };
+  // `answers` is live: it fills as addons answer, before and after `ready`.
+  return { ready, done, answers };
 }
 
-/** The remembered run for a title, when it is recent enough to reuse. */
-export function reusableRun(runs, key, now = Date.now()) {
-  const run = runs?.get(key);
-  return run && now - run.at < SOURCE_RUN_TTL ? run : null;
+/** Forgets runs older than the reuse window, so they free their answers. */
+export function pruneRuns(runs, now = Date.now()) {
+  for (const [key, run] of runs || [])
+    if (now - run.at >= SOURCE_RUN_TTL) runs.delete(key);
 }
+
+/**
+ * The remembered run for a title, when it is recent enough to reuse and was
+ * asked of the same addons (`signature`) the viewer has enabled now.
+ */
+export function reusableRun(runs, key, now = Date.now(), signature) {
+  pruneRuns(runs, now);
+  const run = runs?.get(key);
+  if (!run) return null;
+  if (signature !== undefined && run.signature !== signature) return null;
+  return run;
+}
+
+/** What identifies an addon list: the addresses, in order (main only). */
+export const addonSignature = (addons = []) =>
+  addons.map((a) => a.transportUrl || a.key || "").join("\n");

@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.31.1-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.32.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -23,6 +23,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - Everything entering the report passes `sanitize`: addons by name only, URLs reduced to their host, keys, JWTs and e-mails replaced, the user folder shown as "~". `formatReport` sanitizes the finished text again.
   - Main keeps an `ErrorLog` of IPC, player and process errors with their real messages; the interface keeps its own (`src/lib/diagnostics.js`) and sends it with the run.
   - Nothing is sent anywhere: the viewer copies or saves the report.
+  - Stored addons are `{ transportUrl, manifest, enabled }` with no `key`: the interface names them by `keyFor(transportUrl)`. `probeAddons` fills that key and `removeAddons` matches it (0.30.1–0.31.1 shipped without this, so removal did nothing). Tests must use stored-shape addons and `publicState()` keys.
   - Addon health (`core/addon-health.mjs`, `probeAddons`): ok, slow (>3 s), gone (404/410), down, needs-server (a loopback addon when the local service is off), and duplicates by manifest ID. IPC `addonsHealth` and `removeAddons` sit behind the addons lock and return keys and names, never addresses.
   - A hidden video surface is not judged. Trakt is probed with the viewer's own headers.
 - Session UI verification: build, then `node scripts/test-session-ui.mjs` on Windows. It uses an isolated profile and local HTTP addon, with real IPC. Select the main renderer, never the HUD. Run the native MPV smoke separately; UI fixture success does not verify live accounts or real addon streams.
@@ -96,6 +97,8 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - Only sources are asked for; nothing is downloaded or played early.
   - `advance` uses the answer only for the same title and profile within ten minutes, and asks again when it holds no playable source.
 - Per-series skip exceptions: `skipExcept` lists series IDs (at most 300). `skipPreferences` turns their "auto" into "button" and never turns skipping on. The player reads `skipPrefs()` from main at every check, so a change applies during a viewing.
+- Player stability (`electron/player.mjs`): `start` takes a `startToken` before awaiting `stop()` and throws "بدأ تشغيل مصدر آخر" when a newer start arrived, so two close plays never spawn two MPVs. A pipe that never connects kills its MPV. A spawn error releases `this.child`; an `error` after connecting is not a failed start. Auto-skip sends one seek per entry into a segment (`autoSkipped`), and with no segments reads no preferences. A second subtitle line is set by MPV's track ID through `pendingSecondary`. Main's `onState` touches the window only while it exists (MPV exits after it at shutdown).
+- Main-process caches stay bounded (`boundedSet`): streams 4000, subtitles 3000, metas 400. A subtitle list is cached only when some addon answered.
 - Holding the primary button on the picture sets MPV speed to `holdSpeed` (0, 1.5, 2 or 3) until release. The click that ends a hold never toggles pause.
 - Episode shuffle (`core/shuffle.mjs`) picks released, numbered, unwatched episodes (or all, when asked), never the current one, with no repeat until each has come up once in the session.
 - `hideWatched` hides finished films (`watchedTitles`/`withoutWatched` in `core/library.mjs`) live at render time on home, discover, collections and folder pages. It never applies in search, the library, continue watching, up next or hand-picked folder titles. Series are never hidden, since a row cannot know every episode.
@@ -107,7 +110,9 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - When they settle, `onLateSources` makes main emit `sources` (`type`, `id`, `found`, `failed` names) to the main window only, never the HUD.
   - Details compares the report with the request it made (a ref), never the current page, and shows a button: the list never reorders under the pointer.
   - `streams` with `again: true` (strictly boolean) re-ranks the remembered run without a new request; `playerSources` always uses it.
+  - A run holds the live `answers` map and its `ready` promise from the start: a reuse while it is still out awaits `ready`, never an empty run. It is reused only while `addonSignature` of the enabled stream addons is unchanged, and expired runs are pruned (`pruneRuns`). A late `found` counts only sources new to the list that `analyzeStreams` keeps.
 - Riwaq's TMDB rows carry `genres` named from TMDB genre IDs (`TMDB_GENRES`, `tmdbGenreNames` in `core/collection-sources.mjs`): Arabic when the metadata language is Arabic, otherwise English. Combined series genres become both halves. No request is made for the names. Session moods match both languages.
+- Finding a source (`core/source-view.mjs`): above more than four sources, Details shows a search (`filterSources`, every word, Arabic folded, over `sourceText`) and quick chips (`SOURCE_CHIPS`: arabic, cached, hdr, direct, torrent; direct + torrent together mean either; chips with no source are not shown). In addon order, `addonSections` heads each run of one addon copy, and it can fold. All of this narrows the view only: "recommended" stays the ranked list's first source, and autoplay and failover never see it. A new sources request clears it.
 - Source failover (`core/failover.mjs`) replays the next ranked playable source from the same position, at most three times per title.
 - Settings are grouped like Harbor (`GROUPS` in `SettingsStudio.jsx`: account, watching, content, look, devices, system); a page is `[id, title, keywords, icon]`, and search spans every page.
 - Window (`windowFrame` native/hybrid/riwaq, `windowControls`, `frostTopBar`, `dragAnywhere`): a frame change applies on relaunch (`runningFrame` in main). Drag-anywhere is main polling the cursor between `windowDrag` start and end, and only from empty space. `setAppIcon` takes a PNG data URL of at most 512 px drawn by the renderer. Ambience wallpapers and logo images are HTTPS without credentials (`imageUrl`).

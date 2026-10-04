@@ -25,6 +25,75 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.32.0 — finding a source in a long list
+
+What changed:
+
+- `core/source-view.mjs` adds the source search (every word, Arabic folded) and five quick chips with counts. Direct and torrent together mean either. In addon order, one foldable section heads each run of one addon copy.
+- Details shows the tools above more than four sources. They filter only what is displayed: "recommended" stays the first ranked source, and autoplay and failover use the full list. A new request clears them.
+
+Executed:
+
+- `npm test`: **491 passing, 0 failing** (487 + 4 in `tests/source-view.test.mjs`). They cover:
+  - words, groups and qualities, and Arabic folding;
+  - chip combinations and counts;
+  - sections per addon copy and the home copy;
+  - the view-only wiring.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render at 980×680 (addon order) and 1440×960 (Riwaq order) with 14 sources from two addons:
+  - "remux" leaves 4, with "يعرض 4 من 14";
+  - "عربيه" finds the "عربية" source;
+  - "مخزّن" leaves 4, and adding "تورنت" leaves none with a clear button that restores all 14;
+  - folding AIOStreams leaves Torrentio's 6;
+  - the recommended mark stays on one source;
+  - 0 errors, and no page or dialog overflow.
+
+Not executed: a real addon's long list on Windows.
+
+### Stability review before release (same version)
+
+The owner asked for a full review before merging. Two code-review passes ran:
+
+- one over everything since 0.30.1;
+- one over the whole of `electron/main.mjs`, `electron/player.mjs`, `core/client.mjs`, `core/hud.mjs` and `electron/video-host.mjs`, for crashes, races, leaks and null access.
+
+Fixed:
+
+1. **Addon health and removal (shipped broken in 0.30.1–0.31.1):** stored addons have no `key`, so health results never matched the page, and "احذف المتوقفة" / "عطّل اللي ما تستجيب" did nothing. The earlier test passed only because its fixtures added a synthetic key. `probeAddons` now fills `keyFor(transportUrl)`, `removeAddons` matches it, and a new test uses stored-shape addons with `publicState()` keys.
+2. **Two close plays spawned two MPVs:** a double click, or a pick during failover or autoplay, left one MPV unowned. Starts are now serialized by a token.
+3. **Shutdown error dialog:** MPV exiting after the window closed called `isFullScreen()` on a destroyed window. Fixed with a guard.
+4. **Unresponsive MPV pipe:** MPV kept playing with no control. It is now killed.
+5. **Spawn errors:** a failed spawn kept a dead child, and a later kill error was misreported. Both fixed.
+6. **Auto-skip:** it sent a seek on every frame while inside a segment. It now sends one per entry.
+7. **Secondary subtitle:** a hard-coded track ID 2 was used. It now uses MPV's own ID.
+8. **Subtitle cache:** a list was cached when every addon failed. That no longer happens.
+9. **Unbounded maps:** the streams, subtitles and metas maps grew without limit. They are now bounded.
+10. **Source runs:**
+    - a reuse during an in-flight run returned an empty list, and now waits;
+    - a run was reused after addon changes, and is now replaced;
+    - expired runs were never freed, and are now pruned;
+    - the late count included duplicates and rejects, and now counts only new kept sources.
+11. **From the PR #43 review:**
+    - TMDB rows dropped the full release date, so this year's upcoming films passed the taste shelf's future check;
+    - session seeds were ordered by taste alone, and now keep their origin bands, with affinity computed once and rows sliced to what is read;
+    - the taste key is memoized.
+12. **Sources view:**
+    - addon headings repeated when a source moved out of its run;
+    - the search tools vanished while a filter was still on;
+    - "يعرض" now uses `arabicCount`.
+
+Rejected after checking: the claim that taste sorting drops in-progress titles from a session. `sessionSeeds` cuts to 18 before the sort and `prepareSession` reads every seed, so nothing was dropped. Bands were kept anyway.
+
+Not changed: progress is still persisted every 5 s during a viewing. Debouncing it trades crash safety for speed, and needs measuring on Windows first.
+
+Executed after the fixes:
+
+- `npm test`: **500 passing, 0 failing** (491 + 4 source-run and late-count tests + 1 stored-shape addon test + 4 player tests).
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge renders of the sources tools, late sources, the order switch and Sorting page, the Discover taste shelf and the session home were re-run at 980×680 and 1440×960: 0 errors, 0 overflow.
+
+Not executed: any of the player fixes against a real MPV on Windows (double-click play, closing during a viewing, a slow pipe). The player tests use the real `Player` class with stubbed `stop`/`send`, plus source checks.
+
 ## 0.31.1 — addon order that keeps each addon's own order
 
 The owner reported that sources did not follow their addons' order.
