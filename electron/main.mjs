@@ -894,7 +894,12 @@ const methods = {
       tmdb: typeof a?.tmdb === "string" ? a.tmdb : "",
     }),
   streams: async (a) => {
-    const result = await client.getStreams(a);
+    const result = await client.getStreams({
+      type: a?.type,
+      id: a?.id,
+      seriesId: a?.seriesId,
+      again: a?.again === true,
+    });
     remember(a, result);
     return result;
   },
@@ -902,10 +907,12 @@ const methods = {
   // the player without losing the position.
   playerSources: async () => {
     if (!nowPlaying || !player.state.active) return { streams: [] };
+    // The run that started this viewing, late answers included, when recent.
     const result = await client.getStreams({
       type: nowPlaying.type,
       id: nowPlaying.id,
       seriesId: nowPlaying.series,
+      again: true,
     });
     remember(nowPlaying, result);
     return { ...result, current: nowPlaying.key };
@@ -1619,6 +1626,9 @@ app
       app.exit(1);
     }
     if (client) {
+      // Sources that arrive after the list was shown (core/source-wait.mjs):
+      // counts and addon names only, for the main window.
+      client.onLateSources = (info) => emit("sources", info);
       client.updates = new DesktopUpdates(client, {
         current: app.getVersion(),
         directory: join(app.getPath("userData"), "updates"),

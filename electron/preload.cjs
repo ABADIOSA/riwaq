@@ -146,6 +146,7 @@ contextBridge.exposeInMainWorld("riwaq", {
         "ended",
         "playerRequest",
         "hudCommand",
+        "sources",
         "window",
       ].includes(name)
     )

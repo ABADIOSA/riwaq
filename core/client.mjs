@@ -71,11 +71,13 @@ import {
 } from "./feed.mjs";
 import {
   sourceLabel,
+  tmdbGenreNames,
   tmdbItems,
   tmdbRequest,
   traktMetas,
   traktRequest,
 } from "./collection-sources.mjs";
+import { gatherSources, reusableRun } from "./source-wait.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 import {
@@ -885,6 +887,7 @@ export class Client {
           "tmdb:1",
         ),
       );
+    const genreLanguage = this.state.settings.metadataLanguage || "ar-SA";
     const metas = items
       .map((item) => {
         const id =
@@ -904,6 +907,9 @@ export class Client {
             : {}),
           ...(item.released ? { releaseInfo: item.released.slice(0, 4) } : {}),
           ...(item.rating ? { imdbRating: item.rating.toFixed(1) } : {}),
+          ...(item.genres?.length
+            ? { genres: tmdbGenreNames(item.genres, genreLanguage) }
+            : {}),
         };
       })
       .filter(Boolean);
@@ -1603,30 +1609,61 @@ export class Client {
     this.persist();
     return this.publicState();
   }
-  async getStreams({ type, id, seriesId }) {
-    const failures = [];
+  async getStreams({ type, id, seriesId, again = false }) {
     const addons = this.enabled().filter((a) =>
       accepts(a.manifest, "stream", type, id),
     );
-    const results = await Promise.all(
-      addons.map(async (addon) => {
-        try {
+    // Addons are asked at once and the list does not wait for the slowest
+    // (core/source-wait.mjs). Late answers fill the same run; asking again
+    // within five minutes shows them without a new request.
+    const runs = (this.sourceRuns ||= new Map());
+    const runKey = `${type}:${id}`;
+    let run = again ? reusableRun(runs, runKey) : null;
+    if (!run) {
+      const { ready, done } = gatherSources(
+        addons,
+        async (addon) => {
           const response = await this.request(
             resourceUrl(addon.transportUrl, "stream", type, id),
           );
-          return (response.streams || [])
+          return (response?.streams || [])
             .filter((s) => s && typeof s === "object")
             .map((s) => ({
               ...s,
               provider: addon.manifest.name,
               addonId: addon.manifest.id,
             }));
-        } catch {
-          failures.push(addon.manifest.name);
-          return [];
-        }
-      }),
-    );
+        },
+        { ...this.sourceWait, keyOf: (addon) => addon.transportUrl },
+      );
+      run = { at: Date.now(), addons, answers: new Map() };
+      runs.delete(runKey);
+      if (runs.size >= 20) runs.delete(runs.keys().next().value);
+      runs.set(runKey, run);
+      const first = await ready;
+      run.answers = first.answers;
+      if (first.late.length)
+        done.then((answers) => {
+          if (runs.get(runKey) !== run) return;
+          let found = 0;
+          const failed = [];
+          for (const addon of first.late) {
+            const streams = answers.get(addon.transportUrl);
+            if (streams) found += streams.length;
+            else failed.push(addon.manifest.name);
+          }
+          this.onLateSources?.({ type, id, found, failed });
+        });
+    }
+    const failures = [];
+    const late = [];
+    const results = [];
+    for (const addon of run.addons) {
+      const answer = run.answers.get(addon.transportUrl);
+      if (answer === undefined) late.push(addon.manifest.name);
+      else if (answer === null) failures.push(addon.manifest.name);
+      else results.push(answer);
+    }
     const seen = new Set();
     const unique = [];
     for (const stream of results.flat()) {
@@ -1771,7 +1808,8 @@ export class Client {
       })),
       dropped,
       failures,
-      providers: addons.length,
+      late,
+      providers: run.addons.length,
       safety: analysis.safety,
       mode: prefs.mode,
       modeFallback: prefs.modeFallback,

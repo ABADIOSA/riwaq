@@ -51,13 +51,18 @@ import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
 import { IconButton, Busy, Empty, Modal, ScrollRow } from "./UI.jsx";
 import { TitleLogo } from "./TitleLogo.jsx";
-import { call } from "../lib/api.js";
+import { api, call } from "../lib/api.js";
 import {
   queueKey,
   releasedEpisodes,
   isCompleted,
 } from "../../core/library.mjs";
-import { arabicCount, EPISODES } from "../../core/arabic.mjs";
+import {
+  arabicCount,
+  EPISODES,
+  READY_SOURCES,
+  SOURCES,
+} from "../../core/arabic.mjs";
 import {
   CastRail,
   CollectionRails,
@@ -86,6 +91,9 @@ export default function Details({
     [shuffleAll, setShuffleAll] = useState(false),
     [result, setResult] = useState(null),
     [streamsLoading, setStreamsLoading] = useState(false),
+    // Sources from addons that answered after the list was shown.
+    [arrived, setArrived] = useState(0),
+    asked = useRef(null),
     [quality, setQuality] = useState(""),
     [showOutside, setShowOutside] = useState(false),
     [showDropped, setShowDropped] = useState(false),
@@ -166,9 +174,12 @@ export default function Details({
     if (!videoId || !showSources) return;
     let current = true;
     setResult(null);
+    setArrived(0);
     setSubs([]);
     setStreamsLoading(true);
-    call("streams", { type: meta.type, id: videoId, seriesId: meta.id })
+    // What was asked, so a late report or a refresh matches this request.
+    asked.current = { type: meta.type, id: videoId, seriesId: meta.id };
+    call("streams", asked.current)
       .then((r) => {
         if (current) setResult(r);
       })
@@ -182,6 +193,37 @@ export default function Details({
       current = false;
     };
   }, [videoId, request, showSources]);
+  // Late addons report once they settle: their sources wait behind a button
+  // so the list never moves under the pointer.
+  useEffect(() => {
+    if (!videoId || !showSources || !api?.on) return;
+    return api.on("sources", (info) => {
+      const now = asked.current;
+      if (!now || info?.type !== now.type || info?.id !== now.id) return;
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              late: [],
+              failures: [...(prev.failures || []), ...(info.failed || [])],
+            }
+          : prev,
+      );
+      if (info.found > 0) setArrived(info.found);
+    });
+  }, [videoId, showSources]);
+  const addArrived = async () => {
+    const now = asked.current;
+    if (!now) return;
+    try {
+      const next = await call("streams", { ...now, again: true });
+      if (asked.current !== now) return;
+      setResult(next);
+      setArrived(0);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
   // TMDB's stills and descriptions for the season on screen (with a key).
   useEffect(() => {
     if (meta.type !== "series" || loading) return;
@@ -302,7 +344,7 @@ export default function Details({
           </h2>
           <span>
             {result
-              ? `${shown.length} مصدر جاهز${dropped.length ? ` · ${dropped.length} مستبعد` : ""}`
+              ? `${arabicCount(shown.length, READY_SOURCES)}${dropped.length ? ` · ${dropped.length} مستبعد` : ""}`
               : "مرتبة بمحرّك رِواق: الجودة واللغة والموثوقية"}
           </span>
         </div>
@@ -555,6 +597,18 @@ export default function Details({
             </ul>
           )}
         </div>
+      )}
+      {arrived > 0 && (
+        <button className="secondary sources-arrived" onClick={addArrived}>
+          <RefreshCw size={15} />
+          وصل {arabicCount(arrived, SOURCES)} من إضافات تأخرت · أضفها للقائمة
+        </button>
+      )}
+      {result?.late?.length > 0 && (
+        <p className="sources-late" role="status">
+          ما زالت تبحث: {result.late.join("، ")}. نعرض اللي وصل، ونضيف مصادرها
+          إذا ردّت.
+        </p>
       )}
       {result?.failures.length > 0 && (
         <p className="inline-warning">لم تستجب: {result.failures.join("، ")}</p>

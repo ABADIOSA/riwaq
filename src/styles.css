@@ -926,6 +926,19 @@ button.secondary {
   margin-right: auto;
   font-size: 11px;
 }
+.sources-late {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin-top: 16px;
+}
+.sources-arrived {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  max-width: 100%;
+}
 .count-badge {
   border: 1px solid #ffffff12;
   background: #ffffff05;

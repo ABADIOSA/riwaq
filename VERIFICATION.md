@@ -25,6 +25,39 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.31.0 — sources without waiting for the slowest addon
+
+Why: the owner's real report showed addons that time out (NexoTV) or fail slowly. `getStreams` awaited every addon with `Promise.all`, so one dead addon held the whole source list for its full 16 s request timeout.
+
+What changed:
+
+- `core/source-wait.mjs` `gatherSources`: the list shows when every addon has answered, 4 s after the start once one addon has returned a stream, or (past 4 s with nothing) at the first stream plus 1.2 s. With no stream anywhere it still waits for every addon.
+- Late addons keep running and fill a per-title run kept five minutes. Main emits `sources` (title, count, failed names) to the main window only. Details shows "ما زالت تبحث" and then a button that re-ranks the run with `again: true`, making no new request. `playerSources` reuses the run.
+- Details matches a late report against the request it made (a ref). A mocked render first showed that comparing against the page's current `meta.type` accepted a report for the wrong kind after the page's metadata changed; this was fixed before commit.
+- TMDB rows now carry genre names from TMDB genre IDs (Arabic for an Arabic metadata language), so session moods match Riwaq's own rows. "فانتازيا" joined the "wonder" mood. This also gives PR #43's taste ranker something to rank on those rows.
+- The ready-sources count uses `arabicCount` (`READY_SOURCES`).
+
+Executed:
+
+- `npm test`: **471 passing, 0 failing** (462 + 9 in `tests/source-wait.test.mjs`). The new tests use real timers and fake addons. They cover:
+  - early display and the soft and grace limits;
+  - waiting for everyone when nothing is found;
+  - run reuse for five minutes;
+  - a late success and a late failure through `Client.getStreams`, with no addon address in the event;
+  - `again` making no new request while keeping existing keys valid;
+  - a replaced run staying quiet;
+  - main and preload wiring, and HUD exclusion;
+  - TMDB genre naming and mood matching.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render at 980×680 (popup) and 1440×960 (on the page):
+  - the late line appears;
+  - reports for another title or another kind are ignored;
+  - the button reads "وصل مصدران من إضافات تأخرت · أضفها للقائمة";
+  - pressing it shows 3 sources through one `again` call;
+  - 0 errors and 0 overflow.
+
+Not executed: timings against real addons on Windows, a real slow or dead addon in the packaged app, and the player's source panel with late results.
+
 ## 0.30.1 — first real diagnostic report
 
 The owner sent the first report from a real machine. It showed:
