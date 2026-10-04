@@ -16,6 +16,8 @@ import {
 } from "../../core/session.mjs";
 import { call } from "../lib/api.js";
 import { imgUrl } from "../lib/helpers.js";
+import { tasteProfile, tasteAffinity } from "../../core/taste.mjs";
+import { titleKey } from "../../core/library.mjs";
 import { arabicCount, MINUTES, WORKS } from "../../core/arabic.mjs";
 
 // The unit after a bare number: "5 دقائق", "45 دقيقة".
@@ -37,13 +39,37 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
   const [started, setStarted] = useState(Date.now());
   const generation = useRef(0),
     alive = useRef(true);
+  const tasteKey = JSON.stringify(state.settings.taste || {});
+  const profile = useMemo(() => tasteProfile(state.settings.taste), [tasteKey]);
+  useEffect(() => {
+    generation.current++;
+    setBusy(false);
+    setResult(null);
+    setExcluded([]);
+  }, [tasteKey]);
   const seedPool = useMemo(
     () =>
       sessionSeeds(
-        { favorites: state.favorites, progress: state.progress, rows },
+        {
+          favorites: state.favorites.filter(
+            (m) => !profile.hidden.has(titleKey(m)),
+          ),
+          progress: Object.fromEntries(
+            Object.entries(state.progress).filter(
+              ([, p]) => !profile.hidden.has(titleKey(p.meta)),
+            ),
+          ),
+          rows: rows.map((r) => ({
+            ...r,
+            metas: r.metas.filter((m) => !profile.hidden.has(titleKey(m))),
+          })),
+        },
         mood,
+      ).sort(
+        (a, b) =>
+          tasteAffinity(b.meta, profile) - tasteAffinity(a.meta, profile),
       ),
-    [state.favorites, state.progress, rows, mood],
+    [state.favorites, state.progress, rows, mood, profile],
   );
   const peek = seedPool.filter((s) => imgUrl(s.meta.poster)).slice(0, 3);
   useEffect(() => {
@@ -82,7 +108,13 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
     }
   };
   const plan =
-    result && planSession(result.candidates, { budget, mood, excluded });
+    result &&
+    planSession(result.candidates, {
+      budget,
+      mood,
+      excluded,
+      affinity: (meta) => tasteAffinity(meta, profile),
+    });
   useEffect(() => {
     if (!result) return;
     setStarted(Date.now());

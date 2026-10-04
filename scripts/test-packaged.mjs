@@ -69,8 +69,14 @@ try {
     websocket.addEventListener("error", j, { once: true });
   });
   const pending = new Map();
+  const rendererErrors = [];
   websocket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
+    if (message.method === "Runtime.exceptionThrown")
+      rendererErrors.push(
+        message.params.exceptionDetails.exception?.description ||
+          message.params.exceptionDetails.text,
+      );
     if (message.id) {
       const p = pending.get(message.id);
       pending.delete(message.id);
@@ -95,6 +101,7 @@ try {
     return result.result.value;
   };
   let loaded = false;
+  await send("Runtime.enable");
   for (let i = 0; i < 160; i++) {
     loaded = await evaluate(
       offlineMode
@@ -201,11 +208,29 @@ try {
     if (active.video.nativeVisible && active.video.siblingsClipped) break;
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
+  if (!active.video.nativeVisible || !active.video.siblingsClipped) {
+    const failure = await send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(
+      join(output, "native-failure.png"),
+      Buffer.from(failure.data, "base64"),
+    );
+    console.error({
+      rendererErrors,
+      dom: await evaluate(
+        `JSON.stringify({visibility:document.visibilityState,active:window.__packagedPlayer?.active,dialogs:[...document.querySelectorAll('dialog[open]')].map(d=>d.innerText.slice(0,300)),player:document.querySelector('.theater')?.className,hidden:document.querySelector('.theater')?.hidden,bounds:document.querySelector('.video-surface')?.getBoundingClientRect().toJSON()})`,
+      ),
+    });
+  }
   assert.ok(
     active.video.nativeVisible && active.video.siblingsClipped,
     JSON.stringify(active.video),
   );
   assert.ok(active.video.rectangle.width > 800);
+  assert.deepEqual(
+    rendererErrors,
+    [],
+    "No uncaught renderer errors during playback",
+  );
   await evaluate(`window.riwaq.call('stop')`);
   const result = {
     passed: true,

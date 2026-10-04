@@ -58,6 +58,7 @@ import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
 import RiwaqNav from "./components/RiwaqNav.jsx";
 import SessionHome from "./components/SessionHome.jsx";
+import TasteDiscovery from "./components/TasteDiscovery.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
 import DiscoverSections from "./components/DiscoverSections.jsx";
 import WhatsNew from "./components/WhatsNew.jsx";
@@ -1221,6 +1222,17 @@ export default function App() {
                                 onOpen={openStable}
                               />
                             )}
+                            {id === "taste" && ready && (
+                              <TasteDiscovery
+                                key={state.profiles?.active}
+                                rows={shownRows}
+                                state={state}
+                                update={update}
+                                onOpen={openStable}
+                                watched={finished}
+                                loading={loading}
+                              />
+                            )}
                             {id === "suggestions" && (
                               <TraktSuggestions
                                 trakt={traktState}
@@ -1301,16 +1313,29 @@ export default function App() {
                           </React.Fragment>
                         ))
                     ) : view === "discover" ? (
-                      <DiscoverSections
-                        tab={discoverTab}
-                        setTab={setDiscoverTab}
-                        rows={shownRows}
-                        tmdb={tmdbOn}
-                        loading={loading}
-                        onOpen={openStable}
-                        onMore={moreStable}
-                        onSettings={settingsStable}
-                      />
+                      <>
+                        {ready && (
+                          <TasteDiscovery
+                            key={state.profiles?.active}
+                            rows={shownRows}
+                            state={state}
+                            update={update}
+                            onOpen={openStable}
+                            watched={finished}
+                            loading={loading}
+                          />
+                        )}
+                        <DiscoverSections
+                          tab={discoverTab}
+                          setTab={setDiscoverTab}
+                          rows={shownRows}
+                          tmdb={tmdbOn}
+                          loading={loading}
+                          onOpen={openStable}
+                          onMore={moreStable}
+                          onSettings={settingsStable}
+                        />
+                      </>
                     ) : (
                       catalogRails
                     )}

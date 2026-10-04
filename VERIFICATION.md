@@ -1,5 +1,13 @@
 # Verification — Riwaq
 
+## 2026-10-03 — local taste compass (unreleased, based on 0.30.1 / 4e161e0)
+
+- **472 Node tests pass** (462 baseline + 10 meaningful taste tests), with Vite production build and repository Prettier validation. The tests cover genre aliases, bounded/validated storage, reasons, reversible feedback, future/watched/runtime exclusions, diverse and familiar discovery, interleaved catalogs, session affinity, profile isolation/stale owners, restart/backup sanitization, PIN gating, and home-section migration.
+- Real Electron renderer/main IPC test `node scripts/test-session-ui.mjs` passed with a local HTTP addon and isolated profile: 1440×1000 and 980×680 layouts; actual horizontal row scrolling; genre ranking and explanation; like/hide/undo/reset; saved preferences after reload; hidden works absent from generated sessions. Prior session, queue, navigation, settings and classic-layout assertions also pass. Zero renderer exceptions. Screenshots use synthetic artwork and titles.
+- A read-only request to Cinemeta's live movie top catalog returned HTTP 200; the first three records carried genres and runtimes. This is a narrow metadata-shape check, not verification of all addons, accounts or playable sources.
+- Windows MPV source smoke eventually passed three consecutive times: DPAPI, Y4M decoding, a visible clipped native surface at 2560×1440 and consumed queue item. Two initial attempts decoded video but did not observe a visible surface, and one stopped at the local fixture install request. No production playback fix is claimed: the cause of those intermittent failures remains unresolved. The runner now captures renderer exceptions and a failure screenshot/DOM snapshot to make recurrence diagnosable. Successful runs contained no renderer exceptions.
+- No new installer/release/upgrade test; no live account writes; no cross-device sync, HDR or multi-monitor validation. Local ranking is an explicit genre heuristic, not an ML model or evidence of higher recommendation quality than a commercial service.
+
 ## 2026-10-03 — Riwaq sessions and navigation (unreleased, based on 0.26.0)
 
 - **427 Node tests pass**, zero failures (419 merged baseline + 8 session tests). New coverage includes strict runtime parsing, measured remaining time, released/unwatched episodes, budget and intermission constraints, alternatives, metadata concurrency/cancellation/failure, malformed metadata, validated profile preferences and rejection of a late queue write after a profile switch.

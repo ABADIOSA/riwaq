@@ -32,6 +32,7 @@ import {
   History,
 } from "lucide-react";
 import ArtworkGallery from "./ArtworkGallery.jsx";
+import { TasteFeedback } from "./TasteDiscovery.jsx";
 import { AddToCollection } from "./Collections.jsx";
 import { titlePlaces } from "../../core/collections.mjs";
 import { trailerOf } from "../../core/credits.mjs";
@@ -699,6 +700,9 @@ export default function Details({
                 : "أضف إلى الطابور"}
             </button>
           </div>
+          {!loading && (
+            <TasteFeedback meta={meta} state={state} update={update} />
+          )}
           {!loading &&
             !(
               meta.type === "movie" &&

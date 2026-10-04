@@ -22,7 +22,8 @@ const metas = () =>
     name,
     type: "movie",
     runtime,
-    genres: ["Comedy", "Drama"],
+    genres:
+      runtime === 55 ? ["Mystery"] : runtime === 30 ? ["Drama"] : ["Comedy"],
     poster: `${base}/poster/${id}.svg`,
     releaseInfo: "2025",
     description: "عنوان تجريبي لاختبار تخطيط الجلسة في رِواق.",
@@ -214,6 +215,138 @@ try {
     deviceScaleFactor: 1,
     mobile: false,
   });
+  // Recommendations use real IPC and the same isolated catalog. These are
+  // local preferences, never writes to a connected tracker account.
+  await wait(
+    () => evaluate("document.querySelectorAll('.taste-pick').length===5"),
+    "taste fixture shelf",
+  );
+  await textClick("غموض", ".taste-genre-chips button");
+  await wait(
+    async () => (await call("init")).settings.taste.genres.includes("mystery"),
+    "genre persisted",
+  );
+  await wait(
+    () =>
+      evaluate(
+        "document.querySelector('.taste-pick').dataset.titleId==='session:last-train'",
+      ),
+    "mystery recommendation first",
+  );
+  assert.ok(
+    await evaluate(
+      "document.querySelector('.taste-reason').textContent.includes('غموض')",
+    ),
+  );
+  await textClick("إغلاق التخصيص", ".taste-customize");
+  for (const [width, height] of [
+    [1440, 1000],
+    [980, 680],
+  ]) {
+    await send("Emulation.setDeviceMetricsOverride", {
+      width,
+      height,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    await evaluate(
+      "document.querySelector('.taste-discovery').scrollIntoView({block:'start'})",
+    );
+    await pause(300);
+    assert.ok(
+      await evaluate("document.documentElement.scrollWidth<=innerWidth+1"),
+    );
+    await screenshot(`taste-${width}`);
+    if (width === 980) {
+      const moved = await evaluate(
+        "(()=>{const row=document.querySelector('.taste-row');row.scrollLeft=-150;return row.scrollLeft<0;})()",
+      );
+      assert.ok(moved, "recommendation row actually scrolls within its bounds");
+      await evaluate("document.querySelector('.taste-row').scrollLeft=0");
+    }
+  }
+  await send("Emulation.setDeviceMetricsOverride", {
+    width: 1440,
+    height: 1000,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await textClick("أحببته", ".taste-pick:first-child .taste-feedback button");
+  await wait(
+    async () =>
+      (await call("init")).settings.taste.feedback.some(
+        (f) => f.id === "session:last-train" && f.value === "like",
+      ),
+    "like persisted",
+  );
+  await wait(
+    () =>
+      evaluate(
+        "!document.querySelector('.taste-pick[data-title-id=\"session:last-train\"]')",
+      ),
+    "liked seed leaves discovery shelf",
+  );
+  const hiddenTitle = await evaluate(
+    "document.querySelector('.taste-pick').dataset.titleId",
+  );
+  await textClick(
+    "لا تقترحه",
+    ".taste-pick:first-child .taste-feedback button",
+  );
+  await wait(
+    () =>
+      evaluate(
+        `!document.querySelector('.taste-pick[data-title-id="${hiddenTitle}"]')`,
+      ),
+    "hidden suggestion removed",
+  );
+  await click(".session-build");
+  await wait(
+    () => evaluate("document.querySelectorAll('.session-pick').length>0"),
+    "session honors feedback",
+  );
+  const hiddenName = metas().find((m) => m.id === hiddenTitle).name;
+  assert.ok(
+    await evaluate(
+      `![...document.querySelectorAll('.session-pick-copy > button')].some(b=>b.textContent===${JSON.stringify(hiddenName)})`,
+    ),
+  );
+  await textClick("اضبط ذوقك", ".taste-customize");
+  await click(".taste-manage summary");
+  await wait(
+    () =>
+      evaluate("document.querySelectorAll('.taste-history > div').length===2"),
+    "feedback history",
+  );
+  await click(".taste-history > div:first-child button");
+  await wait(
+    async () =>
+      !(await call("init")).settings.taste.feedback.some(
+        (f) => f.id === hiddenTitle,
+      ),
+    "hide undone",
+  );
+  await evaluate("window.__beforeTasteReload=true");
+  await send("Page.reload");
+  await wait(
+    () =>
+      evaluate(
+        "!window.__beforeTasteReload && document.querySelectorAll('.taste-pick').length===4",
+      ),
+    "taste survives reload",
+  );
+  assert.ok((await call("init")).settings.taste.genres.includes("mystery"));
+  await textClick("اضبط ذوقك", ".taste-customize");
+  await textClick("ابدأ ذوقي", ".taste-manage > button");
+  await textClick("نعم، امسحها", ".taste-reset button");
+  await wait(
+    async () => (await call("init")).settings.taste.feedback.length === 0,
+    "taste reset",
+  );
+  await wait(
+    () => evaluate("document.querySelectorAll('.taste-pick').length===5"),
+    "reset refreshes recommendations",
+  );
   await click(".session-build");
   await wait(
     () => evaluate("document.querySelectorAll('.session-pick').length>0"),
@@ -335,6 +468,9 @@ try {
       "settings reachable",
       "classic fallback and new design switch",
       "budget persists after reload",
+      "taste genre ranking, reasons, like, hide, undo, reset and reload persistence through IPC",
+      "hidden taste titles excluded from generated sessions",
+      "taste layouts at 1440×1000 and 980×680",
     ],
     errors,
   };

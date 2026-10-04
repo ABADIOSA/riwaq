@@ -14,6 +14,7 @@ import "./window.css";
 import "./hero.css";
 import "./smart.css";
 import "./session.css";
+import "./taste.css";
 import { watchErrors } from "./lib/diagnostics.js";
 
 // Recent interface errors for the diagnostic report (Settings → النظام).

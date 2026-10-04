@@ -23,6 +23,7 @@ import {
 import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
+import { editTaste } from "./taste.mjs";
 import { parseReleaseDates } from "./countdown.mjs";
 import {
   fillOverviews,
@@ -465,6 +466,14 @@ export class Client {
   }
   settings(input) {
     this.state.settings = safeSettings(input, this.state.settings);
+    this.persist();
+    return this.publicState();
+  }
+  tasteEdit(input) {
+    this.profiles.gate("library");
+    if (input?.profileId !== this.profiles.store.active)
+      throw new Error("تغير الملف الشخصي؛ أعد اختيار ذوقك في الملف الحالي");
+    this.state.settings.taste = editTaste(this.state.settings.taste, input);
     this.persist();
     return this.publicState();
   }

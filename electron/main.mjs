@@ -1100,6 +1100,7 @@ const methods = {
     return true;
   },
   favorite: (a) => client.favorite(a),
+  tasteEdit: (a) => client.tasteEdit(a),
   queueEdit: (a) => client.queueEdit(a),
   historyEdit: (a) => {
     const touched = Array.isArray(a?.videoIds) ? a.videoIds : [a?.videoId];
