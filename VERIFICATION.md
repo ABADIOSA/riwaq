@@ -50,6 +50,50 @@ Executed:
 
 Not executed: a real addon's long list on Windows.
 
+### Stability review before release (same version)
+
+The owner asked for a full review before merging. Two code-review passes ran:
+
+- one over everything since 0.30.1;
+- one over the whole of `electron/main.mjs`, `electron/player.mjs`, `core/client.mjs`, `core/hud.mjs` and `electron/video-host.mjs`, for crashes, races, leaks and null access.
+
+Fixed:
+
+1. **Addon health and removal (shipped broken in 0.30.1–0.31.1):** stored addons have no `key`, so health results never matched the page, and "احذف المتوقفة" / "عطّل اللي ما تستجيب" did nothing. The earlier test passed only because its fixtures added a synthetic key. `probeAddons` now fills `keyFor(transportUrl)`, `removeAddons` matches it, and a new test uses stored-shape addons with `publicState()` keys.
+2. **Two close plays spawned two MPVs:** a double click, or a pick during failover or autoplay, left one MPV unowned. Starts are now serialized by a token.
+3. **Shutdown error dialog:** MPV exiting after the window closed called `isFullScreen()` on a destroyed window. Fixed with a guard.
+4. **Unresponsive MPV pipe:** MPV kept playing with no control. It is now killed.
+5. **Spawn errors:** a failed spawn kept a dead child, and a later kill error was misreported. Both fixed.
+6. **Auto-skip:** it sent a seek on every frame while inside a segment. It now sends one per entry.
+7. **Secondary subtitle:** a hard-coded track ID 2 was used. It now uses MPV's own ID.
+8. **Subtitle cache:** a list was cached when every addon failed. That no longer happens.
+9. **Unbounded maps:** the streams, subtitles and metas maps grew without limit. They are now bounded.
+10. **Source runs:**
+    - a reuse during an in-flight run returned an empty list, and now waits;
+    - a run was reused after addon changes, and is now replaced;
+    - expired runs were never freed, and are now pruned;
+    - the late count included duplicates and rejects, and now counts only new kept sources.
+11. **From the PR #43 review:**
+    - TMDB rows dropped the full release date, so this year's upcoming films passed the taste shelf's future check;
+    - session seeds were ordered by taste alone, and now keep their origin bands, with affinity computed once and rows sliced to what is read;
+    - the taste key is memoized.
+12. **Sources view:**
+    - addon headings repeated when a source moved out of its run;
+    - the search tools vanished while a filter was still on;
+    - "يعرض" now uses `arabicCount`.
+
+Rejected after checking: the claim that taste sorting drops in-progress titles from a session. `sessionSeeds` cuts to 18 before the sort and `prepareSession` reads every seed, so nothing was dropped. Bands were kept anyway.
+
+Not changed: progress is still persisted every 5 s during a viewing. Debouncing it trades crash safety for speed, and needs measuring on Windows first.
+
+Executed after the fixes:
+
+- `npm test`: **500 passing, 0 failing** (491 + 4 source-run and late-count tests + 1 stored-shape addon test + 4 player tests).
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge renders of the sources tools, late sources, the order switch and Sorting page, the Discover taste shelf and the session home were re-run at 980×680 and 1440×960: 0 errors, 0 overflow.
+
+Not executed: any of the player fixes against a real MPV on Windows (double-click play, closing during a viewing, a slow pipe). The player tests use the real `Player` class with stubbed `stop`/`send`, plus source checks.
+
 ## 0.31.1 — addon order that keeps each addon's own order
 
 The owner reported that sources did not follow their addons' order.

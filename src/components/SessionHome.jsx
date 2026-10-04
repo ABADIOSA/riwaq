@@ -39,7 +39,11 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
   const [started, setStarted] = useState(Date.now());
   const generation = useRef(0),
     alive = useRef(true);
-  const tasteKey = JSON.stringify(state.settings.taste || {});
+  // Keyed by content: a state update that leaves the taste alone keeps it.
+  const tasteKey = useMemo(
+    () => JSON.stringify(state.settings.taste || {}),
+    [state.settings.taste],
+  );
   const profile = useMemo(() => tasteProfile(state.settings.taste), [tasteKey]);
   useEffect(() => {
     generation.current++;
@@ -47,30 +51,34 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
     setResult(null);
     setExcluded([]);
   }, [tasteKey]);
-  const seedPool = useMemo(
-    () =>
-      sessionSeeds(
-        {
-          favorites: state.favorites.filter(
-            (m) => !profile.hidden.has(titleKey(m)),
-          ),
-          progress: Object.fromEntries(
-            Object.entries(state.progress).filter(
-              ([, p]) => !profile.hidden.has(titleKey(p.meta)),
-            ),
-          ),
-          rows: rows.map((r) => ({
-            ...r,
-            metas: r.metas.filter((m) => !profile.hidden.has(titleKey(m))),
-          })),
-        },
-        mood,
-      ).sort(
-        (a, b) =>
-          tasteAffinity(b.meta, profile) - tasteAffinity(a.meta, profile),
-      ),
-    [state.favorites, state.progress, rows, mood, profile],
-  );
+  const seedPool = useMemo(() => {
+    const shown = (m) => !profile.hidden.has(titleKey(m));
+    const seeds = sessionSeeds(
+      {
+        favorites: state.favorites.filter(shown),
+        progress: Object.fromEntries(
+          Object.entries(state.progress).filter(([, p]) => shown(p.meta)),
+        ),
+        // sessionSeeds reads at most 30 rows and 12 titles of each.
+        rows: rows.slice(0, 30).map((r) => ({
+          ...r,
+          metas: (r.metas || []).filter(shown).slice(0, 12),
+        })),
+      },
+      mood,
+    );
+    // Taste orders titles inside each origin (continue, library, rows), so
+    // unfinished and saved titles keep their place ahead of discoveries.
+    const band = { continue: 0, library: 1 };
+    const score = new Map(
+      seeds.map((seed) => [seed, tasteAffinity(seed.meta, profile)]),
+    );
+    return seeds.sort(
+      (a, b) =>
+        (band[a.origin] ?? 2) - (band[b.origin] ?? 2) ||
+        score.get(b) - score.get(a),
+    );
+  }, [state.favorites, state.progress, rows, mood, profile]);
   const peek = seedPool.filter((s) => imgUrl(s.meta.poster)).slice(0, 3);
   useEffect(() => {
     alive.current = true;

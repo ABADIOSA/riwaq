@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 import {
   SOURCE_RUN_TTL,
   gatherSources,
+  pruneRuns,
   reusableRun,
 } from "../core/source-wait.mjs";
+import { addonSections } from "../core/source-view.mjs";
 import {
   TMDB_GENRES,
   tmdbGenreNames,
@@ -250,4 +252,104 @@ test("Riwaq's TMDB rows carry genre names, so moods and tastes can match them", 
     source("core/client.mjs"),
     /genres: tmdbGenreNames\(item\.genres, genreLanguage\)/,
   );
+});
+
+test("stability: a request that reuses a run still out waits for it, never an empty run", async () => {
+  const { c, asked } = sourcesClient({ fast: 30, slow: 30, dead: 30 });
+  const first = c.getStreams({ type: "movie", id: "tt3" });
+  // Asked again before any addon answered (the order switch, the player).
+  const again = await c.getStreams({ type: "movie", id: "tt3", again: true });
+  assert.deepEqual(again.late, []);
+  assert.equal(again.streams.length, 2);
+  assert.equal((await first).streams.length, 2);
+  assert.equal(asked.length, 3, "one search, not two");
+});
+
+test("stability: a run is not reused once the enabled addons change, and old runs are freed", async () => {
+  const { c, asked } = sourcesClient({ fast: 5, slow: 5, dead: 5 });
+  await c.getStreams({ type: "movie", id: "tt4" });
+  c.state.addons[1].enabled = false;
+  const again = await c.getStreams({ type: "movie", id: "tt4", again: true });
+  assert.equal(asked.length, 5, "the changed list was asked anew");
+  assert.ok(!again.streams.some((s) => s.provider === "Slow"));
+  const runs = new Map([
+    ["old", { at: 0 }],
+    ["new", { at: SOURCE_RUN_TTL }],
+  ]);
+  pruneRuns(runs, SOURCE_RUN_TTL + 1);
+  assert.deepEqual([...runs.keys()], ["new"]);
+  assert.equal(
+    reusableRun(new Map([["k", { at: 0, signature: "a" }]]), "k", 1, "b"),
+    null,
+  );
+});
+
+test("stability: a late count promises only sources the list will gain", async () => {
+  const delays = { fast: 5, slow: 150, dead: 5 };
+  const c = new Client({
+    load: () => ({
+      addons: ["fast", "slow"].map((id) => ({
+        transportUrl: `https://${id}.example/manifest.json`,
+        manifest: {
+          id,
+          name: id,
+          version: "1",
+          resources: ["stream"],
+          types: ["movie"],
+          catalogs: [],
+        },
+      })),
+    }),
+    save: () => {},
+    request: async (url) => {
+      const id = new URL(url).hostname.split(".")[0];
+      await wait(delays[id]);
+      const same = {
+        url: "https://cdn.example/same.mkv",
+        name: "x",
+        title: "Film.2024.1080p.WEB-DL.x264",
+      };
+      return {
+        streams:
+          id === "fast"
+            ? [same]
+            : [
+                same,
+                {
+                  url: "https://cdn.example/new.mkv",
+                  name: "x",
+                  title: "Film.2024.2160p.BluRay.x265",
+                },
+              ],
+      };
+    },
+  });
+  c.sourceWait = { soft: 30, grace: 10 };
+  const events = [];
+  c.onLateSources = (info) => events.push(info);
+  const first = await c.getStreams({ type: "movie", id: "tt5" });
+  assert.deepEqual(first.late, ["slow"]);
+  await wait(200);
+  assert.equal(events[0].found, 1, "the shared source is not counted");
+});
+
+test("stability: one heading per addon even when a source moved out of its run", () => {
+  const sections = addonSections([
+    { key: "r", provider: "AIO", addonKey: "a" },
+    { key: "t1", provider: "Torrentio", addonKey: "t" },
+    { key: "a2", provider: "AIO", addonKey: "a" },
+  ]);
+  assert.deepEqual(
+    sections.map((x) => [x.name, x.streams.map((s) => s.key)]),
+    [
+      ["AIO", ["r", "a2"]],
+      ["Torrentio", ["t1"]],
+    ],
+  );
+  const details = source("src/components/Details.jsx");
+  assert.match(details, /\(shown\.length > 4 \|\| narrowing\) &&/);
+  assert.match(details, /arabicCount\(visible\.length, SOURCES\)/);
+  // TMDB rows keep their full date, so this year's upcoming films count
+  // as not out yet.
+  assert.match(source("core/client.mjs"), /released: item\.released,/);
 });

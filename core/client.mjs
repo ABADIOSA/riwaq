@@ -77,7 +77,12 @@ import {
   traktMetas,
   traktRequest,
 } from "./collection-sources.mjs";
-import { gatherSources, reusableRun } from "./source-wait.mjs";
+import {
+  addonSignature,
+  gatherSources,
+  pruneRuns,
+  reusableRun,
+} from "./source-wait.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 import {
@@ -103,6 +108,25 @@ function subtitleFormat(url) {
     .match(/\.(srt|vtt|ass|ssa|sub)$/i);
   return ext ? ext[1].toUpperCase() : "";
 }
+/**
+ * Sets a key on a map that must not grow for the whole session: re-setting
+ * moves it to the newest end, and the oldest entries beyond `limit` go.
+ */
+function boundedSet(map, key, value, limit) {
+  map.delete(key);
+  map.set(key, value);
+  while (map.size > limit) map.delete(map.keys().next().value);
+}
+/** What makes two offers the same source, across addons. */
+const streamIdentity = (stream) =>
+  JSON.stringify([
+    stream.url,
+    stream.infoHash,
+    stream.fileIdx,
+    stream.externalUrl,
+    stream.ytId,
+    stream.behaviorHints?.proxyHeaders,
+  ]);
 export async function fetchJson(url, init = {}) {
   const { timeout = 16000, ...rest } = init;
   try {
@@ -350,7 +374,11 @@ export class Client {
     this.profiles.gate("addons");
     const drop = new Set(Array.isArray(keys) ? keys.map(String) : []);
     if (!drop.size) return this.publicState();
-    this.state.addons = this.state.addons.filter((a) => !drop.has(a.key));
+    // Stored addons carry no key: they are named by keyFor(transportUrl),
+    // as publicState and addonsHealth give them to the interface.
+    this.state.addons = this.state.addons.filter(
+      (a) => !drop.has(keyFor(a.transportUrl)),
+    );
     this.cache.clear();
     this.persist();
     return this.publicState();
@@ -905,7 +933,14 @@ export class Client {
           ...(item.backdrop
             ? { background: `https://image.tmdb.org/t/p/w1280${item.backdrop}` }
             : {}),
-          ...(item.released ? { releaseInfo: item.released.slice(0, 4) } : {}),
+          ...(item.released
+            ? {
+                releaseInfo: item.released.slice(0, 4),
+                // The full date, so "not out yet" checks see this year's
+                // upcoming films (the taste shelf, countdowns).
+                released: item.released,
+              }
+            : {}),
           ...(item.rating ? { imdbRating: item.rating.toFixed(1) } : {}),
           ...(item.genres?.length
             ? { genres: tmdbGenreNames(item.genres, genreLanguage) }
@@ -1538,7 +1573,7 @@ export class Client {
         );
         if (result.meta?.id) {
           const meta = await this.dataHub.enrich(result.meta);
-          this.metas.set(`${type}:${id}`, meta);
+          boundedSet(this.metas, `${type}:${id}`, meta, 400);
           return meta;
         }
       } catch {
@@ -1618,9 +1653,11 @@ export class Client {
     // within five minutes shows them without a new request.
     const runs = (this.sourceRuns ||= new Map());
     const runKey = `${type}:${id}`;
-    let run = again ? reusableRun(runs, runKey) : null;
-    if (!run) {
-      const { ready, done } = gatherSources(
+    const signature = addonSignature(addons);
+    let run = again ? reusableRun(runs, runKey, Date.now(), signature) : null;
+    if (run) await run.ready;
+    else {
+      const { ready, done, answers } = gatherSources(
         addons,
         async (addon) => {
           const response = await this.request(
@@ -1637,21 +1674,48 @@ export class Client {
         },
         { ...this.sourceWait, keyOf: (addon) => addon.transportUrl },
       );
-      run = { at: Date.now(), addons, answers: new Map() };
+      // The live answers go on the run at once, so a request that reuses it
+      // while it is still out waits on `ready` and never sees an empty run.
+      run = { at: Date.now(), addons, signature, answers, ready };
+      pruneRuns(runs);
       runs.delete(runKey);
       if (runs.size >= 20) runs.delete(runs.keys().next().value);
       runs.set(runKey, run);
       const first = await ready;
-      run.answers = first.answers;
       if (first.late.length)
-        done.then((answers) => {
+        done.then((all) => {
           if (runs.get(runKey) !== run) return;
-          let found = 0;
+          const lateKeys = new Set(first.late.map((a) => a.transportUrl));
+          // Count only what the list will gain: sources not already shown
+          // under another addon, and not rejected by the stream engine.
+          const seen = new Set();
+          for (const [key, streams] of all)
+            if (!lateKeys.has(key))
+              for (const stream of streams || [])
+                seen.add(streamIdentity(stream));
+          const fresh = [];
           const failed = [];
           for (const addon of first.late) {
-            const streams = answers.get(addon.transportUrl);
-            if (streams) found += streams.length;
-            else failed.push(addon.manifest.name);
+            const streams = all.get(addon.transportUrl);
+            if (!streams) failed.push(addon.manifest.name);
+            for (const stream of streams || []) {
+              const identity = streamIdentity(stream);
+              if (seen.has(identity)) continue;
+              seen.add(identity);
+              fresh.push(stream);
+            }
+          }
+          let found = 0;
+          try {
+            found = fresh.length
+              ? analyzeStreams(
+                  fresh,
+                  this.state.settings,
+                  this.requestContext(type, id),
+                ).kept.length
+              : 0;
+          } catch {
+            found = fresh.length;
           }
           this.onLateSources?.({ type, id, found, failed });
         });
@@ -1668,14 +1732,7 @@ export class Client {
     const seen = new Set();
     const unique = [];
     for (const stream of results.flat()) {
-      const identity = JSON.stringify([
-        stream.url,
-        stream.infoHash,
-        stream.fileIdx,
-        stream.externalUrl,
-        stream.ytId,
-        stream.behaviorHints?.proxyHeaders,
-      ]);
+      const identity = streamIdentity(stream);
       if (seen.has(identity)) continue;
       seen.add(identity);
       unique.push({ stream, identity });
@@ -1688,7 +1745,9 @@ export class Client {
     const ranked = analysis.kept.map((entry) => {
       const { stream, parsed } = entry;
       const key = keyFor(unique[entry.index].identity);
-      this.streams.set(key, { ...stream, type, videoId: id });
+      // Bounded: a long session lists many titles. Every list re-sets its
+      // own keys, so the sources on screen and the one playing stay.
+      boundedSet(this.streams, key, { ...stream, type, videoId: id }, 4000);
       const supported = !!(
         (typeof stream.url === "string" && /^https?:\/\//i.test(stream.url)) ||
         (typeof stream.infoHash === "string" &&
@@ -1764,7 +1823,12 @@ export class Client {
       await this.services.homeStreams({ type, id }).catch(() => [])
     ).map((copy) => {
       const key = keyFor(`home|${copy.server.id}|${copy.itemId}`);
-      this.streams.set(key, { url: copy.url, type, videoId: id, home: true });
+      boundedSet(
+        this.streams,
+        key,
+        { url: copy.url, type, videoId: id, home: true },
+        4000,
+      );
       const resolution = Number.parseInt(copy.label.resolution) || 0;
       return {
         key,
@@ -1855,6 +1919,7 @@ export class Client {
     const providers = this.enabled().filter((a) =>
       accepts(a.manifest, "subtitles", type, id),
     );
+    let answered = 0;
     const results = await Promise.all(
       providers.map(async (a) => {
         try {
@@ -1865,6 +1930,7 @@ export class Client {
                 { timeout: 10000 },
               )
             ).subtitles || [];
+          answered++;
           return found.map((s) => ({ ...s, provider: a.manifest.name }));
         } catch {
           return [];
@@ -1881,8 +1947,13 @@ export class Client {
       .map((s) => {
         const key = keyFor(s.url);
         const label = subtitleLabel(s);
-        this.subtitles.set(key, s.url);
-        this.subtitleInfo.set(key, { lang: s.lang || "und", label });
+        boundedSet(this.subtitles, key, s.url, 3000);
+        boundedSet(
+          this.subtitleInfo,
+          key,
+          { lang: s.lang || "und", label },
+          3000,
+        );
         return {
           key,
           lang: s.lang || "und",
@@ -1891,9 +1962,13 @@ export class Client {
           format: subtitleFormat(s.url),
         };
       });
-    if (this.subtitleLists.size > 20)
-      this.subtitleLists.delete(this.subtitleLists.keys().next().value);
-    this.subtitleLists.set(cacheKey, { at: Date.now(), list });
+    // A list is kept for ten minutes only when some addon answered: when
+    // every one failed (a cold start, a network blip), the next ask retries.
+    if (answered > 0 || !providers.length) {
+      if (this.subtitleLists.size > 20)
+        this.subtitleLists.delete(this.subtitleLists.keys().next().value);
+      this.subtitleLists.set(cacheKey, { at: Date.now(), list });
+    }
     return list;
   }
 

@@ -339,6 +339,9 @@ export default function Details({
     chips: sourceChips,
   });
   const narrowed = visible.length !== shown.length;
+  // The tools stay while a search or chip is on, even if the list shrank
+  // under five (a quality pick), so the viewer can always see and clear it.
+  const narrowing = !!sourceQuery.trim() || sourceChips.length > 0;
   const counts = chipCounts(shown);
   const grouped = result?.order === "addon";
   const sections = grouped
@@ -460,7 +463,7 @@ export default function Details({
         <Busy text="نبحث في إضافاتك عن المصادر…" />
       ) : shown.length ? (
         <>
-          {shown.length > 4 && (
+          {(shown.length > 4 || narrowing) && (
             <div className="source-tools">
               <label className="source-search">
                 <Search size={15} />
@@ -495,7 +498,7 @@ export default function Details({
               </ScrollRow>
               {narrowed && (
                 <small className="source-count" role="status">
-                  يعرض {visible.length} من {shown.length}
+                  يعرض {arabicCount(visible.length, SOURCES)} من {shown.length}
                 </small>
               )}
             </div>

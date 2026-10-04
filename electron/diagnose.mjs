@@ -23,6 +23,7 @@ import {
   runCheck,
   sanitize,
 } from "../core/diagnose.mjs";
+import { keyFor } from "../core/protocol.mjs";
 
 const GB = 1024 ** 3;
 const round = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
@@ -105,7 +106,13 @@ export async function probeAddons(
   { fetcher = fetch, version = "" } = {},
 ) {
   const headers = { "User-Agent": `Riwaq/${version} (health)` };
-  const results = await pool(addons, 6, async (a) => {
+  // Stored addons carry no key: they are named by keyFor(transportUrl), as
+  // publicState gives them to the interface and removeAddons matches them.
+  const list = (addons || []).map((a) => ({
+    ...a,
+    key: a.key || keyFor(a.transportUrl),
+  }));
+  const results = await pool(list, 6, async (a) => {
     let status, ms;
     try {
       const r = await probe(fetcher, a.transportUrl, {
@@ -124,7 +131,7 @@ export async function probeAddons(
       ...classifyHealth({ status, ms, local: isLocalAddon(a.transportUrl) }),
     };
   });
-  return { results, duplicates: duplicateAddons(addons) };
+  return { results, duplicates: duplicateAddons(list) };
 }
 
 /**

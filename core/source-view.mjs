@@ -72,21 +72,23 @@ export function chipCounts(streams = []) {
 }
 
 /**
- * Consecutive sources from one addon copy as a section, in list order. A
- * source with no addon (the viewer's own home-server copy) gets its own.
+ * One section per addon copy, in the order each first appears. A source
+ * moved out of its addon's run (the series' remembered source, sources
+ * outside a saved filter) still joins its addon's one section, so a heading
+ * never repeats. The viewer's own home-server copy has its own section.
  */
 export function addonSections(streams = []) {
-  const sections = [];
+  const sections = new Map();
   for (const s of streams) {
     const id = s.home ? "home" : s.addonKey || s.addonId || s.provider || "";
-    const last = sections[sections.length - 1];
-    if (last && last.id === id) last.streams.push(s);
+    const section = sections.get(id);
+    if (section) section.streams.push(s);
     else
-      sections.push({
+      sections.set(id, {
         id,
         name: s.home ? "نسختك على خادمك" : s.provider || s.name || "مصدر",
         streams: [s],
       });
   }
-  return sections;
+  return [...sections.values()];
 }
