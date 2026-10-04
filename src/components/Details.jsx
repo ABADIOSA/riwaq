@@ -212,6 +212,18 @@ export default function Details({
       if (info.found > 0) setArrived(info.found);
     });
   }, [videoId, showSources]);
+  // Switching the order re-ranks the answers already in hand: no new search.
+  const reorder = async (order) => {
+    const now = asked.current;
+    const saved = await update("settings", { streamOrder: order });
+    if (!saved || !now) return;
+    try {
+      const next = await call("streams", { ...now, again: true });
+      if (asked.current === now) setResult(next);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
   const addArrived = async () => {
     const now = asked.current;
     if (!now) return;
@@ -346,9 +358,22 @@ export default function Details({
             {result
               ? `${arabicCount(shown.length, READY_SOURCES)}${dropped.length ? ` · ${dropped.length} مستبعد` : ""}`
               : "مرتبة بمحرّك رِواق: الجودة واللغة والموثوقية"}
+            {result &&
+              (result.order === "addon"
+                ? " · بترتيب إضافاتك"
+                : " · بترتيب رِواق")}
           </span>
         </div>
         <div className="button-row">
+          <select
+            aria-label="ترتيب المصادر"
+            title="ترتيب المصادر"
+            value={settings.streamOrder === "addon" ? "addon" : "riwaq"}
+            onChange={(e) => reorder(e.target.value)}
+          >
+            <option value="riwaq">ترتيب رِواق</option>
+            <option value="addon">ترتيب إضافاتي</option>
+          </select>
           <select
             aria-label="فلترة جودة المصادر"
             value={quality}

@@ -286,3 +286,132 @@ test("the client applies the viewer's filter and badges to real addon replies", 
   assert.equal(result.streams[1].matches, false);
   assert.equal(result.streams[0].addonId, "one");
 });
+
+test("addon order keeps each addon's own order, unless Riwaq's is asked for inside", () => {
+  // Riwaq ranked these by score; the addons sent them in `order`.
+  const ranked = [
+    s("b-4k", { addonId: "b", addonKey: "kb", order: 4, score: 90 }),
+    s("a-1080", { addonId: "a", addonKey: "ka", order: 1, score: 80 }),
+    s("b-720", { addonId: "b", addonKey: "kb", order: 3, score: 40 }),
+    s("a-4k", { addonId: "a", addonKey: "ka", order: 0, score: 30 }),
+  ];
+  const installed = [
+    { id: "a", key: "ka" },
+    { id: "b", key: "kb" },
+  ];
+  const own = applyStreamPrefs(ranked, { streamOrder: "addon" }, installed);
+  assert.deepEqual(
+    own.streams.map((x) => x.key),
+    ["a-4k", "a-1080", "b-720", "b-4k"],
+    "addon by addon, each in the order it sent",
+  );
+  const riwaqInside = applyStreamPrefs(
+    ranked,
+    { streamOrder: "addon", streamOrderInside: "riwaq" },
+    installed,
+  );
+  assert.deepEqual(
+    riwaqInside.streams.map((x) => x.key),
+    ["a-1080", "a-4k", "b-4k", "b-720"],
+  );
+  // The viewer's priority wins over install order.
+  const placed = applyStreamPrefs(
+    ranked,
+    { streamOrder: "addon", addonPriority: ["b"] },
+    installed,
+  );
+  assert.deepEqual(
+    placed.streams.map((x) => x.key),
+    ["b-720", "b-4k", "a-4k", "a-1080"],
+  );
+  // Riwaq's order is untouched by any of this.
+  assert.deepEqual(
+    applyStreamPrefs(ranked, {}, installed).streams.map((x) => x.key),
+    ranked.map((x) => x.key),
+  );
+});
+
+test("two copies of one addon (same ID) stay apart, in install order", () => {
+  const ranked = [
+    s("second-1", { addonId: "aio", addonKey: "k2", order: 2 }),
+    s("first-1", { addonId: "aio", addonKey: "k1", order: 0 }),
+    s("other", { addonId: "x", addonKey: "kx", order: 4 }),
+    s("second-0", { addonId: "aio", addonKey: "k2", order: 1 }),
+  ];
+  const result = applyStreamPrefs(
+    ranked,
+    { streamOrder: "addon", addonPriority: ["x", "aio"] },
+    [
+      { id: "aio", key: "k1" },
+      { id: "x", key: "kx" },
+      { id: "aio", key: "k2" },
+    ],
+  );
+  assert.deepEqual(
+    result.streams.map((x) => x.key),
+    ["other", "first-1", "second-0", "second-1"],
+  );
+  assert.equal(DEFAULT_SETTINGS.streamOrderInside, "addon");
+  assert.equal(
+    safeSettings({ streamOrderInside: "riwaq" }).streamOrderInside,
+    "riwaq",
+  );
+  assert.equal(
+    safeSettings({ streamOrderInside: "random" }).streamOrderInside,
+    "addon",
+  );
+});
+
+test("the client sends sources in the viewer's addon order, as each addon sorted them", async () => {
+  const make = (id) => ({
+    transportUrl: `https://${id}.example/manifest.json`,
+    manifest: {
+      id,
+      name: id.toUpperCase(),
+      version: "1",
+      resources: ["stream"],
+      types: ["movie"],
+      catalogs: [],
+    },
+  });
+  const replies = {
+    // Each addon sorts by its own rules: here, smaller files first.
+    one: [
+      "Film.2024.720p.WEB-DL.x264-ONE",
+      "Film.2024.2160p.BluRay.REMUX.HEVC.DV-ONE",
+    ],
+    two: ["Film.2024.1080p.WEB-DL.x264-TWO", "Film.2024.2160p.WEB-DL.HEVC-TWO"],
+  };
+  const client = new Client({
+    load: () => ({ addons: [make("one"), make("two")] }),
+    save: () => {},
+    request: async (url) => {
+      const id = new URL(url).hostname.split(".")[0];
+      return {
+        streams: replies[id].map((title, i) => ({
+          url: `https://cdn.example/${id}/${i}.mkv`,
+          name: id,
+          title,
+        })),
+      };
+    },
+  });
+  const riwaq = await client.getStreams({ type: "movie", id: "tt1" });
+  assert.equal(riwaq.order, "riwaq");
+  assert.match(riwaq.streams[0].title, /2160p/);
+  client.state.settings = safeSettings(
+    { streamOrder: "addon", addonPriority: ["two"] },
+    client.state.settings,
+  );
+  const mine = await client.getStreams({
+    type: "movie",
+    id: "tt1",
+    again: true,
+  });
+  assert.equal(mine.order, "addon");
+  assert.deepEqual(
+    mine.streams.map((x) => x.title),
+    [...replies.two, ...replies.one],
+  );
+  assert.ok(mine.streams.every((x) => /^[\w-]+$/.test(x.addonKey)));
+});

@@ -1323,6 +1323,7 @@ export default function App() {
                             onOpen={openStable}
                             watched={finished}
                             loading={loading}
+                            collapsed
                           />
                         )}
                         <DiscoverSections

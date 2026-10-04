@@ -5,7 +5,10 @@
  * - source mode: every source, direct and debrid links only, or torrents only;
  * - saved stream filters, one of them active: a stream must match every
  *   category the filter sets, a blank category accepts anything;
- * - result order: Riwaq's ranking, or the viewer's addon order.
+ * - result order: Riwaq's ranking, or the viewer's addon order. In addon
+ *   order, each addon's results keep the order the addon sent them in (its
+ *   own sorting, as in Stremio) unless the viewer asks for Riwaq's ranking
+ *   inside each addon.
  *
  * Nothing is lost silently. When the mode or the filter would leave nothing,
  * every stream stays and the reply says so; streams outside the active filter
@@ -49,6 +52,7 @@ export const FILTER_OPTIONS = {
 export const FILTER_LIMIT = 12;
 export const SOURCE_MODES = ["all", "direct", "p2p"];
 export const STREAM_ORDERS = ["riwaq", "addon"];
+export const INSIDE_ORDERS = ["addon", "riwaq"];
 const GIB = 1024 ** 3;
 
 const text = (value, max) =>
@@ -168,9 +172,11 @@ const inMode = (stream, mode) =>
 
 /**
  * Applies mode, filter and order to the ranked streams. `streams` carry the
- * engine's `score` and their addon's `addonId`; `addonOrder` is the installed
- * addons' IDs in install order, the fallback for addons the viewer did not
- * place.
+ * engine's `score`, their addon's `addonId` and `addonKey`, and `order`, their
+ * place in the replies as the addons sent them. `addonOrder` lists the
+ * installed addons in install order, as `{ id, key }` (or bare IDs): the
+ * fallback for addons the viewer did not place, and what keeps two copies of
+ * one addon (same ID) apart.
  */
 export function applyStreamPrefs(streams, settings = {}, addonOrder = []) {
   const mode = SOURCE_MODES.includes(settings.sourceMode)
@@ -182,17 +188,37 @@ export function applyStreamPrefs(streams, settings = {}, addonOrder = []) {
   const modeFallback = mode !== "all" && !list.length && streams.length > 0;
   if (modeFallback) list = [...streams];
   if (settings.streamOrder === "addon") {
+    const installed = (Array.isArray(addonOrder) ? addonOrder : []).map((a) =>
+      typeof a === "string" ? { id: a, key: "" } : { id: a?.id, key: a?.key },
+    );
     const priority = [
       ...cleanAddonPriority(settings.addonPriority),
-      ...addonOrder,
+      ...installed.map((a) => a.id),
     ];
-    const rank = (s) => {
+    const byId = (s) => {
       const i = priority.indexOf(s.addonId);
       return i < 0 ? priority.length : i;
     };
+    const byCopy = (s) => {
+      const i = s.addonKey
+        ? installed.findIndex((a) => a.key === s.addonKey)
+        : -1;
+      return i < 0 ? installed.length : i;
+    };
+    const inside = settings.streamOrderInside === "riwaq" ? "riwaq" : "addon";
+    const within = (entry) =>
+      inside === "addon" && Number.isInteger(entry.s.order)
+        ? entry.s.order
+        : entry.i;
     list = list
       .map((s, i) => ({ s, i }))
-      .sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i)
+      .sort(
+        (a, b) =>
+          byId(a.s) - byId(b.s) ||
+          byCopy(a.s) - byCopy(b.s) ||
+          within(a) - within(b) ||
+          a.i - b.i,
+      )
       .map(({ s }) => s);
   }
   let matched = list.length;

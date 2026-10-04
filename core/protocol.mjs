@@ -101,6 +101,7 @@ export const DEFAULT_SETTINGS = {
   // picker and its badges look.
   sourceMode: "all",
   streamOrder: "riwaq",
+  streamOrderInside: "addon",
   addonPriority: [],
   streamFilters: [],
   activeFilter: "",
@@ -402,6 +403,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     screensaver: [0, 1, 3, 5, 10, 15],
     sourceMode: ["all", "direct", "p2p"],
     streamOrder: ["riwaq", "addon"],
+    streamOrderInside: ["addon", "riwaq"],
     pickerLayout: ["detailed", "compact"],
     spoilerGuard: ["off", "titles"],
     hudLayout: ["full", "minimal", "cinema", "custom"],
