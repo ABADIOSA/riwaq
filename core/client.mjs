@@ -23,7 +23,6 @@ import {
 import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
-import { gatherSources, reusableRun } from "./source-wait.mjs";
 import { parseReleaseDates } from "./countdown.mjs";
 import {
   fillOverviews,
@@ -77,6 +76,7 @@ import {
   traktMetas,
   traktRequest,
 } from "./collection-sources.mjs";
+import { gatherSources, reusableRun } from "./source-wait.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 import {
