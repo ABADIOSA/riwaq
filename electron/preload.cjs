@@ -60,6 +60,7 @@ const allowed = new Set([
   "updateAddon",
   "settings",
   "favorite",
+  "tasteEdit",
   "queueEdit",
   "historyEdit",
   "episodes",

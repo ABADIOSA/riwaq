@@ -16,6 +16,7 @@ import { cleanCountdowns } from "./countdown.mjs";
 import { cleanSeriesMemory } from "./series-memory.mjs";
 import { cleanSkipExcept } from "./skip-segments.mjs";
 import { cleanSeenVersion } from "./whats-new.mjs";
+import { cleanTaste } from "./taste.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -41,6 +42,7 @@ export const DEFAULT_SETTINGS = {
   interfaceStyle: "riwaq",
   sessionBudget: 90,
   sessionMood: "any",
+  taste: cleanTaste({}),
   cardStyle: "glass",
   cardSize: "comfortable",
   showHero: true,
@@ -458,6 +460,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.skipExcept = cleanSkipExcept(input.skipExcept);
   if (input.seriesMemory && typeof input.seriesMemory === "object")
     next.seriesMemory = cleanSeriesMemory(input.seriesMemory);
+  if (input.taste && typeof input.taste === "object")
+    next.taste = cleanTaste(input.taste);
   if (Array.isArray(input.countdowns))
     next.countdowns = cleanCountdowns(input.countdowns);
   if (Array.isArray(input.hudHidden))

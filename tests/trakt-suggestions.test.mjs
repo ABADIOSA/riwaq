@@ -128,6 +128,7 @@ test("the suggestions section joins arrangements saved before it existed", () =>
     "hero",
     "countdowns",
     "continue",
+    "taste",
     "upnext",
     "suggestions",
     "catalogs",

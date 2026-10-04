@@ -231,7 +231,7 @@ export async function prepareSession(
 /** Pick up to three different titles, including a five-minute interval between them. */
 export function planSession(
   candidates,
-  { budget = 90, mood = "any", excluded = [] } = {},
+  { budget = 90, mood = "any", excluded = [], affinity = () => 0 } = {},
 ) {
   budget = Math.min(240, Math.max(15, Number(budget) || 90));
   const eligible = candidates
@@ -250,6 +250,7 @@ export function planSession(
         items.reduce(
           (sum, c) =>
             sum +
+            Math.min(12, Math.max(0, Number(affinity(c.meta)) || 0)) +
             (c.origin === "continue" ? 24 : c.origin === "library" ? 14 : 0),
           0,
         ) / items.length;
