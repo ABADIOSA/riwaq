@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.31.1-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.32.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -108,6 +108,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - Details compares the report with the request it made (a ref), never the current page, and shows a button: the list never reorders under the pointer.
   - `streams` with `again: true` (strictly boolean) re-ranks the remembered run without a new request; `playerSources` always uses it.
 - Riwaq's TMDB rows carry `genres` named from TMDB genre IDs (`TMDB_GENRES`, `tmdbGenreNames` in `core/collection-sources.mjs`): Arabic when the metadata language is Arabic, otherwise English. Combined series genres become both halves. No request is made for the names. Session moods match both languages.
+- Finding a source (`core/source-view.mjs`): above more than four sources, Details shows a search (`filterSources`, every word, Arabic folded, over `sourceText`) and quick chips (`SOURCE_CHIPS`: arabic, cached, hdr, direct, torrent; direct + torrent together mean either; chips with no source are not shown). In addon order, `addonSections` heads each run of one addon copy, and it can fold. All of this narrows the view only: "recommended" stays the ranked list's first source, and autoplay and failover never see it. A new sources request clears it.
 - Source failover (`core/failover.mjs`) replays the next ranked playable source from the same position, at most three times per title.
 - Settings are grouped like Harbor (`GROUPS` in `SettingsStudio.jsx`: account, watching, content, look, devices, system); a page is `[id, title, keywords, icon]`, and search spans every page.
 - Window (`windowFrame` native/hybrid/riwaq, `windowControls`, `frostTopBar`, `dragAnywhere`): a frame change applies on relaunch (`runningFrame` in main). Drag-anywhere is main polling the cursor between `windowDrag` start and end, and only from empty space. `setAppIcon` takes a PNG data URL of at most 512 px drawn by the renderer. Ambience wallpapers and logo images are HTTPS without credentials (`imageUrl`).

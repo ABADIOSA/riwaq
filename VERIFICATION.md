@@ -25,6 +25,31 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.32.0 — finding a source in a long list
+
+What changed:
+
+- `core/source-view.mjs` adds the source search (every word, Arabic folded) and five quick chips with counts. Direct and torrent together mean either. In addon order, one foldable section heads each run of one addon copy.
+- Details shows the tools above more than four sources. They filter only what is displayed: "recommended" stays the first ranked source, and autoplay and failover use the full list. A new request clears them.
+
+Executed:
+
+- `npm test`: **491 passing, 0 failing** (487 + 4 in `tests/source-view.test.mjs`). They cover:
+  - words, groups and qualities, and Arabic folding;
+  - chip combinations and counts;
+  - sections per addon copy and the home copy;
+  - the view-only wiring.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render at 980×680 (addon order) and 1440×960 (Riwaq order) with 14 sources from two addons:
+  - "remux" leaves 4, with "يعرض 4 من 14";
+  - "عربيه" finds the "عربية" source;
+  - "مخزّن" leaves 4, and adding "تورنت" leaves none with a clear button that restores all 14;
+  - folding AIOStreams leaves Torrentio's 6;
+  - the recommended mark stays on one source;
+  - 0 errors, and no page or dialog overflow.
+
+Not executed: a real addon's long list on Windows.
+
 ## 0.31.1 — addon order that keeps each addon's own order
 
 The owner reported that sources did not follow their addons' order.
