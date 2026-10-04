@@ -78,6 +78,22 @@ export const READY_SOURCES = {
   many: "{n} مصدراً جاهزاً",
   other: "{n} مصدر جاهز",
 };
+export const LIKES = {
+  zero: "لا إعجابات",
+  one: "إعجاب واحد",
+  two: "إعجابان",
+  few: "{n} إعجابات",
+  many: "{n} إعجاباً",
+  other: "{n} إعجاب",
+};
+export const EXCLUDED = {
+  zero: "لا أعمال مستبعدة",
+  one: "عمل واحد مستبعد",
+  two: "عملان مستبعدان",
+  few: "{n} أعمال مستبعدة",
+  many: "{n} عملاً مستبعداً",
+  other: "{n} عمل مستبعد",
+};
 export const CATALOGS = {
   zero: "لا كتالوجات",
   one: "كتالوج واحد",

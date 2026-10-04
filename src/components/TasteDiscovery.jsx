@@ -15,6 +15,7 @@ import {
   recommendTaste,
 } from "../../core/taste.mjs";
 import { titleKey } from "../../core/library.mjs";
+import { arabicCount, EXCLUDED, LIKES } from "../../core/arabic.mjs";
 import { Poster, ScrollRow } from "./UI.jsx";
 
 export function TasteFeedback({ meta, state, update }) {
@@ -84,14 +85,18 @@ export default function TasteDiscovery({
   onOpen,
   watched,
   loading,
+  collapsed = false,
 }) {
   const taste = useMemo(
     () => cleanTaste(state.settings.taste),
     [state.settings.taste],
   );
+  // On Discover the panel starts closed so the page's own tabs stay in view.
   const [editing, setEditing] = useState(
       () =>
-        !taste.genres.length && !taste.feedback.some((f) => f.value === "like"),
+        !collapsed &&
+        !taste.genres.length &&
+        !taste.feedback.some((f) => f.value === "like"),
     ),
     [busy, setBusy] = useState(false),
     [confirmReset, setConfirmReset] = useState(false);
@@ -196,8 +201,8 @@ export default function TasteDiscovery({
           {editing && (
             <div className="taste-manage">
               <p>
-                اختياراتك المحفوظة: {liked.length} إعجاب · {hidden.length}{" "}
-                مستبعد
+                اختياراتك المحفوظة: {arabicCount(liked.length, LIKES)} ·{" "}
+                {arabicCount(hidden.length, EXCLUDED)}
               </p>
               <details>
                 <summary>راجع اختياراتك وتراجع عنها</summary>
@@ -256,7 +261,7 @@ export default function TasteDiscovery({
         </div>
       )}
       <div className="taste-filters">
-        <span>من فهارس إضافاتك</span>
+        <span>من فهارسك</span>
         <label>
           النوع
           <select
@@ -299,7 +304,7 @@ export default function TasteDiscovery({
       </div>
       {maxMinutes > 0 && (
         <p className="taste-note">
-          يعرض أفلاماً بمدة معلومة فقط. قد يغيب عمل لم توفر إضافته المدة.
+          يعرض أفلاماً بمدة معلومة فقط. قد يغيب عمل مدته غير معروفة.
         </p>
       )}
       {picks.length ? (
@@ -322,7 +327,7 @@ export default function TasteDiscovery({
           <p>
             {loading
               ? "ننتظر أعمالاً من فهارسك…"
-              : "لا توجد اقتراحات تطابق اختياراتك الآن. جرّب «توازن» أو امسح المرشحات أو تصفّح فهارس إضافاتك لمزيد من الأعمال."}
+              : "لا توجد اقتراحات تطابق اختياراتك الآن. جرّب «توازن» أو امسح المرشحات أو تصفّح أقساماً أخرى لمزيد من الأعمال."}
           </p>
         </div>
       )}

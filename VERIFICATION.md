@@ -25,6 +25,43 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.31.1 — addon order that keeps each addon's own order
+
+The owner reported that sources did not follow their addons' order.
+
+Causes found in code:
+
+- In "ترتيب إضافاتي", `applyStreamPrefs` grouped streams by addon but kept Riwaq's engine rank inside each addon. An addon that sorts its own results (AIOStreams, Torrentio sorting options) lost that order.
+- Priority was keyed by manifest ID alone, so two copies of one addon had the same rank and their streams interleaved by Riwaq's score. The Sorting page also listed such copies by a shared React key.
+- The order could only be changed deep in Settings, and the list's heading always said "مرتبة بمحرّك رِواق".
+
+What changed:
+
+- Ranked streams carry `order`, their place in the replies as the addons sent them (run order, then each addon's own order), and `addonKey`.
+- Addon order sorts by priority ID, then the copy's install position, then `order`. `streamOrderInside: "riwaq"` keeps the previous inside ranking.
+- The Sorting page shows one entry per addon ID with a copy count, and a "داخل كل إضافة" choice.
+- The sources list has an order switch that saves `streamOrder` and re-ranks with `again: true`; its heading names the order used.
+- From the PR #43 review: the taste shelf names no addon, starts collapsed on Discover, and uses `LIKES`/`EXCLUDED` counts.
+
+Executed:
+
+- `npm test`: **487 passing, 0 failing** (471 + 3 in `tests/stream-prefs.test.mjs` + 3 in `tests/taste-discover.test.mjs`, plus #43's 10). They cover:
+  - each addon's own order;
+  - Riwaq inside an addon;
+  - priority over install order;
+  - two copies of one ID;
+  - settings validation;
+  - the client end to end with two addons, using `again`.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render at 980×680 and 1440×960:
+  - the switch reorders "B.2160p A.1080p B.720p A.720p" to "A.720p A.1080p B.720p B.2160p" through one `again` call, and the heading changes;
+  - the Sorting page lists "AIOStreams (2 نسخ)" once;
+  - the inside choice and priority moves save;
+  - the Discover taste panel starts closed with no addon wording;
+  - 0 errors and 0 overflow.
+
+Not executed: the owner's real addons on Windows.
+
 ## 0.31.0 — sources without waiting for the slowest addon
 
 Why: the owner's real report showed addons that time out (NexoTV) or fail slowly. `getStreams` awaited every addon with `Promise.all`, so one dead addon held the whole source list for its full 16 s request timeout.

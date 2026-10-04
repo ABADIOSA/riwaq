@@ -1632,6 +1632,7 @@ export class Client {
               ...s,
               provider: addon.manifest.name,
               addonId: addon.manifest.id,
+              addonKey: keyFor(addon.transportUrl),
             }));
         },
         { ...this.sourceWait, keyOf: (addon) => addon.transportUrl },
@@ -1727,6 +1728,9 @@ export class Client {
         external: !!(stream.externalUrl || stream.ytId),
         supported,
         addonId: stream.addonId,
+        addonKey: stream.addonKey,
+        // Its place in the replies as the addons sent them, for addon order.
+        order: entry.index,
       };
     });
     // What a played source is remembered by, kept beside its link in main.
@@ -1739,7 +1743,10 @@ export class Client {
     const prefs = applyStreamPrefs(
       ranked,
       settings,
-      this.enabled().map((a) => a.manifest.id),
+      this.enabled().map((a) => ({
+        id: a.manifest.id,
+        key: keyFor(a.transportUrl),
+      })),
     );
     // The source this series was last watched from comes first (inside the
     // filter), so the next episode keeps the same release.
@@ -1814,6 +1821,7 @@ export class Client {
       mode: prefs.mode,
       modeFallback: prefs.modeFallback,
       filter: prefs.filter,
+      order: settings.streamOrder === "addon" ? "addon" : "riwaq",
       remembered: remembered.remembered,
     };
   }

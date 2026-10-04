@@ -74,11 +74,17 @@ export function SortingPage({ state, update }) {
     (a) => a.enabled && a.resources.includes("stream"),
   );
   const priority = cleanAddonPriority(s.addonPriority);
+  // One entry per addon ID: copies of the same addon (installed twice with
+  // different settings) move together and keep their install order.
+  const byId = new Map();
+  for (const a of streamAddons) {
+    const entry = byId.get(a.id);
+    if (entry) entry.copies++;
+    else byId.set(a.id, { ...a, copies: 1 });
+  }
   const ordered = [
-    ...priority
-      .map((id) => streamAddons.find((a) => a.id === id))
-      .filter(Boolean),
-    ...streamAddons.filter((a) => !priority.includes(a.id)),
+    ...priority.map((id) => byId.get(id)).filter(Boolean),
+    ...[...byId.values()].filter((a) => !priority.includes(a.id)),
   ];
   const move = (index, delta) => {
     const ids = ordered.map((a) => a.id);
@@ -102,7 +108,7 @@ export function SortingPage({ state, update }) {
             [
               "addon",
               "ترتيب إضافاتي",
-              "نتائج الإضافة الأعلى في قائمتك تحت تأتي أولاً، وداخل كل إضافة يبقى ترتيب رِواق.",
+              "نتائج الإضافة الأعلى في قائمتك تحت تأتي أولاً، مثل ستريميو.",
             ],
           ].map(([id, title, text]) => (
             <button
@@ -121,6 +127,41 @@ export function SortingPage({ state, update }) {
           ))}
         </div>
       </section>
+      {s.streamOrder === "addon" && (
+        <section className="settings-card">
+          <h2>داخل كل إضافة</h2>
+          <div className="frame-options" role="radiogroup">
+            {[
+              [
+                "addon",
+                "ترتيب الإضافة نفسها",
+                "الافتراضي. المصادر بالترتيب اللي ترسله الإضافة، يعني حسب إعدادات الفرز اللي ضبطتها فيها (مثل AIOStreams وTorrentio).",
+              ],
+              [
+                "riwaq",
+                "ترتيب رِواق",
+                "رِواق يعيد ترتيب مصادر كل إضافة بالجودة واللغة والموثوقية.",
+              ],
+            ].map(([id, title, text]) => (
+              <button
+                key={id}
+                role="radio"
+                aria-checked={(s.streamOrderInside || "addon") === id}
+                className={
+                  (s.streamOrderInside || "addon") === id ? "selected" : ""
+                }
+                onClick={() => update("settings", { streamOrderInside: id })}
+              >
+                <span>
+                  <b>{title}</b>
+                  <small>{text}</small>
+                </span>
+                {(s.streamOrderInside || "addon") === id && <Check size={16} />}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       <section className="settings-card">
         <h2>أولوية الإضافات</h2>
         <p>
@@ -132,7 +173,10 @@ export function SortingPage({ state, update }) {
             {ordered.map((a, i) => (
               <li key={a.id}>
                 <span dir="auto">
-                  <b>{a.name}</b>
+                  <b>
+                    {a.name}
+                    {a.copies > 1 ? ` (${a.copies} نسخ)` : ""}
+                  </b>
                   <small>{a.host}</small>
                 </span>
                 <div className="button-row">
