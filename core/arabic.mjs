@@ -62,6 +62,22 @@ export const EPISODES = {
   many: "{n} حلقة",
   other: "{n} حلقة",
 };
+export const SOURCES = {
+  zero: "لا مصادر",
+  one: "مصدر واحد",
+  two: "مصدران",
+  few: "{n} مصادر",
+  many: "{n} مصدراً",
+  other: "{n} مصدر",
+};
+export const READY_SOURCES = {
+  zero: "لا مصادر جاهزة",
+  one: "مصدر واحد جاهز",
+  two: "مصدران جاهزان",
+  few: "{n} مصادر جاهزة",
+  many: "{n} مصدراً جاهزاً",
+  other: "{n} مصدر جاهز",
+};
 export const CATALOGS = {
   zero: "لا كتالوجات",
   one: "كتالوج واحد",

@@ -37,6 +37,7 @@ export const SESSION_MOODS = [
       "adventure",
       "animation",
       "خيال",
+      "فانتازيا",
       "مغامرة",
       "رسوم متحركة",
     ],

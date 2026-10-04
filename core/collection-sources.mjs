@@ -131,6 +131,9 @@ export function tmdbItems(body, source) {
           ? r.vote_average
           : null,
       votes: Number(r?.vote_count) || 0,
+      genres: (Array.isArray(r?.genre_ids) ? r.genre_ids : [])
+        .filter((g) => Number.isInteger(g) && TMDB_GENRES[g])
+        .slice(0, 6),
       popularity: Number(r?.popularity) || 0,
       poster:
         typeof r?.poster_path === "string" &&
@@ -160,6 +163,63 @@ export function tmdbItems(body, source) {
       (a.released || "9999").localeCompare(b.released || "9999"),
     );
   return items;
+}
+
+/**
+ * TMDB's genre IDs (films and series) as [Arabic, English] names. Lists and
+ * discover pages carry only the IDs; naming them here costs no request, so
+ * Riwaq's own rows can be matched to a mood or a taste like Cinemeta's.
+ * TMDB's combined series genres become both their halves.
+ */
+export const TMDB_GENRES = {
+  28: [["أكشن", "Action"]],
+  12: [["مغامرة", "Adventure"]],
+  16: [["رسوم متحركة", "Animation"]],
+  35: [["كوميديا", "Comedy"]],
+  80: [["جريمة", "Crime"]],
+  99: [["وثائقي", "Documentary"]],
+  18: [["دراما", "Drama"]],
+  10751: [["عائلي", "Family"]],
+  14: [["فانتازيا", "Fantasy"]],
+  36: [["تاريخ", "History"]],
+  27: [["رعب", "Horror"]],
+  10402: [["موسيقى", "Music"]],
+  9648: [["غموض", "Mystery"]],
+  10749: [["رومانسية", "Romance"]],
+  878: [["خيال علمي", "Science Fiction"]],
+  10770: [["فيلم تلفزيوني", "TV Movie"]],
+  53: [["إثارة", "Thriller"]],
+  10752: [["حرب", "War"]],
+  37: [["غربي", "Western"]],
+  10759: [
+    ["أكشن", "Action"],
+    ["مغامرة", "Adventure"],
+  ],
+  10762: [["أطفال", "Kids"]],
+  10763: [["أخبار", "News"]],
+  10764: [["واقع", "Reality"]],
+  10765: [
+    ["خيال علمي", "Science Fiction"],
+    ["فانتازيا", "Fantasy"],
+  ],
+  10766: [["مسلسل طويل", "Soap"]],
+  10767: [["حواري", "Talk"]],
+  10768: [
+    ["حرب", "War"],
+    ["سياسة", "Politics"],
+  ],
+};
+
+/** Genre names for TMDB genre IDs, in Arabic when the metadata language is. */
+export function tmdbGenreNames(ids = [], language = "ar-SA") {
+  const arabic = /^ar\b/i.test(String(language));
+  const names = [];
+  for (const id of Array.isArray(ids) ? ids : [])
+    for (const pair of TMDB_GENRES[id] || []) {
+      const name = pair[arabic ? 0 : 1];
+      if (!names.includes(name)) names.push(name);
+    }
+  return names.slice(0, 6);
 }
 
 /** One Trakt public list page request (the client adds its API key). */

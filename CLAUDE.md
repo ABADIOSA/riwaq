@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.30.1-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.31.0-win-x64.exe`.
 
 ## Design and invariants
 
@@ -99,6 +99,14 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - Episode shuffle (`core/shuffle.mjs`) picks released, numbered, unwatched episodes (or all, when asked), never the current one, with no repeat until each has come up once in the session.
 - `hideWatched` hides finished films (`watchedTitles`/`withoutWatched` in `core/library.mjs`) live at render time on home, discover, collections and folder pages. It never applies in search, the library, continue watching, up next or hand-picked folder titles. Series are never hidden, since a row cannot know every episode.
 - Dropped files arrive through Chromium's file navigation, which both windows refuse (`onDropNavigate`). Only `core/drop.mjs` video and subtitle extensions are accepted: a video plays like the file dialog does, and a subtitle joins an active viewing.
+- Sources do not wait for the slowest addon (`core/source-wait.mjs`, `gatherSources`):
+  - Every stream addon is asked at once.
+  - The list shows when all have answered; or 4 s after the start once at least one addon returned a stream; or, past 4 s with nothing yet, at the first stream plus a 1.2 s grace. With no stream anywhere it waits for every addon (each request keeps its own timeout).
+  - Addons still out are `late` (names only). They keep running and fill the same run, kept per title for five minutes in `Client.sourceRuns` (at most 20).
+  - When they settle, `onLateSources` makes main emit `sources` (`type`, `id`, `found`, `failed` names) to the main window only, never the HUD.
+  - Details compares the report with the request it made (a ref), never the current page, and shows a button: the list never reorders under the pointer.
+  - `streams` with `again: true` (strictly boolean) re-ranks the remembered run without a new request; `playerSources` always uses it.
+- Riwaq's TMDB rows carry `genres` named from TMDB genre IDs (`TMDB_GENRES`, `tmdbGenreNames` in `core/collection-sources.mjs`): Arabic when the metadata language is Arabic, otherwise English. Combined series genres become both halves. No request is made for the names. Session moods match both languages.
 - Source failover (`core/failover.mjs`) replays the next ranked playable source from the same position, at most three times per title.
 - Settings are grouped like Harbor (`GROUPS` in `SettingsStudio.jsx`: account, watching, content, look, devices, system); a page is `[id, title, keywords, icon]`, and search spans every page.
 - Window (`windowFrame` native/hybrid/riwaq, `windowControls`, `frostTopBar`, `dragAnywhere`): a frame change applies on relaunch (`runningFrame` in main). Drag-anywhere is main polling the cursor between `windowDrag` start and end, and only from empty space. `setAppIcon` takes a PNG data URL of at most 512 px drawn by the renderer. Ambience wallpapers and logo images are HTTPS without credentials (`imageUrl`).
