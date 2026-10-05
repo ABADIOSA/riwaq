@@ -17,6 +17,7 @@ import { cleanSeriesMemory } from "./series-memory.mjs";
 import { cleanSkipExcept } from "./skip-segments.mjs";
 import { cleanSeenVersion } from "./whats-new.mjs";
 import { cleanTaste } from "./taste.mjs";
+import { cleanMusic } from "./music.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -43,6 +44,10 @@ export const DEFAULT_SETTINGS = {
   sessionBudget: 90,
   sessionMood: "any",
   taste: cleanTaste({}),
+  // A title's page takes its colours from the title (core/title-theme.mjs).
+  titleTheme: "artwork",
+  // The music room: platforms and saved links (core/music.mjs).
+  music: cleanMusic({}),
   cardStyle: "glass",
   cardSize: "comfortable",
   showHero: true,
@@ -404,6 +409,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     sourceMode: ["all", "direct", "p2p"],
     streamOrder: ["riwaq", "addon"],
     streamOrderInside: ["addon", "riwaq"],
+    titleTheme: ["artwork", "genre", "off"],
     pickerLayout: ["detailed", "compact"],
     spoilerGuard: ["off", "titles"],
     hudLayout: ["full", "minimal", "cinema", "custom"],
@@ -464,6 +470,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.seriesMemory = cleanSeriesMemory(input.seriesMemory);
   if (input.taste && typeof input.taste === "object")
     next.taste = cleanTaste(input.taste);
+  if (input.music && typeof input.music === "object")
+    next.music = cleanMusic(input.music);
   if (Array.isArray(input.countdowns))
     next.countdowns = cleanCountdowns(input.countdowns);
   if (Array.isArray(input.hudHidden))

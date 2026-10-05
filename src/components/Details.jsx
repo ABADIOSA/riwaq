@@ -31,6 +31,7 @@ import {
   Video,
   History,
   Search,
+  Music2,
 } from "lucide-react";
 import ArtworkGallery from "./ArtworkGallery.jsx";
 import { TasteFeedback } from "./TasteDiscovery.jsx";
@@ -58,6 +59,13 @@ import {
 } from "../../core/source-view.mjs";
 import { IconButton, Busy, Empty, Modal, ScrollRow } from "./UI.jsx";
 import { TitleLogo } from "./TitleLogo.jsx";
+import { dominantColor, titleTheme } from "../../core/title-theme.mjs";
+import { luminance, resolveAppearance } from "../../core/appearance.mjs";
+import {
+  platformName,
+  preferredPlatform,
+  soundtrackQuery,
+} from "../../core/music.mjs";
 import { api, call } from "../lib/api.js";
 import {
   queueKey,
@@ -104,6 +112,8 @@ export default function Details({
     [sourceChips, setSourceChips] = useState([]),
     [folded, setFolded] = useState([]),
     asked = useRef(null),
+    // The colour read from the title's artwork, for its page theme.
+    [artColor, setArtColor] = useState(null),
     [quality, setQuality] = useState(""),
     [showOutside, setShowOutside] = useState(false),
     [showDropped, setShowDropped] = useState(false),
@@ -275,6 +285,47 @@ export default function Details({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+  // The title's own colours on its page (core/title-theme.mjs). The picture
+  // is read through a small canvas; a host that refuses cross-origin reads
+  // leaves the genre colour.
+  const themeMode = state.settings.titleTheme || "artwork";
+  const artSource = imgUrl(meta.background) || imgUrl(meta.poster) || "";
+  useEffect(() => {
+    setArtColor(null);
+    if (themeMode !== "artwork" || !artSource) return;
+    let live = true;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
+    img.decoding = "async";
+    img.onload = () => {
+      if (!live) return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 48;
+        canvas.height = 32;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, 48, 32);
+        setArtColor(dominantColor(ctx.getImageData(0, 0, 48, 32).data));
+      } catch {
+        setArtColor(null);
+      }
+    };
+    img.onerror = () => live && setArtColor(null);
+    img.src = artSource;
+    return () => {
+      live = false;
+      img.onload = img.onerror = null;
+    };
+  }, [artSource, themeMode]);
+  const look = resolveAppearance(state.settings);
+  const pageTheme = titleTheme(meta, {
+    mode: themeMode,
+    rgb: artColor,
+    light: luminance(look.colors.bg) > 0.4,
+    gradient: look.gradient,
+  });
+  const musicPlatform = preferredPlatform(state.settings.music);
   const openSources = () => {
     setShowSources(true);
     if (popupMode) {
@@ -758,7 +809,10 @@ export default function Details({
     </section>
   );
   return (
-    <article className="title-page">
+    <article
+      className={`title-page ${pageTheme ? `themed theme-${pageTheme.source}` : ""}`}
+      style={pageTheme?.vars}
+    >
       <div className="title-hero">
         <div
           className="detail-backdrop"
@@ -849,6 +903,20 @@ export default function Details({
                 ? "في مجموعاتك"
                 : "أضف لمجموعة"}
             </button>
+            {soundtrackQuery(meta) && (
+              <button
+                className="secondary"
+                title={`ابحث عن موسيقى العمل في ${platformName(musicPlatform)}`}
+                onClick={() =>
+                  act("musicOpen", {
+                    platform: musicPlatform,
+                    query: soundtrackQuery(meta),
+                  })
+                }
+              >
+                <Music2 size={18} /> موسيقى العمل
+              </button>
+            )}
             {trailerOf(meta) && (
               <button
                 className="secondary"

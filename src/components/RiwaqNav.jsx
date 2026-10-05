@@ -11,6 +11,7 @@ import {
   Users,
   LogIn,
   Lock,
+  Music2,
 } from "lucide-react";
 
 export default function RiwaqNav({
@@ -136,6 +137,14 @@ export default function RiwaqNav({
             <div className="riwaq-tools-panel" id="riwaq-tools">
               <p>بقية مساحتك</p>
               <div>
+                {(!appearance.navHidden.includes("music") ||
+                  view === "music") && (
+                  <button onClick={() => go("music")}>
+                    <Music2 />
+                    <b>موسيقى</b>
+                    <small>منصاتك وقوائمك</small>
+                  </button>
+                )}
                 {(!appearance.navHidden.includes("live") ||
                   view === "live") && (
                   <button onClick={() => go("live")}>

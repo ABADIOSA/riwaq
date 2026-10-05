@@ -35,6 +35,7 @@ import {
 import { matchTrack, seriesOf, trackIdentity } from "../core/series-memory.mjs";
 import { skipPreferences } from "../core/skip-segments.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
+import { musicLink, musicSearchUrl } from "../core/music.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
@@ -879,6 +880,17 @@ const methods = {
     client.credits.searchPeople({
       query: typeof a?.query === "string" ? a.query : "",
     }),
+  // Music (core/music.mjs): a saved link or a platform's search page, each
+  // re-checked here to be HTTPS on that platform's own hosts before the
+  // system opens it. Riwaq plays no audio and holds no platform sign-in.
+  musicOpen: async (a) => {
+    const url = a?.url
+      ? musicLink(a.url)
+      : musicSearchUrl(a?.platform, a?.query);
+    if (!url) throw new Error("رابط الموسيقى غير صالح");
+    await shell.openExternal(url);
+    return true;
+  },
   // The trailer ID comes from main's own copy of the metadata, never the
   // interface, and only a YouTube watch page on the fixed host is opened.
   openTrailer: async (a) => {

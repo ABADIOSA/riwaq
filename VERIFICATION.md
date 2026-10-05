@@ -25,6 +25,45 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.33.0 — music room and title theme
+
+What changed:
+
+- **`core/music.mjs` and `Music.jsx` (view `music`):**
+  - nine platforms with exact host lists and their own search pages;
+  - saved links validated (HTTPS, no credentials or port, an exact platform host, at most 600 characters), with their kind read from the path;
+  - per-profile `settings.music` (at most 120 items), validated on restore.
+- **Opening:** IPC `musicOpen` re-checks every address in main before `shell.openExternal`. It is main-window only and absent from the HUD. Title pages gain "موسيقى العمل".
+- **`core/title-theme.mjs`:**
+  - the artwork colour comes from a 48×32 canvas sample, or the genre colour when there is none;
+  - the accent is clamped to stay readable;
+  - variables go on `.title-page` only.
+  - The setting `titleTheme` (artwork, genre or off) lives on Settings → Ambience.
+
+Executed:
+
+- `npm test`: **513 passing, 0 failing** (500 + 7 in `tests/music.test.mjs` + 6 in `tests/title-theme.test.mjs`). They cover:
+  - host checks, including look-alike hosts, http, credentials, ports and whitespace;
+  - kinds, and encoded searches that stay on each platform's hosts;
+  - the soundtrack phrase;
+  - validation, limits and de-duplication;
+  - add/refuse and preferred platform;
+  - main and preload wiring, and HUD exclusion;
+  - colour conversion, the dominant colour (vivid vs grey), genre colours in Arabic and English, readable accents on dark and light palettes, theme modes, and page scoping.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render at 980×680 (Riwaq interface, through "⋯") and 1440×960 (classic sidebar):
+  - choosing Anghami and Spotify, then making Spotify first, saved `["spotify","anghami"]`;
+  - a foreign link was refused with the Arabic sentence;
+  - two links were saved, with platform chips;
+  - opening sent `{url}`, `{platform:"anghami",query}` and the soundtrack search `{platform:"spotify",query:"فيلم رعب 2024 soundtrack"}`;
+  - a title page with a teal backdrop got `--accent:#38E6DA` (`theme-artwork`), and "off" left the page unthemed;
+  - 0 errors and 0 overflow.
+
+Not executed:
+
+- opening any platform page (egress is blocked here);
+- whether real artwork hosts (image.tmdb.org, metahub) allow the CORS canvas read on Windows. Playwright's routed images could be read even without a CORS header, so the genre fallback is covered by unit tests only.
+
 ## 0.32.0 — finding a source in a long list
 
 What changed:

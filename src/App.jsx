@@ -39,6 +39,7 @@ import {
   Lock,
   Users,
   Folders,
+  Music2,
 } from "lucide-react";
 import { api, call } from "./lib/api.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
@@ -87,6 +88,7 @@ const Preferences = lazy(() => import("./components/SettingsStudio.jsx"));
 const LiveTV = lazy(() => import("./components/LiveTV.jsx"));
 const LibraryView = lazy(() => import("./components/LibraryView.jsx"));
 const FolderPage = lazy(() => import("./components/FolderPage.jsx"));
+const MusicRoom = lazy(() => import("./components/Music.jsx"));
 import CollectionsPage, {
   NuvioLink,
   PinnedCollections,
@@ -852,6 +854,7 @@ export default function App() {
                 [Compass, "discover", "اكتشف"],
                 [Library, "library", "مكتبتي"],
                 [Folders, "collections", "المجموعات"],
+                [Music2, "music", "موسيقى"],
                 [Tv, "live", "بث مباشر"],
                 [Puzzle, "addons", "الإضافات"],
               ]
@@ -1397,6 +1400,15 @@ export default function App() {
                 state={state}
                 update={update}
                 onOpen={open}
+                notice={notice}
+              />
+            )}
+            {view === "music" && (
+              <MusicRoom
+                key={state.profiles?.active}
+                state={state}
+                update={update}
+                act={act}
                 notice={notice}
               />
             )}
