@@ -279,6 +279,7 @@ export const HIDEABLE_NAV = [
   ["discover", "اكتشف"],
   ["library", "مكتبتي"],
   ["collections", "المجموعات"],
+  ["music", "موسيقى"],
   ["live", "بث مباشر"],
   ["addons", "الإضافات"],
 ];

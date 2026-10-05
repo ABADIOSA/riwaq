@@ -61,6 +61,7 @@ const allowed = new Set([
   "settings",
   "favorite",
   "tasteEdit",
+  "musicOpen",
   "queueEdit",
   "historyEdit",
   "episodes",

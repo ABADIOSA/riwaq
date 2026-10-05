@@ -358,6 +358,23 @@ export function AmbiencePage({ state, update }) {
         )}
       </section>
       <section className="settings-card">
+        <h2>ثيم العمل</h2>
+        <p>
+          لما تفتح صفحة فيلم أو مسلسل، تاخذ ألوانها من العمل نفسه: من صورته،
+          وإذا ما انقرأت الصورة فمن نوعه (الرعب أحمر، الخيال العلمي أزرق،
+          الكوميديا ذهبي…). يتغير لون صفحة العمل بس، وترجع ألوانك برا الصفحة.
+        </p>
+        <Choices
+          options={[
+            ["artwork", "من صورة العمل"],
+            ["genre", "من نوع العمل"],
+            ["off", "بدون (ألواني دائماً)"],
+          ]}
+          value={state.settings.titleTheme || "artwork"}
+          onPick={(titleTheme) => update("settings", { titleTheme })}
+        />
+      </section>
+      <section className="settings-card">
         <h2>أجواء العمل المعروض</h2>
         <p>
           توهّج خافت بألوان العمل خلف رِواق. يتبع العمل اللي تحت مؤشر الفأرة، أو
