@@ -296,6 +296,17 @@ export class SpotifyHub {
       await this.api("GET", "/me/playlists", { query: { limit: "50" } }),
     );
   }
+  /** Track search (any account), for a title's theme song. */
+  async searchTracks(query) {
+    const q = String(query || "")
+      .replace(/[\u0000-\u001f\u007f]+/g, " ")
+      .trim()
+      .slice(0, 120);
+    if (!q) return null;
+    return this.api("GET", "/search", {
+      query: { q, type: "track", limit: "10" },
+    });
+  }
   /** play (optionally a URI), pause, next, previous, volume, shuffle, transfer. */
   async control({ action, uri, deviceId, volume, state } = {}) {
     const device =

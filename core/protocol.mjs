@@ -52,6 +52,8 @@ export const DEFAULT_SETTINGS = {
   // A title's theme song on its page (core/theme-song.mjs): played at once,
   // offered as a button, or off; its volume; titles whose song was refused.
   themeSong: "auto",
+  // With Spotify linked (Premium), the full track plays through it.
+  themeSongSource: "auto",
   themeSongVolume: 35,
   themeSongSkip: [],
   cardStyle: "glass",
@@ -417,6 +419,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     streamOrderInside: ["addon", "riwaq"],
     titleTheme: ["artwork", "genre", "off"],
     themeSong: ["auto", "button", "off"],
+    themeSongSource: ["auto", "previews"],
     themeSongVolume: [10, 20, 35, 50, 70, 100],
     pickerLayout: ["detailed", "compact"],
     spoilerGuard: ["off", "titles"],

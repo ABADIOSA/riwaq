@@ -28,8 +28,10 @@ import {
   deezerUrl,
   fromDeezer,
   fromItunes,
+  fromSpotify,
   itunesUrl,
   pickThemeSong,
+  themeNames,
   themeQueries,
 } from "./theme-song.mjs";
 import { editTaste } from "./taste.mjs";
@@ -1589,7 +1591,12 @@ export class Client {
           resourceUrl(addon.transportUrl, "meta", type, id),
         );
         if (result.meta?.id) {
-          const meta = await this.dataHub.enrich(result.meta);
+          // The addon's own name stays beside a translated one: theme songs
+          // are searched by it (albums carry the English or original name).
+          const meta = {
+            ...(await this.dataHub.enrich(result.meta)),
+            addonName: String(result.meta.name || "").slice(0, 200),
+          };
           boundedSet(this.metas, `${type}:${id}`, meta, 400);
           return meta;
         }
@@ -1999,31 +2006,61 @@ export class Client {
     const key = `${type}:${id}`;
     const meta = this.metas.get(key);
     if (!meta?.name) return null;
+    const linked = this.spotify.publicState().connected;
     const cache = (this.themeSongs ||= new Map());
-    const hit = cache.get(key);
+    const cacheKey = `${key}|${linked ? "s" : "-"}`;
+    const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.at < 86400000) return hit.song;
-    let song = null;
     let failed = 0;
     let asked = 0;
-    const ask = (url, read) => {
+    const ask = (load, read) => {
       asked++;
-      return this.request(url, { timeout: 7000, redirect: "error" })
+      return load()
         .then(read)
-        .catch(() => {
+        .catch((error) => {
           failed++;
+          // Main logs it for the full diagnostic (never with an address).
+          this.onThemeError?.(error?.message || String(error));
           return [];
         });
     };
-    for (const query of themeQueries(meta)) {
-      const lists = await Promise.all([
-        ask(itunesUrl(query), fromItunes),
-        ask(deezerUrl(query), fromDeezer),
-      ]);
-      song = pickThemeSong(lists.flat(), meta);
-      if (song) break;
+    const get = (url) => () =>
+      this.request(url, { timeout: 7000, redirect: "error" });
+    let preview = null;
+    let full = null;
+    // By the addon's or original name first: a translated name finds nothing.
+    for (const name of themeNames(meta)) {
+      const named = { ...meta, name };
+      for (const query of themeQueries(named)) {
+        const [spotify, itunes, deezer] = await Promise.all([
+          linked && !full
+            ? ask(() => this.spotify.searchTracks(query), fromSpotify)
+            : [],
+          preview ? [] : ask(get(itunesUrl(query)), fromItunes),
+          preview ? [] : ask(get(deezerUrl(query)), fromDeezer),
+        ]);
+        full ||= pickThemeSong(spotify, named);
+        preview ||= pickThemeSong([...itunes, ...deezer], named);
+        if (preview && (full || !linked)) break;
+      }
+      if (preview && (full || !linked)) break;
     }
+    // A preview Riwaq plays itself, and the full track when Spotify can.
+    const song =
+      preview || full
+        ? {
+            ...(preview || full),
+            ...(full
+              ? {
+                  spotifyUri: full.spotifyUri,
+                  spotifyTrack: full.track,
+                  spotifyArtist: full.artist,
+                }
+              : {}),
+          }
+        : null;
     if (song || failed < asked)
-      boundedSet(cache, key, { at: Date.now(), song }, 300);
+      boundedSet(cache, cacheKey, { at: Date.now(), song }, 300);
     return song;
   }
 

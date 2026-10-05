@@ -25,6 +25,36 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.35.0 — theme songs fixed, full tracks on Spotify
+
+**Report:** the owner said music does not play when they open a title.
+
+**Cause found in code:** with a TMDB key, `dataHub.enrich` replaces `name` with the title in the metadata language. "Game of Thrones" became «صراع العروش». The theme search used that name against iTunes and Deezer, whose album names are English, so `pickThemeSong` never matched and the page stayed silent.
+
+What changed:
+
+- **Names:** `metadataOf` keeps `addonName` and TMDB enrichment adds `originalName`. `themeNames` searches those first (Latin script first, at most two).
+- **Spotify:** when linked, Spotify is searched too (`searchTracks`, `fromSpotify`) and the song carries `spotifyUri`. Details plays the full track through `src/lib/theme-spotify.js` when `themeSongSource` is `auto` and the account is Premium:
+  - never while the viewer's own Spotify music plays;
+  - it pauses only the theme it started;
+  - it falls back to the preview when there is no device.
+- **Feedback and logging:** a "not found" note offers a search on the preferred platform by the original name, and theme-search failures go to the ErrorLog.
+
+Executed:
+
+- `npm test`: **532 passing, 0 failing** (528 + 4 in `tests/theme-song-names.test.mjs`), including a regression test where the stored meta is named «صراع العروش» with `addonName` "Game of Thrones" and the theme is found. The page-guard test was updated to the new flow.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render, four cases:
+  - **Premium, Spotify idle:** `play` on the theme URI, chip "كاملة على Spotify", and `pause` on leaving.
+  - **The viewer's own Spotify music playing:** no command, no preview, and their track still playing after leaving.
+  - **No Spotify:** the preview played.
+  - **Not found:** the note, whose button opened `youtubemusic` with "Game of Thrones soundtrack theme".
+  - 0 errors.
+
+Not executed: real iTunes, Deezer or Spotify requests (egress is blocked here), a real Spotify device, and audio on Windows.
+
+Not done: Spotify audio decoded inside Riwaq itself. That needs a Widevine-enabled Electron (castLabs ECS) signed through a castLabs EVS account that belongs to the project.
+
 ## 0.34.0 — Spotify as Riwaq's player, and theme songs
 
 The owner asked for:

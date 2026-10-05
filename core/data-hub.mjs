@@ -139,6 +139,10 @@ export class DataHub {
       ];
     return {
       name: detail.title || detail.name || meta.name,
+      // The title in its own language, for searches that are not translated.
+      originalName: String(
+        detail.original_title || detail.original_name || "",
+      ).slice(0, 200),
       description: detail.overview || meta.description,
       poster: image(detail.poster_path, "w500") || meta.poster,
       background: image(detail.backdrop_path) || meta.background,
