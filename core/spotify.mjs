@@ -176,6 +176,10 @@ export class SpotifyHub {
     this.request = request;
     this.now = now;
     this.refreshing = null;
+    this.epoch = 0;
+  }
+  checkSession(epoch, bag) {
+    if (epoch !== this.epoch || bag !== this.bag()) throw spotifyProblem(401);
   }
   publicState() {
     const s = this.bag();
@@ -195,6 +199,8 @@ export class SpotifyHub {
       );
     const s = this.bag();
     if (s.clientId !== clientId) {
+      this.epoch++;
+      this.refreshing = null;
       delete s.token;
       delete s.name;
       delete s.product;
@@ -226,17 +232,19 @@ export class SpotifyHub {
   /** Finishes the sign-in: the code from the redirect, with the verifier. */
   async exchange(code, verifier) {
     const s = this.bag();
+    const epoch = this.epoch;
     if (!s.clientId) throw new Error("أدخل Client ID أولاً");
-    this.keep(
-      await this.tokenRequest({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: SPOTIFY_REDIRECT,
-        client_id: s.clientId,
-        code_verifier: verifier,
-      }),
-    );
+    const token = await this.tokenRequest({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: SPOTIFY_REDIRECT,
+      client_id: s.clientId,
+      code_verifier: verifier,
+    });
+    this.checkSession(epoch, s);
+    this.keep(token);
     const me = await this.api("GET", "/me");
+    this.checkSession(epoch, s);
     s.name = text(me?.display_name || me?.id, 80);
     s.product = text(me?.product, 20);
     this.save();
@@ -245,28 +253,38 @@ export class SpotifyHub {
   /** A live access token, refreshed once when it is about to expire. */
   async token() {
     const s = this.bag();
+    const epoch = this.epoch;
     if (!s.token?.refresh_token) throw spotifyProblem(401);
     if (s.token.access_token && s.token.expires_at - this.now() > 60000)
       return s.token.access_token;
-    this.refreshing ||= this.tokenRequest({
+    if (this.refreshing) return this.refreshing;
+    const pending = this.tokenRequest({
       grant_type: "refresh_token",
       refresh_token: s.token.refresh_token,
       client_id: s.clientId,
     })
       .then((data) => {
+        this.checkSession(epoch, s);
         this.keep(data);
         return data.access_token;
       })
       .catch((error) => {
         // A refused refresh ends the link: credentials are removed.
-        if (error.status === 401) this.disconnect();
+        if (error.status === 401 && epoch === this.epoch && s === this.bag())
+          this.disconnect();
         throw error;
       })
-      .finally(() => (this.refreshing = null));
-    return this.refreshing;
+      .finally(() => {
+        if (this.refreshing === pending) this.refreshing = null;
+      });
+    this.refreshing = pending;
+    return pending;
   }
   async api(method, path, { query, body, retried = false } = {}) {
+    const epoch = this.epoch,
+      bag = this.bag();
     const token = await this.token();
+    this.checkSession(epoch, bag);
     const url = `${API}${path}${query ? `?${new URLSearchParams(query)}` : ""}`;
     const r = await this.request(url, {
       method,
@@ -276,8 +294,9 @@ export class SpotifyHub {
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
+    this.checkSession(epoch, bag);
     if (r.status === 401 && !retried) {
-      this.bag().token.expires_at = 0;
+      if (bag.token?.access_token === token) bag.token.expires_at = 0;
       return this.api(method, path, { query, body, retried: true });
     }
     if (r.status === 204 || r.status === 202) return null;
@@ -341,6 +360,8 @@ export class SpotifyHub {
   }
   /** Removes the link's credentials; the Client ID (not secret) stays. */
   disconnect() {
+    this.epoch++;
+    this.refreshing = null;
     const s = this.bag();
     delete s.token;
     delete s.name;

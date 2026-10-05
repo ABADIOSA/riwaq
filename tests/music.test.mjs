@@ -169,7 +169,10 @@ test("main opens only re-checked music addresses, from the main window", () => {
   // The room is reachable in both interfaces and can be hidden.
   assert.ok(HIDEABLE_NAV.some(([id]) => id === "music"));
   assert.match(source("src/App.jsx"), /\[Music2, "music", "موسيقى"\]/);
-  assert.match(source("src/components/RiwaqNav.jsx"), /go\("music"\)/);
+  assert.match(
+    source("src/components/RiwaqNav.jsx"),
+    /\[Music2, "music", "موسيقى"\]/,
+  );
   assert.match(source("src/components/Details.jsx"), /act\("musicOpen", \{/);
   // The room never offers a password field.
   assert.doesNotMatch(source("src/components/Music.jsx"), /type="password"/);

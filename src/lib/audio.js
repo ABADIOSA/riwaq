@@ -26,8 +26,16 @@ export function onAudio(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
-export const setExternalPlaying = (value) => (externalPlaying = !!value);
-export const externalMusicPlaying = () => externalPlaying;
+export const setExternalPlaying = (value) => {
+  externalPlaying = !!value;
+  if (externalPlaying) stopAudio(undefined, { fadeMs: 100 });
+};
+let localPlaying = false;
+export const setLocalPlaying = (value) => {
+  localPlaying = !!value;
+  if (localPlaying) stopAudio(undefined, { fadeMs: 0 });
+};
+export const externalMusicPlaying = () => externalPlaying || localPlaying;
 // A viewing in Riwaq's player: no theme starts over it (App keeps this).
 let videoPlaying = false;
 export const setVideoPlaying = (value) => {
@@ -61,7 +69,13 @@ export function playPreview(
   song,
   { owner, volume = 0.35, gentle = true } = {},
 ) {
-  if (!song || !okPreview(song.preview)) return false;
+  if (
+    !song ||
+    !okPreview(song.preview) ||
+    externalMusicPlaying() ||
+    videoPlaying
+  )
+    return false;
   stopAudio(undefined, { fadeMs: 300 });
   const audio = document.createElement("audio");
   audio.preload = "auto";
