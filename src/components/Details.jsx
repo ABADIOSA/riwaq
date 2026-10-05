@@ -1127,6 +1127,18 @@ export default function Details({
               <span>
                 <b dir="auto">
                   {onSpotify ? song.spotifyTrack || song.track : song.track}
+                  {(onSpotify ? song.spotifyOfficial : song.official) && (
+                    <em
+                      className="theme-song-official"
+                      title={
+                        song.composer
+                          ? `من ألبوم العمل الرسمي أو من مؤلف موسيقاه: ${song.composer}`
+                          : "من ألبوم العمل الرسمي"
+                      }
+                    >
+                      رسمية
+                    </em>
+                  )}
                 </b>
                 <small dir="auto">
                   {onSpotify

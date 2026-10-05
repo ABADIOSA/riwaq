@@ -50,7 +50,8 @@ test("regression: an Arabic-named title (TMDB in Arabic) still finds its theme",
     save: () => {},
     request: async (url) => {
       const u = new URL(url);
-      terms.push(u.searchParams.get("term") || u.searchParams.get("q"));
+      if (u.hostname === "itunes.apple.com")
+        terms.push(u.searchParams.get("term"));
       return u.hostname === "itunes.apple.com" ? ITUNES : { data: [] };
     },
   });

@@ -147,6 +147,18 @@ export class DataHub {
       poster: image(detail.poster_path, "w500") || meta.poster,
       background: image(detail.backdrop_path) || meta.background,
       cast: detail.credits?.cast?.slice(0, 12).map((a) => a.name) || meta.cast,
+      // The composers, so a theme song by anyone else is not taken as official.
+      composers: (detail.credits?.crew || [])
+        .filter((c) =>
+          [
+            "Original Music Composer",
+            "Music",
+            "Main Title Theme Composer",
+          ].includes(c?.job),
+        )
+        .map((c) => String(c.name || "").slice(0, 100))
+        .filter((n, i, all) => n && all.indexOf(n) === i)
+        .slice(0, 4),
       genres: detail.genres?.map((g) => g.name) || meta.genres,
       tmdbId: match.id,
       tvdbId: detail.external_ids?.tvdb_id,

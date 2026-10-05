@@ -72,7 +72,10 @@ test("the song is chosen only when it clearly belongs to the title", () => {
     album: "TV Covers",
   };
   const other = { ...got, album: "Thrones of Glass", track: "Intro" };
-  assert.deepEqual(pickThemeSong([cover, other, got], meta), got);
+  assert.deepEqual(pickThemeSong([cover, other, got], meta), {
+    ...got,
+    official: false,
+  });
   assert.equal(
     pickThemeSong([cover, other], meta),
     null,

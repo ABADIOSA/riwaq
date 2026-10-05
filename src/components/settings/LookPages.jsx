@@ -393,6 +393,21 @@ export function AmbiencePage({ state, update }) {
         />
         {(state.settings.themeSong || "auto") !== "off" && (
           <div className="studio-field">
+            الثقة
+            <Choices
+              options={[
+                ["official", "رسمية فقط (ألبوم العمل أو مؤلف موسيقاه)"],
+                ["relaxed", "متساهلة (تقبل أكثر)"],
+              ]}
+              value={state.settings.themeSongTrust || "official"}
+              onPick={(themeSongTrust) =>
+                update("settings", { themeSongTrust })
+              }
+            />
+          </div>
+        )}
+        {(state.settings.themeSong || "auto") !== "off" && (
+          <div className="studio-field">
             المصدر
             <Choices
               options={[
