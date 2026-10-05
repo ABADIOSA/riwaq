@@ -25,6 +25,70 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.34.0 — Spotify as Riwaq's player, and theme songs
+
+The owner asked for:
+
+- Riwaq as the player for linked music platforms;
+- a title's theme song that plays on its page, with an off switch.
+
+What was possible:
+
+- Riwaq uses stock Electron 44 with `--ytdl=no`. Playing Spotify, Apple Music or TIDAL audio inside it would need a Widevine build (castLabs ECS plus VMP signing), an architectural change not made without the owner's approval.
+- What was built:
+  - **Spotify Connect:** Riwaq shows and controls the viewer's Spotify; the audio comes from their Spotify app.
+  - **Theme songs:** Riwaq plays them itself, from official 30-second previews.
+
+What changed:
+
+- **`core/spotify.mjs`:**
+  - PKCE with the viewer's Client ID, and a fixed loopback redirect served once by main with a state check;
+  - encrypted tokens with one-in-flight refresh and rotation, removed on a refused refresh or on disconnect;
+  - playback, devices, playlists and validated controls;
+  - Arabic messages for Spotify's refusals.
+- **Interface:** `MusicBar.jsx` and the music-room Spotify card, with playlists. Saved Spotify links play through Riwaq.
+- **`core/theme-song.mjs`:** keyless iTunes and Deezer searches, strict matching, preview and art host allowlists, and a day's cache.
+- **Players:**
+  - `src/lib/audio.js` plays one song, never over Spotify, a viewing or a hidden window.
+  - The title page has a song chip with pause and "مو هذي".
+  - Settings: auto, button or off, plus volume.
+  - CSP `media-src` gains exactly the two preview hosts.
+
+Executed:
+
+- `npm test`: **528 passing, 0 failing** (513 + 7 in `tests/theme-song.test.mjs` + 8 in `tests/spotify.test.mjs`). They cover:
+  - preview and art host allowlists and the CSP;
+  - queries, parsing, and strict matching: covers rejected, silence over a guess, the 1984 Dune refused for the 2021 film (this caught a real scoring bug: the year penalty was raised from −3 to −6);
+  - the client's own-meta rule, day cache and retry;
+  - settings;
+  - the page's guards;
+  - PKCE and the authorize URL (no secret);
+  - the exchange, with tokens kept out of public state;
+  - a single refresh with rotation, and a refused refresh removing credentials;
+  - control bodies (track vs context), device query and validation;
+  - Arabic refusals;
+  - checked pictures, the backup secret list, and main and preload wiring.
+- A second bug was found while testing: `foldArabic` joins words (it is built for search), so the theme matcher got its own normalizer that keeps word boundaries.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render at 980×680 (Riwaq interface, Spotify not linked) and 1440×960 (classic, linked):
+  - **Theme song:**
+    - on "auto" it played on entry and paused when the page closed;
+    - with Spotify playing it did not play;
+    - on "button" it waited for a press;
+    - "مو هذي" saved `series:tt0944947` and hid the chip.
+  - **Spotify:**
+    - the card asked to connect with the Client ID;
+    - when linked, the bar showed the track and time;
+    - playlist play, pause/play and device transfer sent the expected commands;
+    - controls now read left to right, and the page is padded under the bar.
+  - 0 errors and 0 overflow.
+
+Not executed:
+
+- linking a real Spotify account;
+- real iTunes or Deezer searches (egress is blocked here);
+- audio output on Windows.
+
 ## 0.33.0 — music room and title theme
 
 What changed:

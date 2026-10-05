@@ -617,7 +617,12 @@ export function restoreState(current, payload) {
       ? cleanSecretBag(payload.providers, ["tmdb", "omdb", "mdblist", "fanart"])
       : current.providers || {},
     integrations: carries("integrations")
-      ? cleanSecretBag(payload.integrations, ["trakt", "letterboxd", "simkl"])
+      ? cleanSecretBag(payload.integrations, [
+          "trakt",
+          "letterboxd",
+          "simkl",
+          "spotify",
+        ])
       : current.integrations || {},
     notify: carries("notify")
       ? cleanNotify(payload.notify)

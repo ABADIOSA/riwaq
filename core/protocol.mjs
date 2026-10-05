@@ -18,6 +18,7 @@ import { cleanSkipExcept } from "./skip-segments.mjs";
 import { cleanSeenVersion } from "./whats-new.mjs";
 import { cleanTaste } from "./taste.mjs";
 import { cleanMusic } from "./music.mjs";
+import { cleanThemeSkip } from "./theme-song.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -48,6 +49,11 @@ export const DEFAULT_SETTINGS = {
   titleTheme: "artwork",
   // The music room: platforms and saved links (core/music.mjs).
   music: cleanMusic({}),
+  // A title's theme song on its page (core/theme-song.mjs): played at once,
+  // offered as a button, or off; its volume; titles whose song was refused.
+  themeSong: "auto",
+  themeSongVolume: 35,
+  themeSongSkip: [],
   cardStyle: "glass",
   cardSize: "comfortable",
   showHero: true,
@@ -410,6 +416,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     streamOrder: ["riwaq", "addon"],
     streamOrderInside: ["addon", "riwaq"],
     titleTheme: ["artwork", "genre", "off"],
+    themeSong: ["auto", "button", "off"],
+    themeSongVolume: [10, 20, 35, 50, 70, 100],
     pickerLayout: ["detailed", "compact"],
     spoilerGuard: ["off", "titles"],
     hudLayout: ["full", "minimal", "cinema", "custom"],
@@ -472,6 +480,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.taste = cleanTaste(input.taste);
   if (input.music && typeof input.music === "object")
     next.music = cleanMusic(input.music);
+  if (Array.isArray(input.themeSongSkip))
+    next.themeSongSkip = cleanThemeSkip(input.themeSongSkip);
   if (Array.isArray(input.countdowns))
     next.countdowns = cleanCountdowns(input.countdowns);
   if (Array.isArray(input.hudHidden))

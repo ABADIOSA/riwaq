@@ -204,3 +204,229 @@
     transparent 70%
   );
 }
+/* A title's theme song (core/theme-song.mjs, src/lib/audio.js). */
+.theme-song {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin: 12px 0 0;
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+}
+.theme-song img {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.theme-song span {
+  display: grid;
+  min-width: 0;
+}
+.theme-song b,
+.theme-song small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theme-song b {
+  font-size: 13px;
+}
+.theme-song small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.theme-song-play {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-soft, #ffffff14);
+  color: var(--accent);
+}
+.theme-song-play.playing {
+  background: var(--accent-fill, var(--accent));
+  color: var(--accent-ink, #111);
+}
+.theme-song .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+/* Spotify in the music room and the player bar (core/spotify.mjs). */
+.music-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--platform);
+  margin-inline-end: 4px;
+}
+.music-spotify-link ol {
+  margin: 8px 0 12px;
+  padding-inline-start: 20px;
+  line-height: 2;
+  color: var(--muted);
+  font-size: 13px;
+}
+.music-spotify-link code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 12px;
+}
+.music-spotify-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.music-spotify-row input {
+  flex: 1;
+  min-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.music-playlists {
+  margin-top: 14px;
+}
+.music-playlist {
+  flex: none;
+  width: 140px;
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+}
+.music-playlist img,
+.music-playlist .music-work-initial {
+  width: 140px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+.music-playlist b {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-playlist small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.music-bar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 16px;
+  margin-inline: auto;
+  width: min(760px, calc(100vw - 32px));
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 12px 40px #0008;
+}
+.music-bar img,
+.music-bar-art {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--raised);
+  flex: none;
+}
+.music-bar-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: start;
+  padding: 0;
+}
+.music-bar-text b,
+.music-bar-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.music-bar-text small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.music-bar-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.music-bar button {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 6px;
+  border-radius: 50%;
+}
+.music-bar .music-bar-main {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-fill, var(--accent));
+  color: var(--accent-ink, #111);
+}
+.music-bar-volume,
+.music-bar-device {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.music-bar-volume input {
+  width: 90px;
+}
+.music-bar-device select {
+  max-width: 130px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px 6px;
+}
+.music-bar-close {
+  color: var(--muted) !important;
+}
+@media (max-width: 1100px) {
+  .music-bar-volume {
+    display: none;
+  }
+}
+/* With the player bar up, the end of the page stays clear of it. */
+.app:has(.music-bar) .content {
+  padding-bottom: 96px;
+}

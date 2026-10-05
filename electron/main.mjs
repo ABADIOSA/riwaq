@@ -36,6 +36,11 @@ import { matchTrack, seriesOf, trackIdentity } from "../core/series-memory.mjs";
 import { skipPreferences } from "../core/skip-segments.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { musicLink, musicSearchUrl } from "../core/music.mjs";
+import {
+  SPOTIFY_PORT,
+  authorizeUrl as spotifyAuthorizeUrl,
+  pkce as spotifyPkce,
+} from "../core/spotify.mjs";
 import { inputConf } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
@@ -486,6 +491,92 @@ async function beginLogin() {
   );
   return true;
 }
+/**
+ * Linking Spotify (core/spotify.mjs): the viewer's own Client ID, PKCE, and
+ * a one-shot loopback server on the fixed port the viewer registered as the
+ * redirect URI. The browser does the sign-in; Riwaq sees only the code.
+ */
+let spotifyServer = null;
+let spotifyTimer = null;
+function cancelSpotifyLink() {
+  clearTimeout(spotifyTimer);
+  spotifyServer?.close();
+  spotifyServer?.closeAllConnections();
+  spotifyServer = null;
+}
+async function beginSpotifyLink(clientId) {
+  cancelSpotifyLink();
+  const id = client.spotify.setClientId(clientId);
+  const { verifier, challenge } = spotifyPkce();
+  const nonce = randomBytes(24).toString("hex");
+  const page = (res, status, message) => {
+    res.writeHead(status, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      "Content-Security-Policy":
+        "default-src 'none'; style-src 'unsafe-inline'",
+    });
+    res.end(
+      `<html dir="rtl"><meta charset="UTF-8"><title>Riwaq</title><body style="background:#111316;color:#f5ead9;font:22px Segoe UI;text-align:center;padding:100px">${message}</body></html>`,
+    );
+  };
+  spotifyServer = createServer(async (req, res) => {
+    const url = new URL(req.url, "http://127.0.0.1");
+    if (req.method !== "GET" || url.pathname !== "/callback") {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    // The state ties the answer to this attempt; anything else is refused.
+    if (url.searchParams.get("state") !== nonce) {
+      page(res, 400, "طلب غير متوقع. ارجع إلى رِواق وجرّب الربط مجدداً.");
+      return;
+    }
+    const code = url.searchParams.get("code");
+    if (!code || code.length > 2048) {
+      page(res, 400, "ما تم الربط. ارجع إلى رِواق وجرّب مجدداً.");
+      cancelSpotifyLink();
+      emit("notice", "ألغيت ربط Spotify أو رفضه الحساب");
+      return;
+    }
+    try {
+      await client.spotify.exchange(code, verifier);
+      page(res, 200, "تم ربط Spotify. ارجع إلى رِواق.");
+      emit("notice", "تم ربط Spotify");
+      broadcast();
+      window?.show();
+      window?.focus();
+    } catch (error) {
+      logError("spotify", error);
+      page(res, 400, "ما اكتمل الربط. ارجع إلى رِواق وجرّب مجدداً.");
+      emit("notice", error.message);
+    } finally {
+      cancelSpotifyLink();
+    }
+  });
+  await new Promise((resolve, reject) => {
+    spotifyServer.once("error", () =>
+      reject(
+        new Error(
+          `المنفذ ${SPOTIFY_PORT} مستخدم من برنامج ثاني. أغلقه ثم جرّب الربط.`,
+        ),
+      ),
+    );
+    spotifyServer.listen(SPOTIFY_PORT, "127.0.0.1", resolve);
+  }).catch((error) => {
+    cancelSpotifyLink();
+    throw error;
+  });
+  spotifyTimer = setTimeout(() => {
+    cancelSpotifyLink();
+    emit("notice", "انتهت مهلة ربط Spotify. يمكنك المحاولة مجدداً.");
+  }, 300000);
+  await shell.openExternal(
+    spotifyAuthorizeUrl({ clientId: id, challenge, state: nonce }),
+  );
+  return true;
+}
 function hotkeyFile() {
   const path = join(app.getPath("userData"), "input.conf");
   writeFileSync(path, inputConf(client.state.hotkeys), "utf8");
@@ -880,6 +971,54 @@ const methods = {
     client.credits.searchPeople({
       query: typeof a?.query === "string" ? a.query : "",
     }),
+  // A title's theme song: a preview chosen in main from its own copy of the
+  // title (core/theme-song.mjs); only the song's names, picture and preview
+  // address (Apple's or Deezer's preview hosts) reach the page.
+  themeSong: (a) =>
+    client.themeSong({
+      type: a?.type === "series" ? "series" : "movie",
+      id: typeof a?.id === "string" ? a.id.slice(0, 200) : "",
+    }),
+  // Spotify Connect (core/spotify.mjs): main-window only.
+  spotifyConnect: (a) => beginSpotifyLink(a?.clientId),
+  spotifyDisconnect: () => {
+    cancelSpotifyLink();
+    client.spotify.disconnect();
+    return client.publicState();
+  },
+  spotifyState: async () => {
+    const pub = client.spotify.publicState();
+    if (!pub.connected) return { ...pub, playback: null, devices: [] };
+    const [playback, devices] = await Promise.all([
+      client.spotify.playback().catch((e) => ({ error: e.message })),
+      client.spotify.devices().catch(() => []),
+    ]);
+    const failed = playback && "error" in playback;
+    return {
+      ...client.spotify.publicState(),
+      playback: failed ? null : playback,
+      error: failed ? playback.error : "",
+      devices,
+    };
+  },
+  spotifyPlaylists: () => client.spotify.playlists(),
+  spotifyControl: async (a) => {
+    await client.spotify.control({
+      action: a?.action,
+      uri: a?.uri,
+      deviceId: a?.deviceId,
+      volume: a?.volume,
+      state: a?.state === true,
+    });
+    // Spotify applies a command a moment later; read the state after it.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return client.spotify.playback().catch(() => null);
+  },
+  // Only this fixed address: it starts the Spotify app when installed.
+  spotifyOpenApp: async () => {
+    await shell.openExternal("spotify:");
+    return true;
+  },
   // Music (core/music.mjs): a saved link or a platform's search page, each
   // re-checked here to be HTTPS on that platform's own hosts before the
   // system opens it. Riwaq plays no audio and holds no platform sign-in.
@@ -1930,6 +2069,7 @@ app.on("before-quit", (event) => {
   closing = true;
   client?.updates.stop();
   cancelLogin();
+  cancelSpotifyLink();
   // Stopping the player sends the final scrobble; give it a moment to land so
   // a play finished just before closing is recorded rather than queued.
   Promise.resolve(player?.stop())

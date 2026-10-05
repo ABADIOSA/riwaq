@@ -32,6 +32,8 @@ import {
   History,
   Search,
   Music2,
+  Pause,
+  VolumeX,
 } from "lucide-react";
 import ArtworkGallery from "./ArtworkGallery.jsx";
 import { TasteFeedback } from "./TasteDiscovery.jsx";
@@ -60,6 +62,14 @@ import {
 import { IconButton, Busy, Empty, Modal, ScrollRow } from "./UI.jsx";
 import { TitleLogo } from "./TitleLogo.jsx";
 import { dominantColor, titleTheme } from "../../core/title-theme.mjs";
+import {
+  externalMusicPlaying,
+  onAudio,
+  playPreview,
+  stopAudio,
+  toggleAudio,
+  videoIsPlaying,
+} from "../lib/audio.js";
 import { luminance, resolveAppearance } from "../../core/appearance.mjs";
 import {
   platformName,
@@ -114,6 +124,10 @@ export default function Details({
     asked = useRef(null),
     // The colour read from the title's artwork, for its page theme.
     [artColor, setArtColor] = useState(null),
+    // The title's theme song (core/theme-song.mjs) and whether it plays.
+    [song, setSong] = useState(null),
+    [songPlaying, setSongPlaying] = useState(false),
+    songOwner = useRef(`page-${Math.random().toString(36).slice(2)}`),
     [quality, setQuality] = useState(""),
     [showOutside, setShowOutside] = useState(false),
     [showDropped, setShowDropped] = useState(false),
@@ -326,6 +340,63 @@ export default function Details({
     gradient: look.gradient,
   });
   const musicPlatform = preferredPlatform(state.settings.music);
+  // The theme song: asked once the title is loaded; it plays at once in
+  // "auto" (never over Spotify, a viewing or a hidden window), waits for a
+  // press in "button", and stops when the page goes.
+  const songMode = state.settings.themeSong || "auto";
+  const songKey = `${meta.type}:${meta.id}`;
+  const songRefused = (state.settings.themeSongSkip || []).includes(songKey);
+  useEffect(() => {
+    setSong(null);
+    if (songMode === "off" || loading || songRefused || !meta.id) return;
+    let live = true;
+    call("themeSong", { type: meta.type, id: meta.id })
+      .then((found) => {
+        if (!live || !found) return;
+        setSong(found);
+        if (
+          songMode === "auto" &&
+          document.visibilityState === "visible" &&
+          !externalMusicPlaying() &&
+          !videoIsPlaying()
+        )
+          playPreview(found, {
+            owner: songOwner.current,
+            volume: (state.settings.themeSongVolume || 35) / 100,
+            gentle: !(
+              state.settings.reduceMotion ||
+              matchMedia("(prefers-reduced-motion: reduce)").matches
+            ),
+          });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      stopAudio(songOwner.current);
+    };
+  }, [meta.id, meta.type, loading, songMode, songRefused]);
+  useEffect(
+    () =>
+      onAudio((now) =>
+        setSongPlaying(!!now?.playing && now.owner === songOwner.current),
+      ),
+    [],
+  );
+  const playSong = () => {
+    if (songPlaying) toggleAudio();
+    else
+      playPreview(song, {
+        owner: songOwner.current,
+        volume: (state.settings.themeSongVolume || 35) / 100,
+      });
+  };
+  const refuseSong = () => {
+    stopAudio(songOwner.current, { fadeMs: 200 });
+    setSong(null);
+    update("settings", {
+      themeSongSkip: [songKey, ...(state.settings.themeSongSkip || [])],
+    });
+  };
   const openSources = () => {
     setShowSources(true);
     if (popupMode) {
@@ -964,6 +1035,35 @@ export default function Details({
                 : "أضف إلى الطابور"}
             </button>
           </div>
+          {!loading && song && (
+            <div className="theme-song" role="group" aria-label="أغنية العمل">
+              <button
+                className={`theme-song-play ${songPlaying ? "playing" : ""}`}
+                onClick={playSong}
+                aria-pressed={songPlaying}
+                title={songPlaying ? "إيقاف مؤقت" : "شغّل أغنية العمل"}
+              >
+                {songPlaying ? <Pause size={15} /> : <Music2 size={15} />}
+              </button>
+              {song.image && (
+                <img src={song.image} alt="" referrerPolicy="no-referrer" />
+              )}
+              <span>
+                <b dir="auto">{song.track}</b>
+                <small dir="auto">
+                  {song.artist} · مقطع 30 ثانية من{" "}
+                  {song.source === "deezer" ? "Deezer" : "Apple Music"}
+                </small>
+              </span>
+              <button
+                className="text-button"
+                onClick={refuseSong}
+                title="ما تنطلب لهذا العمل مرة ثانية"
+              >
+                <VolumeX size={14} /> مو هذي
+              </button>
+            </div>
+          )}
           {!loading && (
             <TasteFeedback meta={meta} state={state} update={update} />
           )}
