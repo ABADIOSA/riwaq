@@ -94,6 +94,14 @@ export const EXCLUDED = {
   many: "{n} عملاً مستبعداً",
   other: "{n} عمل مستبعد",
 };
+export const SONGS = {
+  zero: "لا أغاني",
+  one: "أغنية واحدة",
+  two: "أغنيتان",
+  few: "{n} أغانٍ",
+  many: "{n} أغنية",
+  other: "{n} أغنية",
+};
 export const CATALOGS = {
   zero: "لا كتالوجات",
   one: "كتالوج واحد",

@@ -23,6 +23,15 @@ import {
 import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
+import { SpotifyHub } from "./spotify.mjs";
+import {
+  deezerUrl,
+  fromDeezer,
+  fromItunes,
+  itunesUrl,
+  pickThemeSong,
+  themeQueries,
+} from "./theme-song.mjs";
 import { editTaste } from "./taste.mjs";
 import { parseReleaseDates } from "./countdown.mjs";
 import {
@@ -186,6 +195,7 @@ export class Client {
     request = fetchJson,
     requestText = fetchText,
     api = stremioCall,
+    spotifyRequest,
     version = "",
   }) {
     this.version = version;
@@ -214,6 +224,12 @@ export class Client {
     this.ai = new AiSearch(this);
     this.credits = new Credits(this);
     this.integrations = new Integrations(this);
+    // Spotify Connect, with the viewer's own Client ID (core/spotify.mjs).
+    this.spotify = new SpotifyHub({
+      bag: () => ((this.state.integrations ||= {}).spotify ||= {}),
+      save: () => this.persist(),
+      ...(spotifyRequest ? { request: spotifyRequest } : {}),
+    });
     this.live = new LiveHub(this);
     this.profiles = new Profiles(this);
     this.notifier = new Notifier(this);
@@ -278,6 +294,7 @@ export class Client {
       services: this.services.publicState(),
       aiSearch: this.ai.publicState(),
       integrations: this.integrations.publicState(),
+      spotify: this.spotify.publicState(),
       live: this.live.publicState(),
       profiles: this.profiles.publicState(),
       notify: this.notifier.publicState(),
@@ -1970,6 +1987,44 @@ export class Client {
       this.subtitleLists.set(cacheKey, { at: Date.now(), list });
     }
     return list;
+  }
+
+  /**
+   * A title's theme song (core/theme-song.mjs): from main's own copy of the
+   * title, a 30-second preview from iTunes or Deezer that clearly belongs to
+   * it, or null. Kept a day per title, including "none"; a search that
+   * failed everywhere is asked again next time.
+   */
+  async themeSong({ type, id }) {
+    const key = `${type}:${id}`;
+    const meta = this.metas.get(key);
+    if (!meta?.name) return null;
+    const cache = (this.themeSongs ||= new Map());
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < 86400000) return hit.song;
+    let song = null;
+    let failed = 0;
+    let asked = 0;
+    const ask = (url, read) => {
+      asked++;
+      return this.request(url, { timeout: 7000, redirect: "error" })
+        .then(read)
+        .catch(() => {
+          failed++;
+          return [];
+        });
+    };
+    for (const query of themeQueries(meta)) {
+      const lists = await Promise.all([
+        ask(itunesUrl(query), fromItunes),
+        ask(deezerUrl(query), fromDeezer),
+      ]);
+      song = pickThemeSong(lists.flat(), meta);
+      if (song) break;
+    }
+    if (song || failed < asked)
+      boundedSet(cache, key, { at: Date.now(), song }, 300);
+    return song;
   }
 
   configureUrl(key) {

@@ -375,6 +375,45 @@ export function AmbiencePage({ state, update }) {
         />
       </section>
       <section className="settings-card">
+        <h2>أغنية العمل</h2>
+        <p>
+          لما تفتح صفحة فيلم أو مسلسل، رِواق يشغّل أغنيته (مقطع 30 ثانية من
+          Apple Music أو Deezer) إذا لقاها بثقة؛ وإذا ما تأكد يسكت. ما تشتغل فوق
+          Spotify أو أثناء المشاهدة، وتوقف لما تطلع من الصفحة. «مو هذي» تمنعها
+          لذاك العمل.
+        </p>
+        <Choices
+          options={[
+            ["auto", "تشتغل تلقائياً"],
+            ["button", "زر أشغّلها أنا"],
+            ["off", "بدون"],
+          ]}
+          value={state.settings.themeSong || "auto"}
+          onPick={(themeSong) => update("settings", { themeSong })}
+        />
+        {(state.settings.themeSong || "auto") !== "off" && (
+          <div className="studio-field">
+            مستوى الصوت
+            <Choices
+              options={[10, 20, 35, 50, 70, 100].map((v) => [v, `${v}٪`])}
+              value={state.settings.themeSongVolume || 35}
+              onPick={(themeSongVolume) =>
+                update("settings", { themeSongVolume })
+              }
+            />
+          </div>
+        )}
+        {(state.settings.themeSongSkip || []).length > 0 && (
+          <button
+            className="text-button"
+            onClick={() => update("settings", { themeSongSkip: [] })}
+          >
+            رجّع الأغاني اللي قلت عنها «مو هذي» (
+            {(state.settings.themeSongSkip || []).length})
+          </button>
+        )}
+      </section>
+      <section className="settings-card">
         <h2>أجواء العمل المعروض</h2>
         <p>
           توهّج خافت بألوان العمل خلف رِواق. يتبع العمل اللي تحت مؤشر الفأرة، أو

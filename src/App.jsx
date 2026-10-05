@@ -59,6 +59,8 @@ import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
 import RiwaqNav from "./components/RiwaqNav.jsx";
 import SessionHome from "./components/SessionHome.jsx";
+import MusicBar from "./components/MusicBar.jsx";
+import { setVideoPlaying } from "./lib/audio.js";
 import TasteDiscovery from "./components/TasteDiscovery.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
 import DiscoverSections from "./components/DiscoverSections.jsx";
@@ -334,6 +336,8 @@ export default function App() {
       clearTimeout(toastTimer.current);
     };
   }, []);
+  // No theme song plays over a viewing (src/lib/audio.js).
+  useEffect(() => setVideoPlaying(player.active), [player.active]);
   useEffect(() => {
     if (player.active) {
       setSelected(null);
@@ -1488,6 +1492,12 @@ export default function App() {
             </small>
           </footer>
         </main>
+        <MusicBar
+          linked={!!state.spotify?.connected}
+          hidden={player.active}
+          act={act}
+          onRoom={() => navigate("music")}
+        />
         {toast && (
           <div role="status" className="toast">
             <AlertCircle size={18} />

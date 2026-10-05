@@ -150,6 +150,23 @@ export function musicQuery(value) {
     .slice(0, 120);
 }
 
+/**
+ * A saved Spotify page as the URI Spotify plays ("spotify:playlist:…"), or
+ * "" when the link is not one Riwaq can start through Spotify.
+ */
+export function spotifyUri(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname !== "open.spotify.com") return "";
+    const m = u.pathname.match(
+      /^\/(?:intl-[a-z]{2}(?:-[a-z]{2})?\/)?(track|album|playlist|artist|show|episode)\/([A-Za-z0-9]{10,40})\/?$/,
+    );
+    return m ? `spotify:${m[1]}:${m[2]}` : "";
+  } catch {
+    return "";
+  }
+}
+
 /** The platform's own search page for a phrase, or "". */
 export function musicSearchUrl(platform, query) {
   const p = BY_ID.get(platform);

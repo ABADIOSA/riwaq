@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Music2,
   Star,
@@ -8,6 +8,10 @@ import {
   ArrowUp,
   Trash2,
   Disc3,
+  Play,
+  Link2,
+  Copy,
+  Unlink,
 } from "lucide-react";
 import {
   MUSIC_KINDS,
@@ -18,9 +22,11 @@ import {
   platformName,
   preferredPlatform,
   soundtrackQuery,
+  spotifyUri,
 } from "../../core/music.mjs";
+import { call } from "../lib/api.js";
 import { continueWatching } from "../../core/library.mjs";
-import { arabicCount, WORKS } from "../../core/arabic.mjs";
+import { arabicCount, SONGS, WORKS } from "../../core/arabic.mjs";
 import { imgUrl } from "../lib/helpers.js";
 import { ScrollRow } from "./UI.jsx";
 
@@ -98,6 +104,35 @@ export default function MusicRoom({ state, update, act, notice }) {
       .slice(0, 12);
   }, [state.progress, state.favorites]);
   const first = preferredPlatform(music);
+  // Spotify Connect (core/spotify.mjs): Riwaq plays through the viewer's own
+  // Spotify app and account.
+  const spotify = state.spotify || {};
+  const [clientId, setClientId] = useState(""),
+    [playlists, setPlaylists] = useState(null),
+    [noDevice, setNoDevice] = useState(false);
+  useEffect(() => {
+    if (!spotify.connected) {
+      setPlaylists(null);
+      return;
+    }
+    let live = true;
+    call("spotifyPlaylists")
+      .then((list) => live && setPlaylists(list))
+      .catch(() => live && setPlaylists([]));
+    return () => {
+      live = false;
+    };
+  }, [spotify.connected]);
+  const playOnSpotify = async (uri) => {
+    setNoDevice(false);
+    try {
+      await call("spotifyControl", { action: "play", uri });
+      notice("يشتغل على Spotify");
+    } catch (error) {
+      if (/جهاز Spotify/.test(error.message)) setNoDevice(true);
+      notice(error.message);
+    }
+  };
   return (
     <section className="music-page">
       <div className="page-heading">
@@ -148,6 +183,117 @@ export default function MusicRoom({ state, update, act, notice }) {
             );
           })}
         </div>
+      </section>
+
+      <section className="settings-card music-spotify">
+        <h2>
+          <i className="music-dot" style={{ "--platform": "#1DB954" }} /> رِواق
+          مشغّل Spotify
+        </h2>
+        {spotify.connected ? (
+          <>
+            <p>
+              مربوط باسم <b dir="auto">{spotify.name || "حسابك"}</b>
+              {spotify.premium
+                ? " · Premium"
+                : " · التحكم بالتشغيل يحتاج Premium (شرط من Spotify)"}
+              . الصوت يطلع من تطبيق Spotify على جهازك، ورِواق يعرض ويتحكم:
+              الشريط تحت يبين وش يشتغل، وتقدر توقف وتقدّم وتغيّر الصوت والجهاز.
+            </p>
+            <div className="button-row">
+              {noDevice && (
+                <button
+                  className="secondary"
+                  onClick={() => act("spotifyOpenApp")}
+                >
+                  افتح تطبيق Spotify
+                </button>
+              )}
+              <button
+                className="secondary"
+                onClick={() => update("spotifyDisconnect")}
+              >
+                <Unlink size={15} /> افصل الحساب
+              </button>
+            </div>
+            {playlists === null ? (
+              <p className="subtle">نجيب قوائمك…</p>
+            ) : playlists.length ? (
+              <ScrollRow className="music-playlists">
+                {playlists.map((p) => (
+                  <button
+                    key={p.uri}
+                    className="music-playlist"
+                    onClick={() => playOnSpotify(p.uri)}
+                    title={`شغّل «${p.name}»`}
+                  >
+                    {p.image ? (
+                      <img src={p.image} alt="" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="music-work-initial">♪</span>
+                    )}
+                    <b dir="auto">{p.name}</b>
+                    <small>
+                      <Play size={11} /> {arabicCount(p.tracks, SONGS)}
+                    </small>
+                  </button>
+                ))}
+              </ScrollRow>
+            ) : (
+              <p className="subtle">ما لقينا قوائم تشغيل في حسابك.</p>
+            )}
+          </>
+        ) : (
+          <form
+            className="music-spotify-link"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (await act("spotifyConnect", { clientId }))
+                notice("كمّل الربط في المتصفح، ثم ارجع لرِواق");
+            }}
+          >
+            <p>
+              اربط حسابك ويصير رِواق هو المشغّل: يعرض اللي يشتغل ويتحكم فيه،
+              ويشغّل قوائمك ومحفوظاتك على أجهزتك. ما نطلب كلمة مرورك؛ تسجّل في
+              صفحة Spotify نفسها.
+            </p>
+            <ol>
+              <li>
+                افتح لوحة مطوري Spotify (developer.spotify.com/dashboard) وأنشئ
+                تطبيقاً.
+              </li>
+              <li>
+                أضف هذا العنوان في Redirect URIs:{" "}
+                <code dir="ltr">{spotify.redirect}</code>{" "}
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() =>
+                    navigator.clipboard
+                      ?.writeText(spotify.redirect)
+                      .then(() => notice("تم نسخ العنوان"))
+                  }
+                >
+                  <Copy size={13} /> انسخ
+                </button>
+              </li>
+              <li>انسخ Client ID من التطبيق والصقه هنا:</li>
+            </ol>
+            <div className="music-spotify-row">
+              <input
+                dir="ltr"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder="Client ID (32 حرفاً)"
+                aria-label="Spotify Client ID"
+                maxLength={64}
+              />
+              <button className="primary" disabled={!clientId.trim()}>
+                <Link2 size={15} /> اربط Spotify
+              </button>
+            </div>
+          </form>
+        )}
       </section>
 
       <div className="music-columns">
@@ -253,8 +399,16 @@ export default function MusicRoom({ state, update, act, notice }) {
               >
                 <button
                   className="music-open"
-                  onClick={() => open({ url: item.url })}
-                  title="افتح في المنصة"
+                  onClick={() =>
+                    spotify.connected && spotifyUri(item.url)
+                      ? playOnSpotify(spotifyUri(item.url))
+                      : open({ url: item.url })
+                  }
+                  title={
+                    spotify.connected && spotifyUri(item.url)
+                      ? "شغّل في رِواق عبر Spotify"
+                      : "افتح في المنصة"
+                  }
                 >
                   <Disc3 size={26} />
                   <span>
@@ -269,6 +423,15 @@ export default function MusicRoom({ state, update, act, notice }) {
                   <ExternalLink size={15} />
                 </button>
                 <div className="music-item-tools">
+                  {spotify.connected && spotifyUri(item.url) && (
+                    <button
+                      title="افتح في Spotify"
+                      aria-label="افتح في Spotify"
+                      onClick={() => open({ url: item.url })}
+                    >
+                      <ExternalLink size={14} />
+                    </button>
+                  )}
                   {!only && index > 0 && (
                     <button
                       title="أعلى"
