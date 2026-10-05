@@ -47,6 +47,32 @@ const norm = (value) =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
+const ARABIC = /[\u0600-\u06ff]/;
+const LATIN = /[A-Za-z]/;
+/**
+ * The names a title's music is filed under, best first: the addon's own
+ * name and the original title before a translated one (with an Arabic
+ * metadata language, TMDB names "Game of Thrones" «صراع العروش», and no
+ * album carries that). Names in Latin letters come first; at most two.
+ */
+export function themeNames(meta = {}) {
+  const names = [];
+  for (const value of [meta.addonName, meta.originalName, meta.name]) {
+    const name = String(value || "")
+      .replace(/[\u0000-\u001f\u007f]+/g, " ")
+      .trim()
+      .slice(0, 100);
+    if (name && !names.some((n) => n.toLowerCase() === name.toLowerCase()))
+      names.push(name);
+  }
+  const rank = (n) => (LATIN.test(n) && !ARABIC.test(n) ? 0 : 1);
+  return names
+    .map((n, i) => [n, i])
+    .sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1])
+    .map(([n]) => n)
+    .slice(0, 2);
+}
+
 /** The phrases to search with, most specific first. */
 export function themeQueries(meta = {}) {
   const name = String(meta.name || "")
@@ -86,6 +112,36 @@ export function fromItunes(body) {
       source: "itunes",
     }))
     .filter((c) => c.preview && c.track);
+}
+
+/**
+ * Spotify search results as candidates (with the linked account): the full
+ * track's URI to play through Spotify, no preview needed.
+ */
+export function fromSpotify(body) {
+  return (Array.isArray(body?.tracks?.items) ? body.tracks.items : [])
+    .filter((t) => /^spotify:track:[A-Za-z0-9]{10,40}$/.test(t?.uri || ""))
+    .map((t) => ({
+      track: String(t.name || "").slice(0, 200),
+      artist: String(t.artists?.[0]?.name || "").slice(0, 200),
+      album: String(t.album?.name || "").slice(0, 200),
+      year:
+        Number.parseInt(String(t.album?.release_date || "").slice(0, 4)) || 0,
+      preview: "",
+      image: (() => {
+        for (const img of t.album?.images || [])
+          try {
+            const u = new URL(img.url);
+            if (u.protocol === "https:" && /\.scdn\.co$/.test(u.hostname))
+              return u.toString();
+          } catch {}
+        return "";
+      })(),
+      link: "",
+      spotifyUri: t.uri,
+      source: "spotify",
+    }))
+    .filter((c) => c.track);
 }
 
 /** Deezer results as candidates. */

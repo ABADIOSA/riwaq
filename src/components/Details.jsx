@@ -70,6 +70,12 @@ import {
   toggleAudio,
   videoIsPlaying,
 } from "../lib/audio.js";
+import {
+  startSpotifyTheme,
+  stopSpotifyTheme,
+  toggleSpotifyTheme,
+} from "../lib/theme-spotify.js";
+import { themeNames } from "../../core/theme-song.mjs";
 import { luminance, resolveAppearance } from "../../core/appearance.mjs";
 import {
   platformName,
@@ -124,8 +130,11 @@ export default function Details({
     asked = useRef(null),
     // The colour read from the title's artwork, for its page theme.
     [artColor, setArtColor] = useState(null),
-    // The title's theme song (core/theme-song.mjs) and whether it plays.
+    // The title's theme song (core/theme-song.mjs) and whether it plays,
+    // on Riwaq's own audio or through the viewer's Spotify.
     [song, setSong] = useState(null),
+    [songMissing, setSongMissing] = useState(false),
+    [onSpotify, setOnSpotify] = useState(""),
     [songPlaying, setSongPlaying] = useState(false),
     songOwner = useRef(`page-${Math.random().toString(36).slice(2)}`),
     [quality, setQuality] = useState(""),
@@ -346,35 +355,63 @@ export default function Details({
   const songMode = state.settings.themeSong || "auto";
   const songKey = `${meta.type}:${meta.id}`;
   const songRefused = (state.settings.themeSongSkip || []).includes(songKey);
+  // Spotify plays the full track when linked with Premium and allowed.
+  const spotifyTheme =
+    (state.settings.themeSongSource || "auto") === "auto" &&
+    !!state.spotify?.connected &&
+    !!state.spotify?.premium;
+  // The name the music is filed under (not a translated one).
+  const musicMeta = { ...meta, name: themeNames(meta)[0] || meta.name };
   useEffect(() => {
     setSong(null);
+    setSongMissing(false);
+    setOnSpotify("");
     if (songMode === "off" || loading || songRefused || !meta.id) return;
     let live = true;
+    let spotifyUri = "";
     call("themeSong", { type: meta.type, id: meta.id })
-      .then((found) => {
-        if (!live || !found) return;
+      .then(async (found) => {
+        if (!live) return;
+        if (!found) {
+          setSongMissing(true);
+          return;
+        }
         setSong(found);
         if (
-          songMode === "auto" &&
-          document.visibilityState === "visible" &&
-          !externalMusicPlaying() &&
-          !videoIsPlaying()
+          songMode !== "auto" ||
+          document.visibilityState !== "visible" ||
+          videoIsPlaying()
         )
-          playPreview(found, {
-            owner: songOwner.current,
-            volume: (state.settings.themeSongVolume || 35) / 100,
-            gentle: !(
-              state.settings.reduceMotion ||
-              matchMedia("(prefers-reduced-motion: reduce)").matches
-            ),
-          });
+          return;
+        if (found.spotifyUri && spotifyTheme) {
+          const ok = await startSpotifyTheme(found.spotifyUri);
+          if (ok && !live) {
+            stopSpotifyTheme(found.spotifyUri);
+            return;
+          }
+          if (ok) {
+            spotifyUri = found.spotifyUri;
+            setOnSpotify(found.spotifyUri);
+            return;
+          }
+        }
+        if (!live || !found.preview || externalMusicPlaying()) return;
+        playPreview(found, {
+          owner: songOwner.current,
+          volume: (state.settings.themeSongVolume || 35) / 100,
+          gentle: !(
+            state.settings.reduceMotion ||
+            matchMedia("(prefers-reduced-motion: reduce)").matches
+          ),
+        });
       })
       .catch(() => {});
     return () => {
       live = false;
       stopAudio(songOwner.current);
+      stopSpotifyTheme(spotifyUri);
     };
-  }, [meta.id, meta.type, loading, songMode, songRefused]);
+  }, [meta.id, meta.type, loading, songMode, songRefused, spotifyTheme]);
   useEffect(
     () =>
       onAudio((now) =>
@@ -382,16 +419,36 @@ export default function Details({
       ),
     [],
   );
-  const playSong = () => {
+  const playSong = async () => {
+    if (onSpotify) {
+      const next = await toggleSpotifyTheme(songPlaying).catch(() => null);
+      setSongPlaying(!!next?.playing);
+      return;
+    }
     if (songPlaying) toggleAudio();
-    else
+    else if (song.spotifyUri && spotifyTheme) {
+      if (await startSpotifyTheme(song.spotifyUri)) {
+        setOnSpotify(song.spotifyUri);
+        setSongPlaying(true);
+      } else if (song.preview)
+        playPreview(song, {
+          owner: songOwner.current,
+          volume: (state.settings.themeSongVolume || 35) / 100,
+        });
+    } else if (song.preview)
       playPreview(song, {
         owner: songOwner.current,
         volume: (state.settings.themeSongVolume || 35) / 100,
       });
   };
+  // While the theme plays on Spotify, the button follows Spotify.
+  useEffect(() => {
+    if (onSpotify) setSongPlaying(true);
+  }, [onSpotify]);
   const refuseSong = () => {
     stopAudio(songOwner.current, { fadeMs: 200 });
+    stopSpotifyTheme(onSpotify);
+    setOnSpotify("");
     setSong(null);
     update("settings", {
       themeSongSkip: [songKey, ...(state.settings.themeSongSkip || [])],
@@ -974,14 +1031,14 @@ export default function Details({
                 ? "في مجموعاتك"
                 : "أضف لمجموعة"}
             </button>
-            {soundtrackQuery(meta) && (
+            {soundtrackQuery(musicMeta) && (
               <button
                 className="secondary"
                 title={`ابحث عن موسيقى العمل في ${platformName(musicPlatform)}`}
                 onClick={() =>
                   act("musicOpen", {
                     platform: musicPlatform,
-                    query: soundtrackQuery(meta),
+                    query: soundtrackQuery(musicMeta),
                   })
                 }
               >
@@ -1035,6 +1092,25 @@ export default function Details({
                 : "أضف إلى الطابور"}
             </button>
           </div>
+          {!loading && songMissing && songMode !== "off" && (
+            <div className="theme-song missing" role="status">
+              <Music2 size={15} />
+              <span>
+                <small>ما لقينا أغنية هذا العمل بثقة، فسكتنا.</small>
+              </span>
+              <button
+                className="text-button"
+                onClick={() =>
+                  act("musicOpen", {
+                    platform: musicPlatform,
+                    query: soundtrackQuery(musicMeta),
+                  })
+                }
+              >
+                ابحث عنها في {platformName(musicPlatform)}
+              </button>
+            </div>
+          )}
           {!loading && song && (
             <div className="theme-song" role="group" aria-label="أغنية العمل">
               <button
@@ -1049,10 +1125,19 @@ export default function Details({
                 <img src={song.image} alt="" referrerPolicy="no-referrer" />
               )}
               <span>
-                <b dir="auto">{song.track}</b>
+                <b dir="auto">
+                  {onSpotify ? song.spotifyTrack || song.track : song.track}
+                </b>
                 <small dir="auto">
-                  {song.artist} · مقطع 30 ثانية من{" "}
-                  {song.source === "deezer" ? "Deezer" : "Apple Music"}
+                  {onSpotify
+                    ? `${song.spotifyArtist || song.artist} · كاملة على Spotify`
+                    : `${song.artist} · مقطع 30 ثانية من ${
+                        song.source === "deezer"
+                          ? "Deezer"
+                          : song.source === "spotify"
+                            ? "Spotify"
+                            : "Apple Music"
+                      }`}
                 </small>
               </span>
               <button

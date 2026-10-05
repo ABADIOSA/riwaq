@@ -377,10 +377,10 @@ export function AmbiencePage({ state, update }) {
       <section className="settings-card">
         <h2>أغنية العمل</h2>
         <p>
-          لما تفتح صفحة فيلم أو مسلسل، رِواق يشغّل أغنيته (مقطع 30 ثانية من
-          Apple Music أو Deezer) إذا لقاها بثقة؛ وإذا ما تأكد يسكت. ما تشتغل فوق
-          Spotify أو أثناء المشاهدة، وتوقف لما تطلع من الصفحة. «مو هذي» تمنعها
-          لذاك العمل.
+          لما تفتح صفحة فيلم أو مسلسل، رِواق يشغّل أغنيته إذا لقاها بثقة: كاملة
+          على Spotify إذا ربطته (Premium)، وإلا مقطع 30 ثانية من Apple Music أو
+          Deezer. إذا ما تأكد يسكت ويقول لك. ما تقاطع موسيقاك ولا تشتغل أثناء
+          المشاهدة، وتوقف لما تطلع من الصفحة. «مو هذي» تمنعها لذاك العمل.
         </p>
         <Choices
           options={[
@@ -391,6 +391,21 @@ export function AmbiencePage({ state, update }) {
           value={state.settings.themeSong || "auto"}
           onPick={(themeSong) => update("settings", { themeSong })}
         />
+        {(state.settings.themeSong || "auto") !== "off" && (
+          <div className="studio-field">
+            المصدر
+            <Choices
+              options={[
+                ["auto", "Spotify كاملة إذا مربوط (Premium)، وإلا مقطع"],
+                ["previews", "مقطع 30 ثانية دائماً"],
+              ]}
+              value={state.settings.themeSongSource || "auto"}
+              onPick={(themeSongSource) =>
+                update("settings", { themeSongSource })
+              }
+            />
+          </div>
+        )}
         {(state.settings.themeSong || "auto") !== "off" && (
           <div className="studio-field">
             مستوى الصوت

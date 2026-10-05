@@ -1832,6 +1832,7 @@ app
       // Sources that arrive after the list was shown (core/source-wait.mjs):
       // counts and addon names only, for the main window.
       client.onLateSources = (info) => emit("sources", info);
+      client.onThemeError = (message) => logError("themeSong", message);
       client.updates = new DesktopUpdates(client, {
         current: app.getVersion(),
         directory: join(app.getPath("userData"), "updates"),

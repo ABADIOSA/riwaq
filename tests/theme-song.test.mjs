@@ -195,17 +195,29 @@ test("settings: auto by default, a volume, and refused titles", () => {
 
 test("the page plays a theme only when nothing else is, and stops when it goes", () => {
   const details = source("src/components/Details.jsx");
+  // Not in "button" mode, a hidden window or during a viewing.
   assert.match(
     details,
-    /songMode === "auto" &&\s+document\.visibilityState === "visible" &&\s+!externalMusicPlaying\(\) &&\s+!videoIsPlaying\(\)/,
+    /songMode !== "auto" \|\|\s+document\.visibilityState !== "visible" \|\|\s+videoIsPlaying\(\)/,
+  );
+  // Riwaq's own preview never plays over the viewer's music.
+  assert.match(
+    details,
+    /if \(!live \|\| !found\.preview \|\| externalMusicPlaying\(\)\) return;/,
   );
   assert.match(
     details,
-    /return \(\) => \{\s+live = false;\s+stopAudio\(songOwner\.current\);/,
+    /return \(\) => \{\s+live = false;\s+stopAudio\(songOwner\.current\);\s+stopSpotifyTheme\(spotifyUri\);/,
   );
+  // Searched by the name the music is filed under, never a translated one.
+  assert.match(details, /soundtrackQuery\(musicMeta\)/);
   assert.match(source("src/App.jsx"), /setVideoPlaying\(player\.active\)/);
   const main = source("electron/main.mjs");
   assert.match(main, /themeSong: \(a\) =>\s+client\.themeSong\(/);
+  assert.match(
+    main,
+    /client\.onThemeError = \(message\) => logError\("themeSong", message\)/,
+  );
   assert.match(source("electron/preload.cjs"), /"themeSong"/);
   assert.doesNotMatch(source("core/hud.mjs"), /themeSong|spotify/i);
 });
