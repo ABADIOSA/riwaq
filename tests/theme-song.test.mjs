@@ -39,7 +39,7 @@ test("only Apple's and Deezer's preview hosts play, over HTTPS", () => {
   // The CSP lets exactly these hosts be media.
   assert.match(
     source("index.html"),
-    /media-src 'self' https:\/\/audio-ssl\.itunes\.apple\.com https:\/\/\*\.dzcdn\.net;/,
+    /media-src 'self' riwaq-audio: https:\/\/audio-ssl\.itunes\.apple\.com https:\/\/\*\.dzcdn\.net;/,
   );
 });
 

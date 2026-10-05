@@ -86,7 +86,7 @@ export default function RiwaqNav({
           [ArrowUpLeft, "home", "جلسة اليوم"],
           [Compass, "discover", "اكتشف"],
           [Library, "library", "مكتبتي"],
-          [Folders, "collections", "مجموعاتي"],
+          [Music2, "music", "موسيقى"],
         ]
           .filter(([, id]) => !appearance.navHidden.includes(id) || id === view)
           .map(([Icon, id, label]) => (
@@ -98,9 +98,7 @@ export default function RiwaqNav({
             >
               <Icon size={17} />
               <span>{label}</span>
-              {isLocked(id === "collections" ? "library" : id) && (
-                <Lock size={12} />
-              )}
+              {isLocked(id === "music" ? "library" : id) && <Lock size={12} />}
             </button>
           ))}
       </nav>
@@ -137,12 +135,12 @@ export default function RiwaqNav({
             <div className="riwaq-tools-panel" id="riwaq-tools">
               <p>بقية مساحتك</p>
               <div>
-                {(!appearance.navHidden.includes("music") ||
-                  view === "music") && (
-                  <button onClick={() => go("music")}>
-                    <Music2 />
-                    <b>موسيقى</b>
-                    <small>منصاتك وقوائمك</small>
+                {(!appearance.navHidden.includes("collections") ||
+                  view === "collections") && (
+                  <button onClick={() => go("collections")}>
+                    <Folders />
+                    <b>مجموعاتي</b>
+                    <small>قوائمك وفهارسك</small>
                   </button>
                 )}
                 {(!appearance.navHidden.includes("live") ||

@@ -29,12 +29,13 @@ import { continueWatching } from "../../core/library.mjs";
 import { arabicCount, SONGS, WORKS } from "../../core/arabic.mjs";
 import { imgUrl } from "../lib/helpers.js";
 import { ScrollRow } from "./UI.jsx";
+import { LocalMusicRoom } from "./LocalMusic.jsx";
 
 /**
  * The music room (core/music.mjs): the viewer's platforms, saved links,
  * searches and the music of what they watch. Riwaq opens; the platform plays.
  */
-export default function MusicRoom({ state, update, act, notice }) {
+export default function MusicRoom({ state, update, act, notice, localMusic }) {
   const music = useMemo(
     () => cleanMusic(state.settings.music),
     [state.settings.music],
@@ -140,13 +141,14 @@ export default function MusicRoom({ state, update, act, notice }) {
           <span className="eyebrow">RIWAQ / MUSIC</span>
           <h1>موسيقاك، بجنب حكاياتك.</h1>
           <p>
-            منصاتك وقوائمك في مكان واحد. رِواق يفتحها في منصتك أو متصفحك؛ ما
-            يشغّل الصوت بنفسه، ولا يطلب كلمة مرور أي منصة.
+            أغانيك ومنصاتك وقوائمك في مكان واحد. شغّل ملفاتك هنا، وتحكّم في
+            Spotify أو افتح بقية منصاتك.
           </p>
         </div>
         <Music2 size={32} />
       </div>
 
+      <LocalMusicRoom music={localMusic} />
       <section className="settings-card">
         <h2>منصاتك</h2>
         <p>

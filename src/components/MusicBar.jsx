@@ -22,7 +22,7 @@ const clock = (ms) => {
  * seconds only while linked, visible and no viewing is on; hidden over the
  * video (HTML cannot paint on the native surface).
  */
-export default function MusicBar({ linked, hidden, act, onRoom }) {
+export default function MusicBar({ linked, hidden, suppressed, act, onRoom }) {
   const [now, setNow] = useState(null),
     [devices, setDevices] = useState([]),
     [closed, setClosed] = useState(""),
@@ -31,17 +31,22 @@ export default function MusicBar({ linked, hidden, act, onRoom }) {
   const volumeTimer = useRef(null);
   useEffect(() => {
     if (!linked || hidden) return;
-    let live = true;
+    let live = true,
+      reading = false;
     const read = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible" || reading) return;
+      reading = true;
       call("spotifyState")
         .then((s) => {
           if (!live) return;
           setNow(s.playback);
           setDevices(s.devices || []);
-          setExternalPlaying(!!s.playback?.playing);
+          if (!s.error) setExternalPlaying(!!s.playback?.playing);
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          reading = false;
+        });
     };
     read();
     const timer = setInterval(read, 5000);
@@ -51,10 +56,18 @@ export default function MusicBar({ linked, hidden, act, onRoom }) {
     };
   }, [linked, hidden]);
   useEffect(() => {
-    if (!linked) setExternalPlaying(false);
-  }, [linked]);
+    if (!linked) {
+      setExternalPlaying(false);
+      setNow(null);
+      setDevices([]);
+      setClosed("");
+      setVolume(null);
+    }
+    return () => clearTimeout(volumeTimer.current);
+  }, [linked, hidden]);
   const track = now?.track;
-  if (!linked || hidden || !track || closed === track.uri) return null;
+  if (!linked || hidden || suppressed || !track || closed === track.uri)
+    return null;
   const control = async (action, extra = {}) => {
     setBusy(true);
     try {
@@ -115,7 +128,7 @@ export default function MusicBar({ linked, hidden, act, onRoom }) {
           <SkipForward size={17} />
         </button>
       </div>
-      {now.device?.volume !== null && (
+      {now.device && now.device.volume !== null && (
         <label className="music-bar-volume" title="مستوى الصوت">
           <Volume2 size={15} />
           <input

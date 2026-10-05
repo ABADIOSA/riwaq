@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const allowed = new Set([
+  "musicLocalLibrary",
+  "musicLocalImport",
+  "musicLocalEdit",
+  "musicLocalSource",
   "init",
   "windowInfo",
   "windowControl",
@@ -149,6 +153,7 @@ contextBridge.exposeInMainWorld("riwaq", {
     if (
       ![
         "state",
+        "musicStop",
         "player",
         "notice",
         "ended",

@@ -11,6 +11,7 @@ import {
   globalShortcut,
   powerMonitor,
   nativeImage,
+  protocol,
 } from "electron";
 import {
   readFileSync,
@@ -82,6 +83,14 @@ import { DesktopUpdates } from "./updater.mjs";
 import { probeAddons, runDiagnostics } from "./diagnose.mjs";
 import { ErrorLog, formatReport } from "../core/diagnose.mjs";
 import { homedir } from "node:os";
+import { MusicLibrary, AUDIO_TYPES } from "./music-library.mjs";
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "riwaq-audio",
+    privileges: { standard: true, secure: true, stream: true },
+  },
+]);
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 if (process.env.RIWAQ_DATA_DIR)
@@ -94,6 +103,11 @@ app.on("second-instance", () => {
   window?.focus();
 });
 let window, client, player, videoHost, loginServer, loginTimer, presence;
+let musicLibrary;
+function stopLocalMusic() {
+  musicLibrary?.revoke();
+  emit("musicStop", {});
+}
 // A picked backup stays in main between "preview" and "restore"; the renderer
 // only ever holds the opaque token.
 let pendingBackup = null;
@@ -898,6 +912,30 @@ function rememberTrack(kind, value, info) {
   client.rememberSeries(series, { [kind]: identity });
 }
 const methods = {
+  musicLocalLibrary: (a) => musicLibrary.view(a?.profileId),
+  musicLocalImport: async (a) => {
+    musicLibrary.gate(a?.profileId);
+    const picked = await dialog.showOpenDialog(window, {
+      title: "أضف أغاني إلى رِواق",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: "الصوت",
+          extensions: Object.keys(AUDIO_TYPES).map((x) => x.slice(1)),
+        },
+      ],
+    });
+    return musicLibrary.importFiles(
+      a.profileId,
+      picked.canceled ? [] : picked.filePaths,
+    );
+  },
+  musicLocalEdit: (a) => musicLibrary.edit(a || {}),
+  musicLocalSource: async (a) => {
+    if (player.state.active)
+      throw new Error("أوقف المشاهدة قبل تشغيل الموسيقى");
+    return musicLibrary.source(a || {});
+  },
   init: () => client.init(),
   windowInfo: () => windowState(),
   windowControl: (a) => {
@@ -1003,6 +1041,7 @@ const methods = {
   },
   spotifyPlaylists: () => client.spotify.playlists(),
   spotifyControl: async (a) => {
+    if (["play", "transfer"].includes(a?.action)) stopLocalMusic();
     await client.spotify.control({
       action: a?.action,
       uri: a?.uri,
@@ -1021,7 +1060,7 @@ const methods = {
   },
   // Music (core/music.mjs): a saved link or a platform's search page, each
   // re-checked here to be HTTPS on that platform's own hosts before the
-  // system opens it. Riwaq plays no audio and holds no platform sign-in.
+  // system opens it. These links are separate from local audio playback.
   musicOpen: async (a) => {
     const url = a?.url
       ? musicLink(a.url)
@@ -1275,13 +1314,18 @@ const methods = {
   profileUpdate: (a) => client.profiles.update(a),
   profileRemove: async (a) => {
     client.profiles.check({ ...a, intent: "remove" });
-    if (client.profiles.store.active === a.id) await player.stop();
+    if (client.profiles.store.active === a.id) {
+      stopLocalMusic();
+      await player.stop();
+    }
+    if (client.state.localMusic) delete client.state.localMusic[a.id];
     return client.profiles.remove(a);
   },
   profileSwitch: async (a) => {
     // A wrong PIN must be refused before playback is touched. Then save the
     // outgoing viewer's last position before replacing their bucket.
     client.profiles.check({ ...a, intent: "switch" });
+    stopLocalMusic();
     await player.stop();
     const result = client.profiles.switch(a);
     applyZoom();
@@ -1290,7 +1334,10 @@ const methods = {
   },
   profilePin: (a) => client.profiles.setPin(a),
   profileUnlock: (a) => client.profiles.unlock(a?.pin),
-  profileLock: () => client.profiles.lock(),
+  profileLock: () => {
+    stopLocalMusic();
+    return client.profiles.lock();
+  },
   setHotkey: (a) => client.setHotkey(a),
   resetHotkeys: () => client.resetHotkeys(),
   notifySave: (a) => client.notifier.save(a),
@@ -1702,6 +1749,7 @@ const methods = {
       throw new Error("اختر ملف النسخة الاحتياطية من جديد");
     // Check the passphrase before touching playback or the profile file.
     client.inspectBackup({ text: pendingBackup.text, passphrase });
+    stopLocalMusic();
     await player.stop();
     // Keep this machine's current profile beside the new one. It stays sealed
     // with DPAPI, so it is an undo on this PC and useless anywhere else.
@@ -1777,6 +1825,10 @@ app
       app.exit(1);
     }
     if (client) {
+      musicLibrary = new MusicLibrary(client);
+      protocol.handle("riwaq-audio", (request) =>
+        musicLibrary.respond(request),
+      );
       // Sources that arrive after the list was shown (core/source-wait.mjs):
       // counts and addon names only, for the main window.
       client.onLateSources = (info) => emit("sources", info);
@@ -1881,6 +1933,7 @@ app
           const failed = s.active && s.error && !watching.error;
           if (failed) logError("player", s.error);
           const starting = s.active && !watching.active;
+          if (starting) stopLocalMusic();
           const pipChanged =
             s.active && watching.active && s.pip !== watching.pip;
           watching = { active: !!s.active, pip: !!s.pip, error: !!s.error };

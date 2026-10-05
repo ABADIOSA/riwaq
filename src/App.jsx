@@ -60,6 +60,8 @@ import HomeHero from "./components/HomeHero.jsx";
 import RiwaqNav from "./components/RiwaqNav.jsx";
 import SessionHome from "./components/SessionHome.jsx";
 import MusicBar from "./components/MusicBar.jsx";
+import { LocalMusicBar } from "./components/LocalMusic.jsx";
+import { useLocalMusic } from "./lib/local-music.jsx";
 import { setVideoPlaying } from "./lib/audio.js";
 import TasteDiscovery from "./components/TasteDiscovery.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
@@ -284,6 +286,7 @@ export default function App() {
     if (result) setState(result);
     return result;
   };
+  const localMusic = useLocalMusic(state, player.active, notice);
   useEffect(() => {
     let live = true;
     call("init")
@@ -585,7 +588,7 @@ export default function App() {
   const navigate = (v) => {
     // Collections and their folder pages live with the library, behind the
     // same lock.
-    const room = v === "collections" || v === "folder" ? "library" : v;
+    const room = ["collections", "folder", "music"].includes(v) ? "library" : v;
     if (isLocked(room)) {
       setUnlockRoom(room);
       return;
@@ -1410,6 +1413,7 @@ export default function App() {
             {view === "music" && (
               <MusicRoom
                 key={state.profiles?.active}
+                localMusic={localMusic}
                 state={state}
                 update={update}
                 act={act}
@@ -1495,7 +1499,13 @@ export default function App() {
         <MusicBar
           linked={!!state.spotify?.connected}
           hidden={player.active}
+          suppressed={!!localMusic.playback.id}
           act={act}
+          onRoom={() => navigate("music")}
+        />
+        <LocalMusicBar
+          music={localMusic}
+          hidden={player.active}
           onRoom={() => navigate("music")}
         />
         {toast && (

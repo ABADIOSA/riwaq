@@ -1,12 +1,13 @@
 /**
  * The music room: the viewer's own platforms, their saved playlists, albums
  * and artists, searches, and a title's soundtrack. Riwaq organizes and opens;
- * the platform plays. It never streams audio, never asks for a platform
+ * the platform plays. Local playback lives separately in music-player.mjs.
+ * This link module never streams audio, never asks for a platform
  * password, and opens only HTTPS pages on each platform's own hosts (main
  * re-checks every address before handing it to the system). Per profile in
  * `settings.music`. Browser-safe.
  *
- * Why no player inside Riwaq: Spotify, Apple Music and Tidal play through
+ * Why platform links stay separate: Spotify, Apple Music and Tidal play through
  * protected-content modules that a standard Electron build does not ship,
  * so an embedded player would break for them; the platform's app or the
  * browser already holds the viewer's sign-in.
