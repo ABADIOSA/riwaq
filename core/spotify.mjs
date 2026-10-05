@@ -315,6 +315,11 @@ export class SpotifyHub {
       await this.api("GET", "/me/playlists", { query: { limit: "50" } }),
     );
   }
+  /** An album's tracks (a title's official soundtrack album). */
+  async albumTracks(id) {
+    if (!/^[A-Za-z0-9]{22}$/.test(id || "")) return null;
+    return this.api("GET", `/albums/${id}/tracks`, { query: { limit: "50" } });
+  }
   /** Track search (any account), for a title's theme song. */
   async searchTracks(query) {
     const q = String(query || "")

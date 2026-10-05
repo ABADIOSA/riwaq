@@ -35,6 +35,33 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.36.0 — official theme songs, no fan uploads
+
+**Report:** the owner said the theme music can be a fan-made track, not the official one, and asked whether an API key would help.
+
+**Answer in code:** no new key. Wikidata (keyless, already used for credits) knows many works' official soundtrack album (P406) with its Spotify (P2205), Apple Music (P2281) and Deezer (P2722) IDs, and the composer (P86). The viewer's existing TMDB key adds composers from the crew (`Original Music Composer`, `Music`, `Main Title Theme Composer`).
+
+What changed:
+
+- `officialMusicQuery` (IMDb ID validated) and `parseOfficialMusic` (IDs validated by pattern, at most three each) in `core/theme-song.mjs`.
+- `client.themeSong` tries the official album first (Spotify `albumTracks` when linked, then iTunes lookup, then Deezer album tracks) through `pickOfficialTrack`, then falls back to the search.
+- The `themeSongTrust` setting: `official` (default) or `relaxed`. With `official` and a known composer, other artists are refused. With no known composer, an album without soundtrack or theme words is refused.
+- `BAD_WORDS` now refuses plural covers and tributes, "inspired by", piano and epic versions, lo-fi, medleys, renditions, "fan made", sleep and relaxing music.
+- Details shows a «رسمية» badge with the composer in its tooltip.
+
+Executed:
+
+- `npm test`: **548 passing, 0 failing**, including 5 new tests in `tests/theme-song-official.test.mjs`. They cover:
+  - the composer filter;
+  - refusal of fan words;
+  - SPARQL ID safety;
+  - the pick from the official album;
+  - the client using the album before any search (only the Wikidata and iTunes lookup hosts are asked).
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render (render-50): the chip shows «رسمية» for Spotify Premium, for the viewer's own music playing, and with no Spotify. The not-found note still offers a platform search. 0 errors.
+
+Not executed: real Wikidata, iTunes, Deezer or Spotify requests (egress is blocked here), and audio on Windows. Wikidata coverage of soundtrack albums varies by title. Without an album or a known composer, `official` trust keeps the stricter search or stays silent.
+
 ## 0.35.0 — theme songs fixed, full tracks on Spotify
 
 **Report:** the owner said music does not play when they open a title.

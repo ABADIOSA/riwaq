@@ -164,11 +164,32 @@ const THEME_WORDS =
   /\b(main title|main theme|theme song|theme|opening|intro|title sequence|end credits|title song)\b/;
 const SCORE_WORDS =
   /\b(soundtrack|original score|music from|ost|original motion picture|original series|original television|score)\b/;
+// Fan-made, covers and re-arrangements: refused (plural forms included,
+// "Piano Covers" slipped past a singular-only list).
 const BAD_WORDS =
-  /\b(cover|karaoke|tribute|remix|lullaby|lullabies|8 bit|ringtone|made famous|in the style of|parody|workout|kids version)\b/;
+  /\b(covers?|karaoke|tributes?|remix(es)?|lullaby|lullabies|8 bit|ringtones?|made famous|in the style of|parody|workout|kids version|inspired by|piano version|epic version|lo ?fi|medley|rendition|fan made|instrumental cover|sleep music|relaxing)\b/;
 
-/** How clearly a candidate is this title's theme; below 7 is not used. */
-export function themeScore(candidate, meta = {}) {
+const sameArtist = (artist, composers) => {
+  const a = norm(artist);
+  return (
+    !!a &&
+    composers.some((c) => {
+      const n = norm(c);
+      return n.length > 2 && (a.includes(n) || n.includes(a));
+    })
+  );
+};
+
+/**
+ * How clearly a candidate is this title's theme; below 7 is not used. With
+ * the title's composers known (Wikidata, TMDB), a song by one of them gains
+ * much; in "official" trust a song by anyone else is refused.
+ */
+export function themeScore(
+  candidate,
+  meta = {},
+  { composers = [], trust = "official" } = {},
+) {
   const title = norm(meta.name);
   if (!title || title.length < 2) return -Infinity;
   const album = norm(candidate.album);
@@ -188,6 +209,12 @@ export function themeScore(candidate, meta = {}) {
     BAD_WORDS.test(english(artist))
   )
     score -= 8;
+  if (composers.length) {
+    if (sameArtist(candidate.artist, composers)) score += 6;
+    else if (trust === "official") return -Infinity;
+  } else if (trust === "official" && !SCORE_WORDS.test(english(album)))
+    // No composer to check: only a soundtrack or score album is trusted.
+    return -Infinity;
   const year = Number.parseInt(String(meta.releaseInfo || meta.year || ""));
   if (meta.type === "movie" && year && candidate.year) {
     const gap = Math.abs(candidate.year - year);
@@ -199,16 +226,102 @@ export function themeScore(candidate, meta = {}) {
 }
 
 /** The candidate that clearly is the title's theme, or null. */
-export function pickThemeSong(candidates = [], meta = {}) {
+export function pickThemeSong(candidates = [], meta = {}, options = {}) {
   let best = null;
   candidates.forEach((c, index) => {
-    const score = themeScore(c, meta);
+    const score = themeScore(c, meta, options);
     if (score >= 7 && (!best || score > best.score))
       best = { ...c, score, index };
   });
   if (!best) return null;
   const { score, index, ...song } = best;
-  return song;
+  return {
+    ...song,
+    official:
+      !!options.composers?.length && sameArtist(song.artist, options.composers),
+  };
+}
+
+/*
+ * The official soundtrack, from Wikidata (keyless, already Riwaq's source
+ * for credits): the work's soundtrack album (P406) with its Spotify (P2205),
+ * Apple Music (P2281) and Deezer (P2722) album IDs, and its composers (P86).
+ */
+const IMDB_ID = /^tt\d{5,12}$/;
+export function officialMusicQuery(imdb) {
+  if (!IMDB_ID.test(imdb || "")) return "";
+  return `SELECT ?spotify ?apple ?deezer ?composerLabel WHERE {
+  ?work wdt:P345 "${imdb}" .
+  OPTIONAL { ?work wdt:P406 ?album .
+    OPTIONAL { ?album wdt:P2205 ?spotify }
+    OPTIONAL { ?album wdt:P2281 ?apple }
+    OPTIONAL { ?album wdt:P2722 ?deezer } }
+  OPTIONAL { ?work wdt:P86 ?composer .
+    ?composer rdfs:label ?composerLabel . FILTER(LANG(?composerLabel) = "en") }
+} LIMIT 30`;
+}
+
+/** Album IDs (validated) and composer names from the SPARQL answer. */
+export function parseOfficialMusic(body) {
+  const out = { spotify: [], apple: [], deezer: [], composers: [] };
+  const add = (list, value, pattern) => {
+    if (
+      typeof value === "string" &&
+      pattern.test(value) &&
+      !list.includes(value)
+    )
+      list.push(value);
+  };
+  for (const row of body?.results?.bindings || []) {
+    add(out.spotify, row.spotify?.value, /^[A-Za-z0-9]{22}$/);
+    add(out.apple, row.apple?.value, /^\d{4,15}$/);
+    add(out.deezer, row.deezer?.value, /^\d{3,15}$/);
+    const name = String(row.composerLabel?.value || "")
+      .trim()
+      .slice(0, 100);
+    if (name && !out.composers.includes(name)) out.composers.push(name);
+  }
+  for (const key of Object.keys(out)) out[key] = out[key].slice(0, 3);
+  return out;
+}
+
+export const itunesAlbumUrl = (id) =>
+  `https://itunes.apple.com/lookup?${new URLSearchParams({ id, entity: "song", limit: "60" })}`;
+export const deezerAlbumUrl = (id) =>
+  `https://api.deezer.com/album/${encodeURIComponent(id)}/tracks?limit=60`;
+
+/** Spotify album tracks as candidates (`/albums/{id}/tracks`). */
+export function fromSpotifyAlbum(body) {
+  return fromSpotify({
+    tracks: {
+      items: (Array.isArray(body?.items) ? body.items : []).map((t) => ({
+        ...t,
+        album: t.album || {},
+      })),
+    },
+  });
+}
+
+/**
+ * The theme on the title's own soundtrack album: a track named like a
+ * theme or after the title, else the album's first track (where a main
+ * title usually sits). Always official.
+ */
+export function pickOfficialTrack(tracks = [], meta = {}) {
+  const title = norm(meta.name);
+  let best = null;
+  tracks.forEach((t, index) => {
+    const name = norm(t.track);
+    if (!name || BAD_WORDS.test(name)) return;
+    let score = 0;
+    if (THEME_WORDS.test(name)) score += 5;
+    if (title && ` ${name} `.includes(` ${title} `)) score += 3;
+    score += index === 0 ? 2 : index === 1 ? 1 : 0;
+    if (!best || score > best.score) best = { ...t, score };
+  });
+  if (!best) return null;
+  const { score, ...song } = best;
+  return { ...song, official: true };
 }
 
 /** Titles whose song the viewer turned away ("مو هذي"), newest first. */

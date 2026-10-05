@@ -54,6 +54,8 @@ export const DEFAULT_SETTINGS = {
   themeSong: "auto",
   // With Spotify linked (Premium), the full track plays through it.
   themeSongSource: "auto",
+  // Official only (the title's soundtrack album or composer), or relaxed.
+  themeSongTrust: "official",
   themeSongVolume: 35,
   themeSongSkip: [],
   cardStyle: "glass",
@@ -420,6 +422,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     titleTheme: ["artwork", "genre", "off"],
     themeSong: ["auto", "button", "off"],
     themeSongSource: ["auto", "previews"],
+    themeSongTrust: ["official", "relaxed"],
     themeSongVolume: [10, 20, 35, 50, 70, 100],
     pickerLayout: ["detailed", "compact"],
     spoilerGuard: ["off", "titles"],

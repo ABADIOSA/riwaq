@@ -28,8 +28,14 @@ import {
   deezerUrl,
   fromDeezer,
   fromItunes,
+  deezerAlbumUrl,
   fromSpotify,
+  fromSpotifyAlbum,
+  itunesAlbumUrl,
   itunesUrl,
+  officialMusicQuery,
+  parseOfficialMusic,
+  pickOfficialTrack,
   pickThemeSong,
   themeNames,
   themeQueries,
@@ -2007,8 +2013,9 @@ export class Client {
     const meta = this.metas.get(key);
     if (!meta?.name) return null;
     const linked = this.spotify.publicState().connected;
+    const trust = this.state.settings.themeSongTrust || "official";
     const cache = (this.themeSongs ||= new Map());
-    const cacheKey = `${key}|${linked ? "s" : "-"}`;
+    const cacheKey = `${key}|${linked ? "s" : "-"}|${trust}`;
     const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.at < 86400000) return hit.song;
     let failed = 0;
@@ -2026,12 +2033,52 @@ export class Client {
     };
     const get = (url) => () =>
       this.request(url, { timeout: 7000, redirect: "error" });
+    const names = themeNames(meta);
+    const named = { ...meta, name: names[0] || meta.name };
+    // The official soundtrack and composers (Wikidata, keyless; TMDB's
+    // composers come with the viewer's key).
+    const official = officialMusicQuery(id)
+      ? await this.credits
+          .sparql(officialMusicQuery(id))
+          .then(parseOfficialMusic)
+          .catch((error) => {
+            this.onThemeError?.(error?.message || String(error));
+            return null;
+          })
+      : null;
+    const composers = [
+      ...new Set([...(meta.composers || []), ...(official?.composers || [])]),
+    ].slice(0, 6);
     let preview = null;
     let full = null;
-    // By the addon's or original name first: a translated name finds nothing.
-    for (const name of themeNames(meta)) {
-      const named = { ...meta, name };
-      for (const query of themeQueries(named)) {
+    // 1. A track from the title's own soundtrack album.
+    if (official) {
+      if (linked && official.spotify[0])
+        full = pickOfficialTrack(
+          await ask(
+            () => this.spotify.albumTracks(official.spotify[0]),
+            fromSpotifyAlbum,
+          ),
+          named,
+        );
+      if (official.apple[0])
+        preview = pickOfficialTrack(
+          await ask(get(itunesAlbumUrl(official.apple[0])), fromItunes),
+          named,
+        );
+      if (!preview && official.deezer[0])
+        preview = pickOfficialTrack(
+          await ask(get(deezerAlbumUrl(official.deezer[0])), fromDeezer),
+          named,
+        );
+    }
+    // 2. A search, by the addon's or original name first (a translated name
+    //    finds nothing), keeping only the composers' songs in official trust.
+    const options = { composers, trust };
+    for (const name of names) {
+      if (preview && (full || !linked)) break;
+      const each = { ...meta, name };
+      for (const query of themeQueries(each)) {
         const [spotify, itunes, deezer] = await Promise.all([
           linked && !full
             ? ask(() => this.spotify.searchTracks(query), fromSpotify)
@@ -2039,22 +2086,24 @@ export class Client {
           preview ? [] : ask(get(itunesUrl(query)), fromItunes),
           preview ? [] : ask(get(deezerUrl(query)), fromDeezer),
         ]);
-        full ||= pickThemeSong(spotify, named);
-        preview ||= pickThemeSong([...itunes, ...deezer], named);
+        full ||= pickThemeSong(spotify, each, options);
+        preview ||= pickThemeSong([...itunes, ...deezer], each, options);
         if (preview && (full || !linked)) break;
       }
-      if (preview && (full || !linked)) break;
     }
     // A preview Riwaq plays itself, and the full track when Spotify can.
     const song =
       preview || full
         ? {
             ...(preview || full),
+            official: !!(preview || full).official,
+            composer: composers[0] || "",
             ...(full
               ? {
                   spotifyUri: full.spotifyUri,
                   spotifyTrack: full.track,
                   spotifyArtist: full.artist,
+                  spotifyOfficial: !!full.official,
                 }
               : {}),
           }
