@@ -9,7 +9,7 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.38.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.38.1-win-x64.exe`.
 
 ## Design and invariants
 
@@ -98,7 +98,9 @@ Riwaq is an Arabic-first Windows x64 Stremio HTTP addon client. Read README.md, 
   - Watchdog: `Player.checkStall` (every 2 s) reports `onStall` once until the position moves: 15 s without movement while playing, 30 s while `paused-for-cache`. Main reconnects once (`restartSame`, same settings and window), then calls `tryNextSource`. The HUD shows a buffering pill with `cache-buffering-state`.
   - Passthrough: `audioPassthrough` adds `--audio-spdif=ac3,eac3,dts,dts-hd,truehd`.
   - Source tags: `sourceTags(parseStream(stream))` (Dolby Vision, REMUX, IMAX, Atmos; words only) reach `state.sourceTags` and the quality chips.
-- Sound without a picture (0.37.1, staged in 0.38): `Player.watchVideo` reports, six seconds after `file-loaded`, a selected video track whose `vo-configured` never became true. Main restarts with `restartSafe(stage)`, using `safeVideo(stage)`:
+- MPV build (0.38.1): `scripts/fetch-mpv.mjs` installs MPV's own stable release (`mpv-v0.41.0-x86_64-w64-mingw32.zip`, SHA-256 pinned). It extracts the inner CI zip into `vendor/mpv` and writes `.riwaq-build`, so a changed pin re-fetches. Do not go back to daily builds: they are removed upstream, and they changed between 0.36 and 0.37.
+- The video filter chain is touched only for RTX (0.38.1): `refreshRtx` sends `vf remove` only after it added `@riwaqrtx` (`rtxAdded`). MPV's own source shows that removing an absent label still runs `recreate_video_filters`, a full chain rebuild; sending it on every start was the likely cause of the 0.37/0.38 "sound without a picture" reports.
+- Sound without a picture (0.37.1, staged in 0.38): Since 0.38.1 the watchdog's `checkPicture` checks throughout the viewing: a file with a non-image video track must have `vo-configured`, `video-out-params/w` and (once reported) `estimated-vf-fps`. `NULLABLE` records an absent value as null instead of keeping a stale one. Six seconds without a picture, not counting pause, buffering or loading, is reported once per start. `estimated-vf-fps` is throttled like `time-pos` (`THROTTLED`). Main restarts with `restartSafe(stage)`, using `safeVideo(stage)`:
   - stage 1: renderer `gpu`, `tonemap`, and no RTX or compatibility modes;
   - stage 2: also CPU decoding;
   - Dolby Vision keeps `gpu-next`.

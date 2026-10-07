@@ -19,13 +19,13 @@ Riwaq is an independent implementation of a desktop client for the Stremio HTTP 
 - Electron (MIT and Chromium third-party licenses): https://github.com/electron/electron. Electron's LICENSE.electron.txt and LICENSES.chromium.html are retained in the unpacked distribution.
 - React / React DOM (MIT): https://github.com/facebook/react
 - Lucide (ISC): https://github.com/lucide-icons/lucide
-- MPV is a separate executable distributed in resources/mpv. Build: shinchiro 20261007, mpv git eb0ee10315, x86_64. MPV and its dependencies retain their own licenses, including GPL/LGPL; the Riwaq MIT license does not relicense those binaries.
-  - Binary/build recipe: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261007
-  - Build-system source: https://github.com/shinchiro/mpv-winbuild-cmake
-  - MPV corresponding revision: https://github.com/mpv-player/mpv/commit/eb0ee10315
+- MPV is a separate executable distributed in resources/mpv, with its FFmpeg, libplacebo and other DLLs. Build: MPV's own stable release v0.41.0 (mpv git 41f6a64), x86_64 MinGW, from the mpv-player/mpv GitHub release. MPV and its dependencies retain their own licenses, including GPL/LGPL; the Riwaq MIT license does not relicense those binaries.
+  - Release: https://github.com/mpv-player/mpv/releases/tag/v0.41.0
+  - MPV corresponding revision: https://github.com/mpv-player/mpv/commit/41f6a64
   - MPV license and dependency information: https://github.com/mpv-player/mpv/blob/master/Copyright
-  - Exact downloaded archive: mpv-x86_64-20261007-git-eb0ee10315.7z
-  - SHA-256: 6720298e1c32dc9ee60970db1c94c8170dbf33520e48eb9d3258584835c96f81
+  - Exact downloaded archive: mpv-v0.41.0-x86_64-w64-mingw32.zip (it holds the CI build mpv-git-2025-12-21-41f6a64-x86_64.zip)
+  - SHA-256: a49811c0752c108b8260636f9c6f6fcb97406641c98b30f1e7b500dfb20177de
+  - Earlier builds came from shinchiro/mpv-winbuild-cmake daily releases (20260610, then 20261007), which that project removes after a few weeks.
 
 Poster images, descriptions, and catalogs are retrieved at runtime from the user's addons and Cinemeta. They are not shipped as Riwaq artwork. No stream provider is installed by default.
 

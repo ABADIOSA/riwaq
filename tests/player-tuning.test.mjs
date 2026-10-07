@@ -246,11 +246,12 @@ test("RTX Video: only on D3D11 frames, upscale by the display factor, HDR for SD
 });
 
 test("the player tries RTX filters in order and reports what took", async () => {
+  let settings = { rtxUpscale: true, rtxHdr: true, hdrMode: "window" };
   const tried = [];
   const states = [];
   const player = new Player({
     onState: (s) => states.push(s.rtx),
-    settingsNow: () => ({ rtxUpscale: true, rtxHdr: true, hdrMode: "window" }),
+    settingsNow: () => settings,
     displayHeight: () => 2160,
   });
   player.state = {
@@ -265,11 +266,19 @@ test("the player tries RTX filters in order and reports what took", async () => 
     return !command[2]?.includes("nvidia-true-hdr");
   };
   await player.refreshRtx();
-  assert.equal(tried[0], "vf remove @riwaqrtx");
-  assert.equal(tried.length, 5);
+  assert.equal(tried.length, 4, "three HDR forms refused, then the upscale");
+  assert.ok(
+    tried.every((t) => t.startsWith("vf add")),
+    "nothing to remove yet",
+  );
   assert.equal(player.state.rtx, "upscale");
   await player.refreshRtx();
-  assert.equal(tried.length, 5, "the same chain is not applied twice");
+  assert.equal(tried.length, 4, "the same chain is not applied twice");
+  // Turning RTX off removes only the filter Riwaq added.
+  settings = {};
+  await player.refreshRtx();
+  assert.deepEqual(tried.slice(4), ["vf remove @riwaqrtx"]);
+  assert.equal(player.state.rtx, null);
 });
 
 test("quality chips read what MPV reports, a wide film counts as 4K", () => {
@@ -343,27 +352,52 @@ test("a backup never carries this PC's audio output", () => {
   assert.equal(restored.profiles.data.p1.settings.audioDevice, "wasapi/here");
 });
 
-test("sound without a picture is reported once, six seconds after loading", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+test("sound without a picture is reported once, from loading and throughout", () => {
   const failed = [];
   const player = new Player({ onState: () => {} });
   player.onVideoFailed = (info) => failed.push(info);
   player.videoId = "tt1:1:1";
   const video = [{ type: "video", selected: true }];
-  player.state = { active: true, tracks: video, voConfigured: false };
+  player.state = {
+    active: true,
+    tracks: video,
+    voConfigured: true,
+    outWidth: 3840,
+  };
   player.watchVideo();
-  t.mock.timers.tick(5900);
+  player.fileLoaded = true;
+  player.checkPicture(0);
+  player.checkPicture(20000);
+  assert.equal(failed.length, 0, "a picture on screen");
+  // The picture goes away mid-viewing (the output reports no size).
+  player.state.outWidth = undefined;
+  player.checkPicture(30000);
+  player.checkPicture(35900);
   assert.equal(failed.length, 0);
-  t.mock.timers.tick(200);
+  player.checkPicture(36100);
   assert.deepEqual(failed, [{ videoId: "tt1:1:1" }]);
-  // A picture that came up, or a file with no video track, is left alone.
-  player.state = { active: true, tracks: video, voConfigured: true };
+  player.checkPicture(60000);
+  assert.equal(failed.length, 1, "once per start");
+  // A video track MPV deselected still counts; cover art and sound do not.
   player.watchVideo();
-  t.mock.timers.tick(7000);
-  player.state = { active: true, tracks: [{ type: "audio", selected: true }] };
-  player.watchVideo();
-  t.mock.timers.tick(7000);
-  assert.equal(failed.length, 1);
+  player.state = { active: true, tracks: [{ type: "video", selected: false }] };
+  player.checkPicture(0);
+  player.checkPicture(7000);
+  assert.equal(failed.length, 2);
+  for (const tracks of [
+    [{ type: "audio", selected: true }],
+    [
+      { type: "video", image: true },
+      { type: "audio", selected: true },
+    ],
+  ]) {
+    player.watchVideo();
+    player.state = { active: true, tracks };
+    player.checkPicture(0);
+    player.checkPicture(9000);
+  }
+  assert.equal(failed.length, 2);
+  assert.equal(player.hasPicture({ tracks: [] }), null);
 });
 
 test("the compatibility restart keeps the viewing and its position", async () => {
@@ -668,4 +702,73 @@ test("the compatibility mode goes in two steps and keeps gpu-next for Dolby Visi
     "a reconnect keeps the viewing as it was",
   );
   assert.equal(starts[1].safe, true);
+});
+
+test("a viewing without RTX never touches MPV's video filters", async () => {
+  const tried = [];
+  const player = new Player({
+    onState: () => {},
+    settingsNow: () => ({ ...DEFAULT_SETTINGS }),
+    displayHeight: () => 2160,
+  });
+  player.state = {
+    active: true,
+    decoder: "d3d11va",
+    height: 1080,
+    transfer: "pq",
+  };
+  player.request = async (command) => {
+    tried.push(command.join(" "));
+    return true;
+  };
+  await player.refreshRtx();
+  await player.refreshRtx();
+  assert.deepEqual(
+    tried,
+    [],
+    "the 0.37 report: a stray vf command can lose the picture",
+  );
+});
+
+test("frames that stop reaching the output count as a lost picture", () => {
+  const failed = [];
+  const player = new Player({ onState: () => {} });
+  player.onVideoFailed = (info) => failed.push(info);
+  player.send = () => {};
+  player.videoId = "tt2:1:4";
+  player.state = {
+    active: true,
+    tracks: [{ type: "video", selected: true }],
+    voConfigured: true,
+    outWidth: 3840,
+  };
+  player.watchVideo();
+  player.fileLoaded = true;
+  // MPV reports the frame rate, then reports it absent (no data field).
+  player.event({
+    event: "property-change",
+    name: "estimated-vf-fps",
+    data: 23.976,
+  });
+  player.checkPicture(1000);
+  player.checkPicture(9000);
+  assert.equal(failed.length, 0);
+  player.event({ event: "property-change", name: "estimated-vf-fps" });
+  assert.equal(
+    player.state.vfFps,
+    null,
+    "absence is recorded, not the stale value",
+  );
+  player.state.pause = true;
+  player.checkPicture(10000);
+  player.checkPicture(30000);
+  assert.equal(failed.length, 0, "no frames are expected while paused");
+  player.state.pause = false;
+  player.checkPicture(31000);
+  player.checkPicture(37500);
+  assert.equal(failed.length, 1);
+  // Other properties keep their last value when MPV sends none.
+  player.event({ event: "property-change", name: "volume", data: 80 });
+  player.event({ event: "property-change", name: "volume" });
+  assert.equal(player.state.volume, 80);
 });

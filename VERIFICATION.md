@@ -35,6 +35,36 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.38.1 — sound without a picture: the cause in MPV's source
+
+**Report:** on 0.38.0, with SDR conversion (the default), a Dolby Vision episode still played sound with no picture. HDR was not the cause.
+
+What was found:
+- Arguments: the MPV arguments of 0.36.0 and 0.38.0 were compared by running both versions of `playerArgs`. 0.37.0 added only `--volume-max`; 0.38 added the buffer and the log.
+- MPV build: 0.37.0 also changed the bundled build, from shinchiro 20260610 (mpv 0.41.0-744) to 20261007 (0.41.0-1104).
+- Since 0.37, `refreshRtx` sent `vf remove @riwaqrtx` at every start, with RTX off.
+- MPV's source at eb0ee10, the bundled build's commit:
+  - `edit_filters` → `m_option_parse`, which only warns when a label is absent and returns success;
+  - then `set_filters` → `reinit_video_filters` → `recreate_video_filters`, a full video chain rebuild with `VIDEO_RECONFIG`;
+  - all of this while hardware decoding is starting.
+
+What changed:
+- **No stray filter command.** `vf remove` is sent only after Riwaq added an RTX filter.
+- **Stable MPV.** Riwaq now bundles MPV's own stable release v0.41.0 (git 41f6a64, MinGW, SHA-256 pinned). It was downloaded here and checked: it carries every option Riwaq passes, including d3d11, gpu-next, d3d11vpp with `nvidia-true-hdr`, `target-contrast`, the cache options, `audio-spdif` and the log.
+- **Stronger picture check.** The check now runs throughout the viewing (`video-out-params` and `estimated-vf-fps`, absent values recorded as null), skips pause and buffering, and throttles the frame-rate updates.
+
+Executed:
+- `npm test`: **593 passing, 0 failing**, including:
+  - a viewing without RTX sends no filter command;
+  - RTX removes only what it added;
+  - a mid-viewing picture loss is reported;
+  - a deselected video track counts and cover art does not;
+  - frames stopping is detected, with absent values not kept stale.
+- `node scripts/fetch-mpv.mjs` was run in a scratch copy: it downloaded, verified, extracted to `mpv.exe` plus DLLs, and was skipped on the second run.
+- `npm run check` and `npm run build` pass.
+
+Not executed: MPV on Windows. That the stray `vf remove` (or the daily build) hid the picture is a conclusion from the source and the timing, not a reproduction.
+
 ## 0.38.0 — a player that does not stall or lose its picture
 
 **Owner's request:** the picture must never disappear and the player must never freeze. Learn from Netflix and Disney+, and play the largest Blu-ray remux.
