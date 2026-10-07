@@ -253,6 +253,29 @@ test("the full run checks every area and names addons, never their links", async
   assert.doesNotMatch(text, /realdebrid|manifest\.json/);
 });
 
+test("a visible host with a hidden MPV child does not pass the surface check", async () => {
+  const { deps } = rig();
+  const surface = {
+    embedded: true,
+    visible: true,
+    nativeVisible: true,
+    siblingsClipped: true,
+    outputWindows: [{ visible: false, width: 1280, height: 720 }],
+  };
+  deps.videoHost = { inspect: () => surface };
+  let report = await runDiagnostics(deps);
+  assert.equal(
+    report.checks.find((c) => c.id === "video-surface").status,
+    "warn",
+  );
+  surface.outputWindows[0].visible = true;
+  report = await runDiagnostics(deps);
+  assert.equal(
+    report.checks.find((c) => c.id === "video-surface").status,
+    "ok",
+  );
+});
+
 test("missing encryption or MPV are reported as problems, not crashes", async () => {
   const { deps } = rig({ mpvExists: false, encryption: false });
   const report = await runDiagnostics(deps);

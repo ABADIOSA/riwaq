@@ -135,6 +135,20 @@ export class VideoHost {
     this.lateTimer = setTimeout(again, 400);
   }
   inspect() {
+    const outputWindows = [];
+    for (
+      let child = this.handle ? getWindow(this.handle, 5) : null, i = 0;
+      this.handle && child && i < 10;
+      child = getWindow(child, 2), i++
+    ) {
+      const size = {};
+      clientRect(child, size);
+      outputWindows.push({
+        visible: isVisible(child),
+        width: size.right,
+        height: size.bottom,
+      });
+    }
     let siblingsClipped = true;
     for (
       let child = getWindow(this.parent, 5), i = 0;
@@ -151,6 +165,7 @@ export class VideoHost {
       nativeVisible: !!this.handle && isVisible(this.handle),
       parentVisible: isVisible(this.parent),
       siblingsClipped,
+      outputWindows,
     };
   }
   dispose() {

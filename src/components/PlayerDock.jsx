@@ -114,6 +114,23 @@ export default function PlayerDock({
           />
         )}
         {tab === "sources" && addon && <SourcesRoom act={act} />}
+        <details className="picture-settings">
+          <summary>الصوت يعمل بدون صورة؟</summary>
+          <p className="subtle">
+            أعد التشغيل من نفس الموضع بإعدادات صورة أبسط لهذه المشاهدة. المحاولة
+            الثانية تستخدم المعالج لفك الفيديو، وقد تكون أبطأ مع 4K.
+          </p>
+          <button
+            className="secondary"
+            disabled={player.loading}
+            onClick={() => act("playerCommand", { action: "repairVideo" })}
+          >
+            <RefreshCw size={16} />
+            {player.compatibilityStage
+              ? "إصلاح الصورة بالمعالج"
+              : "إصلاح الصورة"}
+          </button>
+        </details>
       </div>
     </aside>
   );

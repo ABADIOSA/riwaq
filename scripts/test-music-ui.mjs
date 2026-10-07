@@ -140,7 +140,9 @@ try {
   };
   await send("Runtime.enable");
   await wait(
-    () => evaluate("!!document.querySelector('.riwaq-masthead')"),
+    // The masthead renders before init has committed the active profile;
+    // navigating then races the profile-change effect that returns home.
+    () => evaluate("!!document.querySelector('.session-home')"),
     "app UI",
   );
   const initial = await call("init");

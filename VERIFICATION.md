@@ -1,5 +1,16 @@
 # Verification — Riwaq
 
+## 2026-10-07 — MPV lifecycle and picture recovery (unreleased after 0.38.1)
+
+- Base `f92794eda4019ed60a1ab100ea890e15b7a9be10`; reviewed updates 0.35–0.38.1 with emphasis on player changes. No version bump, installer, tag or update publication.
+- **602 Node tests pass** (593 baseline + 9 regression tests). Production Vite build and repository Prettier validation pass; the existing large-bundle advisory remains.
+- New behavioral tests cover subscribe-before-load, immediate file-loaded, cancellation while waiting for an old process, retired sockets and pending commands, forced exit without an exit event, safe-mode shader/RTX exclusion, overlapping RTX changes and stale replies, initial-load timeout, and actual MPV child visibility in diagnostics.
+- Downloaded the existing SHA-256-pinned upstream MPV v0.41.0 build with `scripts/fetch-mpv.mjs`; the earlier local binary was the June daily build. Tested the **stable** binary on Windows with `node scripts/test-packaged.mjs --source --offline`. Initial playback and both compatibility stages decoded the synthetic Y4M HTTP fixture, resumed from the recorded position and exposed a visible MPV child at 2560×1440. Stop made playback inactive. This asserts native visibility and decoding, not pixel correctness or HDR fidelity.
+- `scripts/test-music-ui.mjs` passed: real WAV decoding/IPC, music-to-MPV handoff and profile isolation, no renderer errors, 1440×1000 and 980×680. Its first attempt navigated before profile initialization and timed out; the runner now waits for the ready-only session page rather than the early masthead. No production music change was necessary.
+- `scripts/test-session-ui.mjs` passed: session/taste/library/settings/classic navigation at both sizes, no renderer errors.
+- The user's grey-picture-with-sound file was not supplied or reproduced. The initial stable SDR fixture also passed before the fixes. These are confirmed lifecycle/recovery defects plus a preventive removal of Windows' hidden-window launch flag, **not proof of the grey frame's root cause**. Real HEVC/HDR10/Dolby Vision/RTX hardware, receiver passthrough, remux/network interruptions, mixed DPI and installed-upgrade validation remain outstanding.
+- MPV's estimated-vf-fps is a timestamp-derived rate, not a present counter, and video-out-params describes filter output. Neither proves that pixels reached the display: https://mpv.io/manual/stable/#properties . The null-output diagnostic now explicitly says it tests decoding without display.
+
 ## 2026-10-05 — embedded local music and stability review (unreleased after 0.34.0)
 
 - Base: `e8564b493d157bd54f4aaeca077989ed291a6597`, including released 0.31–0.34 changes. No version bump or installer is produced by this change.
