@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 import {
+  ExternalLink,
+  Eye,
+  EyeOff,
   Gauge,
   Feather,
+  Trash2,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -524,7 +528,7 @@ const SKIP_OPTIONS = [
 ];
 
 /** Harbor's Intros page: what is skipped, how, and from where. */
-export function SkipPage({ state, update }) {
+export function SkipPage({ state, update, act }) {
   const s = state.settings;
   const set = (patch) => update("settings", patch);
   return (
@@ -581,13 +585,14 @@ export function SkipPage({ state, update }) {
         </Field>
       </section>
       <section className="settings-card">
-        <h2>توقيتات الأنمي من AniSkip</h2>
+        <h2>توقيتات من قواعد المجتمع</h2>
         <Toggle
           on={s.skipOnline}
-          title="جلب توقيتات المقدمة والنهاية للأنمي"
-          text="للحلقات التي ترسلها إضافات الأنمي بمعرّف MyAnimeList أو Kitsu: يسأل رِواق قاعدة AniSkip المجتمعية (بدون مفتاح) عن رقم الأنمي والحلقة فقط. فصول الملف تبقى أولاً. مطفأ افتراضياً."
+          title="جلب توقيت المقدمة والملخص وشارة النهاية"
+          text="للأفلام والمسلسلات بمعرّف IMDb يسأل رِواق TheIntroDB، ولحلقات الأنمي بمعرّف MyAnimeList أو Kitsu يسأل AniSkip. يُرسل رقم العمل والموسم والحلقة ومدة الملف فقط. فصول الملف تبقى أولاً. مطفأ افتراضياً."
           onChange={(skipOnline) => set({ skipOnline })}
         />
+        <IntroDbKey state={state} update={update} act={act} />
       </section>
       {(s.skipExcept || []).length > 0 && (
         <section className="settings-card">
@@ -610,6 +615,121 @@ export function SkipPage({ state, update }) {
         </section>
       )}
     </>
+  );
+}
+
+/**
+ * TheIntroDB's optional key (Harbor's field on its Intros page). It is kept
+ * in the encrypted provider store like the metadata keys, and only whether
+ * one is saved comes back.
+ */
+function IntroDbKey({ state, update, act }) {
+  const provider = (state.providers || []).find((p) => p.id === "theintrodb");
+  const [key, setKey] = useState("");
+  const [shown, setShown] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!provider) return null;
+  const run = async (fn) => {
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const status =
+    provider.status === "ok"
+      ? "تم التحقق"
+      : provider.status === "error"
+        ? "رفضت الخدمة المفتاح"
+        : provider.configured
+          ? "محفوظ"
+          : "اختياري";
+  return (
+    <form
+      className="introdb-key"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!key.trim()) return;
+        run(async () => {
+          const r = await update("providerSave", {
+            id: "theintrodb",
+            key,
+            enabled: true,
+          });
+          if (r) setKey("");
+        });
+      }}
+    >
+      <div className="introdb-head">
+        <b>TheIntroDB · توقيت المقدمة وأسماء الطاقم</b>
+        <small className={provider.configured ? "on" : ""}>
+          <i /> {status}
+        </small>
+      </div>
+      <div className="introdb-field">
+        <input
+          type={shown ? "text" : "password"}
+          autoComplete="off"
+          spellCheck="false"
+          dir="ltr"
+          aria-label="مفتاح TheIntroDB"
+          placeholder={
+            provider.configured
+              ? "•••••••• محفوظ — أدخل مفتاحاً لاستبداله"
+              : "API key (اختياري)"
+          }
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+        />
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={shown ? "أخفِ المفتاح" : "أظهر المفتاح"}
+          onClick={() => setShown((v) => !v)}
+        >
+          {shown ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </div>
+      <p className="subtle">
+        اختياري. يستجيب TheIntroDB بدون مفتاح، لكن المفتاح يرفع حد الطلبات
+        ليستمر وصول التوقيتات أثناء المشاهدة المتواصلة. احصل على مفتاح من{" "}
+        <button
+          type="button"
+          className="text-button"
+          onClick={() => act("openService", { id: "theintrodb" })}
+        >
+          theintrodb.org <ExternalLink size={13} />
+        </button>
+      </p>
+      <div className="provider-actions">
+        <button disabled={busy || !key.trim()} className="primary small">
+          حفظ
+        </button>
+        <button
+          type="button"
+          className="secondary small"
+          disabled={busy || !provider.configured}
+          onClick={() =>
+            run(() => update("providerTest", { id: "theintrodb" }))
+          }
+        >
+          {busy ? "جاري…" : "اختبار المفتاح"}
+        </button>
+        {provider.configured && (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="احذف مفتاح TheIntroDB"
+            onClick={() =>
+              update("providerSave", { id: "theintrodb", clear: true })
+            }
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
+    </form>
   );
 }
 

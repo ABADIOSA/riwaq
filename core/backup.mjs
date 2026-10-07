@@ -615,7 +615,13 @@ export function restoreState(current, payload) {
           }
         : current.auth || null,
     providers: carries("providers")
-      ? cleanSecretBag(payload.providers, ["tmdb", "omdb", "mdblist", "fanart"])
+      ? cleanSecretBag(payload.providers, [
+          "tmdb",
+          "omdb",
+          "mdblist",
+          "fanart",
+          "theintrodb",
+        ])
       : current.providers || {},
     integrations: carries("integrations")
       ? cleanSecretBag(payload.integrations, [

@@ -2199,3 +2199,45 @@ em.tag-custom {
 .speed-status i.on {
   background: #4ade80;
 }
+/* TheIntroDB's optional key on the skipping page. */
+.introdb-key {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.introdb-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.introdb-head small {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.introdb-head small i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.introdb-head small.on i {
+  background: #4ade80;
+}
+.introdb-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.introdb-field input {
+  flex: 1;
+  min-width: 0;
+}
+.introdb-key .text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}

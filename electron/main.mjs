@@ -1301,6 +1301,7 @@ const methods = {
       omdb: "https://www.omdbapi.com/apikey.aspx",
       mdblist: "https://mdblist.com/preferences/",
       fanart: "https://fanart.tv/get-an-api-key/",
+      theintrodb: "https://theintrodb.org",
       trakt: "https://trakt.tv/oauth/applications",
       traktActivate: "https://trakt.tv/activate",
       simkl: "https://simkl.com/settings/developer/",
@@ -2068,9 +2069,21 @@ app
       setInterval(checkCursor, 150);
       player.onLoaded = ({ meta, videoId }) => {
         autoSubtitle(videoId);
-        if (meta?.type === "series" && client.state.settings.skipOnline)
-          client
-            .skipTimes(videoId)
+        if (
+          ["series", "movie"].includes(meta?.type) &&
+          client.state.settings.skipOnline
+        )
+          (async () => {
+            // A time that runs to the end of the file needs the duration,
+            // which MPV may report a moment after the file loads.
+            for (let i = 0; i < 20 && !(player.state.duration > 0); i++) {
+              if (player.videoId !== videoId) return [];
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+            return client.skipTimes(videoId, {
+              duration: player.state.duration,
+            });
+          })()
             .then((segments) => player.setOnlineSegments(videoId, segments))
             .catch(() => {});
         const key = JSON.stringify([meta.type, videoId]);

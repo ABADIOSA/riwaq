@@ -1,3 +1,4 @@
+import { theIntroDbUrl } from "./skip-online.mjs";
 export const PROVIDERS = [
   {
     id: "tmdb",
@@ -22,6 +23,16 @@ export const PROVIDERS = [
     name: "Fanart.tv",
     description: "شعارات العناوين وخلفيات سينمائية عالية الجودة",
     url: "https://fanart.tv/get-an-api-key/",
+  },
+  {
+    // Intro, recap and credits times (core/skip-online.mjs). It answers
+    // without a key; a key raises the request limit. Shown on the skipping
+    // page, not among the metadata providers.
+    id: "theintrodb",
+    name: "TheIntroDB",
+    description: "توقيت المقدمة والملخص وشارة النهاية",
+    url: "https://theintrodb.org",
+    group: "skip",
   },
 ];
 const image = (path, size = "original") =>
@@ -103,6 +114,7 @@ export class DataHub {
     return result;
   }
   async test(id) {
+    if (id === "theintrodb") return this.testIntroDb();
     const paths = {
       tmdb: ["configuration", {}],
       omdb: ["", { i: "tt0111161" }],
@@ -115,6 +127,30 @@ export class DataHub {
     try {
       await this.request(id, ...paths[id]);
       entry.status = "ok";
+    } catch {
+      entry.status = "error";
+    }
+    entry.testedAt = Date.now();
+    this.client.persist();
+    return this.client.publicState();
+  }
+  /**
+   * TheIntroDB has no account call: a known episode is asked for with the
+   * key. A 200 or a 404 (no times yet) accepts it; 401 or 403 refuses it.
+   */
+  async testIntroDb() {
+    const entry = this.client.state.providers?.theintrodb;
+    if (!entry?.key) throw new Error("احفظ مفتاح الخدمة أولاً");
+    try {
+      const response = await fetch(
+        theIntroDbUrl({ imdb: "tt0903747", season: 1, episode: 1 }),
+        {
+          headers: { Authorization: `Bearer ${entry.key}` },
+          redirect: "error",
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+      entry.status = response.ok || response.status === 404 ? "ok" : "error";
     } catch {
       entry.status = "error";
     }

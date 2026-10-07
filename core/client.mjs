@@ -2010,20 +2010,27 @@ export class Client {
    * failed everywhere is asked again next time.
    */
   /**
-   * Anime intro and ending times from AniSkip (core/skip-online.mjs), only
-   * when the viewer turned it on. Cached per episode, answers of none too.
+   * Intro, recap and credits times from TheIntroDB, or AniSkip for anime
+   * (core/skip-online.mjs), only when the viewer turned it on. TheIntroDB's
+   * key, when saved, stays in the encrypted provider store. Cached per
+   * episode a day, answers of none too.
    */
-  async skipTimes(videoId) {
+  async skipTimes(videoId, { duration = 0 } = {}) {
     if (!this.state.settings.skipOnline) return [];
     const cache = (this.skipCache ||= new Map());
     const hit = cache.get(videoId);
     if (hit && Date.now() - hit.at < 24 * 3600 * 1000) return hit.segments;
+    const provider = this.state.providers?.theintrodb;
+    const introDbKey = provider?.enabled !== false ? provider?.key || "" : "";
+    // A failure is not remembered, so the next viewing asks again.
     const segments = await onlineSegments(videoId, {
-      fetchJson: (url) =>
+      introDbKey,
+      duration,
+      fetchJson: (url, headers = {}) =>
         fetchJson(url, {
           timeout: 6000,
           redirect: "error",
-          headers: { "User-Agent": "Riwaq" },
+          headers: { "User-Agent": "Riwaq", ...headers },
         }),
     });
     boundedSet(cache, videoId, { at: Date.now(), segments }, 300);

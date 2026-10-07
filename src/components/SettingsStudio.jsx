@@ -507,7 +507,7 @@ const GROUPS = [
       [
         "skipping",
         "المقدمات والتخطي",
-        "تخطي المقدمة الملخص شارة النهاية AniSkip أنمي زر التخطي",
+        "تخطي المقدمة الملخص شارة النهاية TheIntroDB AniSkip أنمي زر التخطي مفتاح",
         FastForward,
       ],
       [
@@ -973,7 +973,9 @@ export default function SettingsStudio({
               {id === "onscreen" && (
                 <OnScreenPage state={state} update={update} />
               )}
-              {id === "skipping" && <SkipPage state={state} update={update} />}
+              {id === "skipping" && (
+                <SkipPage state={state} update={update} act={act} />
+              )}
               {id === "playerLayout" && (
                 <PlayerLayoutPage state={state} update={update} />
               )}
@@ -1031,14 +1033,16 @@ export default function SettingsStudio({
                     </div>
                   </div>
                   <div className="provider-grid">
-                    {(state.providers || []).map((p) => (
-                      <ProviderCard
-                        key={p.id}
-                        provider={p}
-                        update={update}
-                        act={act}
-                      />
-                    ))}
+                    {(state.providers || [])
+                      .filter((p) => p.group !== "skip")
+                      .map((p) => (
+                        <ProviderCard
+                          key={p.id}
+                          provider={p}
+                          update={update}
+                          act={act}
+                        />
+                      ))}
                   </div>
                   <section className="settings-card">
                     {select("metadataLanguage", "لغة بيانات TMDB", [

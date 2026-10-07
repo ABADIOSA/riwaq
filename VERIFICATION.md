@@ -57,7 +57,7 @@ Bug found during the render check and fixed: after choosing a sleep option, the 
 
 Executed:
 
-- `npm test`: **575 passing, 0 failing**, including 27 new tests in `tests/player-tuning.test.mjs` and `tests/skip-speed-sleep.test.mjs`. They cover:
+- `npm test`: **580 passing, 0 failing**, including 32 new tests in `tests/player-tuning.test.mjs`, `tests/skip-speed-sleep.test.mjs` and `tests/theintrodb.test.mjs`. They cover:
   - the filters are built from the profile's gains;
   - the MPV device listing is parsed and unsafe names are refused;
   - start-up options and `playerArgs` integration, with a single `--hwdec`;
@@ -66,6 +66,8 @@ Executed:
   - quality chips;
   - settings validation, and the backup leaving the audio device out;
   - AniSkip and ARM parsing, including a failure returning silence;
+  - TheIntroDB URLs, millisecond parsing with open ends, the Bearer key and failures not being cached;
+  - TheIntroDB's key never reaching `publicState` and travelling only in a secrets backup;
   - segment merging, the recap mode, the hidden button and recap auto-skip;
   - the speed penalty and ranking, and the speed test arithmetic;
   - sleep by episodes.
@@ -89,7 +91,9 @@ Not executed:
 - MPV itself on Windows, so the audio filters, the downmix, `--profile=fast/high-quality`, `--target-contrast`, `--d3d11-flip=no` and `--d3d11-output-format=rgba8` were not heard or seen on real hardware.
 - RTX Video on an NVIDIA card. The true-HDR output format name varies by build, so three forms are tried.
 - A real audio device listing.
-- Live AniSkip, ARM or Cloudflare requests (egress is blocked here).
+- Live TheIntroDB, AniSkip, ARM or Cloudflare requests (egress is blocked here).
+  - TheIntroDB's request and response shape was read from its official MPV script (github.com/TheIntroDB/mpv-script), since theintrodb.org itself is blocked here.
+  - A render (render-52) checked its key field: save, show/hide, test, the site link, and its absence from the data providers page.
 
 ## 0.36.0 — official theme songs, no fan uploads
 
