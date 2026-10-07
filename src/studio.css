@@ -1988,3 +1988,214 @@ em.tag-custom {
     inset 0 0 0 3px #0000,
     inset 0 0 0 4px color-mix(in srgb, var(--accent) 55%, transparent);
 }
+
+/* Player pages (0.37): picture quality, audio, on-screen and speed. */
+.player-field {
+  margin-top: 14px;
+}
+.player-field > b {
+  display: block;
+}
+.player-field > p {
+  margin: 3px 0 9px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.setting-tag {
+  margin-inline-start: 8px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+.settings-note {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+.quality-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+.quality-cards button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  text-align: start;
+  color: var(--text);
+  border: 1px solid var(--line);
+  background: var(--raised);
+  border-radius: var(--radius);
+}
+.quality-cards button small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+.quality-cards button.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.quality-cards button.selected svg {
+  color: var(--accent);
+}
+.panel-preview {
+  display: flex;
+  height: 26px;
+  max-width: 300px;
+  margin-top: 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.panel-preview i {
+  flex: 1;
+}
+.panel-preview i:nth-child(1) {
+  background: #8a8a8a;
+}
+.panel-preview i:nth-child(2) {
+  background: #6e6e6e;
+}
+.panel-preview i:nth-child(3) {
+  background: #545454;
+}
+.panel-preview i:nth-child(4) {
+  background: #3c3c3c;
+}
+.panel-preview i:nth-child(5) {
+  background: #282828;
+}
+.panel-preview i:nth-child(6) {
+  background: #181818;
+}
+.panel-preview i:nth-child(7) {
+  background: #0b0b0b;
+}
+.panel-preview i:nth-child(8) {
+  background: #000;
+}
+/* An LCD's backlight lifts the darkest steps. */
+.panel-preview.panel-lcd i:nth-child(n + 6) {
+  background: #1e1e22;
+}
+.eq-preview {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  height: 96px;
+  max-width: 420px;
+  margin-top: 14px;
+  padding: 10px 12px 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--raised);
+}
+.eq-preview span {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+}
+.eq-preview i {
+  width: 100%;
+  max-width: 26px;
+  border-radius: 4px 4px 2px 2px;
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: height 0.25s ease;
+}
+.eq-preview i.boost {
+  background: var(--accent);
+}
+.eq-preview i.cut {
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+.eq-preview small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.boost-preview {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+  max-width: 420px;
+  margin-top: 12px;
+}
+.boost-preview i,
+.boost-preview b {
+  border-radius: 4px;
+}
+.boost-preview i {
+  background: var(--accent);
+}
+.boost-preview b {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.device-select {
+  width: 100%;
+  max-width: 420px;
+  margin-top: 8px;
+}
+.hud-sample {
+  max-width: 320px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #1f2937, #0b0f14);
+  color: #f4f4f5;
+}
+.hud-sample b {
+  display: block;
+  font-size: 14px;
+}
+.hud-sample span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+.hud-sample i {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #ffffff1c;
+  border: 1px solid #ffffff2e;
+}
+.hud-sample small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: #d4d4d8;
+}
+.speed-card h2 svg {
+  vertical-align: -3px;
+}
+.speed-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.speed-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.speed-status i.on {
+  background: #4ade80;
+}

@@ -94,6 +94,8 @@ const allowed = new Set([
   "openService",
   "playerCommand",
   "trickplay",
+  "audioDevices",
+  "speedTest",
   "stop",
   "subtitle",
   "localSubtitle",

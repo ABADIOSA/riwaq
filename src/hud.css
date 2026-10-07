@@ -356,3 +356,114 @@ html.hud-root #root {
   font-size: 15px;
   pointer-events: none;
 }
+/* The stream's quality under the title: chips, or one quiet line. */
+.hud-quality {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+.hud-quality i {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #ffffff1c;
+  border: 1px solid #ffffff2e;
+}
+.hud-quality-bar {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  color: #d4d4d8;
+}
+/* The sleep timer in the top bar. */
+.hud-sleep {
+  position: relative;
+}
+.hud-sleep small {
+  font-size: 11px;
+  color: var(--hud-accent);
+}
+.hud-sleep-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-end: 0;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 14px;
+  background: #0f1318f2;
+  border: 1px solid #ffffff26;
+  box-shadow: 0 18px 50px #000a;
+  z-index: 4;
+}
+.hud-sleep-menu b {
+  font-size: 11px;
+  color: #a1a1aa;
+  padding: 4px 8px;
+}
+.hud-sleep-menu button {
+  justify-content: flex-start;
+  font-size: 13px;
+  padding: 7px 10px !important;
+}
+.hud-sleep-off {
+  color: #fca5a5 !important;
+}
+/* The volume popup while the controls sleep. */
+.hud-volume-popup {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: #000b;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  animation: hud-volume-in 0.15s ease;
+  z-index: 2;
+}
+.hud-volume-popup.at-center {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.hud-volume-popup.at-top {
+  left: 50%;
+  top: 28px;
+  transform: translateX(-50%);
+}
+.hud-volume-popup.at-top-left {
+  left: 28px;
+  top: 28px;
+}
+.hud-volume-popup.at-top-right {
+  right: 28px;
+  top: 28px;
+}
+.hud-volume-meter {
+  position: relative;
+  width: 140px;
+  height: 5px;
+  border-radius: 5px;
+  background: #ffffff2e;
+  overflow: hidden;
+}
+.hud-volume-meter i {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  background: var(--hud-accent);
+}
+@keyframes hud-volume-in {
+  from {
+    opacity: 0;
+  }
+}

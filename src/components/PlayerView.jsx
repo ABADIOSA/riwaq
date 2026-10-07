@@ -157,7 +157,7 @@ export default function PlayerView({
           <span className="video-loading">جاري تجهيز المشاهدة…</span>
         )}
         {player.error && <p>{player.error}</p>}
-        {player.skip && !hidden && (
+        {player.skip && !player.skip.hidden && !hidden && (
           <button
             className="skip-segment"
             onClick={() => command("skipSegment")}
@@ -320,7 +320,7 @@ export default function PlayerView({
                   aria-label="مستوى الصوت المدمج"
                   type="range"
                   min="0"
-                  max="100"
+                  max={player.volumeMax || 150}
                   value={player.volume || 0}
                   onChange={(e) => command("volume", Number(e.target.value))}
                 />

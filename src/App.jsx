@@ -314,8 +314,9 @@ export default function App() {
             if (s.error) notice(s.error);
           }),
           api.on("notice", notice),
-          api.on("ended", ({ meta, videoId }) => {
-            if (!stateRef.current.settings.autoplay) return;
+          api.on("ended", ({ meta, videoId, sleep }) => {
+            // The sleep timer's last episode: nothing starts after it.
+            if (!stateRef.current.settings.autoplay || sleep) return;
             advance(meta, videoId, 1, true);
           }),
           api.on("playerRequest", ({ type, videoId: jump }) => {
@@ -351,7 +352,9 @@ export default function App() {
   // In an episode's last minutes with autoplay on, ask for the next title's
   // sources once, so the end of the episode does not wait for every addon.
   useEffect(() => {
-    if (!prefetchDue(player, state.settings)) return;
+    // The sleep timer's last episode starts nothing after it.
+    if (player.sleepEpisodes === 1 || !prefetchDue(player, state.settings))
+      return;
     const profileId = state.profiles?.active;
     const from = player.videoId;
     const was = prefetchRef.current;

@@ -769,8 +769,46 @@ export function scoreStream(parsed, preferences = {}) {
       sizeLabel(parsed.size),
     );
   }
+  // Above the viewer's connection a stream would keep stopping to load, so
+  // it sinks below those that fit; a typical rate counts for half as much as
+  // one worked out from the file's own size.
+  const cap = Number(preferences.bandwidthCap) || 0;
+  const need = cap > 0 ? neededMbps(parsed, preferences.runtime) : null;
+  if (need && need.mbps > cap)
+    add(
+      -clamp(
+        (120 + 160 * Math.log2(need.mbps / cap)) * (need.measured ? 1 : 0.5),
+        0,
+        500,
+      ),
+      "bandwidth",
+      `يحتاج نحو ${Math.round(need.mbps)} ميغابت/ث وسرعتك ${cap}`,
+    );
   const score = reasons.reduce((total, reason) => total + reason.points, 0);
   return { score: Math.round(score), reasons };
+}
+
+/** Connection speed caps the viewer can choose, in megabits a second. */
+export const BANDWIDTH_CAPS = [0, 25, 50, 100, 300, 500, 1000];
+
+/**
+ * The megabits a second a stream needs to play without stopping: its size
+ * over the runtime when both are known (`measured`), otherwise the typical
+ * rate of what its label says. A quarter is added for the peaks above the
+ * average. A season pack's size covers many episodes, so it is not used.
+ */
+export function neededMbps(parsed, runtimeMinutes) {
+  const minutes = Number(runtimeMinutes) || 0;
+  if (parsed.size > 0 && minutes > 0 && !parsed.pack)
+    return {
+      mbps: ((parsed.size * 8) / (minutes * 60) / 1_000_000) * 1.25,
+      measured: true,
+    };
+  if (!parsed.resolution) return null;
+  const typical =
+    (BITRATE_HINT[parsed.resolution] || 4) *
+    (SOURCE_BITRATE_FACTOR[parsed.source] ?? 1);
+  return { mbps: typical * 1.25, measured: false };
 }
 
 export function sizeLabel(bytes) {
