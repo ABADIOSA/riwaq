@@ -398,6 +398,17 @@ export default function Hud() {
           <span>جاري تجهيز المشاهدة…</span>
         </div>
       )}
+      {!player.loading && player.cachePaused && (
+        <div className="hud-buffering" aria-live="polite">
+          <Loader2 className="hud-spin" size={22} />
+          <span>
+            يخزّن مؤقتاً
+            {Number.isFinite(player.buffering)
+              ? ` ${Math.round(player.buffering)}٪`
+              : "…"}
+          </span>
+        </div>
+      )}
       {player.error && <p className="hud-error">{player.error}</p>}
       {flash && (
         <div className={`hud-flash ${flash.kind}`} key={flash.at}>

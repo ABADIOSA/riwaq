@@ -6,6 +6,12 @@ import {
   audioArgs,
   audioFilters,
   cleanAudioDevice,
+  hdrMode,
+  hdrSignal,
+  separateWindow,
+  bufferArgs,
+  bufferMiB,
+  sourceTags,
   hwdecValue,
   liveTuning,
   parseAudioDevices,
@@ -15,8 +21,10 @@ import {
   videoArgs,
 } from "../core/player-tuning.mjs";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
-import { Player, playerArgs } from "../electron/player.mjs";
+import { Player, playerArgs, safeVideo } from "../electron/player.mjs";
 import { collectBackup, restoreState } from "../core/backup.mjs";
+import { mpvLogProblems } from "../core/diagnose.mjs";
+import { hudVisible } from "../core/hud.mjs";
 
 test("every sound profile has one gain per band, and the filter is built from them", () => {
   for (const [id, profile] of Object.entries(AUDIO_PROFILES)) {
@@ -100,7 +108,15 @@ test("the picture's start-up options follow each choice", () => {
     "--vo=gpu-next",
     "--target-colorspace-hint=no",
   ]);
-  assert.ok(videoArgs({ hdr: true }).includes("--target-colorspace-hint=yes"));
+  assert.ok(
+    videoArgs({ hdrMode: "window" }, { separate: true }).includes(
+      "--target-colorspace-hint=yes",
+    ),
+  );
+  assert.ok(
+    videoArgs({ hdr: true }).includes("--target-colorspace-hint=no"),
+    "the older switch alone never signals HDR",
+  );
   assert.equal(videoArgs({ videoQuality: "smooth" })[0], "--profile=fast");
   assert.equal(
     videoArgs({ videoQuality: "high" })[0],
@@ -108,10 +124,16 @@ test("the picture's start-up options follow each choice", () => {
   );
   assert.ok(videoArgs({ renderer: "gpu" }).includes("--vo=gpu"));
   // Both compatibility modes leave the path HDR needs.
-  const simple = videoArgs({ hdr: true, simpleColor: true });
+  const simple = videoArgs(
+    { hdrMode: "window", simpleColor: true },
+    { separate: true },
+  );
   assert.ok(simple.includes("--target-colorspace-hint=no"));
   assert.ok(simple.includes("--d3d11-output-format=rgba8"));
-  const lineless = videoArgs({ hdr: true, linelessVideo: true });
+  const lineless = videoArgs(
+    { hdrMode: "window", linelessVideo: true },
+    { separate: true },
+  );
   assert.ok(lineless.includes("--d3d11-flip=no"));
   assert.ok(lineless.includes("--target-colorspace-hint=no"));
   assert.ok(
@@ -207,15 +229,19 @@ test("RTX Video: only on D3D11 frames, upscale by the display factor, HDR for SD
     [],
     "needs the HDR signal",
   );
-  const hdr = rtxFilters({ rtxHdr: true, hdr: true }, video);
+  const own = { ...video, separate: true };
+  const hdr = rtxFilters({ rtxHdr: true, hdrMode: "window" }, own);
   assert.equal(hdr.length, 3);
   assert.ok(hdr.every((f) => f.includes("nvidia-true-hdr")));
   assert.deepEqual(
-    rtxFilters({ rtxHdr: true, hdr: true }, { ...video, transfer: "pq" }),
+    rtxFilters({ rtxHdr: true, hdrMode: "window" }, { ...own, transfer: "pq" }),
     [],
     "an HDR picture is not converted again",
   );
-  const both = rtxFilters({ rtxHdr: true, hdr: true, rtxUpscale: true }, video);
+  const both = rtxFilters(
+    { rtxHdr: true, hdrMode: "window", rtxUpscale: true },
+    own,
+  );
   assert.equal(both.at(-1), "@riwaqrtx:d3d11vpp=scale=2:scaling-mode=nvidia");
 });
 
@@ -224,10 +250,15 @@ test("the player tries RTX filters in order and reports what took", async () => 
   const states = [];
   const player = new Player({
     onState: (s) => states.push(s.rtx),
-    settingsNow: () => ({ rtxUpscale: true, rtxHdr: true, hdr: true }),
+    settingsNow: () => ({ rtxUpscale: true, rtxHdr: true, hdrMode: "window" }),
     displayHeight: () => 2160,
   });
-  player.state = { active: true, decoder: "d3d11va", height: 1080 };
+  player.state = {
+    active: true,
+    decoder: "d3d11va",
+    height: 1080,
+    separate: true,
+  };
   player.request = async (command) => {
     tried.push(command.join(" "));
     // This card refuses true HDR but upscales.
@@ -310,4 +341,331 @@ test("a backup never carries this PC's audio output", () => {
   assert.equal(payload.profiles.data.p1.settings.audioDevice, undefined);
   const restored = restoreState(state, payload);
   assert.equal(restored.profiles.data.p1.settings.audioDevice, "wasapi/here");
+});
+
+test("sound without a picture is reported once, six seconds after loading", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const failed = [];
+  const player = new Player({ onState: () => {} });
+  player.onVideoFailed = (info) => failed.push(info);
+  player.videoId = "tt1:1:1";
+  const video = [{ type: "video", selected: true }];
+  player.state = { active: true, tracks: video, voConfigured: false };
+  player.watchVideo();
+  t.mock.timers.tick(5900);
+  assert.equal(failed.length, 0);
+  t.mock.timers.tick(200);
+  assert.deepEqual(failed, [{ videoId: "tt1:1:1" }]);
+  // A picture that came up, or a file with no video track, is left alone.
+  player.state = { active: true, tracks: video, voConfigured: true };
+  player.watchVideo();
+  t.mock.timers.tick(7000);
+  player.state = { active: true, tracks: [{ type: "audio", selected: true }] };
+  player.watchVideo();
+  t.mock.timers.tick(7000);
+  assert.equal(failed.length, 1);
+});
+
+test("the compatibility restart keeps the viewing and its position", async () => {
+  const player = new Player({ onState: () => {} });
+  const starts = [];
+  player.start = async (args) => starts.push(args);
+  assert.equal(player.restartSafe(), null, "nothing to restart yet");
+  player.lastStart = {
+    url: "https://x/v.mkv",
+    settings: {
+      renderer: "gpu-next",
+      hwdec: "on",
+      rtxUpscale: true,
+      audioProfile: "night",
+    },
+    videoId: "tt1:1:1",
+  };
+  player.state = { active: true, position: 754.2 };
+  await player.restartSafe();
+  assert.equal(starts[0].start, 754.2);
+  assert.equal(starts[0].safe, true);
+  assert.equal(starts[0].url, "https://x/v.mkv");
+  assert.equal(starts[0].settings.renderer, "gpu");
+  assert.equal(starts[0].settings.hwdec, "off");
+  assert.equal(starts[0].settings.rtxUpscale, false);
+  assert.equal(starts[0].settings.audioProfile, "night", "sound choices stay");
+  const args = playerArgs({
+    pipe: "p",
+    settings: { ...DEFAULT_SETTINGS, ...starts[0].settings },
+    url: "u",
+    title: "t",
+    logFile: "C:\\riwaq\\logs\\mpv-last.log",
+  });
+  assert.ok(args.includes("--hwdec=no"));
+  assert.ok(args.includes("--vo=gpu"));
+  assert.ok(args.includes("--log-file=C:\\riwaq\\logs\\mpv-last.log"));
+});
+
+test("only MPV's problem lines reach the diagnostic, sanitized", () => {
+  const log = [
+    "[cplayer] Command line: mpv --http-header-fields=Authorization: Bearer abc",
+    "[vo/gpu-next/d3d11] Failed to create swapchain: Error 0x887A0004",
+    "[vo/gpu-next] Could not initialize the video output",
+    "[ffmpeg] https://debrid.example.com/dl/SECRETTOKEN123/file.mkv: error 403",
+    "[cplayer] Playing: C:\\Users\\Abadi\\Videos\\x.mkv",
+    "[vo/gpu-next/d3d11] Failed to create swapchain: Error 0x887A0004",
+  ].join("\n");
+  const lines = mpvLogProblems(log, { home: "C:\\Users\\Abadi" });
+  assert.equal(lines.length, 3, "duplicates and ordinary lines are dropped");
+  assert.ok(lines.every((l) => !/Bearer|SECRETTOKEN|Authorization/.test(l)));
+  assert.ok(lines.some((l) => /debrid\.example\.com/.test(l)));
+  assert.match(lines[0], /swapchain/);
+});
+
+test("HDR modes: SDR conversion by default, true HDR in its own window for HDR sources", () => {
+  const settings = { ...DEFAULT_SETTINGS, hdr: true };
+  assert.equal(
+    settings.hdrMode,
+    "tonemap",
+    "the old switch alone no longer forces true HDR",
+  );
+  assert.equal(hdrSignal(settings), false);
+  assert.equal(hdrMode({ hdr: true }), "tonemap", "an older switch converts");
+  assert.equal(hdrMode({ hdrMode: "embedded" }), "tonemap", "no embedded mode");
+  const windowMode = { ...DEFAULT_SETTINGS, hdrMode: "window" };
+  assert.equal(
+    hdrSignal(windowMode),
+    false,
+    "not for a source shown inside Riwaq",
+  );
+  assert.equal(hdrSignal(windowMode, { separate: true }), true);
+  assert.equal(
+    hdrSignal({ hdrMode: "window", simpleColor: true }, { separate: true }),
+    false,
+  );
+  // The separate window: HDR sources, and SDR ones when RTX Video HDR is on.
+  assert.equal(separateWindow(windowMode, { hdrSource: true }), true);
+  assert.equal(separateWindow(windowMode, { hdrSource: false }), false);
+  assert.equal(separateWindow({ ...windowMode, rtxHdr: true }), true);
+  assert.equal(separateWindow(DEFAULT_SETTINGS, { hdrSource: true }), false);
+  const own = playerArgs({
+    pipe: "p",
+    settings: windowMode,
+    url: "u",
+    title: "t",
+    host: "1234",
+    separate: true,
+  });
+  assert.ok(!own.some((a) => a.startsWith("--wid=")), "MPV's own window");
+  for (const flag of [
+    "--fullscreen=yes",
+    "--ontop=yes",
+    "--target-colorspace-hint=yes",
+  ])
+    assert.ok(own.includes(flag), flag);
+  assert.ok(own.some((a) => a.startsWith("--script-opts=osc-visibility=auto")));
+  assert.equal(
+    own
+      .filter((a) => a.startsWith("--script-opts="))
+      .at(-1)
+      .includes("visibility=auto"),
+    true,
+    "MPV's controller shows in its own window",
+  );
+  const inside = playerArgs({
+    pipe: "p",
+    settings: windowMode,
+    url: "u",
+    title: "t",
+    host: "1234",
+  });
+  assert.ok(inside.includes("--wid=1234"));
+  assert.ok(inside.includes("--target-colorspace-hint=no"));
+});
+
+test("in MPV's own window the HUD steps aside and keys act on that window", () => {
+  assert.equal(
+    hudVisible({
+      enabled: true,
+      player: { active: true, separate: true },
+      surfaceVisible: true,
+    }),
+    false,
+  );
+  assert.equal(
+    hudVisible({
+      enabled: true,
+      player: { active: true },
+      surfaceVisible: true,
+    }),
+    true,
+  );
+  const sent = [];
+  let riwaqFullscreen = 0;
+  const player = new Player({
+    onState: () => {},
+    onFullscreen: () => riwaqFullscreen++,
+  });
+  player.send = (c) => sent.push(c);
+  player.state = { active: true, separate: true, fullscreen: false };
+  player.message("riwaq-fullscreen");
+  assert.deepEqual(sent.at(-1), ["cycle", "fullscreen"]);
+  assert.equal(riwaqFullscreen, 0);
+  player.applyController();
+  assert.equal(sent.at(-1)[2], "auto");
+  let stopped = 0;
+  player.stop = async () => stopped++;
+  player.message("riwaq-stop");
+  assert.equal(stopped, 1, "Esc returns to Riwaq");
+});
+
+test("the compatibility restart leaves MPV's own window and true HDR", async () => {
+  const player = new Player({ onState: () => {} });
+  const starts = [];
+  player.start = async (args) => starts.push(args);
+  player.lastStart = {
+    url: "u",
+    settings: { hdrMode: "window" },
+    separate: true,
+  };
+  player.state = { active: true, position: 10 };
+  await player.restartSafe();
+  assert.equal(starts[0].separate, false);
+  assert.equal(starts[0].settings.hdrMode, "tonemap");
+});
+
+test("network sources keep a large buffer and reconnect; local files and live do not", () => {
+  const gb = 1024 ** 3;
+  assert.equal(bufferMiB({ bufferSize: "auto" }, 32 * gb), 1024);
+  assert.equal(bufferMiB({ bufferSize: "auto" }, 16 * gb), 512);
+  assert.equal(bufferMiB({ bufferSize: "auto" }, 8 * gb), 256);
+  assert.equal(
+    bufferMiB({ bufferSize: 2048 }, 8 * gb),
+    2048,
+    "the viewer's choice wins",
+  );
+  const args = bufferArgs({ mib: 1024 });
+  assert.ok(args.includes("--demuxer-max-bytes=1024MiB"));
+  assert.ok(args.includes("--demuxer-max-back-bytes=256MiB"));
+  assert.ok(args.includes("--cache-pause-initial=yes"));
+  assert.ok(args.some((a) => a.includes("reconnect_on_network_error=1")));
+  assert.deepEqual(bufferArgs({ mib: 1024, local: true }), []);
+  const settings = { ...DEFAULT_SETTINGS };
+  const remote = playerArgs({
+    pipe: "p",
+    settings,
+    url: "https://x/v.mkv",
+    title: "t",
+    bufferMiB: 1024,
+  });
+  assert.ok(remote.includes("--demuxer-max-bytes=1024MiB"));
+  const file = playerArgs({
+    pipe: "p",
+    settings,
+    url: "C:\\v.mkv",
+    title: "t",
+    local: true,
+  });
+  assert.ok(!file.some((a) => a.startsWith("--demuxer-max-bytes")));
+  const live = playerArgs({
+    pipe: "p",
+    settings,
+    url: "https://x/live.m3u8",
+    title: "t",
+    live: true,
+  });
+  assert.ok(
+    !live.some((a) => a.startsWith("--demuxer-max-bytes")),
+    "live keeps its own buffer",
+  );
+  assert.equal(live.filter((a) => a.startsWith("--stream-lavf-o")).length, 1);
+});
+
+test("Dolby and DTS can pass through to a receiver", () => {
+  assert.ok(
+    audioArgs({ audioPassthrough: true }).includes(
+      "--audio-spdif=ac3,eac3,dts,dts-hd,truehd",
+    ),
+  );
+  assert.ok(!audioArgs({}).some((a) => a.startsWith("--audio-spdif")));
+});
+
+test("the source's label adds Dolby Vision, REMUX, IMAX and Atmos to the chips", () => {
+  const tags = sourceTags({
+    hdr: "DV+HDR10",
+    source: "REMUX",
+    editions: ["IMAX"],
+    audio: "TrueHD Atmos",
+  });
+  assert.deepEqual(tags, ["Dolby Vision", "REMUX", "IMAX", "Atmos"]);
+  assert.deepEqual(
+    sourceTags({ hdr: "HDR10", source: "WEB-DL", editions: [] }),
+    [],
+  );
+  assert.deepEqual(
+    qualityChips({
+      width: 3840,
+      height: 2160,
+      transfer: "pq",
+      sourceTags: tags,
+    }),
+    ["4K", "Dolby Vision", "Atmos", "REMUX", "IMAX"],
+  );
+});
+
+test("the watchdog reports a stuck viewing once, later while it waits on the network", () => {
+  const stalls = [];
+  const player = new Player({ onState: () => {} });
+  player.onStall = (info) => stalls.push(info);
+  player.state = { active: true, position: 100, pause: false };
+  player.fileLoaded = true;
+  player.lastPos = null;
+  player.lastMove = 0;
+  player.checkStall(0);
+  player.checkStall(14000);
+  assert.equal(stalls.length, 0);
+  player.checkStall(16000);
+  assert.equal(stalls.length, 1);
+  assert.equal(stalls[0].buffering, false);
+  player.checkStall(40000);
+  assert.equal(stalls.length, 1, "once until it moves again");
+  player.state.position = 101;
+  player.checkStall(41000);
+  player.state.cachePaused = true;
+  player.checkStall(60000);
+  assert.equal(stalls.length, 1, "waiting on the network has longer");
+  player.checkStall(72000);
+  assert.equal(stalls[1].buffering, true);
+  player.state = { active: true, position: 200, pause: true };
+  player.checkStall(200000);
+  player.checkStall(400000);
+  assert.equal(stalls.length, 2, "a pause is not a stall");
+});
+
+test("the compatibility mode goes in two steps and keeps gpu-next for Dolby Vision", async () => {
+  assert.equal(safeVideo(1).renderer, "gpu");
+  assert.equal(
+    safeVideo(1).hwdec,
+    undefined,
+    "step one keeps hardware decoding",
+  );
+  assert.equal(safeVideo(2).hwdec, "off");
+  assert.equal(safeVideo(1, { dolbyVision: true }).renderer, "gpu-next");
+  const player = new Player({ onState: () => {} });
+  const starts = [];
+  player.start = async (args) => starts.push(args);
+  player.lastStart = {
+    url: "u",
+    settings: {},
+    tags: ["Dolby Vision"],
+    separate: true,
+  };
+  player.state = { active: true, position: 42 };
+  await player.restartSafe(1);
+  assert.equal(starts[0].settings.renderer, "gpu-next");
+  assert.equal(starts[0].separate, false);
+  await player.restartSame();
+  assert.equal(starts[1].start, 42);
+  assert.equal(
+    starts[1].separate,
+    true,
+    "a reconnect keeps the viewing as it was",
+  );
+  assert.equal(starts[1].safe, true);
 });

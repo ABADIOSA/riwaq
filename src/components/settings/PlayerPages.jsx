@@ -15,6 +15,7 @@ import {
   AUDIO_PROFILES,
   AUDIO_PROFILE_IDS,
   EQ_BANDS,
+  HDR_MODES,
   VOLUME_MAX,
 } from "../../../core/player-tuning.mjs";
 import { BANDWIDTH_CAPS } from "../../../core/stream-engine.mjs";
@@ -84,9 +85,26 @@ const QUALITY = [
   ],
 ];
 
+// Harbor's three HDR choices; its own support thread showed why true HDR
+// gets a separate window (core/player-tuning.mjs HDR_MODES).
+const HDR_CHOICES = [
+  [
+    "tonemap",
+    "تحويل إلى SDR",
+    "يحوّل HDR إلى صورة عادية دقيقة. يعمل على أي شاشة وكل أدوات التحكم.",
+    "موصى به",
+  ],
+  [
+    "window",
+    "HDR حقيقي",
+    "لمصادر HDR فقط، بنفس طريقة نيتفليكس وديزني بلس: الصورة بملء الشاشة على سطح خاص فيعرضها ويندوز بـ HDR فعلي. أدوات التحكم من MPV (حرّك الفأرة)، وEsc يرجعك لرِواق. المصادر العادية تبقى داخل رِواق.",
+  ],
+];
+
 /** Harbor's Video quality page: MPV's profiles, decoder, renderer and HDR. */
 export function VideoPage({ state, update, act, notice }) {
   const s = state.settings;
+  const mode = HDR_MODES.includes(s.hdrMode) ? s.hdrMode : "tonemap";
   const set = (patch) => update("settings", patch);
   const hwdec = s.hardwareDecoding === false ? "off" : s.hwdec || "auto";
   return (
@@ -134,6 +152,31 @@ export function VideoPage({ state, update, act, notice }) {
         </Field>
       </section>
       <section className="settings-card">
+        <h2>التشغيل السلس</h2>
+        <p>
+          مثل منصات البث الكبيرة: رِواق يحمّل دقائق للأمام، ويعيد الاتصال لو
+          انقطع، ويراقب التشغيل فإن علق أعاد الاتصال من نفس اللحظة ثم جرّب
+          المصدر التالي.
+        </p>
+        <Field
+          title="مخزن التحميل المسبق"
+          text="ملف Blu-ray Remux بدقة 4K يحتاج 60 إلى 100 ميغابت/ث؛ مخزن 1 جيجا يحفظ قرابة دقيقة ونصف منه. «تلقائي» يختار حسب ذاكرة جهازك."
+        >
+          <Choices
+            label="مخزن التحميل المسبق"
+            value={s.bufferSize || "auto"}
+            options={[
+              ["auto", "تلقائي"],
+              [256, "256 ميغا"],
+              [512, "512 ميغا"],
+              [1024, "1 جيجا"],
+              [2048, "2 جيجا"],
+            ]}
+            onPick={(bufferSize) => set({ bufferSize })}
+          />
+        </Field>
+      </section>
+      <section className="settings-card">
         <h2>التوافق</h2>
         <p>
           جرّبها إذا ظهر الفيديو بشاشة سوداء أو بألوان غريبة أو بخط عند الحافة.
@@ -167,12 +210,33 @@ export function VideoPage({ state, update, act, notice }) {
       </section>
       <section className="settings-card">
         <h2>HDR</h2>
-        <Toggle
-          on={s.hdr}
-          title="إشارة HDR للشاشة"
-          text="يرسل الصورة بـ HDR حقيقي لشاشة تدعمه. يحتاج تفعيل HDR في إعدادات ويندوز."
-          onChange={(hdr) => set({ hdr })}
-        />
+        <div
+          className="quality-cards hdr-modes"
+          role="radiogroup"
+          aria-label="طريقة HDR"
+        >
+          {HDR_CHOICES.map(([id, title, text, tag]) => (
+            <button
+              key={id}
+              role="radio"
+              aria-checked={mode === id}
+              className={mode === id ? "selected" : ""}
+              onClick={() => set({ hdrMode: id, hdr: id !== "tonemap" })}
+            >
+              <b>
+                {title}
+                {tag && <em className="setting-tag">{tag}</em>}
+              </b>
+              <small>{text}</small>
+            </button>
+          ))}
+        </div>
+        {mode !== "tonemap" && (
+          <p className="subtle">
+            يحتاج تشغيل HDR في إعدادات ويندوز (العرض ← HDR) وشاشة تدعمه. إذا
+            ظهرت الصورة باهتة، شغّل HDR في ويندوز أو ارجع إلى «تحويل إلى SDR».
+          </p>
+        )}
         <Field
           title="لوحة العرض"
           text="OLED يحافظ على السواد التام ويُظهر تفاصيل الظل؛ LCD يضبط التباين لشاشات الإضاءة الخلفية."
@@ -233,7 +297,7 @@ export function VideoPage({ state, update, act, notice }) {
           on={s.rtxHdr}
           tag="تجريبي"
           title="RTX Video HDR"
-          text="يحوّل فيديو SDR إلى HDR على كرت الشاشة. يحتاج «إشارة HDR للشاشة» وشاشة HDR."
+          text="يحوّل فيديو SDR إلى HDR على كرت الشاشة. يحتاج «HDR حقيقي» وشاشة HDR، ويفتح المصادر العادية في نافذة HDR كذلك."
           onChange={(rtxHdr) => set({ rtxHdr })}
         />
       </section>
@@ -313,6 +377,15 @@ export function AudioPage({ state, update, act }) {
           title="دمج الصوت المحيطي إلى ستيريو"
           text="لسماعات الرأس واللابتوب: صوت 5.1 أو 7.1 يصير ستيريو مع إبقاء قناة الحوار بكامل قوتها. اتركه مطفأ إذا عندك نظام صوت محيطي."
           onChange={(audioDownmix) => set({ audioDownmix })}
+        />
+      </section>
+      <section className="settings-card">
+        <h2>مسرح منزلي</h2>
+        <Toggle
+          on={s.audioPassthrough}
+          title="تمرير الصوت إلى جهاز الاستقبال"
+          text="يرسل Dolby (TrueHD وAtmos وE-AC3) وDTS (وDTS-HD وDTS:X) كما هي إلى جهاز استقبال أو ساوندبار عبر HDMI، مثل مشغل Blu-ray. اتركه مطفأ مع سماعات الكمبيوتر العادية، وملفات الصوت والتطبيع لا تنطبق على الصوت الممرّر."
+          onChange={(audioPassthrough) => set({ audioPassthrough })}
         />
       </section>
       <section className="settings-card">

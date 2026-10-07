@@ -65,7 +65,13 @@ import {
 } from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
-import { parseAudioDevices } from "../core/player-tuning.mjs";
+import {
+  bufferMiB,
+  parseAudioDevices,
+  separateWindow,
+  sourceTags,
+} from "../core/player-tuning.mjs";
+import { parseStream } from "../core/stream-engine.mjs";
 import { measureDownload, suggestCap } from "../core/speed-test.mjs";
 import { Thumbnailer } from "./thumbnails.mjs";
 import { dropKind } from "../core/drop.mjs";
@@ -85,7 +91,7 @@ import {
 import { DesktopUpdates } from "./updater.mjs";
 import { probeAddons, runDiagnostics } from "./diagnose.mjs";
 import { ErrorLog, formatReport } from "../core/diagnose.mjs";
-import { homedir } from "node:os";
+import { homedir, totalmem } from "node:os";
 import { MusicLibrary, AUDIO_TYPES } from "./music-library.mjs";
 
 protocol.registerSchemesAsPrivileged([
@@ -647,11 +653,18 @@ async function applyPresence() {
   updatePresence();
   return true;
 }
+/** The last viewing's MPV log; the diagnostic reads its problem lines. */
+function mpvLogFile() {
+  const dir = join(app.getPath("userData"), "logs");
+  mkdirSync(dir, { recursive: true });
+  return join(dir, "mpv-last.log");
+}
 /** A video file on this PC, chosen in a dialog or dropped on the window. */
 function playLocalFile(path) {
   nowPlaying = null;
   return player.start({
     executable: executable(),
+    logFile: mpvLogFile(),
     settings: client.state.settings,
     url: path,
     local: true,
@@ -790,7 +803,21 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   nowPlaying = { key, type: meta.type, id: videoId, series };
   if (series && stream.memory)
     client.rememberSeries(series, { source: stream.memory });
+  // True HDR in MPV's own window is for sources labelled HDR; everything
+  // else stays in Riwaq's window with its controls.
+  const parsed = parseStream(stream);
+  const separate = separateWindow(client.state.settings, {
+    hdrSource: !!parsed.hdr,
+  });
+  if (separate)
+    emit(
+      "notice",
+      "HDR حقيقي في نافذة MPV: حرّك الفأرة لأدوات التحكم، وEsc يرجعك إلى رِواق.",
+    );
   return player.start({
+    separate,
+    tags: sourceTags(parsed),
+    bufferMiB: bufferMiB(client.state.settings, totalmem()),
     executable: executable(),
     settings: client.state.settings,
     url,
@@ -800,6 +827,7 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     headers: stream.behaviorHints?.proxyHeaders?.request || {},
     inputConf: hotkeyFile(),
     screenshotDir: screenshotDir(),
+    logFile: mpvLogFile(),
   });
 }
 async function playChannel({ key, start = 0, stop = 0 }) {
@@ -822,6 +850,7 @@ async function playChannel({ key, start = 0, stop = 0 }) {
     live: channel.live,
     inputConf: hotkeyFile(),
     screenshotDir: screenshotDir(),
+    logFile: mpvLogFile(),
   });
 }
 /**
@@ -1432,10 +1461,13 @@ const methods = {
   },
   play,
   videoBounds: (a) => {
-    surfaceShown = !!player.state.active && a?.visible !== false;
-    const placed = player.state.active
-      ? videoHost.bounds(a)
-      : (videoHost.hide(), false);
+    // MPV's own HDR window needs no surface inside Riwaq's window.
+    surfaceShown =
+      !!player.state.active && !player.state.separate && a?.visible !== false;
+    const placed =
+      player.state.active && !player.state.separate
+        ? videoHost.bounds(a)
+        : (videoHost.hide(), false);
     placeHud();
     return placed;
   },
@@ -1994,6 +2026,8 @@ app
             } else if (
               // Smoke runs measure the surface in a hidden, fixed-size window.
               !process.env.RIWAQ_SMOKE &&
+              // MPV's own HDR window is full screen by itself.
+              !s.separate &&
               client.state.settings.autoFullscreen !== false &&
               !window.isFullScreen()
             )
@@ -2032,7 +2066,8 @@ app
       const checkCursor = () => {
         if (window.isDestroyed()) return cursorGate.release();
         const state = player.state;
-        if (!state.active) {
+        // MPV hides the pointer in its own HDR window.
+        if (!state.active || state.separate) {
           lastPoint = null;
           return cursorGate.release();
         }
@@ -2067,6 +2102,53 @@ app
       };
       cursorCheck = checkCursor;
       setInterval(checkCursor, 150);
+      // Sound without a picture: start again once in the compatibility
+      // mode, and say so; a second failure points at the diagnostic.
+      player.onVideoFailed = () => {
+        logError("player", "MPV لم يعرض الصورة: مخرج الفيديو لم يُهيأ");
+        const stage = (player.safeStage || 0) + 1;
+        if (stage > 2) {
+          emit(
+            "notice",
+            "الصورة ما ظهرت حتى بوضع التوافق. شغّل «تشخيص كامل» من الإعدادات وأرسل لنا التقرير.",
+          );
+          return;
+        }
+        player.safeStage = stage;
+        emit(
+          "notice",
+          stage === 1
+            ? "الصورة ما ظهرت، فأعدنا التشغيل من نفس اللحظة بوضع التوافق."
+            : "ما زالت الصورة غائبة، فأعدنا التشغيل وفك الترميز بالمعالج.",
+        );
+        player.restartSafe(stage)?.catch((error) => {
+          logError("player", error);
+          emit("notice", cleanError(error));
+        });
+      };
+      // A stuck viewing: reconnect once from the same moment, then move to
+      // the next ranked source (core/failover.mjs) when there is one.
+      player.onStall = ({ buffering }) => {
+        logError(
+          "player",
+          buffering
+            ? "التشغيل توقف ينتظر الشبكة أكثر من 30 ثانية"
+            : "التشغيل علق: الموضع لم يتحرك 15 ثانية",
+        );
+        if ((player.stallRetries || 0) < 1) {
+          player.stallRetries = 1;
+          emit("notice", "التشغيل علق، فأعدنا الاتصال من نفس اللحظة.");
+          player.restartSame()?.catch((error) => logError("player", error));
+          return;
+        }
+        emit(
+          "notice",
+          buffering
+            ? "المصدر أبطأ من اتصالك؛ نجرّب المصدر التالي."
+            : "المصدر ما زال عالقاً؛ نجرّب المصدر التالي.",
+        );
+        tryNextSource();
+      };
       player.onLoaded = ({ meta, videoId }) => {
         autoSubtitle(videoId);
         if (

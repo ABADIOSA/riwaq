@@ -61,6 +61,23 @@ export function sanitize(value, { home = "", max = 400 } = {}) {
 }
 
 /** One captured error, sanitized and dated. */
+/**
+ * The problem lines of the last viewing's MPV log: errors, failures and
+ * warnings, without the command line or HTTP headers, each sanitized like
+ * everything else in a report. At most 40, the latest kept.
+ */
+const MPV_PROBLEM =
+  /\b(error|errors|fail(ed|ure)?|cannot|can't|could not|unable|invalid|unsupported|not supported|warning|disabling)\b/i;
+const MPV_PRIVATE = /http-header|authorization|cookie|command line|user-agent/i;
+export function mpvLogProblems(text, { home = "" } = {}) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .filter((l) => MPV_PROBLEM.test(l) && !MPV_PRIVATE.test(l))
+    .map((l) => sanitize(l.trim(), { home, max: 240 }))
+    .filter(Boolean);
+  return [...new Set(lines)].slice(-40);
+}
+
 export function errorEntry(where, error, { home = "", now = Date.now() } = {}) {
   const message =
     error instanceof Error
