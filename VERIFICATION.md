@@ -86,6 +86,8 @@ Executed:
   - a `hidden` skip button is not drawn;
   - the slider maximum follows `volumeMax`.
 
+MPV build: the first 0.37.0 release run failed at "Fetch the pinned MPV build" with a 404, because shinchiro removed the 20260610 release upstream (it keeps only recent builds). The pin moved to `mpv-x86_64-20261007-git-eb0ee10315.7z`, SHA-256 `6720298e…c96f81`, read from the release page's published digest. `scripts/fetch-mpv.mjs` verifies it on download, and THIRD-PARTY.md records the provenance.
+
 Not executed:
 
 - MPV itself on Windows, so the audio filters, the downmix, `--profile=fast/high-quality`, `--target-contrast`, `--d3d11-flip=no` and `--d3d11-output-format=rgba8` were not heard or seen on real hardware.
