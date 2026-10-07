@@ -19,13 +19,13 @@ Riwaq is an independent implementation of a desktop client for the Stremio HTTP 
 - Electron (MIT and Chromium third-party licenses): https://github.com/electron/electron. Electron's LICENSE.electron.txt and LICENSES.chromium.html are retained in the unpacked distribution.
 - React / React DOM (MIT): https://github.com/facebook/react
 - Lucide (ISC): https://github.com/lucide-icons/lucide
-- MPV is a separate executable distributed in resources/mpv. Build: shinchiro 20260610, mpv git 304426c, x86_64. MPV and its dependencies retain their own licenses, including GPL/LGPL; the Riwaq MIT license does not relicense those binaries.
-  - Binary/build recipe: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20260610
+- MPV is a separate executable distributed in resources/mpv. Build: shinchiro 20261007, mpv git eb0ee10315, x86_64. MPV and its dependencies retain their own licenses, including GPL/LGPL; the Riwaq MIT license does not relicense those binaries.
+  - Binary/build recipe: https://github.com/shinchiro/mpv-winbuild-cmake/releases/tag/20261007
   - Build-system source: https://github.com/shinchiro/mpv-winbuild-cmake
-  - MPV corresponding revision: https://github.com/mpv-player/mpv/commit/304426c
+  - MPV corresponding revision: https://github.com/mpv-player/mpv/commit/eb0ee10315
   - MPV license and dependency information: https://github.com/mpv-player/mpv/blob/master/Copyright
-  - Exact downloaded archive: mpv-x86_64-20260610-git-304426c.7z
-  - SHA-256: facac536baa73c7b925771af5e39a3c9cb16b8d75b59a6e9800de89799dffca7
+  - Exact downloaded archive: mpv-x86_64-20261007-git-eb0ee10315.7z
+  - SHA-256: 6720298e1c32dc9ee60970db1c94c8170dbf33520e48eb9d3258584835c96f81
 
 Poster images, descriptions, and catalogs are retrieved at runtime from the user's addons and Cinemeta. They are not shipped as Riwaq artwork. No stream provider is installed by default.
 
