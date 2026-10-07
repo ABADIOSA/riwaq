@@ -234,7 +234,17 @@ const PROPERTIES = [
   ["video-params/gamma", "transfer"],
   ["vo-configured", "voConfigured"],
   ["paused-for-cache", "cachePaused"],
+  // The picture as the video output shows it, after filters: absent when
+  // MPV has no picture on screen.
+  ["video-out-params/w", "outWidth"],
+  // Frames leaving the filter chain each second: absent when none reach
+  // the output, though the sound and the clock carry on.
+  ["estimated-vf-fps", "vfFps"],
 ];
+// Properties whose absence is itself the news: an unavailable value is
+// recorded as null instead of keeping the last one seen.
+const NULLABLE = new Set(["video-out-params/w", "estimated-vf-fps"]);
+const THROTTLED = new Set(["time-pos", "estimated-vf-fps"]);
 
 export class Player {
   constructor({
@@ -326,7 +336,6 @@ export class Player {
       bufferMiB,
       tags,
     };
-    clearTimeout(this.videoCheck);
     this.stopWatchdog();
     this.meta = meta;
     this.videoId = videoId;
@@ -337,6 +346,7 @@ export class Player {
     this.cursorHidden = false;
     this.pendingSecondary = null;
     this.rtxApplied = "";
+    this.rtxAdded = false;
     this.onlineSegments = [];
     // What MPV started with, so a later settings change sends only changes.
     this.tuningSent = new Map(
@@ -496,6 +506,9 @@ export class Player {
       default: !!t.default,
       hearingImpaired: !!t["hearing-impaired"],
       external: !!t.external,
+      // Cover art and still images are video tracks without a picture to
+      // play; the picture check ignores them.
+      image: !!(t.image || t.albumart),
       channels: t["demux-channel-count"] || undefined,
       addonKey: t["external-filename"]
         ? this.externalSubs.get(t["external-filename"])?.key
@@ -652,7 +665,9 @@ export class Player {
     if (event.event === "property-change") {
       if (event.name === "track-list") this.rawTracks = event.data || [];
       const mapping = PROPERTIES.find(([name]) => name === event.name);
-      if (mapping && event.data !== undefined) {
+      if (mapping && event.data === undefined && NULLABLE.has(event.name))
+        this.state[mapping[1]] = null;
+      else if (mapping && event.data !== undefined) {
         this.state[mapping[1]] =
           event.name === "track-list"
             ? this.mapTracks(event.data || [])
@@ -687,7 +702,8 @@ export class Player {
       if (event.name === "core-idle") this.coreIdle = event.data;
       if (event.name === "core-idle" || event.name === "pause")
         this.state.loading = !!this.coreIdle && !this.state.pause;
-      this.publish(event.name === "time-pos");
+      // The position and the frame rate change every frame: throttled.
+      this.publish(THROTTLED.has(event.name));
     }
     if (event.event === "file-loaded") {
       // The controller script may not have been listening when full screen
@@ -786,21 +802,46 @@ export class Player {
     this.onState(this.state);
   }
   /**
-   * Sound without a picture: a file with a video track whose output MPV
-   * never configured within six seconds of loading. Main is told once per
-   * file and decides what to do (restartSafe).
+   * Whether the viewing shows a picture: null for a file without a moving
+   * picture (sound, cover art), true when MPV's output is configured and
+   * reports the displayed size, false otherwise.
+   */
+  hasPicture(state = this.state) {
+    const video = (state.tracks || []).some(
+      (t) => t.type === "video" && !t.image,
+    );
+    if (!video) return null;
+    return (
+      !!state.voConfigured &&
+      Number(state.outWidth) > 0 &&
+      // Not yet reported (undefined) is not a failure; reported absent is.
+      (state.vfFps === undefined || Number(state.vfFps) > 0)
+    );
+  }
+  /**
+   * Sound without a picture, checked by the watchdog from the moment the
+   * file loads and throughout the viewing: a file with a video track whose
+   * output shows nothing for six seconds is reported once (main restarts it
+   * in the compatibility mode). Kept as a name for the first check.
    */
   watchVideo() {
-    clearTimeout(this.videoCheck);
-    const viewing = this.state;
-    this.videoCheck = setTimeout(() => {
-      if (this.state !== viewing || !viewing.active || viewing.voConfigured)
-        return;
-      const video = (viewing.tracks || []).some(
-        (t) => t.type === "video" && t.selected,
-      );
-      if (video) this.onVideoFailed?.({ videoId: this.videoId });
-    }, 6000);
+    this.noPictureSince = null;
+    this.pictureReported = false;
+  }
+  checkPicture(now = Date.now()) {
+    if (!this.fileLoaded || this.pictureReported || this.state.live) return;
+    // Paused or waiting on the network, no frames are expected.
+    const waiting =
+      this.state.pause || this.state.cachePaused || this.state.loading;
+    if (waiting || this.hasPicture() !== false) {
+      this.noPictureSince = null;
+      return;
+    }
+    if (this.noPictureSince == null) this.noPictureSince = now;
+    else if (now - this.noPictureSince >= 6000) {
+      this.pictureReported = true;
+      this.onVideoFailed?.({ videoId: this.videoId });
+    }
   }
   /**
    * Starts the same viewing again from where it is, with the picture in its
@@ -842,6 +883,8 @@ export class Player {
     this.lastMove = Date.now();
     this.lastPos = null;
     this.stallReported = false;
+    this.noPictureSince = null;
+    this.pictureReported = false;
     this.watchdog = setInterval(() => this.checkStall(), 2000);
     this.watchdog.unref?.();
   }
@@ -852,6 +895,7 @@ export class Player {
   checkStall(now = Date.now()) {
     const state = this.state;
     if (!state.active) return;
+    this.checkPicture(now);
     const position = Number(state.position) || 0;
     if (state.pause || !this.fileLoaded || position !== this.lastPos) {
       this.lastPos = position;
@@ -911,13 +955,21 @@ export class Player {
     if (wanted === this.rtxApplied) return;
     this.rtxApplied = wanted;
     const viewing = this.state;
-    await this.request(["vf", "remove", "@riwaqrtx"]);
+    // MPV's video filter chain is touched only for RTX: a filter command on
+    // a viewing that never asked for one can rebuild the chain and lose the
+    // picture on some builds (the 0.37 report).
+    if (!candidates.length && !this.rtxAdded) return;
+    if (this.rtxAdded) {
+      await this.request(["vf", "remove", "@riwaqrtx"]);
+      this.rtxAdded = false;
+    }
     let status = null;
     if (candidates.length) {
       status = "unavailable";
       for (const filter of candidates) {
         if (this.state !== viewing || this.rtxApplied !== wanted) return;
         if (await this.request(["vf", "add", filter])) {
+          this.rtxAdded = true;
           status = filter.includes("nvidia-true-hdr")
             ? filter.includes("scaling-mode")
               ? "upscale+hdr"
@@ -1149,7 +1201,6 @@ export class Player {
   async stop() {
     const child = this.child;
     this.clearSleep();
-    clearTimeout(this.videoCheck);
     this.stopWatchdog();
     if (!child) return;
     this.save();
