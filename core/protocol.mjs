@@ -24,6 +24,16 @@ import {
   safeCatalogKeys,
   safeHomeSections,
 } from "./home.mjs";
+import {
+  AUDIO_PROFILE_IDS,
+  DISPLAY_PANELS,
+  HWDEC_MODES,
+  RENDERERS,
+  VIDEO_QUALITY,
+  VOLUME_MAX,
+  cleanAudioDevice,
+} from "./player-tuning.mjs";
+import { BANDWIDTH_CAPS } from "./stream-engine.mjs";
 import { createHash } from "node:crypto";
 
 export const CINEMETA = "https://v3-cinemeta.strem.io/manifest.json";
@@ -78,6 +88,39 @@ export const DEFAULT_SETTINGS = {
   streamSizeLimit: 0,
   skipIntro: "button",
   skipOutro: "off",
+  // Recaps have their own choice; the skip button can step aside after a
+  // few seconds; anime times can come from AniSkip (core/skip-online.mjs).
+  skipRecap: "button",
+  skipHideAfter: 0,
+  skipOnline: false,
+  // The picture and sound (core/player-tuning.mjs): MPV's quality profile,
+  // decoder, renderer, compatibility modes, the display's panel, NVIDIA RTX
+  // Video, and the sound's profile, normalising, downmix, ceiling and output.
+  videoQuality: "balanced",
+  hwdec: "auto",
+  renderer: "gpu-next",
+  simpleColor: false,
+  linelessVideo: false,
+  displayPanel: "auto",
+  rtxUpscale: false,
+  rtxHdr: false,
+  audioProfile: "flat",
+  audioNormalize: false,
+  audioDownmix: false,
+  volumeMax: 150,
+  audioDevice: "auto",
+  // A connection speed cap in Mbps (0 for none); heavier streams rank lower.
+  bandwidthCap: 0,
+  // The HUD: the stream's quality under the title, controls on pause, the
+  // sleep timer in the top bar, a volume popup while the controls sleep, and
+  // full screen kept after the viewing ends.
+  hudQuality: true,
+  hudQualityStyle: "chips",
+  hudShowOnPause: true,
+  hudSleep: true,
+  volumeOsd: true,
+  volumeOsdPosition: "center",
+  keepFullscreen: false,
   // Series whose intro and outro are never skipped on their own.
   skipExcept: [],
   shaderPath: "",
@@ -360,6 +403,18 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "prayerPause",
     "heroAutoplay",
     "rememberSeries",
+    "skipOnline",
+    "simpleColor",
+    "linelessVideo",
+    "rtxUpscale",
+    "rtxHdr",
+    "audioNormalize",
+    "audioDownmix",
+    "hudQuality",
+    "hudShowOnPause",
+    "hudSleep",
+    "volumeOsd",
+    "keepFullscreen",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (
@@ -389,6 +444,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
       0,
       Math.min(30, Math.round(input.liveBufferSeconds)),
     );
+  if (typeof input.audioDevice === "string")
+    next.audioDevice = cleanAudioDevice(input.audioDevice) || "auto";
   if (typeof input.serverUrl === "string")
     next.serverUrl = webUrl(input.serverUrl).toString().replace(/\/$/, "");
   for (const [key, values] of Object.entries({
@@ -400,6 +457,17 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     skipIntro: ["off", "button", "auto"],
     seekThumbnails: ["off", "local", "all"],
     skipOutro: ["off", "button", "auto"],
+    skipRecap: ["off", "button", "auto"],
+    skipHideAfter: [0, 5, 10, 15, 30],
+    videoQuality: VIDEO_QUALITY,
+    hwdec: HWDEC_MODES,
+    renderer: RENDERERS,
+    displayPanel: DISPLAY_PANELS,
+    audioProfile: AUDIO_PROFILE_IDS,
+    volumeMax: VOLUME_MAX,
+    bandwidthCap: BANDWIDTH_CAPS,
+    hudQualityStyle: ["chips", "bar"],
+    volumeOsdPosition: ["center", "top", "top-left", "top-right"],
     presenceDetail: ["title", "generic", "off"],
     shader: ["none", "sharp", "anime", "film", "custom"],
     toneMapping: ["auto", "bt.2446a", "hable", "mobius", "reinhard", "off"],

@@ -31,9 +31,20 @@ import {
   PickerPage,
   SortingPage,
 } from "./settings/SourcePages.jsx";
+import {
+  AudioPage,
+  OnScreenPage,
+  SkipPage,
+  SpeedCard,
+  VideoPage,
+} from "./settings/PlayerPages.jsx";
 import React, { useState, useEffect } from "react";
 import {
   Palette,
+  Gauge,
+  Volume2,
+  FastForward,
+  MonitorCog,
   Database,
   Link2,
   MonitorPlay,
@@ -472,10 +483,39 @@ const GROUPS = [
       [
         "playback",
         "المشغل",
-        "HDR الجودة تسريع العتاد متابعة إيقاف معاينة تسريع تقديم خطوة تذكر مسلسل",
+        "الجودة متابعة إيقاف معاينة تسريع تقديم خطوة تذكر مسلسل",
         MonitorPlay,
       ],
-      ["subtitles", "الصوت والترجمة", "عربي لغة حجم توقيت مسارات", Subtitles],
+      [
+        "video",
+        "جودة الفيديو",
+        "جودة الصورة HDR OLED LCD تسريع العتاد العارض gpu-next ألوان 8 بت خطوط RTX NVIDIA تكبير شيدر مرشح تحويل",
+        Gauge,
+      ],
+      [
+        "audio",
+        "الصوت",
+        "صوت تطبيع ستيريو محيطي باس ليلي حوار تعزيز 200% جهاز الإخراج سماعات",
+        Volume2,
+      ],
+      [
+        "onscreen",
+        "عناصر التحكم على الشاشة",
+        "جودة البث شارة مؤقت النوم ملء الشاشة نافذة مستوى الصوت إيقاف مؤقت",
+        MonitorCog,
+      ],
+      [
+        "skipping",
+        "المقدمات والتخطي",
+        "تخطي المقدمة الملخص شارة النهاية TheIntroDB AniSkip أنمي زر التخطي مفتاح",
+        FastForward,
+      ],
+      [
+        "subtitles",
+        "اللغة والترجمة",
+        "عربي لغة حجم توقيت مسارات صوت",
+        Subtitles,
+      ],
       [
         "prayer",
         "أوقات الصلاة",
@@ -504,7 +544,7 @@ const GROUPS = [
       [
         "sources",
         "تفضيلات المصادر",
-        "أمان تخزين debrid حجم استبعاد CAM جودة",
+        "أمان تخزين debrid حجم استبعاد CAM جودة سرعة الإنترنت اختبار السرعة Mbps",
         SlidersHorizontal,
       ],
       [
@@ -919,6 +959,23 @@ export default function SettingsStudio({
                 <DetailsPage state={state} update={update} />
               )}
               {id === "ai" && <AiPage state={state} update={update} />}
+              {id === "video" && (
+                <VideoPage
+                  state={state}
+                  update={update}
+                  act={act}
+                  notice={notice}
+                />
+              )}
+              {id === "audio" && (
+                <AudioPage state={state} update={update} act={act} />
+              )}
+              {id === "onscreen" && (
+                <OnScreenPage state={state} update={update} />
+              )}
+              {id === "skipping" && (
+                <SkipPage state={state} update={update} act={act} />
+              )}
               {id === "playerLayout" && (
                 <PlayerLayoutPage state={state} update={update} />
               )}
@@ -976,14 +1033,16 @@ export default function SettingsStudio({
                     </div>
                   </div>
                   <div className="provider-grid">
-                    {(state.providers || []).map((p) => (
-                      <ProviderCard
-                        key={p.id}
-                        provider={p}
-                        update={update}
-                        act={act}
-                      />
-                    ))}
+                    {(state.providers || [])
+                      .filter((p) => p.group !== "skip")
+                      .map((p) => (
+                        <ProviderCard
+                          key={p.id}
+                          provider={p}
+                          update={update}
+                          act={act}
+                        />
+                      ))}
                   </div>
                   <section className="settings-card">
                     {select("metadataLanguage", "لغة بيانات TMDB", [
@@ -1070,24 +1129,9 @@ export default function SettingsStudio({
                       "إن تعذّر تشغيل المصدر يجرّب رِواق المصدر التالي من نفس اللحظة، حتى ثلاث محاولات.",
                     )}
                     {toggle(
-                      "autoFullscreen",
-                      "ملء الشاشة عند التشغيل",
-                      "تبدأ المشاهدة بملء الشاشة. Esc أو النقر المزدوج للخروج.",
-                    )}
-                    {toggle(
                       "videoFill",
                       "تعبئة الشاشة بالصورة",
                       "تقص حواف الأفلام العريضة لتختفي الأشرطة السوداء. مغلق افتراضياً.",
-                    )}
-                    {toggle(
-                      "hardwareDecoding",
-                      "تسريع العتاد",
-                      "فك الترميز باستخدام كرت الشاشة عند توفره.",
-                    )}
-                    {toggle(
-                      "hdr",
-                      "إشارة HDR للشاشة",
-                      "تحتاج شاشة ومصدرًا وإعدادات ويندوز متوافقة.",
                     )}
                     {toggle(
                       "autoplay",
@@ -1165,86 +1209,6 @@ export default function SettingsStudio({
                     ])}
                   </section>
                   <section className="settings-card">
-                    <h2>
-                      <Sparkles size={17} /> معالجة الصورة
-                    </h2>
-                    <p>
-                      مرشّحات مبنية على محرّك MPV نفسه. رِواق لا يرفق ملفات شيدر
-                      من طرف ثالث؛ إن كان لديك سلسلة GLSL خاصة بك فاخترها من
-                      الملف المخصص.
-                    </p>
-                    {select("shader", "مرشّح الصورة", [
-                      ["none", "بدون · أسرع"],
-                      ["sharp", "حِدّة · تحسين الحواف"],
-                      ["anime", "رسوم متحركة · حِدّة مع تنعيم التدرّج"],
-                      ["film", "سينمائي · تدرّج ناعم"],
-                      ["custom", "ملف GLSL خاص بي"],
-                    ])}
-                    {s.shader === "custom" && (
-                      <div className="setting-row">
-                        <div>
-                          <b>ملف الشيدر</b>
-                          <p className="path" dir="ltr">
-                            {s.shaderPath || "لم يُختر ملف"}
-                          </p>
-                        </div>
-                        <button
-                          className="secondary small"
-                          onClick={async () => {
-                            const result = await act("chooseShader");
-                            if (result) notice("تم اختيار ملف الشيدر");
-                          }}
-                        >
-                          اختيار…
-                        </button>
-                      </div>
-                    )}
-                    {select("toneMapping", "تحويل HDR إلى SDR", [
-                      ["auto", "تلقائي"],
-                      ["bt.2446a", "bt.2446a · الأدق"],
-                      ["hable", "hable"],
-                      ["mobius", "mobius"],
-                      ["reinhard", "reinhard"],
-                      ["off", "بدون تحويل"],
-                    ])}
-                  </section>
-                  <section className="settings-card">
-                    <h2>تخطي المقدمة والخاتمة</h2>
-                    <p>
-                      يعتمد التخطي على فصول الملف. عند غيابها يُعرض الزر فقط ضمن
-                      النافذة التي تقع فيها المقدمة فعلياً، فلا يبتلع الزر جزءاً
-                      من الحلقة.
-                    </p>
-                    {select("skipIntro", "المقدمة والملخص", [
-                      ["button", "إظهار زر تخطي"],
-                      ["auto", "تخطٍ تلقائي"],
-                      ["off", "بدون"],
-                    ])}
-                    {select("skipOutro", "الخاتمة والإعلان", [
-                      ["off", "بدون"],
-                      ["button", "إظهار زر تخطي"],
-                      ["auto", "تخطٍ تلقائي"],
-                    ])}
-                    {(s.skipExcept || []).length > 0 && (
-                      <div className="setting-row">
-                        <div>
-                          <b>مسلسلات بلا تخطٍّ تلقائي</b>
-                          <p>
-                            يظهر فيها زر التخطي فقط:{" "}
-                            {arabicCount(s.skipExcept.length, SERIES)}. غيّرها
-                            من صفحة كل مسلسل.
-                          </p>
-                        </div>
-                        <button
-                          className="secondary small"
-                          onClick={() => save("skipExcept", [])}
-                        >
-                          أعد التخطي للكل
-                        </button>
-                      </div>
-                    )}
-                  </section>
-                  <section className="settings-card">
                     <h2>لقطات الشاشة</h2>
                     <p>
                       تُحفظ اللقطات بصيغة PNG داخل مجلد بيانات رِواق، ويفتح الزر
@@ -1295,6 +1259,7 @@ export default function SettingsStudio({
                       [50, "50 جيجابايت"],
                     ])}
                   </section>
+                  <SpeedCard state={state} update={update} act={act} />
                   <section className="settings-card">
                     <h2>الأولوية العربية</h2>
                     <p>

@@ -4,8 +4,20 @@ import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { webUrl } from "../core/protocol.mjs";
-import { detectSegments, activeSegment } from "../core/skip-segments.mjs";
+import {
+  activeSegment,
+  detectSegments,
+  mergeSegments,
+  skipMode,
+} from "../core/skip-segments.mjs";
 import { seekAmount } from "../core/hotkeys.mjs";
+import {
+  audioArgs,
+  liveTuning,
+  rtxFilters,
+  videoArgs,
+  volumeMax,
+} from "../core/player-tuning.mjs";
 
 /**
  * Picture profiles built from MPV's own scalers and filters. Riwaq ships no
@@ -70,9 +82,8 @@ export function playerArgs({
     `--title=${title}`,
     `--force-media-title=${title}`,
     "--save-position-on-quit=no",
-    `--hwdec=${settings.hardwareDecoding ? "auto-safe" : "no"}`,
-    "--vo=gpu-next",
-    `--target-colorspace-hint=${settings.hdr ? "yes" : "no"}`,
+    ...videoArgs(settings),
+    ...audioArgs(settings),
     `--slang=${settings.subtitleLanguage}`,
     `--alang=${settings.audioLanguage}`,
     `--sub-font-size=${settings.subtitleSize}`,
@@ -170,6 +181,7 @@ const PROPERTIES = [
   ["hwdec-current", "decoder"],
   ["cache-buffering-state", "buffering"],
   ["demuxer-cache-time", "bufferedUntil"],
+  ["video-params/gamma", "transfer"],
 ];
 
 export class Player {
@@ -184,8 +196,15 @@ export class Player {
     onEscape,
     settingsNow,
     skipPrefs,
+    displayHeight,
   }) {
     this.host = host;
+    // The display's height in pixels, for RTX upscaling's factor.
+    this.displayHeight = displayHeight;
+    this.pending = new Map();
+    this.requestId = 0;
+    // "End after N episodes" outlives one file: autoplay starts the next.
+    this.sleepEpisodes = 0;
     this.skipPrefs = skipPrefs;
     // The viewer's settings as they are now; seek keys read the step here.
     this.settingsNow = settingsNow;
@@ -234,6 +253,12 @@ export class Player {
     this.rawTracks = [];
     this.cursorHidden = false;
     this.pendingSecondary = null;
+    this.rtxApplied = "";
+    this.onlineSegments = [];
+    // What MPV started with, so a later settings change sends only changes.
+    this.tuningSent = new Map(
+      liveTuning(settings).map(([name, value]) => [name, String(value)]),
+    );
     const pipe = `\\\\.\\pipe\\riwaq-${randomUUID()}`;
     this.state = {
       active: true,
@@ -263,6 +288,9 @@ export class Player {
       live,
       abLoop: null,
       sleepAt: null,
+      sleepEpisodes: this.sleepEpisodes,
+      rtx: null,
+      volumeMax: volumeMax(settings),
       stats: false,
       shader: settings.shader || "none",
     };
@@ -512,6 +540,12 @@ export class Player {
     }, wait);
   }
   event(event) {
+    if (event.request_id && this.pending.has(event.request_id)) {
+      const done = this.pending.get(event.request_id);
+      this.pending.delete(event.request_id);
+      done(event.error === "success");
+      return;
+    }
     if (event.event === "client-message" && typeof event.args?.[0] === "string")
       this.message(event.args[0], event.args[1]);
     if (event.event === "property-change") {
@@ -531,6 +565,12 @@ export class Player {
       if (event.name === "chapter-list" || event.name === "duration")
         this.refreshSegments();
       if (event.name === "time-pos") this.refreshSkip();
+      if (
+        ["hwdec-current", "video-params/h", "video-params/gamma"].includes(
+          event.name,
+        )
+      )
+        this.refreshRtx();
       if (Date.now() - this.lastSaved > 5000) this.save();
       if (event.name === "video-aspect-override") {
         const n = Number(event.data);
@@ -565,17 +605,28 @@ export class Player {
         this.onState(this.state);
       }
       if (event.reason === "eof") {
-        this.onEnded({ meta: this.meta, videoId: this.videoId });
+        // "End after N episodes": this one counts, and the last one stops
+        // autoplay from starting another.
+        let sleep = false;
+        if (this.sleepEpisodes > 0) {
+          this.sleepEpisodes--;
+          this.state.sleepEpisodes = this.sleepEpisodes;
+          sleep = this.sleepEpisodes === 0;
+        }
+        this.onEnded({ meta: this.meta, videoId: this.videoId, sleep });
         this.send(["quit"]);
       }
     }
   }
   refreshSegments() {
     if (this.state.live) return;
-    this.state.segments = detectSegments({
-      chapters: this.state.chapters,
-      duration: this.state.duration,
-    });
+    this.state.segments = mergeSegments(
+      detectSegments({
+        chapters: this.state.chapters,
+        duration: this.state.duration,
+      }),
+      this.onlineSegments || [],
+    );
     this.refreshSkip();
   }
   refreshSkip() {
@@ -606,11 +657,93 @@ export class Player {
       next &&
       segment !== this.autoSkipped &&
       this.state.abLoop === null &&
-      ((next.kind === "intro" && prefs.skipIntro === "auto") ||
-        (next.kind === "outro" && prefs.skipOutro === "auto"))
+      ["intro", "outro", "recap"].includes(next.kind) &&
+      skipMode(prefs, next.kind) === "auto"
     ) {
       this.autoSkipped = segment;
       this.send(["seek", next.end, "absolute"]);
+    }
+  }
+  /**
+   * A settings change during a viewing: everything MPV can take live
+   * (core/player-tuning.mjs). The rest applies to the next viewing.
+   */
+  applyTuning(settings) {
+    if (!this.state.active) return;
+    // Re-sending an unchanged filter or device would rebuild MPV's audio and
+    // drop a moment of sound, so only changes go out.
+    this.tuningSent ||= new Map();
+    for (const [name, value] of liveTuning(settings)) {
+      if (this.tuningSent.get(name) === String(value)) continue;
+      this.tuningSent.set(name, String(value));
+      this.send(["set_property", name, value]);
+    }
+    this.state.volumeMax = volumeMax(settings);
+    this.refreshRtx();
+    this.onState(this.state);
+  }
+  /** Segments from AniSkip for this viewing (core/skip-online.mjs). */
+  setOnlineSegments(videoId, segments) {
+    if (!this.state.active || this.videoId !== videoId) return;
+    this.onlineSegments = Array.isArray(segments) ? segments : [];
+    this.refreshSegments();
+    this.onState(this.state);
+  }
+  /** Sends a command and resolves with whether MPV accepted it. */
+  request(command) {
+    if (!this.socket?.writable) return Promise.resolve(false);
+    const id = ++this.requestId;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        resolve(false);
+      }, 3000);
+      this.pending.set(id, (ok) => {
+        clearTimeout(timer);
+        resolve(ok);
+      });
+      this.socket.write(JSON.stringify({ command, request_id: id }) + "\n");
+    });
+  }
+  /**
+   * NVIDIA RTX Video (core/player-tuning.mjs): set once the decoder, the
+   * picture height and its transfer are known, and again when they or the
+   * settings change. Each candidate filter is tried until MPV accepts one;
+   * MPV keeps the old chain when one cannot start.
+   */
+  async refreshRtx() {
+    if (!this.state.active || this.state.live) return;
+    const settings = this.settingsNow?.() || this.settings || {};
+    const candidates = rtxFilters(settings, {
+      decoder: this.state.decoder,
+      height: this.state.height,
+      transfer: this.state.transfer,
+      displayHeight: this.displayHeight?.() || 0,
+    });
+    const wanted = JSON.stringify(candidates);
+    if (wanted === this.rtxApplied) return;
+    this.rtxApplied = wanted;
+    const viewing = this.state;
+    await this.request(["vf", "remove", "@riwaqrtx"]);
+    let status = null;
+    if (candidates.length) {
+      status = "unavailable";
+      for (const filter of candidates) {
+        if (this.state !== viewing || this.rtxApplied !== wanted) return;
+        if (await this.request(["vf", "add", filter])) {
+          status = filter.includes("nvidia-true-hdr")
+            ? filter.includes("scaling-mode")
+              ? "upscale+hdr"
+              : "hdr"
+            : "upscale";
+          break;
+        }
+      }
+    }
+    if (this.state !== viewing || this.rtxApplied !== wanted) return;
+    if (this.state.rtx !== status) {
+      this.state.rtx = status;
+      this.onState(this.state);
     }
   }
   setSleep(minutes) {
@@ -621,6 +754,12 @@ export class Player {
       this.state.sleepAt = null;
       this.stop();
     }, ms);
+  }
+  /** Stop after this many episodes end (0 cancels), at most five. */
+  setSleepEpisodes(count) {
+    const n = Number.isInteger(count) ? Math.max(0, Math.min(5, count)) : 0;
+    this.sleepEpisodes = n;
+    this.state.sleepEpisodes = n;
   }
   clearSleep() {
     clearTimeout(this.sleepTimer);
@@ -652,7 +791,17 @@ export class Player {
     else if (action === "seekBy" && Number.isFinite(number))
       this.send(["seek", Math.max(-600, Math.min(600, number)), "relative"]);
     else if (action === "volume" && Number.isFinite(number))
-      this.send(["set_property", "volume", Math.max(0, Math.min(150, number))]);
+      this.send([
+        "set_property",
+        "volume",
+        Math.max(
+          0,
+          Math.min(
+            volumeMax(this.settingsNow?.() || this.settings || {}),
+            number,
+          ),
+        ),
+      ]);
     else if (action === "mute") this.send(["cycle", "mute"]);
     else if (action === "fullscreen") this.onFullscreen?.();
     else if (action === "exitFullscreen") this.onEscape?.();
@@ -760,6 +909,10 @@ export class Player {
     } else if (action === "sleep") {
       if (Number.isFinite(number) && number > 0) this.setSleep(number);
       else this.clearSleep();
+      this.setSleepEpisodes(0);
+    } else if (action === "sleepEpisodes") {
+      this.clearSleep();
+      this.setSleepEpisodes(number);
     }
     this.onState(this.state);
     return this.state;

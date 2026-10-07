@@ -47,7 +47,8 @@ const KDF = { name: "scrypt", N: 32768, r: 8, p: 1 };
 const AVATARS = ["amber", "teal", "violet", "rose", "forest", "nord"];
 // Paths to files on the machine that made the backup mean nothing elsewhere,
 // and a stale MPV path would stop playback outright on the new machine.
-const MACHINE_SETTINGS = ["mpvPath", "shaderPath"];
+// Paths and this PC's audio output belong to the installation, not a backup.
+const MACHINE_SETTINGS = ["mpvPath", "shaderPath", "audioDevice"];
 
 const isObject = (value) =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -614,7 +615,13 @@ export function restoreState(current, payload) {
           }
         : current.auth || null,
     providers: carries("providers")
-      ? cleanSecretBag(payload.providers, ["tmdb", "omdb", "mdblist", "fanart"])
+      ? cleanSecretBag(payload.providers, [
+          "tmdb",
+          "omdb",
+          "mdblist",
+          "fanart",
+          "theintrodb",
+        ])
       : current.providers || {},
     integrations: carries("integrations")
       ? cleanSecretBag(payload.integrations, [

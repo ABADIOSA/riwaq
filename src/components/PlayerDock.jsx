@@ -618,7 +618,7 @@ function AudioRoom({ player, act }) {
         <input
           type="range"
           min="0"
-          max="150"
+          max={player.volumeMax || 150}
           value={player.volume || 0}
           onChange={(e) =>
             act("playerCommand", {

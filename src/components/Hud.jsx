@@ -17,12 +17,14 @@ import {
   X,
   Radio,
   Loader2,
+  Moon,
 } from "lucide-react";
 import PlayerDock from "./PlayerDock.jsx";
 import { api, call } from "../lib/api.js";
 import { clock } from "../lib/helpers.js";
 import { resolveAppearance } from "../../core/appearance.mjs";
 import { hudHidden } from "../../core/hud-layout.mjs";
+import { qualityChips } from "../../core/player-tuning.mjs";
 
 // Controls fade after the pointer has been still this long, and the pointer
 // hides with them. Paused playback and an open panel keep them up.
@@ -40,6 +42,22 @@ const endsAt = (player) =>
     Date.now() +
       ((player.duration - (player.position || 0)) / (player.speed || 1)) * 1000,
   );
+
+const RTX_LABELS = {
+  upscale: "RTX VSR",
+  hdr: "RTX HDR",
+  "upscale+hdr": "RTX VSR · HDR",
+};
+const SLEEP_MINUTES = [15, 30, 45, 60, 90];
+
+const sleepLabel = (player) =>
+  player.sleepEpisodes > 0
+    ? player.sleepEpisodes === 1
+      ? "بعد هذه الحلقة"
+      : `بعد ${player.sleepEpisodes} حلقات`
+    : player.sleepAt
+      ? `بعد ${Math.max(1, Math.round((player.sleepAt - Date.now()) / 60000))} د`
+      : "";
 
 const episodeOf = (videoId) => {
   const parts = String(videoId || "").split(":");
@@ -63,6 +81,10 @@ export default function Hud() {
   const thumbAsk = useRef(0);
   const [flash, setFlash] = useState(null);
   const [skipNext, setSkipNext] = useState("");
+  const [sleepMenu, setSleepMenu] = useState(false);
+  // The volume popup while the controls sleep (Harbor's volume OSD).
+  const [volumePopup, setVolumePopup] = useState(0);
+  const lastVolume = useRef(null);
   const idle = useRef();
   const click = useRef();
   // Holding the picture plays faster until it is let go (Harbor's gesture).
@@ -116,6 +138,8 @@ export default function Hud() {
   useEffect(() => {
     setDock(null);
     setThumb(null);
+    setSleepMenu(false);
+    lastVolume.current = null;
   }, [player.videoId]);
   // A preview is asked for only once the pointer rests on the timeline, so
   // sweeping across it does not send a request per pixel.
@@ -136,7 +160,28 @@ export default function Hud() {
     return () => clearTimeout(timer);
   }, [seekHover?.t, thumbMode, player.live]);
 
-  const shown = awake || player.pause || !!dock || player.loading;
+  const settings = state?.settings || {};
+  const shown =
+    awake ||
+    (player.pause && settings.hudShowOnPause !== false) ||
+    !!dock ||
+    sleepMenu ||
+    player.loading;
+  // A volume change while the controls sleep (a key, the wheel on a mouse
+  // over another window) shows a short popup instead of waking everything.
+  useEffect(() => {
+    const volume = Math.round(player.volume ?? -1);
+    const was = lastVolume.current;
+    lastVolume.current = volume;
+    if (was === null || was === volume || volume < 0) return;
+    if (shown || settings.volumeOsd === false) return;
+    setVolumePopup(Date.now());
+  }, [player.volume]);
+  useEffect(() => {
+    if (!volumePopup) return;
+    const timer = setTimeout(() => setVolumePopup(0), 1300);
+    return () => clearTimeout(timer);
+  }, [volumePopup]);
   const series = player.mediaType === "series";
   // Main hides the pointer itself (CSS cursor alone does not in this window).
   useEffect(() => {
@@ -160,6 +205,19 @@ export default function Hud() {
     skipNext !== player.videoId &&
     !player.error;
   const holdRate = Number(state?.settings.holdSpeed ?? 2);
+  const maxVolume = Number(player.volumeMax) || 150;
+  const chips =
+    settings.hudQuality === false
+      ? []
+      : [
+          ...qualityChips(player),
+          ...(RTX_LABELS[player.rtx] ? [RTX_LABELS[player.rtx]] : []),
+        ];
+  const sleeping = sleepLabel(player);
+  const setSleep = (action, value) => {
+    command(action, value);
+    setSleepMenu(false);
+  };
   const hidden = hudHidden(state?.settings || {});
   const shows = (id) => !hidden.has(id);
   const onStageDown = (e) => {
@@ -205,7 +263,7 @@ export default function Hud() {
   const onWheel = (e) => {
     const volume = Math.max(
       0,
-      Math.min(150, (player.volume || 0) + (e.deltaY < 0 ? 5 : -5)),
+      Math.min(maxVolume, (player.volume || 0) + (e.deltaY < 0 ? 5 : -5)),
     );
     command("volume", volume);
     pulse("volume");
@@ -228,7 +286,14 @@ export default function Hud() {
           ? { "--hud-accent": resolveAppearance(state.settings).colors.accent }
           : undefined
       }
-      onMouseMove={wake}
+      onMouseMove={(e) => {
+        // Where the pointer is now, not only enter/leave: a menu that closes
+        // under it (the sleep timer's) never reports leaving.
+        overControls.current = !!e.target.closest?.(
+          ".hud-top > *, .hud-bottom > *, .hud-dock",
+        );
+        wake();
+      }}
       onPointerDown={onStageDown}
       onPointerUp={onStageUp}
       onPointerLeave={onStageUp}
@@ -252,11 +317,70 @@ export default function Hud() {
             <span className="eyebrow">RIWAQ CINEMA</span>
             <h1 dir="auto">{player.name}</h1>
             {series && <small>{episodeOf(player.videoId)}</small>}
+            {chips.length > 0 &&
+              (settings.hudQualityStyle === "bar" ? (
+                <small className="hud-quality-bar" dir="ltr">
+                  {chips.join(" · ")}
+                </small>
+              ) : (
+                <span className="hud-quality" dir="ltr">
+                  {chips.map((chip) => (
+                    <i key={chip}>{chip}</i>
+                  ))}
+                </span>
+              ))}
           </div>
         ) : (
           <div className="hud-title" />
         )}
         <div className="hud-buttons">
+          {settings.hudSleep !== false && !player.live && (
+            <div className="hud-sleep">
+              <button
+                title="مؤقت النوم"
+                className={sleeping ? "on" : ""}
+                onClick={() => setSleepMenu((open) => !open)}
+              >
+                <Moon size={18} />
+                {sleeping && <small>{sleeping}</small>}
+              </button>
+              {sleepMenu && (
+                <div className="hud-sleep-menu" role="menu">
+                  <b>أوقف المشاهدة</b>
+                  {SLEEP_MINUTES.map((minutes) => (
+                    <button
+                      key={minutes}
+                      role="menuitem"
+                      onClick={() => setSleep("sleep", minutes)}
+                    >
+                      بعد {minutes} دقيقة
+                    </button>
+                  ))}
+                  {series &&
+                    [1, 2, 3].map((count) => (
+                      <button
+                        key={`e${count}`}
+                        role="menuitem"
+                        onClick={() => setSleep("sleepEpisodes", count)}
+                      >
+                        {count === 1
+                          ? "بعد هذه الحلقة"
+                          : `بعد ${count === 2 ? "حلقتين" : "3 حلقات"}`}
+                      </button>
+                    ))}
+                  {sleeping && (
+                    <button
+                      role="menuitem"
+                      className="hud-sleep-off"
+                      onClick={() => setSleep("sleep", 0)}
+                    >
+                      ألغِ المؤقت
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {shows("pip") && (
             <button title="تصغير ومتابعة التصفح" onClick={() => command("pip")}>
               <Minimize2 size={19} />
@@ -287,6 +411,27 @@ export default function Hud() {
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
+      {volumePopup > 0 && (
+        <div
+          className={`hud-volume-popup at-${settings.volumeOsdPosition || "center"}`}
+          key={volumePopup}
+          dir="ltr"
+        >
+          {player.muted || !player.volume ? (
+            <VolumeX size={18} />
+          ) : (
+            <Volume2 size={18} />
+          )}
+          <span className="hud-volume-meter">
+            <i
+              style={{
+                width: `${Math.min(100, ((player.volume || 0) / maxVolume) * 100)}%`,
+              }}
+            />
+          </span>
+          <b>{Math.round(player.volume || 0)}%</b>
+        </div>
+      )}
       {holding && (
         <div className="hud-hold" aria-live="polite">
           <FastForward size={18} fill="currentColor" /> {holdRate}×
@@ -323,7 +468,7 @@ export default function Hud() {
           </div>
         </dl>
       )}
-      {player.skip && (
+      {player.skip && !player.skip.hidden && (
         <button
           className={`hud-skip ${nextCard ? "raised" : ""}`}
           onClick={(e) => {
@@ -516,7 +661,7 @@ export default function Hud() {
                   aria-label="مستوى الصوت"
                   type="range"
                   min="0"
-                  max="150"
+                  max={maxVolume}
                   value={player.volume || 0}
                   onChange={(e) => command("volume", Number(e.target.value))}
                 />

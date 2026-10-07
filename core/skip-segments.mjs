@@ -106,6 +106,22 @@ function dedupe(segments) {
     .sort((a, b) => a.start - b.start);
 }
 
+/**
+ * A file's own segments with those from an online source (AniSkip): the
+ * file's chapters win for each kind they name; an online segment replaces a
+ * guess from the chapter shape and fills kinds the file does not have.
+ */
+export function mergeSegments(local = [], online = []) {
+  const named = new Set(
+    local.filter((s) => s.source === "chapter").map((s) => s.kind),
+  );
+  const onlineKinds = new Set(online.map((s) => s.kind));
+  return dedupe([
+    ...local.filter((s) => s.source === "chapter" || !onlineKinds.has(s.kind)),
+    ...online.filter((s) => !named.has(s.kind)),
+  ]);
+}
+
 export const SEGMENT_LABELS = {
   intro: "تخطي المقدمة",
   outro: "تخطي الخاتمة",
@@ -123,7 +139,7 @@ export function activeSegment(segments, position, preferences = {}) {
   const outro = preferences.skipOutro ?? "off";
   const enabled = {
     intro: intro !== "off",
-    recap: intro !== "off",
+    recap: skipMode(preferences, "recap") !== "off",
     outro: outro !== "off",
     preview: outro !== "off",
   };
@@ -133,13 +149,29 @@ export function activeSegment(segments, position, preferences = {}) {
       enabled[segment.kind] && at >= segment.start && at < segment.end - 3,
   );
   if (!found) return null;
+  // The button can step aside after a few seconds; skipping by key still works.
+  const hideAfter = Number(preferences.skipHideAfter) || 0;
   return {
     kind: found.kind,
     label: SEGMENT_LABELS[found.kind] || "تخطي",
     start: found.start,
     end: found.end,
     remaining: Math.max(0, Math.round(found.end - at)),
+    hidden: hideAfter > 0 && at - found.start >= hideAfter,
   };
+}
+
+/**
+ * How a kind of segment is skipped: "off", "button" or "auto". Recaps have
+ * their own choice; before it existed they followed the intro, and still do
+ * when it is unset. Previews follow the ending.
+ */
+export function skipMode(preferences = {}, kind) {
+  const intro = preferences.skipIntro ?? "button";
+  const outro = preferences.skipOutro ?? "off";
+  if (kind === "recap") return preferences.skipRecap ?? intro;
+  if (kind === "outro" || kind === "preview") return outro;
+  return intro;
 }
 
 /** Series the viewer excluded from automatic skipping (Nuvio #771). */
@@ -169,5 +201,6 @@ export function skipPreferences(settings = {}, seriesId = "") {
     ...settings,
     skipIntro: manual(settings.skipIntro ?? "button"),
     skipOutro: manual(settings.skipOutro ?? "off"),
+    skipRecap: manual(skipMode(settings, "recap")),
   };
 }

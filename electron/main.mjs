@@ -25,6 +25,7 @@ import {
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { Client, fetchText } from "../core/client.mjs";
 import {
@@ -64,6 +65,8 @@ import {
 } from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
+import { parseAudioDevices } from "../core/player-tuning.mjs";
+import { measureDownload, suggestCap } from "../core/speed-test.mjs";
 import { Thumbnailer } from "./thumbnails.mjs";
 import { dropKind } from "../core/drop.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
@@ -710,6 +713,22 @@ function executable() {
     )
   );
 }
+/** MPV lists the audio outputs it can open; asked once per run. */
+let audioDeviceList = null;
+function listAudioDevices() {
+  audioDeviceList ||= new Promise((resolve) => {
+    execFile(
+      executable(),
+      ["--no-config", "--terminal=yes", "--audio-device=help"],
+      { timeout: 8000, windowsHide: true, maxBuffer: 256 * 1024 },
+      (_error, stdout) => resolve(parseAudioDevices(stdout)),
+    );
+  }).then((list) => {
+    if (!list.length) audioDeviceList = null;
+    return list;
+  });
+  return audioDeviceList;
+}
 async function diagnostics() {
   let server = false;
   try {
@@ -1157,6 +1176,8 @@ const methods = {
   removeAddons: (a) => client.removeAddons({ keys: a?.keys }),
   settings: async (a) => {
     const state = client.settings(a);
+    // Sound and picture changes reach a running viewing where MPV allows it.
+    player?.applyTuning(client.state.settings);
     applyZoom();
     if (overlayEnabled()) ensureHud();
     else closeHud();
@@ -1280,6 +1301,7 @@ const methods = {
       omdb: "https://www.omdbapi.com/apikey.aspx",
       mdblist: "https://mdblist.com/preferences/",
       fanart: "https://fanart.tv/get-an-api-key/",
+      theintrodb: "https://theintrodb.org",
       trakt: "https://trakt.tv/oauth/applications",
       traktActivate: "https://trakt.tv/activate",
       simkl: "https://simkl.com/settings/developer/",
@@ -1448,8 +1470,17 @@ const methods = {
   },
   trickplay,
   stop: async () => {
+    // Stopping by hand also cancels "end after N episodes".
+    player.setSleepEpisodes(0);
     await player.stop();
     return true;
+  },
+  // This PC's audio outputs as MPV names them, for the Audio page.
+  audioDevices: () => listAudioDevices(),
+  // A short download timed in main; only the speed comes back.
+  speedTest: async () => {
+    const mbps = await measureDownload();
+    return { mbps, suggest: suggestCap(mbps) };
   },
   subtitle: (a) => {
     const url = client.subtitles.get(a?.key);
@@ -1922,6 +1953,10 @@ app
         host: videoHost,
         inputConf: join(root, "assets", "player-input.conf"),
         settingsNow: () => client.state.settings,
+        displayHeight: () => {
+          const display = screen.getDisplayMatching(window.getBounds());
+          return Math.round(display.size.height * display.scaleFactor);
+        },
         skipPrefs: () =>
           skipPreferences(client.state.settings, nowPlaying?.series),
         onFullscreen: () => window.setFullScreen(!window.isFullScreen()),
@@ -1951,7 +1986,8 @@ app
             try {
               videoHost.hide();
             } catch {}
-            if (window.isFullScreen()) window.setFullScreen(false);
+            if (window.isFullScreen() && !client.state.settings.keepFullscreen)
+              window.setFullScreen(false);
           } else if (starting || pipChanged) {
             if (s.pip) {
               if (window.isFullScreen()) window.setFullScreen(false);
@@ -1971,6 +2007,8 @@ app
         },
         onEnded: (data) => {
           emit("ended", data);
+          if (data.sleep)
+            emit("notice", "انتهى مؤقت النوم، فما بدأت الحلقة التالية.");
           client.notifier
             .notify({
               kind: "finished",
@@ -2031,6 +2069,23 @@ app
       setInterval(checkCursor, 150);
       player.onLoaded = ({ meta, videoId }) => {
         autoSubtitle(videoId);
+        if (
+          ["series", "movie"].includes(meta?.type) &&
+          client.state.settings.skipOnline
+        )
+          (async () => {
+            // A time that runs to the end of the file needs the duration,
+            // which MPV may report a moment after the file loads.
+            for (let i = 0; i < 20 && !(player.state.duration > 0); i++) {
+              if (player.videoId !== videoId) return [];
+              await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+            return client.skipTimes(videoId, {
+              duration: player.state.duration,
+            });
+          })()
+            .then((segments) => player.setOnlineSegments(videoId, segments))
+            .catch(() => {});
         const key = JSON.stringify([meta.type, videoId]);
         if (client.state.queue?.some((item) => item.key === key)) {
           client.state.queue = client.state.queue.filter(

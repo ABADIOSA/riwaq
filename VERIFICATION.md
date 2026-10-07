@@ -35,6 +35,66 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.37.0 — the player studio (Harbor's player pages)
+
+**Request:** the owner sent Harbor's Player engine, Audio, On-screen controls, Intro skipping and Video quality pages and asked for them to be studied, improved and added.
+
+What was built, all from MPV options and FFmpeg filters MPV ships:
+
+- `core/player-tuning.mjs`: quality profiles, decoder, renderer, two compatibility modes, display panel, NVIDIA RTX filters, sound profiles, normalising, downmix, volume ceiling, output device, and the HUD's quality chips.
+- `Player.applyTuning` applies the live properties during a viewing. RTX filters are added at runtime and tried in order.
+- HUD:
+  - quality chips;
+  - a sleep menu by minutes or episodes, with the episode count surviving autoplay starts and stopping the advance;
+  - a volume popup while the controls sleep;
+  - an option to keep the controls hidden on pause.
+- Full screen can be kept after a viewing.
+- Skipping: recaps have their own choice, the button can step aside after a few seconds, and AniSkip is opt-in (`core/skip-online.mjs`).
+- Sources: a speed cap with a labelled penalty (`neededMbps`) and a Cloudflare speed test (`core/speed-test.mjs`).
+- Settings: four new pages under watching, the speed card on the sources page, and the moved items removed from the playback page.
+
+Bug found during the render check and fixed: after choosing a sleep option, the menu closed under the pointer and the controls never slept, because Chromium sends no leave event for a removed node. The HUD now reads hover from the pointer's target on every move.
+
+Executed:
+
+- `npm test`: **580 passing, 0 failing**, including 32 new tests in `tests/player-tuning.test.mjs`, `tests/skip-speed-sleep.test.mjs` and `tests/theintrodb.test.mjs`. They cover:
+  - the filters are built from the profile's gains;
+  - the MPV device listing is parsed and unsafe names are refused;
+  - start-up options and `playerArgs` integration, with a single `--hwdec`;
+  - the volume ceiling;
+  - the RTX candidate order and the reported status;
+  - quality chips;
+  - settings validation, and the backup leaving the audio device out;
+  - AniSkip and ARM parsing, including a failure returning silence;
+  - TheIntroDB URLs, millisecond parsing with open ends, the Bearer key and failures not being cached;
+  - TheIntroDB's key never reaching `publicState` and travelling only in a secrets backup;
+  - segment merging, the recap mode, the hidden button and recap auto-skip;
+  - the speed penalty and ranking, and the speed test arithmetic;
+  - sleep by episodes.
+- `npm run check` and `npm run build` pass.
+- Mocked-bridge render (render-51), at 980×680 in Riwaq's interface and 1440×960 in classic:
+  - every new page renders and writes the right setting;
+  - the device list fills from the mocked `audioDevices` reply;
+  - the speed test result offers and applies 50 Mbps;
+  - the playback page no longer shows the moved items;
+  - 0 overflow, 0 errors.
+- HUD render:
+  - chips read `4K · HDR10 · HEVC · E-AC3 5.1 · RTX VSR`;
+  - the sleep menu sends `sleepEpisodes 1` and labels it;
+  - the controls sleep, and a volume change then shows the popup in the chosen position, which leaves after 1.3 s;
+  - a pause keeps the controls hidden when asked;
+  - a `hidden` skip button is not drawn;
+  - the slider maximum follows `volumeMax`.
+
+Not executed:
+
+- MPV itself on Windows, so the audio filters, the downmix, `--profile=fast/high-quality`, `--target-contrast`, `--d3d11-flip=no` and `--d3d11-output-format=rgba8` were not heard or seen on real hardware.
+- RTX Video on an NVIDIA card. The true-HDR output format name varies by build, so three forms are tried.
+- A real audio device listing.
+- Live TheIntroDB, AniSkip, ARM or Cloudflare requests (egress is blocked here).
+  - TheIntroDB's request and response shape was read from its official MPV script (github.com/TheIntroDB/mpv-script), since theintrodb.org itself is blocked here.
+  - A render (render-52) checked its key field: save, show/hide, test, the site link, and its absence from the data providers page.
+
 ## 0.36.0 — official theme songs, no fan uploads
 
 **Report:** the owner said the theme music can be a fan-made track, not the official one, and asked whether an API key would help.
