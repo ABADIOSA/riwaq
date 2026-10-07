@@ -43,6 +43,8 @@ export function hudVisible({
     enabled !== false &&
     !!player.active &&
     !player.pip &&
+    // MPV's own HDR window: the HUD cannot sit over another program.
+    !player.separate &&
     !!surfaceVisible &&
     !minimized
   );

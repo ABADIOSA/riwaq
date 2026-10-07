@@ -61,6 +61,7 @@ export function playerArgs({
   live = false,
   screenshotDir = "",
   logFile = "",
+  separate = false,
 }) {
   const args = [
     "--no-config",
@@ -83,7 +84,7 @@ export function playerArgs({
     `--title=${title}`,
     `--force-media-title=${title}`,
     "--save-position-on-quit=no",
-    ...videoArgs(settings),
+    ...videoArgs(settings, { separate }),
     ...audioArgs(settings),
     `--slang=${settings.subtitleLanguage}`,
     `--alang=${settings.audioLanguage}`,
@@ -132,7 +133,17 @@ export function playerArgs({
   // The last viewing's MPV log, for the diagnostic (its lines are filtered
   // and sanitized before they enter a report).
   if (logFile) args.push(`--log-file=${logFile}`);
-  if (host) args.push(`--wid=${host}`);
+  if (separate)
+    // True HDR in MPV's own window (core/player-tuning.mjs HDR_MODES):
+    // full screen and on top, with MPV's controller and pointer hiding,
+    // since Riwaq's HUD cannot sit over another program's window.
+    args.push(
+      "--fullscreen=yes",
+      "--ontop=yes",
+      "--cursor-autohide=1000",
+      "--script-opts=osc-visibility=auto,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800",
+    );
+  else if (host) args.push(`--wid=${host}`);
   if (inputConf) args.push(`--input-conf=${inputConf}`);
   const entries = Object.entries(headers).filter(
     ([k, v]) =>
@@ -163,6 +174,7 @@ export const SAFE_VIDEO = {
   rtxUpscale: false,
   rtxHdr: false,
   hdr: false,
+  hdrMode: "tonemap",
 };
 
 /** How often a change of position alone reaches the interface. */
@@ -253,6 +265,7 @@ export class Player {
     screenshotDir = "",
     logFile = "",
     safe = false,
+    separate = false,
   }) {
     if (!local) webUrl(url);
     // A new viewing may fall back to the compatibility mode once again.
@@ -282,6 +295,7 @@ export class Player {
       inputConf,
       screenshotDir,
       logFile,
+      separate,
     };
     clearTimeout(this.videoCheck);
     this.meta = meta;
@@ -330,6 +344,7 @@ export class Player {
       sleepEpisodes: this.sleepEpisodes,
       rtx: null,
       volumeMax: volumeMax(settings),
+      separate: !!separate,
       stats: false,
       shader: settings.shader || "none",
     };
@@ -347,8 +362,11 @@ export class Player {
         live,
         screenshotDir,
         logFile,
+        separate,
       }),
-      { windowsHide: true, stdio: "ignore", shell: false },
+      // windowsHide asks Windows to hide the first window shown, which
+      // would hide MPV's own HDR window.
+      { windowsHide: !separate, stdio: "ignore", shell: false },
     );
     this.child = child;
     let processError = false;
@@ -522,7 +540,8 @@ export class Player {
     this.send([
       "script-message",
       "osc-visibility",
-      this.state.fullscreen && !this.state.pip && !this.state.overlay
+      this.state.separate ||
+      (this.state.fullscreen && !this.state.pip && !this.state.overlay)
         ? "auto"
         : "never",
       "no-osd",
@@ -536,7 +555,11 @@ export class Player {
       );
       if (seconds && this.state.active)
         this.send(["seek", seconds, "relative"]);
-    } else if (name === "riwaq-fullscreen") this.onFullscreen?.();
+    } else if (name === "riwaq-fullscreen")
+      // MPV's own HDR window toggles its own full screen.
+      this.state.separate
+        ? this.send(["cycle", "fullscreen"])
+        : this.onFullscreen?.();
     // Escape leaves full screen before it closes anything.
     else if (name === "riwaq-stop")
       this.state.fullscreen && this.onEscape ? this.onEscape() : this.stop();
@@ -752,6 +775,7 @@ export class Player {
       start: Math.max(0, Number(this.state.position) || 0),
       settings: { ...this.lastStart.settings, ...SAFE_VIDEO },
       safe: true,
+      separate: false,
     });
   }
   /** Segments from AniSkip for this viewing (core/skip-online.mjs). */
@@ -790,6 +814,7 @@ export class Player {
       decoder: this.state.decoder,
       height: this.state.height,
       transfer: this.state.transfer,
+      separate: this.state.separate,
       displayHeight: this.displayHeight?.() || 0,
     });
     const wanted = JSON.stringify(candidates);

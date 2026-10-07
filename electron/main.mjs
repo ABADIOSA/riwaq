@@ -66,6 +66,7 @@ import {
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
 import { parseAudioDevices } from "../core/player-tuning.mjs";
+import { parseStream } from "../core/stream-engine.mjs";
 import { measureDownload, suggestCap } from "../core/speed-test.mjs";
 import { Thumbnailer } from "./thumbnails.mjs";
 import { dropKind } from "../core/drop.mjs";
@@ -797,7 +798,17 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   nowPlaying = { key, type: meta.type, id: videoId, series };
   if (series && stream.memory)
     client.rememberSeries(series, { source: stream.memory });
+  // True HDR in MPV's own window is for sources labelled HDR; everything
+  // else stays in Riwaq's window with its controls.
+  const separate =
+    client.state.settings.hdrMode === "window" && !!parseStream(stream).hdr;
+  if (separate)
+    emit(
+      "notice",
+      "HDR حقيقي في نافذة MPV: حرّك الفأرة لأدوات التحكم، وEsc يرجعك إلى رِواق.",
+    );
   return player.start({
+    separate,
     executable: executable(),
     settings: client.state.settings,
     url,
@@ -1441,10 +1452,13 @@ const methods = {
   },
   play,
   videoBounds: (a) => {
-    surfaceShown = !!player.state.active && a?.visible !== false;
-    const placed = player.state.active
-      ? videoHost.bounds(a)
-      : (videoHost.hide(), false);
+    // MPV's own HDR window needs no surface inside Riwaq's window.
+    surfaceShown =
+      !!player.state.active && !player.state.separate && a?.visible !== false;
+    const placed =
+      player.state.active && !player.state.separate
+        ? videoHost.bounds(a)
+        : (videoHost.hide(), false);
     placeHud();
     return placed;
   },
@@ -2003,6 +2017,8 @@ app
             } else if (
               // Smoke runs measure the surface in a hidden, fixed-size window.
               !process.env.RIWAQ_SMOKE &&
+              // MPV's own HDR window is full screen by itself.
+              !s.separate &&
               client.state.settings.autoFullscreen !== false &&
               !window.isFullScreen()
             )
@@ -2041,7 +2057,8 @@ app
       const checkCursor = () => {
         if (window.isDestroyed()) return cursorGate.release();
         const state = player.state;
-        if (!state.active) {
+        // MPV hides the pointer in its own HDR window.
+        if (!state.active || state.separate) {
           lastPoint = null;
           return cursorGate.release();
         }

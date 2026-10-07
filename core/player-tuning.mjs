@@ -48,6 +48,36 @@ export const VIDEO_QUALITY = ["smooth", "balanced", "high"];
 export const HWDEC_MODES = ["auto", "on", "off"];
 export const RENDERERS = ["gpu-next", "gpu"];
 export const DISPLAY_PANELS = ["auto", "oled", "lcd"];
+/**
+ * How HDR reaches the display (Harbor's three choices, studied from its
+ * own support thread):
+ * - tonemap: MPV converts HDR to SDR inside Riwaq's window. Works on every
+ *   display with every control.
+ * - window: true HDR in MPV's own full-screen window, for HDR sources only,
+ *   so Windows sees an HDR window. Riwaq's HUD cannot sit over another
+ *   program's window, so MPV's own controls show there, and Esc returns.
+ * - embedded: true HDR inside Riwaq's window, with every control. Windows
+ *   may not treat a child window as HDR, and some systems show no picture.
+ */
+export const HDR_MODES = ["tonemap", "window", "embedded"];
+
+/** The HDR mode, reading the older on/off switch when no mode was chosen. */
+export const hdrMode = (settings = {}) =>
+  HDR_MODES.includes(settings.hdrMode)
+    ? settings.hdrMode
+    : settings.hdr
+      ? "embedded"
+      : "tonemap";
+
+/**
+ * Whether MPV signals HDR to the display: in the embedded mode, or in a
+ * separate window. The compatibility modes leave the path HDR needs.
+ */
+export function hdrSignal(settings = {}, { separate = false } = {}) {
+  if (settings.simpleColor || settings.linelessVideo) return false;
+  const mode = hdrMode(settings);
+  return mode === "embedded" || (mode === "window" && separate);
+}
 
 const NORMALIZE = "dynaudnorm=f=150:g=15:p=0.9";
 // Night mode: loud moments are pressed down and the whole made up again.
@@ -137,16 +167,15 @@ export function hwdecValue(settings = {}) {
  * Simple colour and the lineless mode both turn the HDR signal off, since
  * they work by leaving the path HDR needs.
  */
-export function videoArgs(settings = {}) {
+export function videoArgs(settings = {}, { separate = false } = {}) {
   const args = [];
   if (settings.videoQuality === "smooth") args.push("--profile=fast");
   else if (settings.videoQuality === "high")
     args.push("--profile=high-quality");
   args.push(`--hwdec=${hwdecValue(settings)}`);
   args.push(`--vo=${settings.renderer === "gpu" ? "gpu" : "gpu-next"}`);
-  const plain = !!settings.simpleColor || !!settings.linelessVideo;
   args.push(
-    `--target-colorspace-hint=${settings.hdr && !plain ? "yes" : "no"}`,
+    `--target-colorspace-hint=${hdrSignal(settings, { separate }) ? "yes" : "no"}`,
   );
   if (settings.simpleColor)
     args.push("--d3d11-output-format=rgba8", "--dither-depth=8");
@@ -191,7 +220,8 @@ export function rtxFilters(settings = {}, video = {}) {
     parts.push(`scale=${scale}:scaling-mode=nvidia`);
   }
   const sdr = !["pq", "hlg"].includes(video.transfer);
-  const hdr = settings.rtxHdr && settings.hdr && sdr;
+  const hdr =
+    settings.rtxHdr && hdrSignal(settings, { separate: video.separate }) && sdr;
   if (!parts.length && !hdr) return [];
   const base = parts.join(":");
   const join = (...more) =>

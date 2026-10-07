@@ -35,7 +35,19 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
-## 0.37.1 — sound without a picture
+## 0.37.1 — sound without a picture, and HDR modes
+
+The owner then sent a Harbor support thread. True HDR in Harbor's embedded window is not treated as HDR by Windows, so Harbor added a separate MPV window without controls, and users complained they could not pause or leave it. 0.37.0 had made the old "HDR signal" switch prominent on the new video page.
+
+Riwaq now has three HDR modes:
+- `tonemap`: the default. The old switch alone no longer signals HDR, so a viewer who turned it on returns to SDR conversion.
+- `window`: MPV's own full-screen, on-top window, for streams labelled HDR. It has MPV's controller, its pointer hiding, Esc to return to Riwaq, and double click for MPV's own full screen.
+- `embedded`: experimental.
+
+Tests added: the HDR signal per mode; the `separate` arguments (no `--wid`, full screen, on top, controller visible); the HUD standing aside; keys acting on MPV's window; and the compatibility restart leaving the separate window. The render shows the three choices and writes `hdrMode`.
+
+Not executed: MPV's own HDR window on a real Windows HDR display.
+
 
 **Report:** on 0.37.0 a 4K HDR10 HEVC episode played sound, and the HUD read its quality, but no picture appeared.
 
@@ -49,7 +61,7 @@ What changed:
 - Logging: each viewing writes an MPV log. The diagnostic shows its sanitized problem lines (`mpvLogProblems`).
 
 Executed:
-- `npm test`: **583 passing, 0 failing**. The new tests cover:
+- `npm test`: **586 passing, 0 failing**. The new tests cover:
   - reporting once after six seconds, and never with a picture or without a video track;
   - the restart keeping the URL, the position and the sound settings while applying `SAFE_VIDEO` and `safe`;
   - `--log-file` in the arguments;

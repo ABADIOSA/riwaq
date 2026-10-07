@@ -27,6 +27,7 @@ import {
 import {
   AUDIO_PROFILE_IDS,
   DISPLAY_PANELS,
+  HDR_MODES,
   HWDEC_MODES,
   RENDERERS,
   VIDEO_QUALITY,
@@ -102,6 +103,8 @@ export const DEFAULT_SETTINGS = {
   simpleColor: false,
   linelessVideo: false,
   displayPanel: "auto",
+  // How HDR reaches the display (core/player-tuning.mjs HDR_MODES).
+  hdrMode: "tonemap",
   rtxUpscale: false,
   rtxHdr: false,
   audioProfile: "flat",
@@ -463,6 +466,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     hwdec: HWDEC_MODES,
     renderer: RENDERERS,
     displayPanel: DISPLAY_PANELS,
+    hdrMode: HDR_MODES,
     audioProfile: AUDIO_PROFILE_IDS,
     volumeMax: VOLUME_MAX,
     bandwidthCap: BANDWIDTH_CAPS,

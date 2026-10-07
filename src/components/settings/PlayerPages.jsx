@@ -15,6 +15,7 @@ import {
   AUDIO_PROFILES,
   AUDIO_PROFILE_IDS,
   EQ_BANDS,
+  HDR_MODES,
   VOLUME_MAX,
 } from "../../../core/player-tuning.mjs";
 import { BANDWIDTH_CAPS } from "../../../core/stream-engine.mjs";
@@ -84,9 +85,36 @@ const QUALITY = [
   ],
 ];
 
+// Harbor's three HDR choices; its own support thread showed why true HDR
+// gets a separate window (core/player-tuning.mjs HDR_MODES).
+const HDR_CHOICES = [
+  [
+    "tonemap",
+    "تحويل إلى SDR",
+    "يحوّل HDR إلى صورة عادية دقيقة. يعمل على أي شاشة وكل أدوات التحكم.",
+    "موصى به",
+  ],
+  [
+    "window",
+    "HDR حقيقي · نافذة منفصلة",
+    "لمصادر HDR فقط: MPV يفتح بملء الشاشة في نافذته فيعرفها ويندوز كنافذة HDR. أدوات التحكم من MPV نفسه (حرّك الفأرة)، وEsc يرجعك لرِواق.",
+  ],
+  [
+    "embedded",
+    "HDR حقيقي · مضمّن",
+    "داخل نافذة رِواق مع كل أدوات التحكم، لكن قد لا يعاملها ويندوز كـ HDR، وعلى بعض الأجهزة تختفي الصورة.",
+    "تجريبي",
+  ],
+];
+
 /** Harbor's Video quality page: MPV's profiles, decoder, renderer and HDR. */
 export function VideoPage({ state, update, act, notice }) {
   const s = state.settings;
+  const mode = HDR_MODES.includes(s.hdrMode)
+    ? s.hdrMode
+    : s.hdr
+      ? "embedded"
+      : "tonemap";
   const set = (patch) => update("settings", patch);
   const hwdec = s.hardwareDecoding === false ? "off" : s.hwdec || "auto";
   return (
@@ -167,12 +195,33 @@ export function VideoPage({ state, update, act, notice }) {
       </section>
       <section className="settings-card">
         <h2>HDR</h2>
-        <Toggle
-          on={s.hdr}
-          title="إشارة HDR للشاشة"
-          text="يرسل الصورة بـ HDR حقيقي لشاشة تدعمه. يحتاج تفعيل HDR في إعدادات ويندوز."
-          onChange={(hdr) => set({ hdr })}
-        />
+        <div
+          className="quality-cards hdr-modes"
+          role="radiogroup"
+          aria-label="طريقة HDR"
+        >
+          {HDR_CHOICES.map(([id, title, text, tag]) => (
+            <button
+              key={id}
+              role="radio"
+              aria-checked={mode === id}
+              className={mode === id ? "selected" : ""}
+              onClick={() => set({ hdrMode: id, hdr: id !== "tonemap" })}
+            >
+              <b>
+                {title}
+                {tag && <em className="setting-tag">{tag}</em>}
+              </b>
+              <small>{text}</small>
+            </button>
+          ))}
+        </div>
+        {mode !== "tonemap" && (
+          <p className="subtle">
+            يحتاج تشغيل HDR في إعدادات ويندوز (العرض ← HDR) وشاشة تدعمه. إذا
+            اختفت الصورة أو صارت باهتة، ارجع إلى «تحويل إلى SDR».
+          </p>
+        )}
         <Field
           title="لوحة العرض"
           text="OLED يحافظ على السواد التام ويُظهر تفاصيل الظل؛ LCD يضبط التباين لشاشات الإضاءة الخلفية."
@@ -233,7 +282,7 @@ export function VideoPage({ state, update, act, notice }) {
           on={s.rtxHdr}
           tag="تجريبي"
           title="RTX Video HDR"
-          text="يحوّل فيديو SDR إلى HDR على كرت الشاشة. يحتاج «إشارة HDR للشاشة» وشاشة HDR."
+          text="يحوّل فيديو SDR إلى HDR على كرت الشاشة. يحتاج «HDR حقيقي · مضمّن» وشاشة HDR."
           onChange={(rtxHdr) => set({ rtxHdr })}
         />
       </section>

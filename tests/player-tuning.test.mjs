@@ -6,6 +6,8 @@ import {
   audioArgs,
   audioFilters,
   cleanAudioDevice,
+  hdrMode,
+  hdrSignal,
   hwdecValue,
   liveTuning,
   parseAudioDevices,
@@ -18,6 +20,7 @@ import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 import { Player, playerArgs } from "../electron/player.mjs";
 import { collectBackup, restoreState } from "../core/backup.mjs";
 import { mpvLogProblems } from "../core/diagnose.mjs";
+import { hudVisible } from "../core/hud.mjs";
 
 test("every sound profile has one gain per band, and the filter is built from them", () => {
   for (const [id, profile] of Object.entries(AUDIO_PROFILES)) {
@@ -386,4 +389,111 @@ test("only MPV's problem lines reach the diagnostic, sanitized", () => {
   assert.ok(lines.every((l) => !/Bearer|SECRETTOKEN|Authorization/.test(l)));
   assert.ok(lines.some((l) => /debrid\.example\.com/.test(l)));
   assert.match(lines[0], /swapchain/);
+});
+
+test("HDR modes: SDR conversion by default, true HDR in its own window for HDR sources", () => {
+  const settings = { ...DEFAULT_SETTINGS, hdr: true };
+  assert.equal(
+    settings.hdrMode,
+    "tonemap",
+    "the old switch alone no longer forces true HDR",
+  );
+  assert.equal(hdrSignal(settings), false);
+  assert.equal(
+    hdrMode({ hdr: true }),
+    "embedded",
+    "an older saved switch without a mode",
+  );
+  const windowMode = { ...DEFAULT_SETTINGS, hdrMode: "window" };
+  assert.equal(
+    hdrSignal(windowMode),
+    false,
+    "not for a source shown inside Riwaq",
+  );
+  assert.equal(hdrSignal(windowMode, { separate: true }), true);
+  assert.equal(hdrSignal({ hdrMode: "embedded", simpleColor: true }), false);
+  const own = playerArgs({
+    pipe: "p",
+    settings: windowMode,
+    url: "u",
+    title: "t",
+    host: "1234",
+    separate: true,
+  });
+  assert.ok(!own.some((a) => a.startsWith("--wid=")), "MPV's own window");
+  for (const flag of [
+    "--fullscreen=yes",
+    "--ontop=yes",
+    "--target-colorspace-hint=yes",
+  ])
+    assert.ok(own.includes(flag), flag);
+  assert.ok(own.some((a) => a.startsWith("--script-opts=osc-visibility=auto")));
+  assert.equal(
+    own
+      .filter((a) => a.startsWith("--script-opts="))
+      .at(-1)
+      .includes("visibility=auto"),
+    true,
+    "MPV's controller shows in its own window",
+  );
+  const inside = playerArgs({
+    pipe: "p",
+    settings: windowMode,
+    url: "u",
+    title: "t",
+    host: "1234",
+  });
+  assert.ok(inside.includes("--wid=1234"));
+  assert.ok(inside.includes("--target-colorspace-hint=no"));
+});
+
+test("in MPV's own window the HUD steps aside and keys act on that window", () => {
+  assert.equal(
+    hudVisible({
+      enabled: true,
+      player: { active: true, separate: true },
+      surfaceVisible: true,
+    }),
+    false,
+  );
+  assert.equal(
+    hudVisible({
+      enabled: true,
+      player: { active: true },
+      surfaceVisible: true,
+    }),
+    true,
+  );
+  const sent = [];
+  let riwaqFullscreen = 0;
+  const player = new Player({
+    onState: () => {},
+    onFullscreen: () => riwaqFullscreen++,
+  });
+  player.send = (c) => sent.push(c);
+  player.state = { active: true, separate: true, fullscreen: false };
+  player.message("riwaq-fullscreen");
+  assert.deepEqual(sent.at(-1), ["cycle", "fullscreen"]);
+  assert.equal(riwaqFullscreen, 0);
+  player.applyController();
+  assert.equal(sent.at(-1)[2], "auto");
+  let stopped = 0;
+  player.stop = async () => stopped++;
+  player.message("riwaq-stop");
+  assert.equal(stopped, 1, "Esc returns to Riwaq");
+});
+
+test("the compatibility restart leaves MPV's own window and true HDR", async () => {
+  const player = new Player({ onState: () => {} });
+  const starts = [];
+  player.start = async (args) => starts.push(args);
+  player.lastStart = {
+    url: "u",
+    settings: { hdrMode: "window" },
+    separate: true,
+  };
+  player.state = { active: true, position: 10 };
+  await player.restartSafe();
+  assert.equal(starts[0].separate, false);
+  assert.equal(starts[0].settings.hdrMode, "tonemap");
 });
