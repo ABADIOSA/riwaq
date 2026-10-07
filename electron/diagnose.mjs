@@ -19,6 +19,7 @@ import {
 } from "../core/addon-health.mjs";
 import {
   cleanRendererErrors,
+  mpvLogProblems,
   reportSettings,
   runCheck,
   sanitize,
@@ -316,6 +317,23 @@ export async function runDiagnostics(deps) {
     );
   }
 
+  await add("mpv-log", "سجل MPV لآخر مشاهدة", async () => {
+    const path = join(userData, "logs", "mpv-last.log");
+    if (!existsSync(path))
+      return {
+        status: "skip",
+        detail: "لا يوجد سجل بعد؛ شغّل أي عمل ثم أعد التشخيص",
+      };
+    const text = (await readFile(path, "utf8")).slice(-400000);
+    const problems = mpvLogProblems(text, { home });
+    return problems.length
+      ? {
+          status: "warn",
+          detail: `${problems.length} سطر مشاكل في آخر مشاهدة`,
+          data: { lines: problems },
+        }
+      : { detail: "لا أخطاء في آخر مشاهدة" };
+  });
   await add("video-surface", "سطح الفيديو المدمج", async () => {
     const v = videoHost?.inspect?.();
     if (!v)

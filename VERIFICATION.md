@@ -35,6 +35,29 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
+## 0.37.1 — sound without a picture
+
+**Report:** on 0.37.0 a 4K HDR10 HEVC episode played sound, and the HUD read its quality, but no picture appeared.
+
+What is known:
+- The default picture arguments are unchanged from 0.36. The MPV build did change, from 20260610 to 20261007 (v0.41), because the old build was removed upstream.
+- Which optional picture settings the viewer had on is not known yet.
+- The cause was not found: there is no Windows machine here.
+
+What changed:
+- Detection: `Player.watchVideo` (`vo-configured` false six seconds after loading, with a selected video track) triggers a single restart from the same position in `SAFE_VIDEO`.
+- Logging: each viewing writes an MPV log. The diagnostic shows its sanitized problem lines (`mpvLogProblems`).
+
+Executed:
+- `npm test`: **583 passing, 0 failing**. The new tests cover:
+  - reporting once after six seconds, and never with a picture or without a video track;
+  - the restart keeping the URL, the position and the sound settings while applying `SAFE_VIDEO` and `safe`;
+  - `--log-file` in the arguments;
+  - the log filter dropping command lines and headers and reducing URLs to their host.
+- `npm run check` and `npm run build` pass.
+
+Not executed: MPV on Windows. Whether `vo-configured` stays false in the reported case (as opposed to a configured but black output) is unverified; the first diagnostic report will show it.
+
 ## 0.37.0 — the player studio (Harbor's player pages)
 
 **Request:** the owner sent Harbor's Player engine, Audio, On-screen controls, Intro skipping and Video quality pages and asked for them to be studied, improved and added.

@@ -60,6 +60,7 @@ export function playerArgs({
   inputConf,
   live = false,
   screenshotDir = "",
+  logFile = "",
 }) {
   const args = [
     "--no-config",
@@ -128,6 +129,9 @@ export function playerArgs({
       "--keep-open=yes",
     );
   }
+  // The last viewing's MPV log, for the diagnostic (its lines are filtered
+  // and sanitized before they enter a report).
+  if (logFile) args.push(`--log-file=${logFile}`);
   if (host) args.push(`--wid=${host}`);
   if (inputConf) args.push(`--input-conf=${inputConf}`);
   const entries = Object.entries(headers).filter(
@@ -146,6 +150,20 @@ export function playerArgs({
   args.push("--", url);
   return args;
 }
+
+/** The compatibility mode a viewing falls back to when no picture appears. */
+export const SAFE_VIDEO = {
+  renderer: "gpu",
+  hwdec: "off",
+  hardwareDecoding: false,
+  videoQuality: "balanced",
+  simpleColor: false,
+  linelessVideo: false,
+  displayPanel: "auto",
+  rtxUpscale: false,
+  rtxHdr: false,
+  hdr: false,
+};
 
 /** How often a change of position alone reaches the interface. */
 export const POSITION_MS = 250;
@@ -182,6 +200,7 @@ const PROPERTIES = [
   ["cache-buffering-state", "buffering"],
   ["demuxer-cache-time", "bufferedUntil"],
   ["video-params/gamma", "transfer"],
+  ["vo-configured", "voConfigured"],
 ];
 
 export class Player {
@@ -232,8 +251,12 @@ export class Player {
     live = false,
     inputConf = "",
     screenshotDir = "",
+    logFile = "",
+    safe = false,
   }) {
     if (!local) webUrl(url);
+    // A new viewing may fall back to the compatibility mode once again.
+    if (!safe) this.safeRetried = null;
     if (!existsSync(executable))
       throw new Error("لم يتم العثور على MPV. اختر ملف mpv.exe من الإعدادات.");
     // Starts are serialized: two plays close together (a double click, a
@@ -245,6 +268,22 @@ export class Player {
     if (token !== this.startToken) throw new Error("بدأ تشغيل مصدر آخر");
     // Kept in main only, for seek previews; never part of the HUD's state.
     this.source = { url, headers, local, live };
+    // Everything this start needed, so a viewing whose picture never came up
+    // can start again in the compatibility mode (restartSafe).
+    this.lastStart = {
+      executable,
+      settings,
+      url,
+      meta,
+      videoId,
+      headers,
+      local,
+      live,
+      inputConf,
+      screenshotDir,
+      logFile,
+    };
+    clearTimeout(this.videoCheck);
     this.meta = meta;
     this.videoId = videoId;
     this.settings = settings;
@@ -307,6 +346,7 @@ export class Player {
         inputConf: inputConf || this.inputConf,
         live,
         screenshotDir,
+        logFile,
       }),
       { windowsHide: true, stdio: "ignore", shell: false },
     );
@@ -597,6 +637,7 @@ export class Player {
       this.onLoaded?.({ meta: this.meta, videoId: this.videoId });
       this.refreshSegments();
       this.onState(this.state);
+      this.watchVideo();
     }
     if (event.event === "end-file") {
       this.save();
@@ -681,6 +722,37 @@ export class Player {
     this.state.volumeMax = volumeMax(settings);
     this.refreshRtx();
     this.onState(this.state);
+  }
+  /**
+   * Sound without a picture: a file with a video track whose output MPV
+   * never configured within six seconds of loading. Main is told once per
+   * file and decides what to do (restartSafe).
+   */
+  watchVideo() {
+    clearTimeout(this.videoCheck);
+    const viewing = this.state;
+    this.videoCheck = setTimeout(() => {
+      if (this.state !== viewing || !viewing.active || viewing.voConfigured)
+        return;
+      const video = (viewing.tracks || []).some(
+        (t) => t.type === "video" && t.selected,
+      );
+      if (video) this.onVideoFailed?.({ videoId: this.videoId });
+    }, 6000);
+  }
+  /**
+   * Starts the same viewing again from where it is, with the picture in its
+   * most compatible form: the older renderer, decoding on the processor, and
+   * none of the optional picture features.
+   */
+  restartSafe() {
+    if (!this.lastStart || !this.state.active) return null;
+    return this.start({
+      ...this.lastStart,
+      start: Math.max(0, Number(this.state.position) || 0),
+      settings: { ...this.lastStart.settings, ...SAFE_VIDEO },
+      safe: true,
+    });
   }
   /** Segments from AniSkip for this viewing (core/skip-online.mjs). */
   setOnlineSegments(videoId, segments) {
@@ -962,6 +1034,7 @@ export class Player {
   async stop() {
     const child = this.child;
     this.clearSleep();
+    clearTimeout(this.videoCheck);
     if (!child) return;
     this.save();
     this.send(["quit"]);

@@ -647,11 +647,18 @@ async function applyPresence() {
   updatePresence();
   return true;
 }
+/** The last viewing's MPV log; the diagnostic reads its problem lines. */
+function mpvLogFile() {
+  const dir = join(app.getPath("userData"), "logs");
+  mkdirSync(dir, { recursive: true });
+  return join(dir, "mpv-last.log");
+}
 /** A video file on this PC, chosen in a dialog or dropped on the window. */
 function playLocalFile(path) {
   nowPlaying = null;
   return player.start({
     executable: executable(),
+    logFile: mpvLogFile(),
     settings: client.state.settings,
     url: path,
     local: true,
@@ -800,6 +807,7 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     headers: stream.behaviorHints?.proxyHeaders?.request || {},
     inputConf: hotkeyFile(),
     screenshotDir: screenshotDir(),
+    logFile: mpvLogFile(),
   });
 }
 async function playChannel({ key, start = 0, stop = 0 }) {
@@ -822,6 +830,7 @@ async function playChannel({ key, start = 0, stop = 0 }) {
     live: channel.live,
     inputConf: hotkeyFile(),
     screenshotDir: screenshotDir(),
+    logFile: mpvLogFile(),
   });
 }
 /**
@@ -2067,6 +2076,27 @@ app
       };
       cursorCheck = checkCursor;
       setInterval(checkCursor, 150);
+      // Sound without a picture: start again once in the compatibility
+      // mode, and say so; a second failure points at the diagnostic.
+      player.onVideoFailed = ({ videoId }) => {
+        logError("player", "MPV لم يعرض الصورة: مخرج الفيديو لم يُهيأ");
+        if (player.safeRetried === videoId) {
+          emit(
+            "notice",
+            "الصورة ما ظهرت حتى بوضع التوافق. شغّل «تشخيص كامل» من الإعدادات وأرسل لنا التقرير.",
+          );
+          return;
+        }
+        player.safeRetried = videoId;
+        emit(
+          "notice",
+          "الصورة ما ظهرت، فأعدنا التشغيل بوضع التوافق (العارض الأقدم وفك الترميز بالمعالج).",
+        );
+        player.restartSafe()?.catch((error) => {
+          logError("player", error);
+          emit("notice", cleanError(error));
+        });
+      };
       player.onLoaded = ({ meta, videoId }) => {
         autoSubtitle(videoId);
         if (

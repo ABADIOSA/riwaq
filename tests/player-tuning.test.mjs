@@ -17,6 +17,7 @@ import {
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 import { Player, playerArgs } from "../electron/player.mjs";
 import { collectBackup, restoreState } from "../core/backup.mjs";
+import { mpvLogProblems } from "../core/diagnose.mjs";
 
 test("every sound profile has one gain per band, and the filter is built from them", () => {
   for (const [id, profile] of Object.entries(AUDIO_PROFILES)) {
@@ -310,4 +311,79 @@ test("a backup never carries this PC's audio output", () => {
   assert.equal(payload.profiles.data.p1.settings.audioDevice, undefined);
   const restored = restoreState(state, payload);
   assert.equal(restored.profiles.data.p1.settings.audioDevice, "wasapi/here");
+});
+
+test("sound without a picture is reported once, six seconds after loading", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const failed = [];
+  const player = new Player({ onState: () => {} });
+  player.onVideoFailed = (info) => failed.push(info);
+  player.videoId = "tt1:1:1";
+  const video = [{ type: "video", selected: true }];
+  player.state = { active: true, tracks: video, voConfigured: false };
+  player.watchVideo();
+  t.mock.timers.tick(5900);
+  assert.equal(failed.length, 0);
+  t.mock.timers.tick(200);
+  assert.deepEqual(failed, [{ videoId: "tt1:1:1" }]);
+  // A picture that came up, or a file with no video track, is left alone.
+  player.state = { active: true, tracks: video, voConfigured: true };
+  player.watchVideo();
+  t.mock.timers.tick(7000);
+  player.state = { active: true, tracks: [{ type: "audio", selected: true }] };
+  player.watchVideo();
+  t.mock.timers.tick(7000);
+  assert.equal(failed.length, 1);
+});
+
+test("the compatibility restart keeps the viewing and its position", async () => {
+  const player = new Player({ onState: () => {} });
+  const starts = [];
+  player.start = async (args) => starts.push(args);
+  assert.equal(player.restartSafe(), null, "nothing to restart yet");
+  player.lastStart = {
+    url: "https://x/v.mkv",
+    settings: {
+      renderer: "gpu-next",
+      hwdec: "on",
+      rtxUpscale: true,
+      audioProfile: "night",
+    },
+    videoId: "tt1:1:1",
+  };
+  player.state = { active: true, position: 754.2 };
+  await player.restartSafe();
+  assert.equal(starts[0].start, 754.2);
+  assert.equal(starts[0].safe, true);
+  assert.equal(starts[0].url, "https://x/v.mkv");
+  assert.equal(starts[0].settings.renderer, "gpu");
+  assert.equal(starts[0].settings.hwdec, "off");
+  assert.equal(starts[0].settings.rtxUpscale, false);
+  assert.equal(starts[0].settings.audioProfile, "night", "sound choices stay");
+  const args = playerArgs({
+    pipe: "p",
+    settings: { ...DEFAULT_SETTINGS, ...starts[0].settings },
+    url: "u",
+    title: "t",
+    logFile: "C:\\riwaq\\logs\\mpv-last.log",
+  });
+  assert.ok(args.includes("--hwdec=no"));
+  assert.ok(args.includes("--vo=gpu"));
+  assert.ok(args.includes("--log-file=C:\\riwaq\\logs\\mpv-last.log"));
+});
+
+test("only MPV's problem lines reach the diagnostic, sanitized", () => {
+  const log = [
+    "[cplayer] Command line: mpv --http-header-fields=Authorization: Bearer abc",
+    "[vo/gpu-next/d3d11] Failed to create swapchain: Error 0x887A0004",
+    "[vo/gpu-next] Could not initialize the video output",
+    "[ffmpeg] https://debrid.example.com/dl/SECRETTOKEN123/file.mkv: error 403",
+    "[cplayer] Playing: C:\\Users\\Abadi\\Videos\\x.mkv",
+    "[vo/gpu-next/d3d11] Failed to create swapchain: Error 0x887A0004",
+  ].join("\n");
+  const lines = mpvLogProblems(log, { home: "C:\\Users\\Abadi" });
+  assert.equal(lines.length, 3, "duplicates and ordinary lines are dropped");
+  assert.ok(lines.every((l) => !/Bearer|SECRETTOKEN|Authorization/.test(l)));
+  assert.ok(lines.some((l) => /debrid\.example\.com/.test(l)));
+  assert.match(lines[0], /swapchain/);
 });
