@@ -49,34 +49,71 @@ export const HWDEC_MODES = ["auto", "on", "off"];
 export const RENDERERS = ["gpu-next", "gpu"];
 export const DISPLAY_PANELS = ["auto", "oled", "lcd"];
 /**
- * How HDR reaches the display (Harbor's three choices, studied from its
- * own support thread):
- * - tonemap: MPV converts HDR to SDR inside Riwaq's window. Works on every
- *   display with every control.
- * - window: true HDR in MPV's own full-screen window, for HDR sources only,
- *   so Windows sees an HDR window. Riwaq's HUD cannot sit over another
- *   program's window, so MPV's own controls show there, and Esc returns.
- * - embedded: true HDR inside Riwaq's window, with every control. Windows
- *   may not treat a child window as HDR, and some systems show no picture.
+ * How HDR reaches the display. Large services (Netflix, Disney+) present
+ * HDR from a full-screen surface of their own, which Windows composes as
+ * HDR; Harbor's support thread showed that a child window inside an app is
+ * not, and that its picture can vanish. So there is no embedded true HDR:
+ * - tonemap: MPV converts HDR to SDR inside Riwaq's window (libplacebo's
+ *   tone mapping). Works on every display, with every control.
+ * - window: true HDR in MPV's own full-screen window, for sources labelled
+ *   HDR (and SDR ones when RTX Video HDR is on). MPV's own controller shows
+ *   there, and Esc returns to Riwaq.
  */
-export const HDR_MODES = ["tonemap", "window", "embedded"];
+export const HDR_MODES = ["tonemap", "window"];
 
-/** The HDR mode, reading the older on/off switch when no mode was chosen. */
+/** The HDR mode; anything older or unknown converts to SDR. */
 export const hdrMode = (settings = {}) =>
-  HDR_MODES.includes(settings.hdrMode)
-    ? settings.hdrMode
-    : settings.hdr
-      ? "embedded"
-      : "tonemap";
+  HDR_MODES.includes(settings.hdrMode) ? settings.hdrMode : "tonemap";
+
+/** Whether a viewing opens in MPV's own HDR window. */
+export function separateWindow(settings = {}, { hdrSource = false } = {}) {
+  if (settings.simpleColor || settings.linelessVideo) return false;
+  return hdrMode(settings) === "window" && (hdrSource || !!settings.rtxHdr);
+}
 
 /**
- * Whether MPV signals HDR to the display: in the embedded mode, or in a
- * separate window. The compatibility modes leave the path HDR needs.
+ * Whether MPV signals HDR to the display: only from its own window. The
+ * compatibility modes leave the path HDR needs.
  */
 export function hdrSignal(settings = {}, { separate = false } = {}) {
   if (settings.simpleColor || settings.linelessVideo) return false;
-  const mode = hdrMode(settings);
-  return mode === "embedded" || (mode === "window" && separate);
+  return hdrMode(settings) === "window" && separate;
+}
+
+/**
+ * The read-ahead buffer, in MiB, as streaming services keep minutes of
+ * picture ahead: a 4K Blu-ray remux runs at 60 to 100 Mbps, so MPV's own
+ * 150 MiB holds about fifteen seconds of it. "auto" follows the PC's memory.
+ */
+export const BUFFER_SIZES = ["auto", 256, 512, 1024, 2048];
+export function bufferMiB(settings = {}, totalMemory = 0) {
+  if (
+    BUFFER_SIZES.includes(settings.bufferSize) &&
+    settings.bufferSize !== "auto"
+  )
+    return settings.bufferSize;
+  const gb = (Number(totalMemory) || 0) / 1024 ** 3;
+  return gb >= 24 ? 1024 : gb >= 12 ? 512 : 256;
+}
+
+/**
+ * Start-up options for a non-live network source: the buffer, a short wait
+ * before the first frame so a heavy file does not stop at once, a larger
+ * read size, and reconnecting on a dropped connection instead of ending.
+ * Local files read straight from disk.
+ */
+export function bufferArgs({ mib = 512, local = false } = {}) {
+  if (local) return [];
+  const size = Math.max(64, Math.min(4096, Math.round(Number(mib) || 512)));
+  return [
+    "--cache=yes",
+    `--demuxer-max-bytes=${size}MiB`,
+    `--demuxer-max-back-bytes=${Math.round(size / 4)}MiB`,
+    "--cache-pause-initial=yes",
+    "--cache-pause-wait=2",
+    "--stream-buffer-size=4MiB",
+    "--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=10",
+  ];
 }
 
 const NORMALIZE = "dynaudnorm=f=150:g=15:p=0.9";
@@ -148,6 +185,10 @@ export function audioArgs(settings = {}) {
   if (settings.audioDownmix) args.push(...DOWNMIX);
   const device = cleanAudioDevice(settings.audioDevice);
   if (device) args.push(`--audio-device=${device}`);
+  // Dolby and DTS sent untouched to a receiver or soundbar, as a Blu-ray
+  // player does; the receiver decodes Atmos and DTS:X itself.
+  if (settings.audioPassthrough)
+    args.push("--audio-spdif=ac3,eac3,dts,dts-hd,truehd");
   return args;
 }
 
@@ -240,8 +281,22 @@ export function rtxFilters(settings = {}, video = {}) {
  * What the HUD shows under the title: resolution, HDR, video codec and the
  * audio, from what MPV reports about the playing file.
  */
+/**
+ * What the source's own label says that MPV cannot see: Dolby Vision, a
+ * remux, an IMAX edition, Atmos. Words only, never the label itself.
+ */
+export function sourceTags(parsed = {}) {
+  const tags = [];
+  if (/DV/.test(parsed.hdr || "")) tags.push("Dolby Vision");
+  if (parsed.source === "REMUX") tags.push("REMUX");
+  if ((parsed.editions || []).includes("IMAX")) tags.push("IMAX");
+  if (/atmos/i.test(parsed.audio || "")) tags.push("Atmos");
+  return tags;
+}
+
 export function qualityChips(player = {}) {
   const chips = [];
+  const tags = Array.isArray(player.sourceTags) ? player.sourceTags : [];
   const height = Number(player.height) || 0;
   const width = Number(player.width) || 0;
   if (height || width) {
@@ -259,7 +314,8 @@ export function qualityChips(player = {}) {
               : `${height}p`,
     );
   }
-  if (player.transfer === "pq") chips.push("HDR10");
+  if (tags.includes("Dolby Vision")) chips.push("Dolby Vision");
+  else if (player.transfer === "pq") chips.push("HDR10");
   else if (player.transfer === "hlg") chips.push("HLG");
   const tracks = Array.isArray(player.tracks) ? player.tracks : [];
   const video = tracks.find((t) => t.type === "video" && t.selected);
@@ -299,5 +355,7 @@ export function qualityChips(player = {}) {
     const label = [name, layout].filter(Boolean).join(" ");
     if (label) chips.push(label);
   }
+  for (const tag of ["Atmos", "REMUX", "IMAX"])
+    if (tags.includes(tag)) chips.push(tag);
   return chips;
 }

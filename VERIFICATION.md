@@ -35,7 +35,34 @@
 - The runner now selects the main renderer rather than the new HUD, pauses the short fixture for inspection, and avoids `windowsHide` for a GUI visibility test. `--offline` skips external-catalog assertions; it is not a network isolation flag.
 - Real external account flows, HDR, multiple monitors and an NSIS upgrade remain unverified here. Review findings and community sources: [Arabic review](docs/REVIEW-2026-10-02.md).
 
-## 0.37.1 — sound without a picture, and HDR modes
+## 0.38.0 — a player that does not stall or lose its picture
+
+**Owner's request:** the picture must never disappear and the player must never freeze. Learn from Netflix and Disney+, and play the largest Blu-ray remux.
+
+What changed after the HDR-modes work below:
+- **No embedded true HDR.** `HDR_MODES` is `tonemap` and `window`. True HDR always uses MPV's own full-screen surface, as the large services present HDR from a dedicated full-screen surface. RTX Video HDR also opens SDR sources there.
+- **Buffer.** `bufferArgs` covers network sources: the demuxer buffer follows memory (up to 2 GiB), the first frame waits for an initial fill, the stream buffer is 4 MiB, and lavf reconnects on drops. Live and local files are untouched.
+- **Watchdog.** `checkStall`: 15 s without movement while playing, or 30 s waiting on the network. It triggers one reconnect from the same moment, then the next ranked source. A buffering pill shows in the HUD.
+- **Staged compatibility restart.** `safeVideo(1)` switches to the older renderer; `safeVideo(2)` adds CPU decoding. Dolby Vision keeps gpu-next.
+- **Passthrough.** `audioPassthrough` adds `--audio-spdif`.
+- **Source tags.** Dolby Vision, REMUX, IMAX and Atmos are taken from the label and shown in the chips.
+
+What large services do that Riwaq cannot: switching bitrate mid-file (ABR) needs several encodings of one title. An addon link is one file, so the speed cap and the buffer stand in for it.
+
+Executed:
+- `npm test`: **591 passing, 0 failing**. The new tests cover:
+  - buffer sizes by memory, and the buffer arguments (with none for local files and live);
+  - passthrough;
+  - source tags and chips;
+  - the watchdog thresholds, once-only reporting and pause handling;
+  - the two-stage compatibility mode and the Dolby Vision exception;
+  - the reconnect keeping the window;
+  - the separate window rules.
+- `npm run check` and `npm run build` pass.
+
+Not executed: any of this with MPV on Windows. That includes a real remux over a debrid link, a dropped connection, a stalled stream, passthrough to a receiver and MPV's HDR window on an HDR display.
+
+### Earlier in this cycle: sound without a picture, and HDR modes
 
 The owner then sent a Harbor support thread. True HDR in Harbor's embedded window is not treated as HDR by Windows, so Harbor added a separate MPV window without controls, and users complained they could not pause or leave it. 0.37.0 had made the old "HDR signal" switch prominent on the new video page.
 
@@ -61,7 +88,7 @@ What changed:
 - Logging: each viewing writes an MPV log. The diagnostic shows its sanitized problem lines (`mpvLogProblems`).
 
 Executed:
-- `npm test`: **586 passing, 0 failing**. The new tests cover:
+- `npm test` (then): **586 passing, 0 failing**. The new tests cover:
   - reporting once after six seconds, and never with a picture or without a video track;
   - the restart keeping the URL, the position and the sound settings while applying `SAFE_VIDEO` and `safe`;
   - `--log-file` in the arguments;

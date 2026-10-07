@@ -65,7 +65,12 @@ import {
 } from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
-import { parseAudioDevices } from "../core/player-tuning.mjs";
+import {
+  bufferMiB,
+  parseAudioDevices,
+  separateWindow,
+  sourceTags,
+} from "../core/player-tuning.mjs";
 import { parseStream } from "../core/stream-engine.mjs";
 import { measureDownload, suggestCap } from "../core/speed-test.mjs";
 import { Thumbnailer } from "./thumbnails.mjs";
@@ -86,7 +91,7 @@ import {
 import { DesktopUpdates } from "./updater.mjs";
 import { probeAddons, runDiagnostics } from "./diagnose.mjs";
 import { ErrorLog, formatReport } from "../core/diagnose.mjs";
-import { homedir } from "node:os";
+import { homedir, totalmem } from "node:os";
 import { MusicLibrary, AUDIO_TYPES } from "./music-library.mjs";
 
 protocol.registerSchemesAsPrivileged([
@@ -800,8 +805,10 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     client.rememberSeries(series, { source: stream.memory });
   // True HDR in MPV's own window is for sources labelled HDR; everything
   // else stays in Riwaq's window with its controls.
-  const separate =
-    client.state.settings.hdrMode === "window" && !!parseStream(stream).hdr;
+  const parsed = parseStream(stream);
+  const separate = separateWindow(client.state.settings, {
+    hdrSource: !!parsed.hdr,
+  });
   if (separate)
     emit(
       "notice",
@@ -809,6 +816,8 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     );
   return player.start({
     separate,
+    tags: sourceTags(parsed),
+    bufferMiB: bufferMiB(client.state.settings, totalmem()),
     executable: executable(),
     settings: client.state.settings,
     url,
@@ -2095,24 +2104,50 @@ app
       setInterval(checkCursor, 150);
       // Sound without a picture: start again once in the compatibility
       // mode, and say so; a second failure points at the diagnostic.
-      player.onVideoFailed = ({ videoId }) => {
+      player.onVideoFailed = () => {
         logError("player", "MPV لم يعرض الصورة: مخرج الفيديو لم يُهيأ");
-        if (player.safeRetried === videoId) {
+        const stage = (player.safeStage || 0) + 1;
+        if (stage > 2) {
           emit(
             "notice",
             "الصورة ما ظهرت حتى بوضع التوافق. شغّل «تشخيص كامل» من الإعدادات وأرسل لنا التقرير.",
           );
           return;
         }
-        player.safeRetried = videoId;
+        player.safeStage = stage;
         emit(
           "notice",
-          "الصورة ما ظهرت، فأعدنا التشغيل بوضع التوافق (العارض الأقدم وفك الترميز بالمعالج).",
+          stage === 1
+            ? "الصورة ما ظهرت، فأعدنا التشغيل من نفس اللحظة بوضع التوافق."
+            : "ما زالت الصورة غائبة، فأعدنا التشغيل وفك الترميز بالمعالج.",
         );
-        player.restartSafe()?.catch((error) => {
+        player.restartSafe(stage)?.catch((error) => {
           logError("player", error);
           emit("notice", cleanError(error));
         });
+      };
+      // A stuck viewing: reconnect once from the same moment, then move to
+      // the next ranked source (core/failover.mjs) when there is one.
+      player.onStall = ({ buffering }) => {
+        logError(
+          "player",
+          buffering
+            ? "التشغيل توقف ينتظر الشبكة أكثر من 30 ثانية"
+            : "التشغيل علق: الموضع لم يتحرك 15 ثانية",
+        );
+        if ((player.stallRetries || 0) < 1) {
+          player.stallRetries = 1;
+          emit("notice", "التشغيل علق، فأعدنا الاتصال من نفس اللحظة.");
+          player.restartSame()?.catch((error) => logError("player", error));
+          return;
+        }
+        emit(
+          "notice",
+          buffering
+            ? "المصدر أبطأ من اتصالك؛ نجرّب المصدر التالي."
+            : "المصدر ما زال عالقاً؛ نجرّب المصدر التالي.",
+        );
+        tryNextSource();
       };
       player.onLoaded = ({ meta, videoId }) => {
         autoSubtitle(videoId);

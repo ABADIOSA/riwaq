@@ -13,6 +13,7 @@ import {
 import { seekAmount } from "../core/hotkeys.mjs";
 import {
   audioArgs,
+  bufferArgs,
   liveTuning,
   rtxFilters,
   videoArgs,
@@ -62,6 +63,8 @@ export function playerArgs({
   screenshotDir = "",
   logFile = "",
   separate = false,
+  local = false,
+  bufferMiB = 512,
 }) {
   const args = [
     "--no-config",
@@ -115,6 +118,9 @@ export function playerArgs({
       "--screenshot-format=png",
     );
   }
+  // Network sources keep a large buffer and reconnect on a dropped
+  // connection (core/player-tuning.mjs bufferArgs); live keeps its own.
+  if (!live) args.push(...bufferArgs({ mib: bufferMiB, local }));
   if (live) {
     // Broadcast sources stall rather than end. Buffer ahead and reconnect
     // instead of tearing the window down on the first hiccup.
@@ -162,20 +168,34 @@ export function playerArgs({
   return args;
 }
 
-/** The compatibility mode a viewing falls back to when no picture appears. */
-export const SAFE_VIDEO = {
-  renderer: "gpu",
-  hwdec: "off",
-  hardwareDecoding: false,
-  videoQuality: "balanced",
-  simpleColor: false,
-  linelessVideo: false,
-  displayPanel: "auto",
-  rtxUpscale: false,
-  rtxHdr: false,
-  hdr: false,
-  hdrMode: "tonemap",
-};
+/**
+ * The compatibility mode a viewing falls back to when no picture appears,
+ * in two steps: first the older renderer without the optional picture
+ * features, then decoding on the processor as well. Dolby Vision keeps
+ * gpu-next, the only renderer that reads its colours correctly.
+ */
+export function safeVideo(stage = 2, { dolbyVision = false } = {}) {
+  const settings = {
+    renderer: dolbyVision ? "gpu-next" : "gpu",
+    videoQuality: "balanced",
+    simpleColor: false,
+    linelessVideo: false,
+    displayPanel: "auto",
+    rtxUpscale: false,
+    rtxHdr: false,
+    hdr: false,
+    hdrMode: "tonemap",
+  };
+  if (stage >= 2)
+    Object.assign(settings, { hwdec: "off", hardwareDecoding: false });
+  return settings;
+}
+export const SAFE_VIDEO = safeVideo(2);
+
+/** A viewing whose position has not moved for this long is stuck. */
+export const STALL_MS = 15000;
+/** Waiting on the network counts as stuck only after this long. */
+export const BUFFER_STALL_MS = 30000;
 
 /** How often a change of position alone reaches the interface. */
 export const POSITION_MS = 250;
@@ -213,6 +233,7 @@ const PROPERTIES = [
   ["demuxer-cache-time", "bufferedUntil"],
   ["video-params/gamma", "transfer"],
   ["vo-configured", "voConfigured"],
+  ["paused-for-cache", "cachePaused"],
 ];
 
 export class Player {
@@ -266,10 +287,16 @@ export class Player {
     logFile = "",
     safe = false,
     separate = false,
+    bufferMiB = 512,
+    tags = [],
   }) {
     if (!local) webUrl(url);
-    // A new viewing may fall back to the compatibility mode once again.
-    if (!safe) this.safeRetried = null;
+    // A new viewing starts its fallbacks afresh: the compatibility steps
+    // after a missing picture, and the reconnect after a stall.
+    if (!safe) {
+      this.safeStage = 0;
+      this.stallRetries = 0;
+    }
     if (!existsSync(executable))
       throw new Error("لم يتم العثور على MPV. اختر ملف mpv.exe من الإعدادات.");
     // Starts are serialized: two plays close together (a double click, a
@@ -296,8 +323,11 @@ export class Player {
       screenshotDir,
       logFile,
       separate,
+      bufferMiB,
+      tags,
     };
     clearTimeout(this.videoCheck);
+    this.stopWatchdog();
     this.meta = meta;
     this.videoId = videoId;
     this.settings = settings;
@@ -345,6 +375,10 @@ export class Player {
       rtx: null,
       volumeMax: volumeMax(settings),
       separate: !!separate,
+      // Words from the source's label (core/player-tuning.mjs sourceTags).
+      sourceTags: Array.isArray(tags)
+        ? tags.filter((t) => typeof t === "string").slice(0, 6)
+        : [],
       stats: false,
       shader: settings.shader || "none",
     };
@@ -363,6 +397,8 @@ export class Player {
         screenshotDir,
         logFile,
         separate,
+        local,
+        bufferMiB,
       }),
       // windowsHide asks Windows to hide the first window shown, which
       // would hide MPV's own HDR window.
@@ -387,6 +423,7 @@ export class Player {
       this.child = null;
       this.socket?.destroy();
       this.clearSleep();
+      this.stopWatchdog();
       this.state = { ...this.state, active: false };
       this.host?.hide();
       this.onState(this.state);
@@ -421,6 +458,7 @@ export class Player {
     });
     if (Number(settings.sleepTimer) > 0)
       this.setSleep(Number(settings.sleepTimer));
+    this.startWatchdog();
     return this.state;
   }
   attach(socket) {
@@ -661,6 +699,7 @@ export class Player {
       this.refreshSegments();
       this.onState(this.state);
       this.watchVideo();
+      this.fileLoaded = true;
     }
     if (event.event === "end-file") {
       this.save();
@@ -768,14 +807,65 @@ export class Player {
    * most compatible form: the older renderer, decoding on the processor, and
    * none of the optional picture features.
    */
-  restartSafe() {
+  restartSafe(stage = 2) {
+    if (!this.lastStart || !this.state.active) return null;
+    const dolbyVision = (this.lastStart.tags || []).includes("Dolby Vision");
+    return this.start({
+      ...this.lastStart,
+      start: Math.max(0, Number(this.state.position) || 0),
+      settings: {
+        ...this.lastStart.settings,
+        ...safeVideo(stage, { dolbyVision }),
+      },
+      safe: true,
+      separate: false,
+    });
+  }
+  /** The same viewing again from where it is, as it was (after a stall). */
+  restartSame() {
     if (!this.lastStart || !this.state.active) return null;
     return this.start({
       ...this.lastStart,
       start: Math.max(0, Number(this.state.position) || 0),
-      settings: { ...this.lastStart.settings, ...SAFE_VIDEO },
       safe: true,
-      separate: false,
+    });
+  }
+  /**
+   * The watchdog: a playing (not paused) viewing whose position has not
+   * moved for STALL_MS, or BUFFER_STALL_MS while MPV waits on the network,
+   * is reported once until it moves again. Main reconnects, then moves to
+   * the next source.
+   */
+  startWatchdog() {
+    this.stopWatchdog();
+    this.fileLoaded = false;
+    this.lastMove = Date.now();
+    this.lastPos = null;
+    this.stallReported = false;
+    this.watchdog = setInterval(() => this.checkStall(), 2000);
+    this.watchdog.unref?.();
+  }
+  stopWatchdog() {
+    clearInterval(this.watchdog);
+    this.watchdog = null;
+  }
+  checkStall(now = Date.now()) {
+    const state = this.state;
+    if (!state.active) return;
+    const position = Number(state.position) || 0;
+    if (state.pause || !this.fileLoaded || position !== this.lastPos) {
+      this.lastPos = position;
+      this.lastMove = now;
+      if (!state.pause) this.stallReported = false;
+      return;
+    }
+    const limit = state.cachePaused ? BUFFER_STALL_MS : STALL_MS;
+    if (this.stallReported || now - this.lastMove < limit) return;
+    this.stallReported = true;
+    this.onStall?.({
+      videoId: this.videoId,
+      buffering: !!state.cachePaused,
+      position,
     });
   }
   /** Segments from AniSkip for this viewing (core/skip-online.mjs). */
@@ -1060,6 +1150,7 @@ export class Player {
     const child = this.child;
     this.clearSleep();
     clearTimeout(this.videoCheck);
+    this.stopWatchdog();
     if (!child) return;
     this.save();
     this.send(["quit"]);

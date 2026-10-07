@@ -26,6 +26,7 @@ import {
 } from "./home.mjs";
 import {
   AUDIO_PROFILE_IDS,
+  BUFFER_SIZES,
   DISPLAY_PANELS,
   HDR_MODES,
   HWDEC_MODES,
@@ -105,6 +106,9 @@ export const DEFAULT_SETTINGS = {
   displayPanel: "auto",
   // How HDR reaches the display (core/player-tuning.mjs HDR_MODES).
   hdrMode: "tonemap",
+  // The read-ahead buffer for network sources, and Dolby/DTS passthrough.
+  bufferSize: "auto",
+  audioPassthrough: false,
   rtxUpscale: false,
   rtxHdr: false,
   audioProfile: "flat",
@@ -413,6 +417,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "rtxHdr",
     "audioNormalize",
     "audioDownmix",
+    "audioPassthrough",
     "hudQuality",
     "hudShowOnPause",
     "hudSleep",
@@ -467,6 +472,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     renderer: RENDERERS,
     displayPanel: DISPLAY_PANELS,
     hdrMode: HDR_MODES,
+    bufferSize: BUFFER_SIZES,
     audioProfile: AUDIO_PROFILE_IDS,
     volumeMax: VOLUME_MAX,
     bandwidthCap: BANDWIDTH_CAPS,
