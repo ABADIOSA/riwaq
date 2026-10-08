@@ -1,4 +1,5 @@
 import koffi from "koffi";
+import { childFix, surfaceRect } from "../core/surface.mjs";
 
 // A true WS_CHILD surface. MPV renders here, inside the Electron client area.
 // Handles and Win32 calls never cross the renderer bridge.
@@ -21,6 +22,10 @@ const move = user32.func(
   "bool __stdcall SetWindowPos(void *h, void *after, int x, int y, int w, int hgt, uint32 flags)",
 );
 const show = user32.func("bool __stdcall ShowWindow(void *h, int command)");
+// MPV's window belongs to another process: never wait on its thread.
+const showAsync = user32.func(
+  "bool __stdcall ShowWindowAsync(void *h, int command)",
+);
 const destroy = user32.func("bool __stdcall DestroyWindow(void *h)");
 const parentOf = user32.func("void * __stdcall GetParent(void *h)");
 const isVisible = user32.func("bool __stdcall IsWindowVisible(void *h)");
@@ -82,24 +87,15 @@ export class VideoHost {
     }
     const { x, y, width, height, viewportWidth } = input;
     this.last = { x, y, width, height, viewportWidth };
-    if (
-      ![x, y, width, height, viewportWidth].every(Number.isFinite) ||
-      width < 1 ||
-      height < 1 ||
-      viewportWidth < 1
-    )
-      return false;
     const client = {};
     clientRect(this.parent, client);
-    const scale = client.right / viewportWidth;
-    const left = Math.max(0, Math.round(x * scale)),
-      top = Math.max(0, Math.round(y * scale));
-    const w = Math.min(client.right - left, Math.round(width * scale));
-    const h = Math.min(client.bottom - top, Math.round(height * scale));
-    if (w < 1 || h < 1) {
+    const place = surfaceRect(this.last, client);
+    if (!place) return false;
+    if (place.width < 1 || place.height < 1) {
       this.hide();
       return false;
     }
+    const { left, top, width: w, height: h } = place;
     if (!move(this.handle, 0n, left, top, w, h, 0x0010 | 0x0040)) return false;
     // Chromium's D3D child otherwise paints over the native surface after resize.
     setStyle(this.parent, -16, getStyle(this.parent, -16) | 0x02000000);
@@ -113,7 +109,64 @@ export class VideoHost {
     }
     this.visible = true;
     this.rectangle = { x: left, y: top, width: w, height: h };
+    this.syncChild();
     return true;
+  }
+  /**
+   * Gives the hidden surface its size before MPV starts: MPV creates its
+   * window at the surface's size of that moment, and one made at 1×1 could
+   * stay that small (core/surface.mjs). The last layout is used, or the whole
+   * client area before the first viewing.
+   */
+  prepare() {
+    if (!this.handle || this.visible) return false;
+    const client = {};
+    clientRect(this.parent, client);
+    const place = surfaceRect(this.last, client) || {
+      left: 0,
+      top: 0,
+      width: client.right,
+      height: client.bottom,
+    };
+    if (!(place.width > 1) || !(place.height > 1)) return false;
+    // SWP_NOACTIVATE | SWP_NOZORDER, and no SWP_SHOWWINDOW: it stays hidden.
+    return move(
+      this.handle,
+      0n,
+      place.left,
+      place.top,
+      place.width,
+      place.height,
+      0x0010 | 0x0004,
+    );
+  }
+  /**
+   * Keeps MPV's window at the surface's size and shown, instead of relying on
+   * MPV catching the surface's resize. Returns what was corrected, or null.
+   */
+  syncChild() {
+    if (!this.handle || !this.visible) return null;
+    const host = {};
+    clientRect(this.handle, host);
+    for (
+      let child = getWindow(this.handle, 5), i = 0;
+      child && i < 4;
+      child = getWindow(child, 2), i++
+    ) {
+      const size = {};
+      clientRect(child, size);
+      const fix = childFix(
+        { visible: true, width: host.right, height: host.bottom },
+        { visible: isVisible(child), width: size.right, height: size.bottom },
+      );
+      if (!fix) continue;
+      // SWP_ASYNCWINDOWPOS | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_NOZORDER
+      if (fix.resize) move(child, 0n, 0, 0, fix.width, fix.height, 0x4214);
+      // SW_SHOWNA
+      if (fix.show) showAsync(child, 8);
+      return { ...fix, from: { width: size.right, height: size.bottom } };
+    }
+    return null;
   }
   hide() {
     if (this.handle) show(this.handle, 0);
@@ -158,8 +211,11 @@ export class VideoHost {
       if (child !== this.handle && !(getStyle(child, -16) & 0x04000000))
         siblingsClipped = false;
     }
+    const size = {};
+    if (this.handle) clientRect(this.handle, size);
     return {
       embedded: !!this.handle && parentOf(this.handle) === this.parent,
+      size: { width: size.right || 0, height: size.bottom || 0 },
       visible: this.visible,
       rectangle: this.rectangle,
       nativeVisible: !!this.handle && isVisible(this.handle),

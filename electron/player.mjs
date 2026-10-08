@@ -11,6 +11,7 @@ import {
   skipMode,
 } from "../core/skip-segments.mjs";
 import { seekAmount } from "../core/hotkeys.mjs";
+import { SurfaceWatch } from "../core/surface.mjs";
 import {
   audioArgs,
   bufferArgs,
@@ -274,6 +275,8 @@ export class Player {
   }) {
     this.spawnProcess = spawnProcess;
     this.connectSocket = connectSocket;
+    // Corrections to MPV's window inside the surface (core/surface.mjs).
+    this.surfaceWatch = new SurfaceWatch();
     this.host = host;
     // The display's height in pixels, for RTX upscaling's factor.
     this.displayHeight = displayHeight;
@@ -321,6 +324,7 @@ export class Player {
       this.safeStage = 0;
       this.stallRetries = 0;
     }
+    this.surfaceWatch.reset({ keepRestart: !!safe });
     if (!existsSync(executable))
       throw new Error("لم يتم العثور على MPV. اختر ملف mpv.exe من الإعدادات.");
     // Starts are serialized: two plays close together (a double click, a
@@ -409,6 +413,9 @@ export class Player {
       compatibilityStage: this.compatibility ? this.safeStage : 0,
       shader: settings.shader || "none",
     };
+    // MPV creates its window at the surface's size of the moment: give the
+    // hidden surface its size first, so that window never starts at 1×1.
+    if (!separate) this.host?.prepare?.();
     const child = this.spawnProcess(
       executable,
       playerArgs({
@@ -746,6 +753,8 @@ export class Player {
                 : "-1";
       }
       if (event.name === "core-idle") this.coreIdle = event.data;
+      // MPV's window is ready for the picture: make sure it fills the surface.
+      if (event.name === "vo-configured" && event.data) this.syncSurface();
       if (event.name === "core-idle" || event.name === "pause")
         this.state.loading = !!this.coreIdle && !this.state.pause;
       // The position and the frame rate change every frame: throttled.
@@ -762,6 +771,7 @@ export class Player {
       this.onState(this.state);
       this.watchVideo();
       this.fileLoaded = true;
+      this.syncSurface();
     }
     // A playlist hands over to its first entry with reason "redirect": the
     // viewing goes on, and that entry's file-loaded follows.
@@ -943,9 +953,27 @@ export class Player {
     clearInterval(this.watchdog);
     this.watchdog = null;
   }
+  /**
+   * Keeps MPV's window at the surface's size and shown (electron/video-host.mjs
+   * syncChild). A window that needs correcting on several checks in a row is
+   * not taking it, and the viewing restarts once with the same settings: the
+   * surface has its size by then, so MPV's new window starts right.
+   */
+  syncSurface() {
+    if (!this.state.active || this.state.separate) return;
+    const fixed = this.host?.syncChild?.() || null;
+    if (fixed) this.onSurfaceFixed?.(fixed);
+    if (this.surfaceWatch.note(!!fixed) === "restart") {
+      this.onSurfaceFixed?.({ ...fixed, restart: true });
+      this.restartSame()?.catch(() => {});
+    }
+  }
   checkStall(now = Date.now()) {
     const state = this.state;
     if (!state.active) return;
+    this.syncSurface();
+    // A restart may have synchronously stopped this viewing.
+    if (this.state !== state || !state.active) return;
     this.checkPicture(now);
     // A picture recovery may have synchronously stopped this viewing.
     if (this.state !== state || !state.active) return;

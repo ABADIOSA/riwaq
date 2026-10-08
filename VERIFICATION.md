@@ -1,5 +1,21 @@
 # Verification — Riwaq
 
+## 2026-10-08 — 0.38.3: MPV's window kept at the surface's size
+
+- Report: on 0.38.2 the first viewing showed a grey picture with sound, and «إصلاح الصورة» fixed it.
+- Diagnosis, from code rather than a reproduction:
+  - The host is a hidden 1×1 `STATIC` until `bounds()`. Its default background is the light grey seen under the HUD.
+  - MPV (master `eb0ee10`, `w32_common.c`) creates its child at `GetClientRect(parent)`. It resizes only from a `SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, WINEVENT_OUTOFCONTEXT)` callback (`resize_child_win`), which the parent must trigger after the hook exists.
+  - Since 0.38.2, MPV starts idle with `--force-window`, so `idle_loop` creates that child immediately, typically before React has reported the surface. In 0.38.1 and earlier, the window was created only after the demuxer opened (`handle_force_window(mpctx, false)` returns early before `open_demux_reentrant`).
+  - A restart finds the host already sized, which is why the repair worked.
+  - MPV's properties stay healthy with a 1×1 window, so `checkPicture` could not see it.
+- **615 Node tests pass** (607 + 8):
+  - `tests/surface.test.mjs`: rectangle scaling and clamping, a 1×1 or hidden child corrected, rounding tolerated, the diagnostic's fit test, and one restart per viewing.
+  - Player tests: `prepare` runs before the spawn and never for MPV's own window; a correction on `file-loaded` and `vo-configured` is reported; persistent corrections restart once with identical arguments apart from position and pipe.
+  - A diagnostic test: a visible 1×1 child in a 1600×900 surface is named and warned.
+  - Each new test failed with its fix removed. Prettier and the Vite build pass.
+- Not run here: the Win32 calls in `electron/video-host.mjs` (`prepare`, `syncChild`, `ShowWindowAsync`). Their syntax was checked, and they follow the bindings already proven on Windows. Also not run: Windows itself, MPV, a GPU, and the user's source.
+
 ## 2026-10-08 — 0.38.2: picture repair and MPV lifecycle (review of #56 plus follow-ups)
 
 - Includes the reviewed #56 commit `f6cd471` unchanged, plus follow-ups found in review. **607 Node tests pass** (602 from #56 + 5). Each new test was run against a copy of `electron/player.mjs` with its fix removed and failed there: `osc-idlescreen=no` in both window modes; a `loadfile` reply after 5 s (mocked timers) still starts, and one that never comes gives up after `LOAD_REPLY_MS`, not 3 s; a playlist `end-file` with reason `redirect` keeps the watchdog; a start superseded while its pipe connects kills its MPV without waiting out the 1.5 s quit timeout. Prettier check and Vite build pass.

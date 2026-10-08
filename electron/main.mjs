@@ -2128,6 +2128,15 @@ app
       };
       // A stuck viewing: reconnect once from the same moment, then move to
       // the next ranked source (core/failover.mjs) when there is one.
+      // MPV's window had to be brought to the surface's size (or shown):
+      // logged for the diagnostic, sizes only (core/surface.mjs).
+      player.onSurfaceFixed = (fix) =>
+        logError(
+          "player",
+          fix.restart
+            ? "نافذة MPV ما أخذت مقاس سطح الفيديو؛ أُعيد التشغيل من نفس اللحظة"
+            : `نافذة MPV كانت ${fix.from?.width ?? "?"}×${fix.from?.height ?? "?"} داخل سطح ${fix.width}×${fix.height}${fix.show ? " ومخفية" : ""}؛ صُحّحت`,
+        );
       player.onStall = ({ buffering, startup }) => {
         logError(
           "player",

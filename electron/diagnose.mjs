@@ -25,6 +25,7 @@ import {
   sanitize,
 } from "../core/diagnose.mjs";
 import { keyFor } from "../core/protocol.mjs";
+import { outputFits } from "../core/surface.mjs";
 
 const GB = 1024 ** 3;
 const round = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
@@ -351,16 +352,19 @@ export async function runDiagnostics(deps) {
           : "السطح غير مدمج في نافذة رِواق",
         data: v,
       };
-    const outputVisible = v.outputWindows?.some(
-      (output) => output.visible && output.width > 0 && output.height > 0,
-    );
+    // MPV's window must cover the surface, not merely exist: one stuck at
+    // 1×1 showed the surface's grey with the sound playing (core/surface.mjs).
+    const outputVisible = outputFits(v.size, v.outputWindows);
     const ok =
       v.embedded && v.nativeVisible && v.siblingsClipped && outputVisible;
+    const small = v.outputWindows?.find((o) => o.visible);
     return {
       status: ok ? "ok" : "warn",
       detail: ok
-        ? "سطح رِواق ونافذة إخراج MPV ظاهران؛ لا يثبت هذا صحة ألوان الفيديو"
-        : "سطح الفيديو أو نافذة إخراج MPV غير ظاهر، أو القص غير صحيح",
+        ? "سطح رِواق ونافذة إخراج MPV ظاهران بنفس المقاس؛ لا يثبت هذا صحة ألوان الفيديو"
+        : !outputVisible && small && v.size?.width
+          ? `نافذة MPV ${small.width}×${small.height} لا تغطي سطح الفيديو ${v.size.width}×${v.size.height}`
+          : "سطح الفيديو أو نافذة إخراج MPV غير ظاهر، أو القص غير صحيح",
       data: v,
     };
   });
