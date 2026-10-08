@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import {
+  LOAD_REPLY_MS,
   Player,
   playerArgs,
   safeVideo,
@@ -9,7 +10,13 @@ import {
 } from "../electron/player.mjs";
 import { DEFAULT_SETTINGS } from "../core/protocol.mjs";
 
-function harness({ exitOnQuit = true } = {}) {
+function harness({
+  exitOnQuit = true,
+  exitOnKill = false,
+  autoConnect = true,
+  // Milliseconds before MPV answers loadfile; null never answers.
+  loadReply = 0,
+} = {}) {
   const children = [],
     sockets = [],
     commands = [],
@@ -22,6 +29,7 @@ function harness({ exitOnQuit = true } = {}) {
       const child = new EventEmitter();
       child.kill = () => {
         child.killed = true;
+        if (exitOnKill) queueMicrotask(() => child.emit("exit", 1));
       };
       children.push(child);
       starts.push({ args, options });
@@ -39,8 +47,8 @@ function harness({ exitOnQuit = true } = {}) {
         commands.push(command);
         if (command[0] === "quit" && exitOnQuit)
           queueMicrotask(() => child.emit("exit", 0));
-        if (command[0] === "loadfile")
-          queueMicrotask(() => {
+        if (command[0] === "loadfile" && loadReply !== null) {
+          const answer = () =>
             // A fast file loads in the same read as the command response.
             socket.emit(
               "data",
@@ -51,10 +59,12 @@ function harness({ exitOnQuit = true } = {}) {
                   "\n",
               ),
             );
-          });
+          if (loadReply > 0) setTimeout(answer, loadReply);
+          else queueMicrotask(answer);
+        }
       };
       sockets.push(socket);
-      queueMicrotask(() => socket.emit("connect"));
+      if (autoConnect) queueMicrotask(() => socket.emit("connect"));
       return socket;
     },
   });
@@ -219,4 +229,96 @@ test("a source stuck before file-loaded times out once and an ended file stops t
   p.startWatchdog();
   p.event({ event: "end-file", reason: "error" });
   assert.equal(p.watchdog, null);
+});
+
+test("MPV starts idle without its logo, embedded or in its own window", () => {
+  for (const separate of [false, true]) {
+    const flags = playerArgs({
+      pipe: "p",
+      host: 7,
+      settings: DEFAULT_SETTINGS,
+      url: "https://cdn.example/video.mkv",
+      title: "t",
+      separate,
+      deferLoad: true,
+    });
+    const options = flags.filter((f) => f.startsWith("--script-opts=")).at(-1);
+    assert.match(options, /osc-idlescreen=no/, `separate: ${separate}`);
+    assert.ok(flags.includes("--idle=yes"));
+    assert.ok(!flags.includes("https://cdn.example/video.mkv"));
+  }
+});
+
+const settle = async (until) => {
+  for (let i = 0; i < 50 && !until(); i++)
+    await new Promise((resolve) => setImmediate(resolve));
+};
+
+test("a slow answer to loadfile (a waking GPU) still starts the viewing", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = harness({ loadReply: 5000 });
+  const started = h.player.start(h.args);
+  await settle(() => h.commands.some((c) => c[0] === "loadfile"));
+  t.mock.timers.tick(5000);
+  const state = await started;
+  assert.equal(state.active, true);
+  assert.equal(h.player.fileLoaded, true);
+  assert.ok(!h.commands.some((c) => c[0] === "quit"));
+  await h.player.stop();
+});
+
+test("a loadfile MPV never answers gives up after the load timeout and quits MPV", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = harness({ loadReply: null });
+  const failed = assert.rejects(
+    h.player.start(h.args),
+    /تعذّر إرسال المصدر إلى MPV/,
+  );
+  await settle(() => h.commands.some((c) => c[0] === "loadfile"));
+  t.mock.timers.tick(3000);
+  await settle(() => false);
+  assert.equal(
+    h.player.state.active,
+    true,
+    "the usual reply time is too short",
+  );
+  t.mock.timers.tick(LOAD_REPLY_MS - 3000);
+  await failed;
+  assert.ok(h.commands.some((c) => c[0] === "quit"));
+  assert.equal(h.player.state.active, false);
+});
+
+test("a playlist redirect keeps watching the entry it hands over to", async () => {
+  const h = harness();
+  await h.player.start(h.args);
+  const socket = h.sockets[0];
+  socket.emit(
+    "data",
+    Buffer.from('{"event":"end-file","reason":"redirect"}\n'),
+  );
+  assert.notEqual(h.player.watchdog, null);
+  socket.emit("data", Buffer.from('{"event":"file-loaded"}\n'));
+  assert.equal(h.player.fileLoaded, true);
+  socket.emit("data", Buffer.from('{"event":"end-file","reason":"eof"}\n'));
+  assert.equal(h.player.watchdog, null);
+  await h.player.stop();
+});
+
+test("a start superseded while connecting kills its MPV at once", async (t) => {
+  const h = harness({
+    autoConnect: false,
+    exitOnKill: true,
+    exitOnQuit: false,
+  });
+  const rejected = assert.rejects(h.player.start(h.args), /بدأ تشغيل مصدر آخر/);
+  await settle(() => h.sockets.length > 0);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let stopped = false;
+  const stopping = h.player.stop().then(() => (stopped = true));
+  h.sockets[0].emit("connect");
+  await rejected;
+  await settle(() => stopped);
+  assert.equal(h.children[0].killed, true);
+  assert.equal(stopped, true, "Stop did not wait out the quit timeout");
+  await stopping;
 });

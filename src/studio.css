@@ -930,6 +930,17 @@ body:has(.theater:not(.mini-theater)) {
   display: flex;
   flex-direction: column;
 }
+/* The picture repair at the foot of the panel keeps the panel's margins. */
+.dock-body > .picture-settings {
+  flex: none;
+  padding: 10px 14px 14px;
+  border-top: 1px solid #ffffff10;
+}
+.dock-body > .picture-settings p {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  line-height: 1.7;
+}
 .dock-chips {
   display: flex;
   gap: 4px;

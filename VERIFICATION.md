@@ -1,6 +1,14 @@
 # Verification — Riwaq
 
-## 2026-10-07 — MPV lifecycle and picture recovery (unreleased after 0.38.1)
+## 2026-10-08 — 0.38.2: picture repair and MPV lifecycle (review of #56 plus follow-ups)
+
+- Includes the reviewed #56 commit `f6cd471` unchanged, plus follow-ups found in review. **607 Node tests pass** (602 from #56 + 5). Each new test was run against a copy of `electron/player.mjs` with its fix removed and failed there: `osc-idlescreen=no` in both window modes; a `loadfile` reply after 5 s (mocked timers) still starts, and one that never comes gives up after `LOAD_REPLY_MS`, not 3 s; a playlist `end-file` with reason `redirect` keeps the watchdog; a start superseded while its pipe connects kills its MPV without waiting out the 1.5 s quit timeout. Prettier check and Vite build pass.
+- MPV source read (master `eb0ee10`, `video/out/w32_common.c` and `player/playloop.c`): with `--wid` MPV creates its child `WS_CHILD | WS_VISIBLE` and `reinit_window_state` jumps past `ShowWindow` when embedded, so the STARTUPINFO flag behind `windowsHide` cannot hide it; dropping the flag is harmless but not a cause. In idle mode with `--force-window=yes`, `idle_loop` creates the VO before IPC commands are dispatched, which is why `loadfile` now waits up to 20 s; OSC draws its idle logo whatever `osc-visibility` says, hence `osc-idlescreen=no`.
+- MPV command lines for a default-settings network viewing, generated from the v0.36.0, v0.37.0 and v0.38.1 sources: 0.37.0 differs from 0.36.0 only by `--volume-max=150`; 0.38.1 adds the buffer options. The 0.37 regression therefore came from the MPV build (replaced in 0.38.1), the per-start `vf remove` (removed in 0.38.1) or a non-default picture option; the repair button bypasses the last for one viewing.
+- Headless Chromium render with a mock bridge (`#hud`, 980×680 and 1440×900): the repair section is inside the dock with the panel's margins (it was flush with both edges before the CSS follow-up), sends `playerCommand` `repairVideo`, reads «إصلاح الصورة بالمعالج» once `compatibilityStage` is set, is disabled while loading; no page errors, no horizontal overflow.
+- Not run here: Windows, MPV, a GPU, the user's Dolby Vision file, HDR or RTX hardware. The grey picture's cause remains unconfirmed; a diagnostic taken while it shows now separates Riwaq's surface from MPV's own window.
+
+## 2026-10-07 — MPV lifecycle and picture recovery (review of #56, released in 0.38.2)
 
 - Base `f92794eda4019ed60a1ab100ea890e15b7a9be10`; reviewed updates 0.35–0.38.1 with emphasis on player changes. No version bump, installer, tag or update publication.
 - **602 Node tests pass** (593 baseline + 9 regression tests). Production Vite build and repository Prettier validation pass; the existing large-bundle advisory remains.

@@ -79,8 +79,10 @@ export function playerArgs({
     "--idle=yes",
     // MPV's own controller draws over the picture, which HTML cannot do over a
     // native surface. It stays hidden until the player goes full screen.
+    // MPV starts idle and gets the source over IPC: its idle logo stays off,
+    // or it would flash on the surface before every viewing.
     "--osc=yes",
-    "--script-opts=osc-visibility=never,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800",
+    "--script-opts=osc-visibility=never,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800,osc-idlescreen=no",
     "--osd-font=Segoe UI",
     // Main decides when the pointer hides; see setCursorHidden.
     "--cursor-autohide=no",
@@ -148,7 +150,7 @@ export function playerArgs({
       "--fullscreen=yes",
       "--ontop=yes",
       "--cursor-autohide=1000",
-      "--script-opts=osc-visibility=auto,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800",
+      "--script-opts=osc-visibility=auto,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800,osc-idlescreen=no",
     );
   else if (host) args.push(`--wid=${host}`);
   if (inputConf) args.push(`--input-conf=${inputConf}`);
@@ -202,6 +204,8 @@ export const STALL_MS = 15000;
 export const BUFFER_STALL_MS = 30000;
 /** A connection that never finishes loading must not wait forever. */
 export const STARTUP_STALL_MS = 60000;
+/** How long MPV may take to answer the command that hands it the source. */
+export const LOAD_REPLY_MS = 20000;
 
 /** How often a change of position alone reaches the interface. */
 export const POSITION_MS = 250;
@@ -477,6 +481,9 @@ export class Player {
         socket.once("connect", () => {
           if (this.child !== child || token !== this.startToken) {
             socket.destroy();
+            // Nothing will ever own this MPV: it goes now, instead of the
+            // newer start or stop waiting out the quit timeout on it.
+            if (this.child === child) child.kill();
             reject(new Error("بدأ تشغيل مصدر آخر"));
             return;
           }
@@ -495,7 +502,9 @@ export class Player {
     // Subscribe before loading: local/cached files can finish loading before
     // the IPC pipe opens, and file-loaded is not replayed for late clients.
     this.startWatchdog();
-    const loaded = await this.request(["loadfile", url]);
+    // MPV answers only after creating its window and graphics device, which
+    // a waking or busy GPU can stretch past the usual reply time.
+    const loaded = await this.request(["loadfile", url], LOAD_REPLY_MS);
     if (token !== this.startToken || this.child !== child)
       throw new Error("بدأ تشغيل مصدر آخر");
     if (!loaded) {
@@ -754,7 +763,9 @@ export class Player {
       this.watchVideo();
       this.fileLoaded = true;
     }
-    if (event.event === "end-file") {
+    // A playlist hands over to its first entry with reason "redirect": the
+    // viewing goes on, and that entry's file-loaded follows.
+    if (event.event === "end-file" && event.reason !== "redirect") {
       this.stopWatchdog();
       this.fileLoaded = false;
       this.save();
@@ -974,14 +985,14 @@ export class Player {
     this.onState(this.state);
   }
   /** Sends a command and resolves with whether MPV accepted it. */
-  request(command) {
+  request(command, timeout = 3000) {
     if (!this.socket?.writable) return Promise.resolve(false);
     const id = ++this.requestId;
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         resolve(false);
-      }, 3000);
+      }, timeout);
       this.pending.set(id, (ok) => {
         clearTimeout(timer);
         resolve(ok);
