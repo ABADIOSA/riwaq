@@ -276,6 +276,30 @@ test("a visible host with a hidden MPV child does not pass the surface check", a
   );
 });
 
+test("an MPV window stuck at 1×1 inside a full surface is named, not passed", async () => {
+  const { deps } = rig();
+  const surface = {
+    embedded: true,
+    visible: true,
+    nativeVisible: true,
+    siblingsClipped: true,
+    size: { width: 1600, height: 900 },
+    outputWindows: [{ visible: true, width: 1, height: 1 }],
+  };
+  deps.videoHost = { inspect: () => surface };
+  let check = (await runDiagnostics(deps)).checks.find(
+    (c) => c.id === "video-surface",
+  );
+  assert.equal(check.status, "warn");
+  assert.match(check.detail, /1×1/);
+  assert.match(check.detail, /1600×900/);
+  surface.outputWindows[0] = { visible: true, width: 1600, height: 900 };
+  check = (await runDiagnostics(deps)).checks.find(
+    (c) => c.id === "video-surface",
+  );
+  assert.equal(check.status, "ok");
+});
+
 test("missing encryption or MPV are reported as problems, not crashes", async () => {
   const { deps } = rig({ mpvExists: false, encryption: false });
   const report = await runDiagnostics(deps);

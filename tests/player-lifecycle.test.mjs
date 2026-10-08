@@ -322,3 +322,88 @@ test("a start superseded while connecting kills its MPV at once", async (t) => {
   assert.equal(stopped, true, "Stop did not wait out the quit timeout");
   await stopping;
 });
+
+function fakeHost(fixes = []) {
+  const host = {
+    handle: 7,
+    calls: [],
+    prepare() {
+      host.calls.push("prepare");
+    },
+    hide() {},
+    syncChild() {
+      host.calls.push("sync");
+      return fixes.length ? fixes.shift() : null;
+    },
+  };
+  return host;
+}
+
+test("the hidden surface is sized before MPV starts, and never for MPV's own window", async () => {
+  const h = harness();
+  const host = fakeHost();
+  let spawnedAtPrepare = null;
+  host.prepare = () => (spawnedAtPrepare = h.children.length);
+  h.player.host = host;
+  await h.player.start(h.args);
+  assert.equal(spawnedAtPrepare, 0, "prepared before the spawn");
+  spawnedAtPrepare = null;
+  await h.player.start({ ...h.args, separate: true });
+  assert.equal(spawnedAtPrepare, null);
+  await h.player.stop();
+});
+
+test("MPV's window is corrected when the picture starts, and the fix is reported", async () => {
+  const h = harness();
+  const fix = {
+    resize: true,
+    show: false,
+    width: 1600,
+    height: 900,
+    from: { width: 1, height: 1 },
+  };
+  const host = fakeHost([fix]);
+  const reported = [];
+  h.player.host = host;
+  h.player.onSurfaceFixed = (f) => reported.push(f);
+  await h.player.start(h.args);
+  assert.ok(host.calls.includes("sync"), "checked on file-loaded");
+  assert.deepEqual(reported, [fix]);
+  h.sockets[0].emit(
+    "data",
+    Buffer.from(
+      '{"event":"property-change","name":"vo-configured","data":true}\n',
+    ),
+  );
+  assert.equal(host.calls.filter((c) => c === "sync").length, 2);
+  await h.player.stop();
+});
+
+test("a window that never takes the size restarts the viewing once, with the same settings", async () => {
+  const h = harness();
+  const fix = {
+    resize: true,
+    width: 1600,
+    height: 900,
+    from: { width: 1, height: 1 },
+  };
+  const host = fakeHost();
+  host.syncChild = () => fix;
+  const reported = [];
+  h.player.host = host;
+  h.player.onSurfaceFixed = (f) => reported.push(f);
+  await h.player.start(h.args);
+  // file-loaded already counted one correction; the watchdog adds the rest.
+  for (let i = 0; i < 6; i++) h.player.checkStall();
+  await settle(() => h.children.length > 1 && h.player.state.active);
+  assert.equal(h.children.length, 2, "one restart, not one per check");
+  assert.equal(reported.filter((f) => f.restart).length, 1);
+  // Same settings: only the position and the pipe's name differ.
+  const fixed = (args) =>
+    args.filter((a) => !/^--(start|input-ipc-server)=/.test(a));
+  assert.deepEqual(fixed(h.starts[1].args), fixed(h.starts[0].args));
+  for (let i = 0; i < 6; i++) h.player.checkStall();
+  await settle(() => false);
+  assert.equal(h.children.length, 2, "the restart keeps its one restart");
+  await h.player.stop();
+});
