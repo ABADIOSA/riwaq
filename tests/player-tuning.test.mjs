@@ -130,12 +130,15 @@ test("the picture's start-up options follow each choice", () => {
   );
   assert.ok(simple.includes("--target-colorspace-hint=no"));
   assert.ok(simple.includes("--d3d11-output-format=rgba8"));
-  const lineless = videoArgs(
-    { hdrMode: "window", linelessVideo: true },
-    { separate: true },
-  );
-  assert.ok(lineless.includes("--d3d11-flip=no"));
-  assert.ok(lineless.includes("--target-colorspace-hint=no"));
+  // The retired lineless mode's BitBlt swapchain hid an embedded picture
+  // beneath Riwaq's page: no profile, old or new, reaches MPV with it.
+  for (const separate of [false, true])
+    assert.ok(
+      !videoArgs(
+        { hdrMode: "window", linelessVideo: true, rtxHdr: true },
+        { separate },
+      ).some((a) => a.startsWith("--d3d11-flip")),
+    );
   assert.ok(
     videoArgs({ displayPanel: "oled" }).includes("--target-contrast=inf"),
   );

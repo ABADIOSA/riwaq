@@ -67,16 +67,16 @@ export const hdrMode = (settings = {}) =>
 
 /** Whether a viewing opens in MPV's own HDR window. */
 export function separateWindow(settings = {}, { hdrSource = false } = {}) {
-  if (settings.simpleColor || settings.linelessVideo) return false;
+  if (settings.simpleColor) return false;
   return hdrMode(settings) === "window" && (hdrSource || !!settings.rtxHdr);
 }
 
 /**
  * Whether MPV signals HDR to the display: only from its own window. The
- * compatibility modes leave the path HDR needs.
+ * simple-colour mode leaves the path HDR needs.
  */
 export function hdrSignal(settings = {}, { separate = false } = {}) {
-  if (settings.simpleColor || settings.linelessVideo) return false;
+  if (settings.simpleColor) return false;
   return hdrMode(settings) === "window" && separate;
 }
 
@@ -204,9 +204,9 @@ export function hwdecValue(settings = {}) {
 
 /**
  * Start-up options for the picture: MPV's own quality profiles, the
- * renderer, the display's HDR signal and panel, and two compatibility modes.
- * Simple colour and the lineless mode both turn the HDR signal off, since
- * they work by leaving the path HDR needs.
+ * renderer, the display's HDR signal and panel, and the simple-colour
+ * compatibility mode, which turns the HDR signal off since it works by
+ * leaving the path HDR needs.
  */
 export function videoArgs(settings = {}, { separate = false } = {}) {
   const args = [];
@@ -220,7 +220,11 @@ export function videoArgs(settings = {}, { separate = false } = {}) {
   );
   if (settings.simpleColor)
     args.push("--d3d11-output-format=rgba8", "--dither-depth=8");
-  if (settings.linelessVideo) args.push("--d3d11-flip=no");
+  // Never --d3d11-flip=no: Riwaq's window is presented by Chromium through
+  // DirectComposition, and a BitBlt-model swapchain draws into the window's
+  // redirection surface, beneath Chromium's own layer. MPV then plays with
+  // every property healthy while the viewer sees Riwaq's page: the 0.37–0.38.3
+  // "sound without a picture" ("lineless video" option, retired in 0.38.4).
   if (settings.displayPanel === "oled") args.push("--target-contrast=inf");
   else if (settings.displayPanel === "lcd") args.push("--target-contrast=1000");
   return args;

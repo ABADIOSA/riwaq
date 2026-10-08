@@ -183,7 +183,6 @@ export function safeVideo(stage = 2, { dolbyVision = false } = {}) {
     renderer: dolbyVision ? "gpu-next" : "gpu",
     videoQuality: "balanced",
     simpleColor: false,
-    linelessVideo: false,
     displayPanel: "auto",
     rtxUpscale: false,
     rtxHdr: false,

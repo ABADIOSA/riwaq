@@ -201,12 +201,6 @@ export function VideoPage({ state, update, act, notice }) {
           text="يخرج الصورة بألوان 8 بت لكروت الشاشة القديمة، ويطفئ HDR."
           onChange={(simpleColor) => set({ simpleColor })}
         />
-        <Toggle
-          on={s.linelessVideo}
-          title="فيديو بلا خطوط"
-          text="يزيل خطاً رفيعاً لامعاً تظهره بعض الشاشات عند الحافة. قد يخفت HDR ويقل سلاسة 4K. اتركه مطفأ إلا إذا رأيت الخط."
-          onChange={(linelessVideo) => set({ linelessVideo })}
-        />
       </section>
       <section className="settings-card">
         <h2>HDR</h2>

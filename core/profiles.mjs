@@ -11,7 +11,7 @@
  */
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { DEFAULT_SETTINGS } from "./protocol.mjs";
+import { DEFAULT_SETTINGS, retireLineless } from "./protocol.mjs";
 
 export const LOCKABLE_ROOMS = [
   "live",
@@ -85,10 +85,10 @@ export class Profiles {
         collections: Array.isArray(this.client.state.collections)
           ? this.client.state.collections
           : [],
-        settings: {
+        settings: retireLineless({
           ...DEFAULT_SETTINGS,
           ...(this.client.state.settings || {}),
-        },
+        }),
       };
       store.active = id;
     }
@@ -112,7 +112,10 @@ export class Profiles {
     bucket.queue ||= [];
     bucket.connectedLists ||= [];
     bucket.collections ||= [];
-    bucket.settings = { ...DEFAULT_SETTINGS, ...(bucket.settings || {}) };
+    bucket.settings = retireLineless({
+      ...DEFAULT_SETTINGS,
+      ...(bucket.settings || {}),
+    });
     return bucket;
   }
   /** Points the live client state at the active profile's bucket. */
