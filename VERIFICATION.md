@@ -1,5 +1,20 @@
 # Verification — Riwaq
 
+## 2026-10-08 — 0.38.4: the "lineless video" option retired (the reported cause)
+
+- Report: 0.38.3 still showed sound without a picture. The diagnostic's settings had `linelessVideo: true`, `videoQuality: high`, `renderer: gpu-next`, `displayPanel: oled`, `hdrMode: window`, `rtxUpscale`/`rtxHdr: true`, and `hdr: true`.
+- Its error log was empty: no 0.38.3 surface correction happened. The MPV log shows gpu-next rendering normally.
+- Generated MPV arguments for those settings: `separateWindow` was false because `linelessVideo` blocked it, so the viewing was embedded with `--d3d11-flip=no`, among other options.
+- Cause:
+  - A BitBlt-model swapchain in a child of a Chromium (DirectComposition) window draws into the redirection surface, beneath Chromium's own layer. The picture is hidden while every MPV property stays healthy.
+  - The option arrived in 0.37.0, when the reports began.
+  - `repairVideo` (stage 1) turns it off, which is why the button worked.
+  - This reasoning was not reproduced on Windows here.
+- **618 Node tests pass** (615 + 3 in `tests/lineless.test.mjs`, plus a changed tuning assertion):
+  - With the reported settings, no MPV argument list, embedded or separate, carries `--d3d11-flip`.
+  - Client load, profile buckets and an old backup's `safeSettings` drop the option. A `window` mode it blocked becomes `tonemap`; one chosen afterwards is kept.
+  - Each test failed with its fix removed. Prettier and the Vite build pass.
+
 ## 2026-10-08 — 0.38.3: MPV's window kept at the surface's size
 
 - Report: on 0.38.2 the first viewing showed a grey picture with sound, and «إصلاح الصورة» fixed it.

@@ -8,6 +8,7 @@ import {
   resourceUrl,
   catalogExtras,
   mergeAddons,
+  retireLineless,
   safeSettings,
   webUrl,
 } from "./protocol.mjs";
@@ -221,7 +222,10 @@ export class Client {
       lastSync: null,
       ...load(),
     };
-    this.state.settings = { ...DEFAULT_SETTINGS, ...this.state.settings };
+    this.state.settings = retireLineless({
+      ...DEFAULT_SETTINGS,
+      ...this.state.settings,
+    });
     this.streams = new Map();
     this.subtitles = new Map();
     this.subtitleInfo = new Map();

@@ -102,7 +102,6 @@ export const DEFAULT_SETTINGS = {
   hwdec: "auto",
   renderer: "gpu-next",
   simpleColor: false,
-  linelessVideo: false,
   displayPanel: "auto",
   // How HDR reaches the display (core/player-tuning.mjs HDR_MODES).
   hdrMode: "tonemap",
@@ -412,7 +411,6 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "rememberSeries",
     "skipOnline",
     "simpleColor",
-    "linelessVideo",
     "rtxUpscale",
     "rtxHdr",
     "audioNormalize",
@@ -592,5 +590,22 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
       input.subtitleStyle,
       current.subtitleStyle || DEFAULT_SUBTITLE_STYLE,
     );
+  // A restored backup from before 0.38.4 may still carry it.
+  return retireLineless(next, input);
+}
+
+/**
+ * 0.37–0.38.3 had a "lineless video" option that passed --d3d11-flip=no,
+ * which hides an embedded picture beneath Riwaq's page (core/player-tuning.mjs
+ * videoArgs). It is gone. It also kept MPV's own HDR window from opening, so a
+ * profile that had it with that window chosen always watched inside Riwaq:
+ * that is kept, as SDR conversion, and the window stays one choice away.
+ */
+export function retireLineless(settings, legacy = settings) {
+  if (!settings || typeof settings !== "object") return settings;
+  const next = { ...settings };
+  if (legacy?.linelessVideo === true && next.hdrMode === "window")
+    next.hdrMode = "tonemap";
+  delete next.linelessVideo;
   return next;
 }
