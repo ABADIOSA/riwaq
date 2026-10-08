@@ -1,6 +1,6 @@
 {
   "name": "riwaq",
-  "version": "0.38.1",
+  "version": "0.38.2",
   "private": true,
   "type": "module",
   "description": "Riwaq — an Arabic-first desktop client for the Stremio addon ecosystem",

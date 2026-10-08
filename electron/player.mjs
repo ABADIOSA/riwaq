@@ -65,6 +65,7 @@ export function playerArgs({
   separate = false,
   local = false,
   bufferMiB = 512,
+  deferLoad = false,
 }) {
   const args = [
     "--no-config",
@@ -78,8 +79,10 @@ export function playerArgs({
     "--idle=yes",
     // MPV's own controller draws over the picture, which HTML cannot do over a
     // native surface. It stays hidden until the player goes full screen.
+    // MPV starts idle and gets the source over IPC: its idle logo stays off,
+    // or it would flash on the surface before every viewing.
     "--osc=yes",
-    "--script-opts=osc-visibility=never,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800",
+    "--script-opts=osc-visibility=never,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800,osc-idlescreen=no",
     "--osd-font=Segoe UI",
     // Main decides when the pointer hides; see setCursorHidden.
     "--cursor-autohide=no",
@@ -147,7 +150,7 @@ export function playerArgs({
       "--fullscreen=yes",
       "--ontop=yes",
       "--cursor-autohide=1000",
-      "--script-opts=osc-visibility=auto,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800",
+      "--script-opts=osc-visibility=auto,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800,osc-idlescreen=no",
     );
   else if (host) args.push(`--wid=${host}`);
   if (inputConf) args.push(`--input-conf=${inputConf}`);
@@ -164,7 +167,7 @@ export function playerArgs({
           )
           .join(","),
     );
-  args.push("--", url);
+  if (!deferLoad) args.push("--", url);
   return args;
 }
 
@@ -185,6 +188,9 @@ export function safeVideo(stage = 2, { dolbyVision = false } = {}) {
     rtxHdr: false,
     hdr: false,
     hdrMode: "tonemap",
+    shader: "none",
+    shaderPath: "",
+    toneMapping: "off",
   };
   if (stage >= 2)
     Object.assign(settings, { hwdec: "off", hardwareDecoding: false });
@@ -196,6 +202,10 @@ export const SAFE_VIDEO = safeVideo(2);
 export const STALL_MS = 15000;
 /** Waiting on the network counts as stuck only after this long. */
 export const BUFFER_STALL_MS = 30000;
+/** A connection that never finishes loading must not wait forever. */
+export const STARTUP_STALL_MS = 60000;
+/** How long MPV may take to answer the command that hands it the source. */
+export const LOAD_REPLY_MS = 20000;
 
 /** How often a change of position alone reaches the interface. */
 export const POSITION_MS = 250;
@@ -259,7 +269,11 @@ export class Player {
     settingsNow,
     skipPrefs,
     displayHeight,
+    spawnProcess = spawn,
+    connectSocket = (pipe) => net.createConnection(pipe),
   }) {
+    this.spawnProcess = spawnProcess;
+    this.connectSocket = connectSocket;
     this.host = host;
     // The display's height in pixels, for RTX upscaling's factor.
     this.displayHeight = displayHeight;
@@ -314,7 +328,7 @@ export class Player {
     // MPV, and only the newest may spawn, or the older one would keep
     // playing into the surface with nothing owning it.
     const token = (this.startToken = (this.startToken || 0) + 1);
-    await this.stop();
+    await this.stop({ cancelStart: false });
     if (token !== this.startToken) throw new Error("بدأ تشغيل مصدر آخر");
     // Kept in main only, for seek previews; never part of the HUD's state.
     this.source = { url, headers, local, live };
@@ -340,6 +354,8 @@ export class Player {
     this.meta = meta;
     this.videoId = videoId;
     this.settings = settings;
+    // Live preferences must never re-enable RTX during a compatibility retry.
+    this.compatibility = !!safe && (this.safeStage || 0) > 0;
     this.lastSaved = 0;
     this.externalSubs = new Map();
     this.rawTracks = [];
@@ -390,9 +406,10 @@ export class Player {
         ? tags.filter((t) => typeof t === "string").slice(0, 6)
         : [],
       stats: false,
+      compatibilityStage: this.compatibility ? this.safeStage : 0,
       shader: settings.shader || "none",
     };
-    const child = spawn(
+    const child = this.spawnProcess(
       executable,
       playerArgs({
         pipe,
@@ -409,10 +426,11 @@ export class Player {
         separate,
         local,
         bufferMiB,
+        deferLoad: true,
       }),
-      // windowsHide asks Windows to hide the first window shown, which
-      // would hide MPV's own HDR window.
-      { windowsHide: !separate, stdio: "ignore", shell: false },
+      // MPV is a GUI process. SW_HIDE can also hide its child video window;
+      // the host owns visibility of embedded playback.
+      { windowsHide: false, stdio: "ignore", shell: false },
     );
     this.child = child;
     let processError = false;
@@ -431,7 +449,7 @@ export class Player {
       if (this.child !== child) return;
       this.save();
       this.child = null;
-      this.socket?.destroy();
+      this.disconnect();
       this.clearSleep();
       this.stopWatchdog();
       this.state = { ...this.state, active: false };
@@ -442,7 +460,12 @@ export class Player {
     await new Promise((resolve, reject) => {
       let attempts = 0;
       const connect = () => {
-        if (processError || this.child !== child || attempts++ > 60) {
+        if (
+          processError ||
+          this.child !== child ||
+          token !== this.startToken ||
+          attempts++ > 60
+        ) {
           // MPV may still be opening the stream: without its pipe nothing can
           // pause or stop it, so it must not be left playing. Its exit
           // handler marks the viewing inactive.
@@ -450,12 +473,20 @@ export class Player {
           reject(new Error("تعذّر الاتصال بالمشغل"));
           return;
         }
-        const socket = net.createConnection(pipe);
+        const socket = this.connectSocket(pipe);
         socket.once("error", () => {
           socket.destroy();
           setTimeout(connect, 100);
         });
         socket.once("connect", () => {
+          if (this.child !== child || token !== this.startToken) {
+            socket.destroy();
+            // Nothing will ever own this MPV: it goes now, instead of the
+            // newer start or stop waiting out the quit timeout on it.
+            if (this.child === child) child.kill();
+            reject(new Error("بدأ تشغيل مصدر آخر"));
+            return;
+          }
           connected = true;
           socket.removeAllListeners("error");
           socket.on("error", () => {});
@@ -466,17 +497,32 @@ export class Player {
       };
       connect();
     });
+    if (token !== this.startToken || this.child !== child)
+      throw new Error("بدأ تشغيل مصدر آخر");
+    // Subscribe before loading: local/cached files can finish loading before
+    // the IPC pipe opens, and file-loaded is not replayed for late clients.
+    this.startWatchdog();
+    // MPV answers only after creating its window and graphics device, which
+    // a waking or busy GPU can stretch past the usual reply time.
+    const loaded = await this.request(["loadfile", url], LOAD_REPLY_MS);
+    if (token !== this.startToken || this.child !== child)
+      throw new Error("بدأ تشغيل مصدر آخر");
+    if (!loaded) {
+      await this.stop();
+      throw new Error("تعذّر إرسال المصدر إلى MPV");
+    }
     if (Number(settings.sleepTimer) > 0)
       this.setSleep(Number(settings.sleepTimer));
-    this.startWatchdog();
     return this.state;
   }
   attach(socket) {
     let buffer = "";
     socket.on("data", (chunk) => {
+      if (this.socket !== socket) return;
       buffer += chunk.toString();
       let index;
       while ((index = buffer.indexOf("\n")) >= 0) {
+        if (this.socket !== socket) break;
         const line = buffer.slice(0, index);
         buffer = buffer.slice(index + 1);
         try {
@@ -717,7 +763,11 @@ export class Player {
       this.watchVideo();
       this.fileLoaded = true;
     }
-    if (event.event === "end-file") {
+    // A playlist hands over to its first entry with reason "redirect": the
+    // viewing goes on, and that entry's file-loaded follows.
+    if (event.event === "end-file" && event.reason !== "redirect") {
+      this.stopWatchdog();
+      this.fileLoaded = false;
       this.save();
       if (event.reason === "error") {
         this.state.error = "تعذّر تشغيل هذا المصدر. جرّب مصدراً آخر.";
@@ -851,6 +901,7 @@ export class Player {
   restartSafe(stage = 2) {
     if (!this.lastStart || !this.state.active) return null;
     const dolbyVision = (this.lastStart.tags || []).includes("Dolby Vision");
+    this.safeStage = stage;
     return this.start({
       ...this.lastStart,
       start: Math.max(0, Number(this.state.position) || 0),
@@ -896,8 +947,22 @@ export class Player {
     const state = this.state;
     if (!state.active) return;
     this.checkPicture(now);
+    // A picture recovery may have synchronously stopped this viewing.
+    if (this.state !== state || !state.active) return;
     const position = Number(state.position) || 0;
-    if (state.pause || !this.fileLoaded || position !== this.lastPos) {
+    if (!this.fileLoaded && !state.pause) {
+      if (!this.stallReported && now - this.lastMove >= STARTUP_STALL_MS) {
+        this.stallReported = true;
+        this.onStall?.({
+          videoId: this.videoId,
+          buffering: true,
+          position,
+          startup: true,
+        });
+      }
+      return;
+    }
+    if (state.pause || position !== this.lastPos) {
       this.lastPos = position;
       this.lastMove = now;
       if (!state.pause) this.stallReported = false;
@@ -920,14 +985,14 @@ export class Player {
     this.onState(this.state);
   }
   /** Sends a command and resolves with whether MPV accepted it. */
-  request(command) {
+  request(command, timeout = 3000) {
     if (!this.socket?.writable) return Promise.resolve(false);
     const id = ++this.requestId;
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         resolve(false);
-      }, 3000);
+      }, timeout);
       this.pending.set(id, (ok) => {
         clearTimeout(timer);
         resolve(ok);
@@ -941,9 +1006,32 @@ export class Player {
    * settings change. Each candidate filter is tried until MPV accepts one;
    * MPV keeps the old chain when one cannot start.
    */
-  async refreshRtx() {
+  refreshRtx() {
+    const viewing = this.state;
+    this.rtxRevision = (this.rtxRevision || 0) + 1;
+    if (this.rtxJob?.viewing === viewing) return this.rtxJob.promise;
+    const job = { viewing };
+    this.rtxJob = job;
+    job.promise = (async () => {
+      let revision;
+      do {
+        revision = this.rtxRevision;
+        await this.applyRtx();
+      } while (
+        this.state === viewing &&
+        viewing.active &&
+        revision !== this.rtxRevision
+      );
+    })().finally(() => {
+      if (this.rtxJob === job) this.rtxJob = null;
+    });
+    return job.promise;
+  }
+  async applyRtx() {
     if (!this.state.active || this.state.live) return;
-    const settings = this.settingsNow?.() || this.settings || {};
+    const settings = this.compatibility
+      ? this.settings || {}
+      : this.settingsNow?.() || this.settings || {};
     const candidates = rtxFilters(settings, {
       decoder: this.state.decoder,
       height: this.state.height,
@@ -960,7 +1048,9 @@ export class Player {
     // picture on some builds (the 0.37 report).
     if (!candidates.length && !this.rtxAdded) return;
     if (this.rtxAdded) {
-      await this.request(["vf", "remove", "@riwaqrtx"]);
+      const removed = await this.request(["vf", "remove", "@riwaqrtx"]);
+      if (this.state !== viewing) return;
+      if (!removed) return;
       this.rtxAdded = false;
     }
     let status = null;
@@ -968,7 +1058,9 @@ export class Player {
       status = "unavailable";
       for (const filter of candidates) {
         if (this.state !== viewing || this.rtxApplied !== wanted) return;
-        if (await this.request(["vf", "add", filter])) {
+        const added = await this.request(["vf", "add", filter]);
+        if (this.state !== viewing) return;
+        if (added) {
           this.rtxAdded = true;
           status = filter.includes("nvidia-true-hdr")
             ? filter.includes("scaling-mode")
@@ -1023,6 +1115,8 @@ export class Player {
   }
   command({ action, value }) {
     if (!this.state.active) throw new Error("لا توجد مشاهدة حالية");
+    if (action === "repairVideo")
+      return this.restartSafe(Math.min(2, (this.safeStage || 0) + 1));
     const number = Number(value);
     if (action === "pause") this.send(["cycle", "pause"]);
     else if (action === "seek" && Number.isFinite(number))
@@ -1198,24 +1292,52 @@ export class Player {
     if (secondary) this.pendingSecondary = path;
     this.send(["sub-add", path, secondary ? "auto" : "select"]);
   }
-  async stop() {
+  disconnect() {
+    const socket = this.socket;
+    this.socket = null;
+    socket?.destroy();
+    for (const done of this.pending.values()) done(false);
+    this.pending.clear();
+  }
+  async stop({ cancelStart = true } = {}) {
+    if (cancelStart) this.startToken = (this.startToken || 0) + 1;
     const child = this.child;
     this.clearSleep();
     this.stopWatchdog();
-    if (!child) return;
+    clearTimeout(this.publishTimer);
+    this.publishTimer = null;
+    if (this.stopping) return this.stopping;
+    if (!child) {
+      this.disconnect();
+      return;
+    }
     this.save();
-    this.send(["quit"]);
-    await new Promise((resolve) => {
+    const socket = this.socket;
+    // Retire the viewing before an asynchronous exit: no more recovery or
+    // late property events may act on it while Stop is in progress.
+    this.state = { ...this.state, active: false, loading: false };
+    this.host?.hide();
+    this.onState(this.state);
+    this.stopping = new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        child.removeListener("exit", finish);
+        if (this.child === child) this.child = null;
+        if (this.socket === socket) this.disconnect();
+        resolve();
+      };
       const timer = setTimeout(() => {
         child.kill();
-        resolve();
+        finish();
       }, 1500);
-      child.once("exit", () => {
-        clearTimeout(timer);
-        resolve();
-      });
+      child.once("exit", finish);
     });
-    this.socket?.destroy();
-    if (this.child === child) this.child = null;
+    this.send(["quit"]);
+    this.disconnect();
+    try {
+      await this.stopping;
+    } finally {
+      this.stopping = null;
+    }
   }
 }

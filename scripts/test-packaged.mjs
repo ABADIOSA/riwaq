@@ -226,12 +226,54 @@ try {
     JSON.stringify(active.video),
   );
   assert.ok(active.video.rectangle.width > 800);
+  assert.ok(
+    active.video.outputWindows?.some(
+      (w) => w.visible && w.width > 800 && w.height > 0,
+    ),
+    "MPV's actual child output is visible, not just the grey host",
+  );
+  const recoveries = [];
+  for (const stage of [1, 2]) {
+    const position = await evaluate(`window.__packagedPlayer.position`);
+    await evaluate(`window.riwaq.call('playerCommand',{action:'repairVideo'})`);
+    let state;
+    for (let i = 0; i < 80; i++) {
+      state = await evaluate(`window.__packagedPlayer`);
+      if (
+        state?.compatibilityStage === stage &&
+        state.voConfigured &&
+        state.outWidth > 0 &&
+        state.position >= position &&
+        !state.loading
+      )
+        break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    assert.equal(state.compatibilityStage, stage);
+    assert.ok(
+      state.voConfigured && state.outWidth > 0 && state.position >= position,
+      "Compatibility restart decodes from the saved position",
+    );
+    await evaluate(`window.riwaq.call('playerCommand',{action:'pause'})`);
+    let surface;
+    for (let i = 0; i < 60; i++) {
+      surface = (await evaluate(`window.riwaq.call('diagnostics')`)).video;
+      if (surface.outputWindows?.some((w) => w.visible && w.width > 800)) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.ok(
+      surface.outputWindows?.some((w) => w.visible && w.width > 800),
+      "Restart restores the MPV child surface",
+    );
+    recoveries.push({ stage, position: state.position, surface });
+  }
   assert.deepEqual(
     rendererErrors,
     [],
     "No uncaught renderer errors during playback",
   );
   await evaluate(`window.riwaq.call('stop')`);
+  assert.equal(await evaluate(`window.__packagedPlayer.active`), false);
   const result = {
     passed: true,
     mode: sourceMode ? "source" : "packaged",
@@ -254,6 +296,7 @@ try {
     ],
     diagnostics,
     activeVideo: active.video,
+    recoveries,
   };
   writeFileSync(join(output, "results.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));

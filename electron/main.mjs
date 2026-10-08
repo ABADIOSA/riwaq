@@ -2128,12 +2128,14 @@ app
       };
       // A stuck viewing: reconnect once from the same moment, then move to
       // the next ranked source (core/failover.mjs) when there is one.
-      player.onStall = ({ buffering }) => {
+      player.onStall = ({ buffering, startup }) => {
         logError(
           "player",
-          buffering
-            ? "التشغيل توقف ينتظر الشبكة أكثر من 30 ثانية"
-            : "التشغيل علق: الموضع لم يتحرك 15 ثانية",
+          startup
+            ? "المصدر لم يبدأ خلال 60 ثانية"
+            : buffering
+              ? "التشغيل توقف ينتظر الشبكة أكثر من 30 ثانية"
+              : "التشغيل علق: الموضع لم يتحرك 15 ثانية",
         );
         if ((player.stallRetries || 0) < 1) {
           player.stallRetries = 1;

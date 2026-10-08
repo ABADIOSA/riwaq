@@ -291,7 +291,7 @@ export async function runDiagnostics(deps) {
     });
     await add(
       "mpv-decode",
-      "MPV يفك ويعرض إطارات",
+      "MPV يفك إطارات تجريبية",
       async () => {
         const r = await run(
           mpv,
@@ -307,7 +307,10 @@ export async function runDiagnostics(deps) {
           { timeout: 20000 },
         );
         return r.code === 0
-          ? { detail: "شغّل 30 إطاراً تجريبياً" }
+          ? {
+              detail:
+                "فك 30 إطاراً دون مخرج عرض؛ هذا الاختبار لا يتحقق من ظهور الصورة",
+            }
           : {
               status: "fail",
               detail: clean(`رمز الخروج ${r.code}: ${r.out}`, 300),
@@ -348,12 +351,16 @@ export async function runDiagnostics(deps) {
           : "السطح غير مدمج في نافذة رِواق",
         data: v,
       };
-    const ok = v.embedded && v.siblingsClipped;
+    const outputVisible = v.outputWindows?.some(
+      (output) => output.visible && output.width > 0 && output.height > 0,
+    );
+    const ok =
+      v.embedded && v.nativeVisible && v.siblingsClipped && outputVisible;
     return {
       status: ok ? "ok" : "warn",
       detail: ok
-        ? "السطح داخل نافذة رِواق"
-        : "السطح غير مدمج أو لا يقص ما فوقه",
+        ? "سطح رِواق ونافذة إخراج MPV ظاهران؛ لا يثبت هذا صحة ألوان الفيديو"
+        : "سطح الفيديو أو نافذة إخراج MPV غير ظاهر، أو القص غير صحيح",
       data: v,
     };
   });
