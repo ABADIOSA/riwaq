@@ -4,7 +4,7 @@ An optional Riwaq account carries a viewer's data between the Windows app on sev
 
 - Client: `core/account.mjs` (`AccountHub`, on `client.account`), `core/sync-merge.mjs`, the Settings page `src/components/settings/AccountPage.jsx` (Settings → الحسابات والربط → حساب رِواق).
 - Service: `server/accounts/` — a Cloudflare Worker (`worker.mjs`) with a D1 database (`migrations/`), deployed by `.github/workflows/accounts.yml`.
-- Address: `core/account-server.mjs` (`ACCOUNT_SERVER`). Empty until the service is deployed; the page then says accounts are coming and nothing is sent. Tests and development set `RIWAQ_ACCOUNT_SERVER` (main's environment, or the web build's).
+- Address: `core/account-server.mjs` (`ACCOUNT_SERVER`): `https://riwaq-accounts.abadiosa2007.workers.dev`, the Worker's name on the project's workers.dev subdomain. An empty value turns accounts off (the page then says they are coming and nothing is sent). Tests and development set `RIWAQ_ACCOUNT_SERVER` (main's environment, or the web build's).
 
 ## What syncs
 
@@ -58,7 +58,7 @@ Cloudflare's free plan (100k requests and 100k database row writes a day) suits 
 3. Copy the **Account ID** shown in the dashboard.
 4. In GitHub: **Settings → Secrets and variables → Actions → New repository secret**: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 5. Run **Actions → Account service → Run workflow** (it also runs when `server/accounts` changes on `main`). The first run creates the D1 database, applies the migrations, deploys the Worker and generates `AUTH_PEPPER` as a Worker secret. Its summary prints the address.
-6. Put that address in `core/account-server.mjs` and release: the app and the site then offer accounts.
+6. Check that the printed address matches `core/account-server.mjs` (a different subdomain or Worker name means changing it there), then release: the app and the site offer accounts.
 
 Locally: `node server/accounts/local.mjs` runs the same Worker over Node's SQLite.
 
