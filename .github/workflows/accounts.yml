@@ -17,6 +17,7 @@ on:
     branches: [main]
     paths:
       - "server/accounts/**"
+      - "scripts/test-account-live.mjs"
       - ".github/workflows/accounts.yml"
   workflow_dispatch:
 
@@ -100,7 +101,10 @@ jobs:
         if: steps.ready.outputs.ok == 'true'
         working-directory: server/accounts
         run: |
-          if ! wrangler secret list 2>/dev/null | grep -q '"AUTH_PEPPER"'; then
+          # A new pepper would lock every account out, so a listing that fails
+          # stops here instead of counting as "no pepper yet".
+          secrets=$(wrangler secret list --format json)
+          if ! printf '%s' "$secrets" | grep -q '"AUTH_PEPPER"'; then
             node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))' \
               | wrangler secret put AUTH_PEPPER
           fi
@@ -117,3 +121,10 @@ jobs:
           echo
           echo "### Riwaq account service" >> "$GITHUB_STEP_SUMMARY"
           echo "Address: $URL — set it as ACCOUNT_SERVER in core/account-server.mjs." >> "$GITHUB_STEP_SUMMARY"
+      - name: Try an account end to end
+        if: steps.ready.outputs.ok == 'true' && steps.deploy.outputs.url != ''
+        env:
+          RIWAQ_ACCOUNT_SERVER: ${{ steps.deploy.outputs.url }}
+        # A throwaway account: made, signed in on a second device, synced
+        # both ways and deleted (scripts/test-account-live.mjs).
+        run: node scripts/test-account-live.mjs
