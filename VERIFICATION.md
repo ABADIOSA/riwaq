@@ -8,6 +8,7 @@
 - Native source smoke (`scripts/test-packaged.mjs --source --offline`) passes: Electron startup, DPAPI, embedded MPV fixture decoding, and its output window visible at 2560×1440 covering the native surface. The forced-stop lifecycle test now requires an inactive state with no child even when MPV emits no exit event.
 - Local music UI smoke passes: real WAV decode/position and IPC (only chooser stubbed), transport, persistence without autoplay, video/profile isolation and 980×680. The deferred account merge covers video only.
 - Not run here: a new installer/upgrade, Windows account sign-in through the interface, long-lived sync against the deployed service, or the user's original grey-frame media/GPU/HDR conditions. No release published; source validation does not claim those flows.
+- CI exposed a smoke-harness dependency on live Cinemeta CORS responses after all new playback/account assertions passed. The Chromium contexts now abort non-loopback HTTP(S) as offline; all tested addon, video and account requests still use the real local servers. Application exceptions remain asserted. This removes live-service timing from this test and does not verify production catalog availability.
 
 ## 2026-10-11 — 0.40.0: optional, end-to-end encrypted Riwaq accounts
 

@@ -159,7 +159,20 @@ const siteUrl = `http://127.0.0.1:${sitePort}/`;
 const browser = await chromium.launch({
   args: ["--autoplay-policy=no-user-gesture-required"],
 });
-const context = await browser.newContext({
+const openContext = async (options) => {
+  const ctx = await browser.newContext(options);
+  // This smoke owns its addon/account servers. Cinemeta and other remote
+  // services must not make CI depend on live availability, CORS or rate limits.
+  // Model them as offline; application errors are still collected below.
+  await ctx.route(/^https?:\/\//, (route) => {
+    const url = new URL(route.request().url());
+    return url.hostname === "127.0.0.1"
+      ? route.continue()
+      : route.abort("internetdisconnected");
+  });
+  return ctx;
+};
+const context = await openContext({
   viewport: { width: 1280, height: 800 },
   acceptDownloads: true,
 });
@@ -167,8 +180,8 @@ const problems = [];
 const watch = (page) => {
   page.on("pageerror", (error) => problems.push(`pageerror: ${error.message}`));
   page.on("console", (m) => {
-    // Hosts outside this machine (Cinemeta, Wikidata…) may be unreachable
-    // where this runs; only the page's own errors count.
+    // External requests are deliberately offline; their browser resource
+    // notices do not count as application exceptions.
     if (m.type() === "error" && !/Failed to load resource/.test(m.text()))
       problems.push(`console: ${m.text()}`);
   });
@@ -378,7 +391,7 @@ try {
     },
   );
   const openDevice = async () => {
-    const ctx = await browser.newContext({
+    const ctx = await openContext({
       viewport: { width: 1280, height: 800 },
     });
     const tab = await ctx.newPage();
