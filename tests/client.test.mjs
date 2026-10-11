@@ -287,3 +287,21 @@ test("the safety setting reaches the engine through the client", async () => {
     1,
   );
 });
+
+test("an addon installed while Cinemeta is still being asked survives its failure", async () => {
+  let failCinemeta;
+  const c = client({
+    request: (url) =>
+      url.includes("cinemeta")
+        ? new Promise((_, reject) => (failCinemeta = reject))
+        : Promise.resolve(manifest),
+  });
+  const starting = c.init();
+  await c.install("https://addon.example/manifest.json");
+  failCinemeta(new Error("offline"));
+  const state = await starting;
+  assert.deepEqual(
+    state.addons.map((a) => a.id),
+    ["test.provider", "com.linvo.cinemeta"],
+  );
+});

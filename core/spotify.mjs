@@ -42,11 +42,16 @@ export function pkce() {
   return { verifier, challenge };
 }
 
-export function authorizeUrl({ clientId, challenge, state }) {
+export function authorizeUrl({
+  clientId,
+  challenge,
+  state,
+  redirect = SPOTIFY_REDIRECT,
+}) {
   return `${ACCOUNTS}/authorize?${new URLSearchParams({
     client_id: clientId,
     response_type: "code",
-    redirect_uri: SPOTIFY_REDIRECT,
+    redirect_uri: redirect,
     code_challenge_method: "S256",
     code_challenge: challenge,
     scope: SPOTIFY_SCOPES.join(" "),
@@ -168,10 +173,19 @@ export async function spotifyFetch(url, init = {}) {
 export class SpotifyHub {
   /**
    * `bag()` returns the mutable `integrations.spotify` object, `save()`
-   * persists, `request` is spotifyFetch (replaced in tests).
+   * persists, `request` is spotifyFetch (replaced in tests). `redirect` is
+   * the address the viewer registers with Spotify: the desktop's loopback
+   * server, or the web edition's own page.
    */
-  constructor({ bag, save, request = spotifyFetch, now = () => Date.now() }) {
+  constructor({
+    bag,
+    save,
+    request = spotifyFetch,
+    now = () => Date.now(),
+    redirect = SPOTIFY_REDIRECT,
+  }) {
     this.bag = bag;
+    this.redirect = redirect;
     this.save = save;
     this.request = request;
     this.now = now;
@@ -188,7 +202,7 @@ export class SpotifyHub {
       connected: !!s.token?.refresh_token,
       name: text(s.name, 80),
       premium: s.product === "premium",
-      redirect: SPOTIFY_REDIRECT,
+      redirect: this.redirect,
     };
   }
   setClientId(value) {
@@ -237,7 +251,7 @@ export class SpotifyHub {
     const token = await this.tokenRequest({
       grant_type: "authorization_code",
       code,
-      redirect_uri: SPOTIFY_REDIRECT,
+      redirect_uri: this.redirect,
       client_id: s.clientId,
       code_verifier: verifier,
     });

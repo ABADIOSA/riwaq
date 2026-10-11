@@ -94,6 +94,10 @@ React (sandboxed, RTL)
 - `src/components/Episodes.jsx`: the up next rail and the episode calendar.
 - `src/components/LibraryView.jsx` (0.4): library tabs, the queue and, from 0.5, the calendar tab.
 
+## Web edition (0.39)
+
+The browser build (docs/WEB.md, `vite.web.config.mjs`) compiles the same `src/` and `core/`. `web/bridge.js` stands in for `electron/main.mjs` behind the same `window.riwaq` contract; `web/player.js` stands in for `electron/player.mjs` with an HTML5 `<video>` placed in the theater's surface; `web/store.js` replaces DPAPI with a non-extractable WebCrypto key; `web/shims/` give `core/` the Node modules it imports. `tests/web-edition.test.mjs` ties the bridge to `electron/preload.cjs` (every method answered or listed in `web/desktop-only.js`) and `core/`'s `node:` imports to the aliases. `.github/workflows/web.yml` publishes the site to GitHub Pages when `release.yml` publishes a release.
+
 ## Storage and network
 
 `core/library.mjs` contains pure queue, identity, Arabic search, completion and episode-release rules shared with React. `LibraryView.jsx` presents the saved/continue/queue/history/platform tabs. `queueEdit` and `historyEdit` are narrow IPC actions. Queue storage joins the profile bucket; old profiles migrate to an empty queue. History edits remain local and never generate tracker completion writes. MPV file-loaded consumes a queued entry; failures retain it. Profile switches stop/save playback before applying a new bucket. See `docs/RELEASE-0.4.md`.
