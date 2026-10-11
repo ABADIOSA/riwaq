@@ -8,10 +8,11 @@
  * the web and the other way round. Randomness always comes from
  * crypto.getRandomValues.
  */
-import { Buffer } from "buffer";
+import { Buffer } from "./buffer.js";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { sha1 } from "@noble/hashes/legacy.js";
-import { scrypt } from "@noble/hashes/scrypt.js";
+import { scrypt as nobleScrypt, scryptAsync } from "@noble/hashes/scrypt.js";
+import { hmac } from "@noble/hashes/hmac.js";
 import { gcm } from "@noble/ciphers/aes.js";
 
 const HASHES = { sha1, sha256, sha512 };
@@ -57,16 +58,45 @@ export function randomBytes(size) {
 
 export const randomUUID = () => crypto.randomUUID();
 
+export function createHmac(algorithm, key) {
+  const hash = HASHES[String(algorithm).toLowerCase()];
+  if (!hash) throw new Error(`Unsupported hash: ${algorithm}`);
+  const parts = [];
+  return {
+    update(data, encoding) {
+      parts.push(bytes(data, encoding));
+      return this;
+    },
+    digest(encoding) {
+      const out = Buffer.from(hmac(hash, bytes(key), join(parts)));
+      return encoding ? out.toString(encoding) : out;
+    },
+  };
+}
+
+const scryptOptions = (keylen, options = {}) => ({
+  N: options.N ?? options.cost ?? 16384,
+  r: options.r ?? options.blockSize ?? 8,
+  p: options.p ?? options.parallelization ?? 1,
+  dkLen: keylen,
+  maxmem: options.maxmem ?? 64 * 1024 * 1024,
+});
+
 export function scryptSync(password, salt, keylen, options = {}) {
   return Buffer.from(
-    scrypt(bytes(password), bytes(salt), {
-      N: options.N ?? options.cost ?? 16384,
-      r: options.r ?? options.blockSize ?? 8,
-      p: options.p ?? options.parallelization ?? 1,
-      dkLen: keylen,
-      maxmem: options.maxmem ?? 64 * 1024 * 1024,
-    }),
+    nobleScrypt(bytes(password), bytes(salt), scryptOptions(keylen, options)),
   );
+}
+
+/**
+ * Node's callback scrypt. noble's async version yields to the page between
+ * rounds, so a sign-in does not freeze the interface while it derives keys.
+ */
+export function scrypt(password, salt, keylen, options, callback) {
+  if (typeof options === "function") [options, callback] = [{}, options];
+  scryptAsync(bytes(password), bytes(salt), scryptOptions(keylen, options))
+    .then((key) => callback(null, Buffer.from(key)))
+    .catch((error) => callback(error));
 }
 
 export function timingSafeEqual(a, b) {
@@ -129,6 +159,8 @@ export function verify() {
 
 export default {
   createHash,
+  createHmac,
+  scrypt,
   randomBytes,
   randomUUID,
   scryptSync,

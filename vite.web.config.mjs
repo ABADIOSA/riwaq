@@ -58,7 +58,14 @@ export default defineConfig({
   base: "./",
   publicDir: false,
   plugins: [react(), siteFiles()],
-  define: { "import.meta.env.RIWAQ_VERSION": JSON.stringify(version) },
+  define: {
+    "import.meta.env.RIWAQ_VERSION": JSON.stringify(version),
+    // Empty unless a test or a developer points the site at a local
+    // account service; the deployed site uses core/account-server.mjs.
+    "import.meta.env.RIWAQ_ACCOUNT_SERVER": JSON.stringify(
+      process.env.RIWAQ_ACCOUNT_SERVER || "",
+    ),
+  },
   resolve: {
     alias: {
       "node:crypto": here("./web/shims/crypto.js"),

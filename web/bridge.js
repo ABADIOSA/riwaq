@@ -155,6 +155,8 @@ export async function startBridge({ version, store }) {
     save: store.save,
     version,
     spotifyRedirect: pageAddress(),
+    // Set at build time for tests and development (vite.web.config.mjs).
+    accountServer: import.meta.env.RIWAQ_ACCOUNT_SERVER || undefined,
   });
   const broadcast = () => emit("state", client.publicState());
   client.updates = new WebUpdates(client, {
@@ -162,6 +164,11 @@ export async function startBridge({ version, store }) {
     onChange: broadcast,
   });
   client.onLateSources = (info) => emit("sources", info);
+  client.account.onChange = (kind) => {
+    broadcast();
+    if (kind === "remote")
+      emit("notice", "وصلت تحديثات من جهازك الآخر عبر حساب رِواق");
+  };
   client.onThemeError = (message) => logError("themeSong", message);
   const music = new WebMusicLibrary(client);
   const stopLocalMusic = () => {
@@ -216,6 +223,7 @@ export async function startBridge({ version, store }) {
       )
         document.exitFullscreen?.().catch(() => {});
       watching = { active: !!s.active, error: !!s.error };
+      client.account.watching = !!s.active;
       mediaSession(s);
       if (failed) tryNextSource();
       emit("player", s);
@@ -566,6 +574,10 @@ export async function startBridge({ version, store }) {
   }
   setInterval(() => checkPrayer(), 15000);
   document.addEventListener("visibilitychange", () => {
+    // Back on the page: look for changes from other devices; leaving it:
+    // send what is waiting.
+    if (document.visibilityState === "visible") client.account.nudge();
+    else client.account.flush();
     if (document.visibilityState !== "hidden") return;
     // The settings say "pause when minimized"; a hidden tab is the web's.
     if (
@@ -1351,9 +1363,8 @@ export async function startBridge({ version, store }) {
       const file = await pickFile({ accept: ".zip,application/zip" });
       if (!file) return null;
       tooBig(file, 200 * 1024 * 1024, "الملف كبير جداً");
-      const { Buffer } = await import("buffer");
       return nuvioReply(
-        readNuvioZip(Buffer.from(await file.arrayBuffer())),
+        readNuvioZip(new Uint8Array(await file.arrayBuffer())),
         file.name,
       );
     },
@@ -1440,6 +1451,44 @@ export async function startBridge({ version, store }) {
       pendingBackup = null;
       return true;
     },
+    // Riwaq accounts (core/account.mjs), as in main.
+    accountSignup: async (a) => {
+      const { recoveryCode } = await client.account.signup({
+        username: String(a?.username || ""),
+        password: typeof a?.password === "string" ? a.password : "",
+        secrets: a?.secrets === true,
+      });
+      return { recoveryCode };
+    },
+    accountLogin: (a) =>
+      client.account.login({
+        username: String(a?.username || ""),
+        password: typeof a?.password === "string" ? a.password : "",
+      }),
+    accountRecover: (a) =>
+      client.account.recover({
+        username: String(a?.username || ""),
+        code: String(a?.code || ""),
+        password: typeof a?.password === "string" ? a.password : "",
+      }),
+    accountPassword: (a) =>
+      client.account.changePassword({
+        password: typeof a?.password === "string" ? a.password : "",
+        newPassword: typeof a?.newPassword === "string" ? a.newPassword : "",
+      }),
+    accountDelete: (a) =>
+      client.account.deleteAccount({
+        password: typeof a?.password === "string" ? a.password : "",
+      }),
+    accountLogout: () => client.account.logout(),
+    accountConfigure: (a) =>
+      client.account.configure({
+        secrets: typeof a?.secrets === "boolean" ? a.secrets : undefined,
+      }),
+    accountSync: async () => {
+      await client.account.sync();
+      return client.publicState();
+    },
     exportAddons: () =>
       saveFile(
         "riwaq-addons.json",
@@ -1508,6 +1557,7 @@ export async function startBridge({ version, store }) {
   });
 
   client.updates.start((text) => emit("notice", text));
+  client.account.start();
   if (!store.persistent)
     setTimeout(
       () =>

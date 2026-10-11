@@ -68,6 +68,7 @@ import { isAdultAddon, withoutAdult } from "./adult.mjs";
 import { DataHub } from "./data-hub.mjs";
 import { Credits } from "./credits.mjs";
 import { Integrations } from "./integrations.mjs";
+import { AccountHub } from "./account.mjs";
 import { LiveHub } from "./live-hub.mjs";
 import { Profiles } from "./profiles.mjs";
 import { Notifier } from "./notify.mjs";
@@ -207,6 +208,8 @@ export class Client {
     api = stremioCall,
     spotifyRequest,
     spotifyRedirect,
+    accountServer,
+    accountRequest,
     version = "",
   }) {
     this.version = version;
@@ -246,6 +249,11 @@ export class Client {
       ...(spotifyRedirect ? { redirect: spotifyRedirect } : {}),
     });
     this.live = new LiveHub(this);
+    // Optional Riwaq accounts (core/account.mjs); idle until one signs in.
+    this.account = new AccountHub(this, {
+      ...(accountServer !== undefined ? { server: accountServer } : {}),
+      ...(accountRequest ? { request: accountRequest } : {}),
+    });
     this.profiles = new Profiles(this);
     this.notifier = new Notifier(this);
     this.updates = new Updates(this);
@@ -256,6 +264,7 @@ export class Client {
   persist() {
     this.profiles.capture();
     this.saveData(this.state);
+    this.account?.touch();
   }
   async init() {
     if (!this.state.addons.length) {
@@ -312,6 +321,7 @@ export class Client {
       aiSearch: this.ai.publicState(),
       integrations: this.integrations.publicState(),
       spotify: this.spotify.publicState(),
+      account: this.account.publicState(),
       live: this.live.publicState(),
       profiles: this.profiles.publicState(),
       notify: this.notifier.publicState(),

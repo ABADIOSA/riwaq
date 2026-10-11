@@ -1834,6 +1834,47 @@ const methods = {
     pendingBackup = null;
     return true;
   },
+  // Riwaq accounts (core/account.mjs): main-window only, behind the
+  // Settings lock in core. Passwords are used here to derive keys and are
+  // never stored; the interface sees the public state and, once, the
+  // recovery code.
+  accountSignup: async (a) => {
+    const { recoveryCode } = await client.account.signup({
+      username: String(a?.username || ""),
+      password: typeof a?.password === "string" ? a.password : "",
+      secrets: a?.secrets === true,
+    });
+    return { recoveryCode };
+  },
+  accountLogin: (a) =>
+    client.account.login({
+      username: String(a?.username || ""),
+      password: typeof a?.password === "string" ? a.password : "",
+    }),
+  accountRecover: (a) =>
+    client.account.recover({
+      username: String(a?.username || ""),
+      code: String(a?.code || ""),
+      password: typeof a?.password === "string" ? a.password : "",
+    }),
+  accountPassword: (a) =>
+    client.account.changePassword({
+      password: typeof a?.password === "string" ? a.password : "",
+      newPassword: typeof a?.newPassword === "string" ? a.newPassword : "",
+    }),
+  accountDelete: (a) =>
+    client.account.deleteAccount({
+      password: typeof a?.password === "string" ? a.password : "",
+    }),
+  accountLogout: () => client.account.logout(),
+  accountConfigure: (a) =>
+    client.account.configure({
+      secrets: typeof a?.secrets === "boolean" ? a.secrets : undefined,
+    }),
+  accountSync: async () => {
+    await client.account.sync();
+    return client.publicState();
+  },
   exportAddons: async () => {
     const r = await dialog.showSaveDialog(window, {
       title: "حفظ روابط الإضافات — قد تتضمن مفاتيح خاصة",
@@ -1882,7 +1923,13 @@ app
   .then(async () => {
     mkdirSync(app.getPath("userData"), { recursive: true });
     try {
-      client = new Client({ load, save, version: app.getVersion() });
+      client = new Client({
+        load,
+        save,
+        version: app.getVersion(),
+        // Tests and development point at a local account service.
+        accountServer: process.env.RIWAQ_ACCOUNT_SERVER || undefined,
+      });
     } catch (error) {
       dialog.showErrorBox("Riwaq", error.message);
       app.exit(1);
@@ -1895,6 +1942,12 @@ app
       // Sources that arrive after the list was shown (core/source-wait.mjs):
       // counts and addon names only, for the main window.
       client.onLateSources = (info) => emit("sources", info);
+      // Riwaq accounts (core/account.mjs): changes from another device.
+      client.account.onChange = (kind) => {
+        broadcast();
+        if (kind === "remote")
+          emit("notice", "وصلت تحديثات من جهازك الآخر عبر حساب رِواق");
+      };
       client.onThemeError = (message) => logError("themeSong", message);
       client.updates = new DesktopUpdates(client, {
         current: app.getVersion(),
@@ -2005,6 +2058,8 @@ app
           const pipChanged =
             s.active && watching.active && s.pip !== watching.pip;
           watching = { active: !!s.active, pip: !!s.pip, error: !!s.error };
+          // A viewing saves its position often; its uploads are spaced out.
+          client.account.watching = !!s.active;
           setMediaKeys(!!s.active);
           if (failed) tryNextSource();
           emit("player", s);
@@ -2190,6 +2245,8 @@ app
       };
       applyPresence().catch(() => {});
       if (!process.env.RIWAQ_SMOKE) client.updates.start();
+      client.account.start();
+      window.on("focus", () => client.account.nudge());
       setInterval(() => checkPrayer(), 15000).unref?.();
       window.on("minimize", () => {
         placeHud();
@@ -2276,6 +2333,13 @@ app.on("before-quit", (event) => {
   // a play finished just before closing is recorded rather than queued.
   Promise.resolve(player?.stop())
     .then(() => client?.integrations?.settle(3000))
+    // A change still waiting for the account goes up before closing.
+    .then(() =>
+      Promise.race([
+        client?.account?.flush(),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ]),
+    )
     .then(async () => {
       client?.persist();
       await client?.updates.install({ automatic: true, relaunch: false });

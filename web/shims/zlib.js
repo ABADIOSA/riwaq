@@ -3,7 +3,7 @@
  * the web edition. Decompression is streamed in small slices so a crafted
  * file stops at `maxOutputLength` instead of filling the tab's memory.
  */
-import { Buffer } from "buffer";
+import { Buffer } from "./buffer.js";
 import { Gunzip, Inflate, gzipSync as gzip } from "fflate";
 
 const SLICE = 16 * 1024;

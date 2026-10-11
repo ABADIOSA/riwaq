@@ -143,6 +143,14 @@ const allowed = new Set([
   "backupPreview",
   "backupRestore",
   "backupCancel",
+  "accountSignup",
+  "accountLogin",
+  "accountLogout",
+  "accountRecover",
+  "accountPassword",
+  "accountDelete",
+  "accountConfigure",
+  "accountSync",
 ]);
 contextBridge.exposeInMainWorld("riwaq", {
   call: async (method, args) => {
