@@ -1,0 +1,106 @@
+name: Account service
+
+# Riwaq's optional accounts (docs/ACCOUNTS.md): a Cloudflare Worker with a
+# D1 database, deployed from server/accounts when it changes on main, or by
+# hand from the Actions tab.
+#
+# One-time setup, in the repository's Settings → Secrets and variables →
+# Actions:
+#   CLOUDFLARE_API_TOKEN   a token from the "Edit Cloudflare Workers"
+#                          template with "Account → D1 → Edit" added
+#   CLOUDFLARE_ACCOUNT_ID  the account ID shown in the Cloudflare dashboard
+# The database is created on the first run, and AUTH_PEPPER is generated
+# once and kept as a Worker secret (never in this repository or its logs).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/accounts/**"
+      - ".github/workflows/accounts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: riwaq-accounts
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Test the service and the client against it
+        run: node --test tests/accounts-server.test.mjs tests/account.test.mjs
+      - name: Check the Cloudflare secrets
+        id: ready
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::Not deployed: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in Settings → Secrets and variables → Actions (docs/ACCOUNTS.md)."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.ready.outputs.ok == 'true'
+        run: npm install --global wrangler@4.141.0
+      - name: Find or create the database
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: server/accounts
+        run: |
+          find_id() {
+            wrangler d1 list --json | node -e '
+              let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+                const db = JSON.parse(s).find((d) => d.name === "riwaq-accounts");
+                process.stdout.write(db ? db.uuid : "");
+              });'
+          }
+          id=$(find_id)
+          if [ -z "$id" ]; then
+            wrangler d1 create riwaq-accounts
+            id=$(find_id)
+          fi
+          if [ -z "$id" ]; then echo "::error::The D1 database could not be found or created."; exit 1; fi
+          sed -i "s/00000000-0000-0000-0000-000000000000/$id/" wrangler.toml
+      - name: Apply migrations
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: server/accounts
+        run: wrangler d1 migrations apply riwaq-accounts --remote
+      - name: Deploy the Worker
+        if: steps.ready.outputs.ok == 'true'
+        id: deploy
+        working-directory: server/accounts
+        run: |
+          wrangler deploy | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Keep a pepper (created once)
+        if: steps.ready.outputs.ok == 'true'
+        working-directory: server/accounts
+        run: |
+          if ! wrangler secret list 2>/dev/null | grep -q '"AUTH_PEPPER"'; then
+            node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))' \
+              | wrangler secret put AUTH_PEPPER
+          fi
+      - name: Check the service answers
+        if: steps.ready.outputs.ok == 'true'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$URL" ]; then echo "::warning::No workers.dev address was printed; register a workers.dev subdomain in the Cloudflare dashboard."; exit 0; fi
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS "$URL/v1/health"; then break; fi
+            sleep 5
+          done
+          echo
+          echo "### Riwaq account service" >> "$GITHUB_STEP_SUMMARY"
+          echo "Address: $URL — set it as ACCOUNT_SERVER in core/account-server.mjs." >> "$GITHUB_STEP_SUMMARY"

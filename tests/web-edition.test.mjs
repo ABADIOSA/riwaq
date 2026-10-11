@@ -7,6 +7,7 @@ import nodeCrypto from "node:crypto";
 import nodeZlib from "node:zlib";
 import * as webCrypto from "../web/shims/crypto.js";
 import * as webZlib from "../web/shims/zlib.js";
+import { Buffer as WebBuffer } from "../web/shims/buffer.js";
 import { DESKTOP_ONLY } from "../web/desktop-only.js";
 import { browserFetch, cleanError } from "../web/bridge.js";
 import {
@@ -90,7 +91,7 @@ test("every Node module core/ imports has a browser version in the web build", (
   assert.deepEqual(missing, []);
 });
 
-test("the shims give Node's own bytes, so backups cross between editions", () => {
+test("the shims give Node's own bytes, so backups cross between editions", async () => {
   const same = (a, b) =>
     assert.equal(Buffer.compare(Buffer.from(a), Buffer.from(b)), 0);
   same(
@@ -125,6 +126,21 @@ test("the shims give Node's own bytes, so backups cross between editions", () =>
   forged.setAuthTag(desktop.getAuthTag());
   forged.update(sealed);
   assert.throws(() => forged.final());
+  // Accounts (core/account.mjs): HMAC and the callback scrypt.
+  assert.equal(
+    webCrypto.createHmac("sha256", "key").update("رِواق").digest("base64url"),
+    nodeCrypto.createHmac("sha256", "key").update("رِواق").digest("base64url"),
+  );
+  await new Promise((resolve, reject) =>
+    webCrypto.scrypt("pw", "salt", 32, { N: 1024, r: 8, p: 1 }, (e, key) => {
+      if (e) return reject(e);
+      same(
+        key,
+        nodeCrypto.scryptSync("pw", "salt", 32, { N: 1024, r: 8, p: 1 }),
+      );
+      resolve();
+    }),
+  );
   const text = Buffer.from("رِواق ".repeat(5000));
   same(webZlib.gunzipSync(nodeZlib.gzipSync(text)), text);
   same(nodeZlib.gunzipSync(webZlib.gzipSync(text)), text);
@@ -132,6 +148,27 @@ test("the shims give Node's own bytes, so backups cross between editions", () =>
   assert.throws(() =>
     webZlib.gunzipSync(nodeZlib.gzipSync(text), { maxOutputLength: 100 }),
   );
+});
+
+test("the browser's Buffer speaks base64url, which Spotify, Letterboxd and accounts use", () => {
+  // The npm polyfill, not Node's own Buffer: 0.39.0 shipped without this,
+  // so Spotify linking failed on the web only.
+  assert.notEqual(WebBuffer, Buffer);
+  const text = "رِواق ✓ ?>";
+  assert.equal(
+    WebBuffer.from(text).toString("base64url"),
+    Buffer.from(text).toString("base64url"),
+  );
+  assert.equal(
+    WebBuffer.from(
+      Buffer.from(text).toString("base64url"),
+      "base64url",
+    ).toString(),
+    text,
+  );
+  assert.ok(WebBuffer.isEncoding("base64url"));
+  assert.equal(webCrypto.randomBytes(48).toString("base64url").length, 64);
+  assert.ok(WebBuffer.isBuffer(WebBuffer.from("abc").subarray(1)));
 });
 
 test("a backup sealed with the web shims opens with the desktop's Node code", async () => {

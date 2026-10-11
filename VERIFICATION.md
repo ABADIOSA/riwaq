@@ -1,5 +1,15 @@
 # Verification — Riwaq
 
+## 2026-10-11 — 0.40.0: optional, end-to-end encrypted Riwaq accounts
+
+- What: `core/account.mjs` (keys, sealing, pull–merge–push), `core/sync-merge.mjs` (three-way merge), `server/accounts/` (Cloudflare Worker + D1, deployed by `.github/workflows/accounts.yml`), the Settings page `src/components/settings/AccountPage.jsx`, IPC `account*` in preload, main and the web bridge. Details in docs/ACCOUNTS.md. `core/account-server.mjs` is empty until the service is deployed, so released builds show "coming soon" and send nothing.
+- **641 Node tests pass** (629 + 12):
+  - `tests/account.test.mjs` (6): the merge rules; usernames, recovery codes, key wrapping bound to user and kind, the sealed format; the real Worker in-process over `node:sqlite` with several clients (sign-up, wrong password refused, a second device receives favorites and settings, changes flow both ways, keys only after turning them on, recovery sets a new password and signs other devices out without touching their data, wrong current password, deletion empties the tables, two devices changing at once both kept and a removal not undone, the Settings lock, no server configured sends nothing). The service's tables never contain the title, its ID, the password, a setting name or the provider key.
+  - `tests/accounts-server.test.mjs` (5): sign-in limits per account and address, sign-up limits, unknown users answered like wrong passwords, web origins, a short pepper refused, the 7 MB text limit, revisions and 409, pieces of old revisions removed, 304, 180-day sessions, 20 devices.
+  - `tests/web-edition.test.mjs` (+1, and stronger): the shims now load the npm `buffer` polyfill in Node (`buffer/index.js`) instead of Node's own Buffer, which had hidden that the polyfill lacks `base64url`: 0.39.0's Spotify PKCE and Letterboxd bridge failed on the web only. `web/shims/buffer.js` adds it; the two affected tests fail without it. HMAC and the callback scrypt match Node.
+- `node scripts/test-web.mjs` passed in headless Chromium: besides the 0.39 checks, a second copy of the site built against the local service; on one browser context an account is made through the Settings page and the recovery code shown; the service holds no title, ID, password or setting name; a second context signs in through the page and receives the favorite, the seek step and the addon; a favorite added there reaches the first after a sync. Screenshots of the three account states were checked.
+- Not run: the Worker on Cloudflare (needs the repository secrets in docs/ACCOUNTS.md), the Windows app signing in on a real PC, and long-running sync between several active devices.
+
 ## 2026-10-11 — 0.39.0: Riwaq on the web
 
 - What: the same `src/` and `core/` built for a browser (`vite.web.config.mjs`, `web/`), published to GitHub Pages by `.github/workflows/web.yml`, which `release.yml` now calls after every published release. Details and limits in docs/WEB.md.

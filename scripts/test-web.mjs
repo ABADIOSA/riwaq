@@ -11,9 +11,10 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { decryptBackup } from "../core/backup.mjs";
+import { serveLocally, sqliteD1 } from "../server/accounts/local.mjs";
 
 const require = createRequire(import.meta.url);
 function loadPlaywright() {
@@ -54,7 +55,7 @@ const TYPES = {
   ".png": "image/png",
   ".webmanifest": "application/manifest+json",
 };
-const siteServer = createServer((req, res) => {
+const serveDir = (site) => (req, res) => {
   let path = join(
     site,
     decodeURIComponent(new URL(req.url, "http://x").pathname),
@@ -72,7 +73,8 @@ const siteServer = createServer((req, res) => {
     TYPES[extname(path)] || "application/octet-stream",
   );
   res.end(readFileSync(path));
-});
+};
+const siteServer = createServer(serveDir(site));
 
 // --- A Stremio addon on this machine --------------------------------------
 let video = Buffer.alloc(0);
@@ -348,6 +350,117 @@ try {
   step(
     "a web backup decrypts with core/backup.mjs under Node, as on the desktop",
   );
+
+  // --- Riwaq accounts: two devices, one account -------------------------
+  // A copy of the site pointed at the account service (server/accounts)
+  // running here over SQLite; each device is its own browser context.
+  const accountSite = join(output, "site-accounts");
+  const accountServer = createServer(serveDir(accountSite));
+  const accountOrigin = `http://127.0.0.1:${await listen(accountServer)}`;
+  const db = sqliteD1();
+  const service = await serveLocally({ origins: accountOrigin, db });
+  execFileSync(
+    process.execPath,
+    [
+      resolve("node_modules/vite/bin/vite.js"),
+      "build",
+      "--config",
+      "vite.web.config.mjs",
+      "--outDir",
+      accountSite,
+      "--emptyOutDir",
+      "--logLevel",
+      "error",
+    ],
+    {
+      env: { ...process.env, RIWAQ_ACCOUNT_SERVER: service.url },
+      stdio: "inherit",
+    },
+  );
+  const openDevice = async () => {
+    const ctx = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+    });
+    const tab = await ctx.newPage();
+    watch(tab);
+    await tab.goto(`${accountOrigin}/`);
+    await tab.waitForFunction(() => window.riwaq?.platform === "web");
+    await tab.waitForSelector(".app", { timeout: 20000 });
+    // The first init settles before navigating (it can send the view home).
+    await tab.evaluate(() => window.riwaq.call("init"));
+    await tab.waitForTimeout(500);
+    return {
+      tab,
+      call: (method, args) =>
+        tab.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]),
+      openAccount: async () => {
+        await tab.click('button.riwaq-tool[aria-label="الإعدادات"]');
+        await tab.getByText("الحسابات والربط", { exact: true }).first().click();
+        await tab.getByText("حساب رِواق", { exact: true }).first().click();
+      },
+    };
+  };
+  const password = "riwaq web account test";
+  const pc = await openDevice();
+  await pc.call("install", { url: `${base}/manifest.json` });
+  await pc.call("favorite", {
+    id: "webfix:blue-hour",
+    type: "movie",
+    name: "الساعة الزرقاء",
+  });
+  await pc.call("settings", { seekStep: 30 });
+  await pc.openAccount();
+  await pc.tab.getByLabel("اسم المستخدم (حروف إنجليزية وأرقام)").fill("Abadi");
+  await pc.tab
+    .getByLabel("كلمة المرور الجديدة (10 أحرف على الأقل)")
+    .fill(password);
+  await pc.tab.getByLabel("أعد كتابتها").fill(password);
+  await pc.tab.screenshot({ path: join(output, "account-signup.png") });
+  await pc.tab.getByRole("button", { name: "سوّ حسابي" }).click();
+  await pc.tab.waitForSelector(".recovery-code", { timeout: 60000 });
+  const code = await pc.tab.inputValue(".recovery-code");
+  assert.match(code, /^([0-9A-Z]{4}-){5}[0-9A-Z]{4}$/);
+  await pc.tab.screenshot({ path: join(output, "account-recovery.png") });
+  await pc.tab.getByRole("button", { name: "حفظته في مكان آمن" }).click();
+  await pc.tab.getByText("حسابك:").waitFor();
+  step("an account is made in the interface and shows its recovery code once");
+
+  const stored = JSON.stringify([
+    (await db.prepare("SELECT * FROM users").all()).results,
+    (await db.prepare("SELECT * FROM chunks").all()).results,
+  ]);
+  for (const plain of ["الساعة الزرقاء", "webfix", password, "seekStep"])
+    assert.ok(!stored.includes(plain), `the server holds no ${plain}`);
+  step("the account service holds only hashes and ciphertext");
+
+  const phone = await openDevice();
+  await phone.openAccount();
+  await phone.tab.getByText("تسجيل الدخول", { exact: true }).click();
+  await phone.tab
+    .getByLabel("اسم المستخدم (حروف إنجليزية وأرقام)")
+    .fill("abadi");
+  await phone.tab.getByLabel("كلمة المرور", { exact: true }).fill(password);
+  await phone.tab.getByRole("button", { name: "ادخل" }).click();
+  await phone.tab.getByText("حسابك:").waitFor({ timeout: 60000 });
+  await phone.tab.screenshot({ path: join(output, "account-signed-in.png") });
+  const arrived = await phone.call("init");
+  assert.ok(arrived.favorites.some((f) => f.name === "الساعة الزرقاء"));
+  assert.equal(arrived.settings.seekStep, 30);
+  assert.ok(arrived.addons.some((a) => a.id === "riwaq.web-fixture"));
+  step("a second device signs in and gets the library, settings and addons");
+
+  await phone.call("favorite", {
+    id: "webfix:quiet-city",
+    type: "movie",
+    name: "مدينة هادئة",
+  });
+  await phone.call("accountSync");
+  await pc.call("accountSync");
+  const back = await pc.call("init");
+  assert.ok(back.favorites.some((f) => f.name === "مدينة هادئة"));
+  step("a change on one device reaches the other");
+  await service.close();
+  accountServer.close();
 
   assert.deepEqual(problems, []);
   console.log(`\nWeb smoke passed. Screenshots in ${output}`);

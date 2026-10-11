@@ -1,0 +1,16 @@
+# Riwaq accounts on Cloudflare Workers (docs/ACCOUNTS.md).
+# Deployed by .github/workflows/accounts.yml, which creates the D1 database
+# on the first run and fills in its ID; AUTH_PEPPER is a Worker secret.
+name = "riwaq-accounts"
+main = "worker.mjs"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGINS = "https://abadiosa.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "riwaq-accounts"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

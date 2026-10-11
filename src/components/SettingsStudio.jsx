@@ -1,4 +1,5 @@
 import UpdatesCard from "./UpdatesCard.jsx";
+import AccountPage from "./settings/AccountPage.jsx";
 import DiagnosticsCard from "./DiagnosticsCard.jsx";
 import AppearanceStudio from "./AppearanceStudio.jsx";
 import {
@@ -97,6 +98,7 @@ import {
   Gamepad2,
   Trophy,
   MoonStar,
+  UserRound,
 } from "lucide-react";
 import { call, isWeb } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -467,6 +469,12 @@ const ALL_GROUPS = [
     title: "الحسابات والربط",
     Icon: Link2,
     pages: [
+      [
+        "riwaqAccount",
+        "حساب رِواق",
+        "حساب تسجيل دخول مزامنة أجهزة موقع ويب اسم مستخدم كلمة مرور استرداد سحابة",
+        UserRound,
+      ],
       [
         "connections",
         "الحسابات والربط",
@@ -1078,6 +1086,14 @@ export default function SettingsStudio({
                     </p>
                   </section>
                 </>
+              )}
+              {id === "riwaqAccount" && (
+                <AccountPage
+                  state={state}
+                  update={update}
+                  act={act}
+                  notice={notice}
+                />
               )}
               {id === "connections" && (
                 <>

@@ -98,6 +98,10 @@ React (sandboxed, RTL)
 
 The browser build (docs/WEB.md, `vite.web.config.mjs`) compiles the same `src/` and `core/`. `web/bridge.js` stands in for `electron/main.mjs` behind the same `window.riwaq` contract; `web/player.js` stands in for `electron/player.mjs` with an HTML5 `<video>` placed in the theater's surface; `web/store.js` replaces DPAPI with a non-extractable WebCrypto key; `web/shims/` give `core/` the Node modules it imports. `tests/web-edition.test.mjs` ties the bridge to `electron/preload.cjs` (every method answered or listed in `web/desktop-only.js`) and `core/`'s `node:` imports to the aliases. `.github/workflows/web.yml` publishes the site to GitHub Pages when `release.yml` publishes a release.
 
+## Accounts (0.40)
+
+Optional Riwaq accounts (docs/ACCOUNTS.md) sync the backup payload between devices, end-to-end encrypted. `core/account.mjs` derives keys, seals data and runs the pull–merge–push loop; `core/sync-merge.mjs` merges three ways; `server/accounts/worker.mjs` is the Cloudflare Worker (D1) that stores hashes, wrapped keys and ciphertext. Main and the web bridge expose the same `account*` methods and start the hub; the Settings page is `src/components/settings/AccountPage.jsx`.
+
 ## Storage and network
 
 `core/library.mjs` contains pure queue, identity, Arabic search, completion and episode-release rules shared with React. `LibraryView.jsx` presents the saved/continue/queue/history/platform tabs. `queueEdit` and `historyEdit` are narrow IPC actions. Queue storage joins the profile bucket; old profiles migrate to an empty queue. History edits remain local and never generate tracker completion writes. MPV file-loaded consumes a queued entry; failures retain it. Profile switches stop/save playback before applying a new bucket. See `docs/RELEASE-0.4.md`.

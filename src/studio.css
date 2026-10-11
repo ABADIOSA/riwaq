@@ -2252,3 +2252,27 @@ em.tag-custom {
   align-items: center;
   gap: 4px;
 }
+
+/* Riwaq account (settings/AccountPage.jsx). */
+.account-card .segmented {
+  align-self: flex-start;
+  margin-bottom: 4px;
+}
+.account-card h2 b {
+  color: var(--accent);
+}
+.recovery-code {
+  width: 100%;
+  margin: 6px 0 14px;
+  padding: 14px 16px;
+  border: 1px dashed var(--accent);
+  border-radius: 12px;
+  background: var(--accent-soft, #e7b66e22);
+  color: var(--text, #f5ead9);
+  font:
+    600 20px/1.4 Consolas,
+    "Cascadia Mono",
+    monospace;
+  letter-spacing: 2px;
+  text-align: center;
+}

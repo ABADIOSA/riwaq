@@ -38,7 +38,8 @@ The interface checks `isWeb` (`src/lib/api.js`) in two places only: Settings lea
 - Sources whose addon asks for special request headers may fail: a browser does not let a page set them on media.
 - Hosts that do not send CORS headers cannot be read by a page. Stremio addons, Cinemeta, TMDB, Trakt's API and Wikidata do; IPTV playlists and some subtitle hosts often do not (subtitles then go through the Stremio Service when it runs).
 - Local music works for the visit only: a page cannot keep a path to a file, so picked songs are held in memory and forgotten on reload. Nothing is uploaded.
-- The site needs no account of ours and sends nothing to a server of ours: it is static files, and everything the viewer adds stays encrypted in their browser.
+- The site needs no account and is static files; everything the viewer adds stays encrypted in their browser. An optional Riwaq account (0.40, docs/ACCOUNTS.md) syncs it, still encrypted on the device first.
+- `Buffer` is the npm polyfill plus `base64url` (`web/shims/buffer.js`). 0.39.0 lacked the encoding, so Spotify linking and the Letterboxd bridge failed on the web; the tests now load the same polyfill.
 
 ## Verified here
 

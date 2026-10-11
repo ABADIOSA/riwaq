@@ -36,6 +36,10 @@ Bundled into the web edition (`npm run build:web`, docs/WEB.md); none of these s
 - fflate 0.8.3 (MIT): https://github.com/101arrowz/fflate — gzip and raw inflate for backups and Nuvio backup zips.
 - buffer 6.0.3 (MIT): https://github.com/feross/buffer — Node's Buffer for core/ in the browser.
 
+## Account service
+
+The optional account service (server/accounts, docs/ACCOUNTS.md) runs on Cloudflare Workers and D1. It ships no third-party code; Wrangler (MIT/Apache-2.0, https://github.com/cloudflare/workers-sdk) is installed only in the deployment workflow.
+
 Poster images, descriptions, and catalogs are retrieved at runtime from the user's addons and Cinemeta. They are not shipped as Riwaq artwork. No stream provider is installed by default.
 
 Dependency versions and integrity hashes are recorded in package-lock.json. Rebuilding uses those locked versions with npm ci.
