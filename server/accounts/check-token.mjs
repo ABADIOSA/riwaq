@@ -8,11 +8,16 @@
 import { appendFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-/** Removes spaces of every kind, invisible marks, quotes and a "Bearer" prefix. */
+/**
+ * Removes spaces of every kind, invisible marks, quotes, a "Bearer" prefix
+ * and a variable name pasted with the value (`CLOUDFLARE_API_TOKEN=…`,
+ * `export …=`). No API token contains "=" or ":", so nothing real is lost.
+ */
 export function cleanToken(raw) {
   return String(raw || "")
     .normalize("NFKC")
     .replace(/[\p{Cf}"'`«»“”‘’]/gu, "")
+    .replace(/^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*[=:]/, "")
     .replace(/^\s*(?:authorization\s*:\s*)?bearer\s+/i, "")
     .replace(/[\p{White_Space}\p{Cc}]/gu, "");
 }
@@ -23,7 +28,7 @@ export function wrongKind(token) {
   if (/^[0-9a-f]{32}$/i.test(token)) {
     return "it holds a 32-character ID (the Account ID or the token's ID), not the token's value";
   }
-  if (/^[0-9a-f]{37}$/i.test(token)) {
+  if (/^[0-9a-f]{37}$/i.test(token) || /^cfk_/.test(token)) {
     return "it holds the Global API Key, which Wrangler cannot use as a token";
   }
   if (/^v1\.0-/i.test(token)) return "it holds an Origin CA key";
@@ -64,6 +69,6 @@ if (
   write(output, "ok=true");
   write(
     output,
-    `hint=The value is ${describeToken(token)}; a Cloudflare API token is usually 40 letters, digits, - and _.`,
+    `hint=The value is ${describeToken(token)}; a Cloudflare API token is 53 characters starting cfut_ or cfat_ (older ones: 40 letters, digits, - and _).`,
   );
 }
