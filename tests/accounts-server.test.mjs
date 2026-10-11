@@ -213,6 +213,17 @@ test("the deploy's token check cleans pasted values and names what is not a toke
   );
   assert.equal(cleanToken(`Authorization: Bearer ${token}`), token);
   assert.equal(wrongKind(token), null);
+  // Today's tokens (cfut_/cfat_ + 48), pasted with their variable name.
+  const scannable = "cfut_" + "aB3".repeat(13) + "x" + "0a1b2c3d";
+  assert.equal(scannable.length, 53);
+  assert.equal(cleanToken(`CLOUDFLARE_API_TOKEN=${scannable}`), scannable);
+  assert.equal(
+    cleanToken(`export CLOUDFLARE_API_TOKEN="${scannable}"\n`),
+    scannable,
+  );
+  assert.equal(cleanToken(`CLOUDFLARE_API_TOKEN = ${scannable}`), scannable);
+  assert.equal(wrongKind(scannable), null);
+  assert.match(wrongKind("cfk_" + "a".repeat(48)), /Global API Key/);
   assert.match(
     wrongKind("d83ae19aa10beea65a17f06bc10ebe3b"),
     /32-character ID/,
