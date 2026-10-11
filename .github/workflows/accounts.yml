@@ -48,15 +48,29 @@ jobs:
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::warning::Not deployed: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in Settings → Secrets and variables → Actions (docs/ACCOUNTS.md)."
             echo "ok=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          # Pasted values often carry spaces, line breaks, quotes or the
+          # backticks of a chat message; Wrangler refuses any of them.
+          token=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]`"'"'"'')
+          account=$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]`"'"'"'' | tr 'A-F' 'a-f')
+          echo "::add-mask::$token"
+          if ! printf '%s' "$account" | grep -Eq '^[0-9a-f]{32}$'; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID must be the 32-character Account ID from the Cloudflare dashboard (letters a-f and digits only)."
+            exit 1
+          fi
+          {
+            echo "CLOUDFLARE_API_TOKEN=$token"
+            echo "CLOUDFLARE_ACCOUNT_ID=$account"
+          } >> "$GITHUB_ENV"
+          echo "ok=true" >> "$GITHUB_OUTPUT"
       - if: steps.ready.outputs.ok == 'true'
         run: npm install --global wrangler@4.141.0
       - name: Find or create the database
         if: steps.ready.outputs.ok == 'true'
         working-directory: server/accounts
         run: |
+          set -o pipefail
           find_id() {
             wrangler d1 list --json | node -e '
               let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
