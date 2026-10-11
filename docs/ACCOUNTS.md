@@ -55,8 +55,8 @@ Cloudflare's free plan (100k requests and 100k database row writes a day) suits 
 
 1. Make a free Cloudflare account. Open **Workers & Pages** once and choose a `workers.dev` subdomain.
 2. **My Profile → API Tokens → Create Token**, template **Edit Cloudflare Workers**, then add the permission **Account → D1 → Edit**. Copy the token.
-3. Copy the **Account ID** shown in the dashboard.
-4. In GitHub: **Settings → Secrets and variables → Actions → New repository secret**: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+3. Put the **Account ID** shown in the dashboard's address bar in `server/accounts/wrangler.toml` (`account_id`); it is not a secret. This repository already carries its own.
+4. In GitHub: **Settings → Secrets and variables → Actions → New repository secret**: `CLOUDFLARE_API_TOKEN`, with nothing but the token in it.
 5. Run **Actions → Account service → Run workflow** (it also runs when `server/accounts` changes on `main`). The first run creates the D1 database, applies the migrations, deploys the Worker and generates `AUTH_PEPPER` as a Worker secret. Its summary prints the address.
 6. Check that the printed address matches `core/account-server.mjs` (a different subdomain or Worker name means changing it there), then release: the app and the site offer accounts.
 
