@@ -27,6 +27,15 @@ Riwaq is an independent implementation of a desktop client for the Stremio HTTP 
   - SHA-256: a49811c0752c108b8260636f9c6f6fcb97406641c98b30f1e7b500dfb20177de
   - Earlier builds came from shinchiro/mpv-winbuild-cmake daily releases (20260610, then 20261007), which that project removes after a few weeks.
 
+## Web edition only
+
+Bundled into the web edition (`npm run build:web`, docs/WEB.md); none of these ship in the Windows app.
+
+- hls.js 1.7.3 (Apache-2.0): https://github.com/video-dev/hls.js — HLS playback through Media Source Extensions.
+- @noble/hashes 2.4.0 and @noble/ciphers 2.4.0 (MIT): https://github.com/paulmillr/noble-hashes, https://github.com/paulmillr/noble-ciphers — SHA-1/SHA-256/SHA-512, scrypt and AES-256-GCM with Node's results, so backups and PIN hashes match the desktop's.
+- fflate 0.8.3 (MIT): https://github.com/101arrowz/fflate — gzip and raw inflate for backups and Nuvio backup zips.
+- buffer 6.0.3 (MIT): https://github.com/feross/buffer — Node's Buffer for core/ in the browser.
+
 Poster images, descriptions, and catalogs are retrieved at runtime from the user's addons and Cinemeta. They are not shipped as Riwaq artwork. No stream provider is installed by default.
 
 Dependency versions and integrity hashes are recorded in package-lock.json. Rebuilding uses those locked versions with npm ci.

@@ -263,6 +263,8 @@ test("every interface and core module uses only names it declares", () => {
     ...files(join(root, "src"), /\.(jsx|js)$/),
     ...files(join(root, "core"), /\.mjs$/),
     ...files(join(root, "electron"), /\.mjs$/),
+    // The web edition's bridge, player and shims (docs/WEB.md).
+    ...files(join(root, "web"), /\.(jsx|js)$/),
   ];
   assert.ok(all.length > 60, `${all.length} files`);
   const problems = [];

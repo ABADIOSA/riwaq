@@ -41,6 +41,8 @@ export default function UpdatesCard({ state, update, act }) {
       setBusy(false);
     }
   };
+  if (info.web)
+    return <WebUpdates info={info} working={working} run={run} act={act} />;
   const toggle = (key, title, description) => (
     <div className="setting-row" key={key}>
       <div>
@@ -240,6 +242,102 @@ export default function UpdatesCard({ state, update, act }) {
         "التثبيت عند إغلاق رِواق",
         "يثبّت التحديث الجاهز بعد حفظ تقدمك، ولا يغلق التطبيق أثناء المشاهدة. يُؤجَّل عند إيقاف تشغيل ويندوز.",
       )}
+      {info.checkedAt && (
+        <p className="subtle">
+          آخر تحقق:{" "}
+          {new Date(info.checkedAt).toLocaleString(
+            "ar-SA-u-ca-gregory-nu-latn",
+          )}
+        </p>
+      )}
+      {notesOpen && (
+        <WhatsNew
+          current={info.current}
+          all
+          onClose={() => setNotesOpen(false)}
+        />
+      )}
+    </section>
+  );
+}
+
+/**
+ * The web edition (docs/WEB.md) is rebuilt from the same source with every
+ * release, so it never downloads anything: an open page only learns that a
+ * newer build is live and reloads into it.
+ */
+function WebUpdates({ info, working, run, act }) {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const status = info.status || "current";
+  return (
+    <section
+      className="settings-card updates-studio"
+      aria-label="تحديثات رِواق"
+    >
+      <div className="update-hero">
+        <span className="update-emblem">
+          {info.available ? (
+            <Download size={32} />
+          ) : (
+            <RefreshCw
+              size={32}
+              className={status === "checking" ? "spin" : ""}
+            />
+          )}
+        </span>
+        <div>
+          <span className="eyebrow">RIWAQ · WEB</span>
+          <h2 aria-live="polite">
+            {info.available
+              ? "نسخة أحدث من الموقع منشورة"
+              : status === "checking"
+                ? "نتحقق من نسخة الموقع…"
+                : "الموقع يتحدث مع كل إصدار"}
+          </h2>
+          <p>
+            إصدارك <b dir="ltr">{info.current || "—"}</b>{" "}
+            <button className="text-button" onClick={() => setNotesOpen(true)}>
+              ما الجديد؟
+            </button>
+            {info.available && (
+              <>
+                {" "}
+                · المنشور <b dir="ltr">{info.latest?.version}</b>
+              </>
+            )}
+          </p>
+        </div>
+        <button
+          className="secondary"
+          disabled={working}
+          onClick={() => run("updatesCheck")}
+        >
+          <RefreshCw size={16} /> تحقق الآن
+        </button>
+      </div>
+      <p className="subtle">
+        نسخة الويب تُبنى من نفس مصدر برنامج ويندوز وتُنشر مع كل إصدار، فلا تنزيل
+        ولا تثبيت: إعادة تحميل الصفحة تكفي.
+      </p>
+      {info.error && (
+        <p role="alert" className="inline-warning">
+          {info.error}
+        </p>
+      )}
+      <div className="update-actions">
+        {info.available && (
+          <button
+            className="primary"
+            disabled={working}
+            onClick={() => act("updatesInstall")}
+          >
+            <RotateCw size={17} /> حدّث الصفحة الآن
+          </button>
+        )}
+        <button className="text-button" onClick={() => act("openUpdate")}>
+          <ArrowUpRight size={16} /> نسخة ويندوز الكاملة
+        </button>
+      </div>
       {info.checkedAt && (
         <p className="subtle">
           آخر تحقق:{" "}

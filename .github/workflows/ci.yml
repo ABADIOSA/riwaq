@@ -18,3 +18,9 @@ jobs:
       - run: npm test
       - run: npm run check
       - run: npm run build
+      - run: npm run build:web
+      - name: Smoke-test the web edition in Chromium
+        run: |
+          npm install --global playwright@1.56.1
+          playwright install --with-deps chromium
+          node scripts/test-web.mjs

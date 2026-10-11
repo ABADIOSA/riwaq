@@ -206,6 +206,7 @@ export class Client {
     requestText = fetchText,
     api = stremioCall,
     spotifyRequest,
+    spotifyRedirect,
     version = "",
   }) {
     this.version = version;
@@ -242,6 +243,7 @@ export class Client {
       bag: () => ((this.state.integrations ||= {}).spotify ||= {}),
       save: () => this.persist(),
       ...(spotifyRequest ? { request: spotifyRequest } : {}),
+      ...(spotifyRedirect ? { redirect: spotifyRedirect } : {}),
     });
     this.live = new LiveHub(this);
     this.profiles = new Profiles(this);
@@ -260,7 +262,9 @@ export class Client {
       try {
         await this.install(CINEMETA);
       } catch {
-        this.state.addons = [
+        // Kept beside anything installed while Cinemeta was being asked
+        // (a slow network): replacing the list once dropped those addons.
+        this.state.addons = mergeAddons(this.state.addons, [
           {
             transportUrl: CINEMETA,
             enabled: true,
@@ -281,7 +285,7 @@ export class Client {
               ),
             },
           },
-        ];
+        ]);
         this.persist();
       }
     }

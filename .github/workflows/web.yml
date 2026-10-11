@@ -1,0 +1,53 @@
+name: Web edition
+
+# The web edition (docs/WEB.md) is built from the same source as the
+# Windows app and published to GitHub Pages. release.yml calls this
+# workflow after every published release, so the site always carries the
+# version the app does; it can also be run by hand from the Actions tab.
+#
+# One-time setup: Settings → Pages → Build and deployment → Source:
+# "GitHub Actions".
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:web
+      - name: Smoke-test the site in Chromium
+        run: |
+          npm install --global playwright@1.56.1
+          playwright install --with-deps chromium
+          node scripts/test-web.mjs
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: riwaq-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

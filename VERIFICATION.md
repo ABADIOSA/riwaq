@@ -1,5 +1,17 @@
 # Verification — Riwaq
 
+## 2026-10-11 — 0.39.0: Riwaq on the web
+
+- What: the same `src/` and `core/` built for a browser (`vite.web.config.mjs`, `web/`), published to GitHub Pages by `.github/workflows/web.yml`, which `release.yml` now calls after every published release. Details and limits in docs/WEB.md.
+- **629 Node tests pass** (618 + 11):
+  - `tests/web-edition.test.mjs` (10): every `electron/preload.cjs` method is answered by `web/bridge.js` or listed in `web/desktop-only.js` (adding a fake preload method made it fail); every event exists; every `node:` import in `core/` has a browser alias; the shims give Node's bytes for SHA-256, scrypt, AES-256-GCM (tampering rejected), gzip and raw inflate; a backup sealed by `core/backup.mjs` over the shims opens with Node's, and the other way round; the playback plan (HLS, mixed content, Stremio Service conversion URL); sign-in callbacks; the fetch wrapper and `cleanError`; web local music limits; the release hook.
+  - `tests/client.test.mjs` (1): an addon installed while Cinemeta is still being asked at first start survives Cinemeta's failure. It failed before the fix (`init()` replaced the addon list); found by the web smoke in an environment where Cinemeta is unreachable.
+  - `tests/undefined-names.test.mjs` now also walks `web/`.
+- `node scripts/test-web.mjs` passed in headless Chromium (Playwright 1.56.1) against the production build and a local addon with CORS, no internet: the bridge starts and the interface renders; an addon installs; the IndexedDB record is AES-GCM ciphertext without the addon's name; a second tab is refused; after a reload the store reopens with the addon; Discover shows the addon's posters; a WebM recorded by Chromium plays inside `.theater .video-surface`; the addon's SRT subtitle is chosen automatically (series-memory/automaticSubtitle path) and shows as a text track; pause, stop and saved progress work; a backup downloaded from the site decrypts with `core/backup.mjs` under Node.
+- Checked by screenshots: home, Discover, the player in browser full screen with the controls over the picture, and Settings on the web (watching shows 5 pages without MPV's picture and sound pages, the window page and key map are gone, the updates card explains the site updates itself). Prettier, `npm run build` and `npm run build:web` pass.
+- Not run: a real deployment to GitHub Pages (Pages must be switched to "GitHub Actions" in the repository settings first), sign-in with real Stremio, Spotify or Trakt accounts from the site (the Stremio callback depends on how stremio.com appends the key to `appCallback`), a real Stremio Service's `hlsv2` conversion and torrents, IPTV sources, Safari and Firefox, and phones.
+- Seen while testing, not changed: the interface can be shown before its first `init` returns, and when `init` resolves the profile effect sends the view back home. With Cinemeta unreachable that takes up to 16 s; it applies to the desktop too.
+
 ## 2026-10-08 — 0.38.4: the "lineless video" option retired (the reported cause)
 
 - Report: 0.38.3 still showed sound without a picture. The diagnostic's settings had `linelessVideo: true`, `videoQuality: high`, `renderer: gpu-next`, `displayPanel: oled`, `hdrMode: window`, `rtxUpscale`/`rtxHdr: true`, and `hdr: true`.

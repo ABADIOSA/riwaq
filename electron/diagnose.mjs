@@ -12,10 +12,10 @@ import { writeFile, readFile, unlink, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import {
   HEALTH_LABELS,
-  classifyHealth,
-  duplicateAddons,
   healthSummary,
-  isLocalAddon,
+  pool,
+  probeAddons,
+  probeUrl as probe,
 } from "../core/addon-health.mjs";
 import {
   cleanRendererErrors,
@@ -24,8 +24,10 @@ import {
   runCheck,
   sanitize,
 } from "../core/diagnose.mjs";
-import { keyFor } from "../core/protocol.mjs";
 import { outputFits } from "../core/surface.mjs";
+
+// Shared with the web edition (core/addon-health.mjs).
+export { probeAddons };
 
 const GB = 1024 ** 3;
 const round = (n, d = 1) => Math.round(n * 10 ** d) / 10 ** d;
@@ -66,74 +68,6 @@ export function runProgram(file, args, { timeout = 10000 } = {}) {
     });
     child.on("exit", (code) => finish(code));
   });
-}
-
-/** A reachability probe: any HTTP answer means the service is reachable. */
-async function probe(fetcher, url, { timeout = 8000, headers = {} } = {}) {
-  const started = Date.now();
-  const response = await fetcher(url, {
-    redirect: "manual",
-    signal: AbortSignal.timeout(timeout),
-    headers,
-  });
-  await response.body?.cancel?.().catch(() => {});
-  return {
-    status: response.status,
-    ms: Date.now() - started,
-    headers: response.headers,
-  };
-}
-
-/** Pool of at most `size` promises at a time. */
-async function pool(items, size, fn) {
-  const out = new Array(items.length);
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(size, items.length) }, async () => {
-      while (next < items.length) {
-        const i = next++;
-        out[i] = await fn(items[i], i);
-      }
-    }),
-  );
-  return out;
-}
-
-/**
- * Every addon's manifest, probed at most six at a time: its health by key and
- * name only (core/addon-health.mjs). Used by the Addons page and the report.
- */
-export async function probeAddons(
-  addons,
-  { fetcher = fetch, version = "" } = {},
-) {
-  const headers = { "User-Agent": `Riwaq/${version} (health)` };
-  // Stored addons carry no key: they are named by keyFor(transportUrl), as
-  // publicState gives them to the interface and removeAddons matches them.
-  const list = (addons || []).map((a) => ({
-    ...a,
-    key: a.key || keyFor(a.transportUrl),
-  }));
-  const results = await pool(list, 6, async (a) => {
-    let status, ms;
-    try {
-      const r = await probe(fetcher, a.transportUrl, {
-        timeout: 8000,
-        headers,
-      });
-      status = r.status;
-      ms = r.ms;
-    } catch (error) {
-      status = error?.name === "TimeoutError" ? "timeout" : "error";
-    }
-    return {
-      key: a.key,
-      name: a.manifest?.name || a.manifest?.id || "?",
-      enabled: a.enabled !== false,
-      ...classifyHealth({ status, ms, local: isLocalAddon(a.transportUrl) }),
-    };
-  });
-  return { results, duplicates: duplicateAddons(list) };
 }
 
 /**

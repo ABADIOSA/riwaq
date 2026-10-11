@@ -98,7 +98,7 @@ import {
   Trophy,
   MoonStar,
 } from "lucide-react";
-import { call } from "../lib/api.js";
+import { call, isWeb } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
 import {
   arabicCount,
@@ -461,7 +461,7 @@ function mpvKey(event) {
  * Settings are grouped the way Harbor groups them: a group opens to its
  * pages. Each page is [id, title, search keywords, icon].
  */
-const GROUPS = [
+const ALL_GROUPS = [
   {
     id: "account",
     title: "الحسابات والربط",
@@ -689,11 +689,24 @@ const GROUPS = [
     ],
   },
 ];
+// MPV's picture and sound, the window frame and MPV's key map belong to the
+// desktop player; the web edition plays in the browser (docs/WEB.md), so
+// those pages are left out there and their links land on a sensible page.
+const WEB_HIDDEN = {
+  video: "playback",
+  audio: "playback",
+  window: "interface",
+  hotkeys: "playback",
+};
+const GROUPS = ALL_GROUPS.map((g) => ({
+  ...g,
+  pages: g.pages.filter(([id]) => !(isWeb && id in WEB_HIDDEN)),
+})).filter((g) => g.pages.length);
 const sections = GROUPS.flatMap((g) => g.pages);
 const groupOf = (page) =>
   GROUPS.find((g) => g.pages.some(([id]) => id === page));
 // Pages that moved: an old link still lands somewhere sensible.
-const MOVED = { appearance: "theme" };
+const MOVED = { appearance: "theme", ...(isWeb ? WEB_HIDDEN : {}) };
 
 export default function SettingsStudio({
   state,
