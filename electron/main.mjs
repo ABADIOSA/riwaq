@@ -1943,6 +1943,8 @@ app
       // counts and addon names only, for the main window.
       client.onLateSources = (info) => emit("sources", info);
       // Riwaq accounts (core/account.mjs): changes from another device.
+      client.account.playbackActive = () =>
+        !!player?.state.active || !!player?.child;
       client.account.onChange = (kind) => {
         broadcast();
         if (kind === "remote")
@@ -2059,7 +2061,7 @@ app
             s.active && watching.active && s.pip !== watching.pip;
           watching = { active: !!s.active, pip: !!s.pip, error: !!s.error };
           // A viewing saves its position often; its uploads are spaced out.
-          client.account.watching = !!s.active;
+          client.account.playbackChanged(!!s.active);
           setMediaKeys(!!s.active);
           if (failed) tryNextSource();
           emit("player", s);

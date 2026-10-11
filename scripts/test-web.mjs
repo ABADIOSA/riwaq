@@ -458,7 +458,67 @@ try {
   await pc.call("accountSync");
   const back = await pc.call("init");
   assert.ok(back.favorites.some((f) => f.name === "مدينة هادئة"));
+  await pc.tab.getByRole("button", { name: "زامن الآن" }).click();
+  await pc.tab.waitForFunction(
+    () =>
+      [...document.querySelectorAll("button")].some(
+        (button) =>
+          button.textContent.includes("زامن الآن") && !button.disabled,
+      ),
+    null,
+    { timeout: 5000 },
+  );
   step("a change on one device reaches the other");
+
+  // A remote settings change must not replace the viewing's active profile.
+  const videoMeta = await pc.call("metadata", {
+    type: "movie",
+    id: "webfix:last-train",
+  });
+  const videoSources = await pc.call("streams", {
+    type: "movie",
+    id: "webfix:last-train",
+  });
+  await pc.call("play", {
+    key: videoSources.streams[0].key,
+    meta: videoMeta,
+    videoId: "webfix:last-train",
+  });
+  await pc.tab.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.currentTime > 0.5,
+  );
+  await pc.call("playerCommand", { action: "pause" });
+  await pc.call("playerCommand", { action: "pip" });
+  await pc.tab.setViewportSize({ width: 980, height: 680 });
+  await phone.call("settings", { seekStep: 15 });
+  await phone.call("accountSync");
+  const deferred = await pc.call("accountSync");
+  assert.equal(deferred.account.deferred, true);
+  assert.equal(deferred.settings.seekStep, 30);
+  const waiting = pc.tab.getByText(
+    "وصلت تغييرات من جهاز آخر؛ نطبّقها تلقائياً بعد انتهاء المشاهدة.",
+    { exact: false },
+  );
+  await waiting.waitFor();
+  await pc.tab.locator(".account-card").first().scrollIntoViewIfNeeded();
+  await pc.tab.screenshot({ path: join(output, "account-deferred.png") });
+  await pc.call("stop");
+  await pc.tab.waitForFunction(async () => {
+    const state = await window.riwaq.call("init");
+    return !state.account.deferred && state.settings.seekStep === 15;
+  });
+  await pc.tab.getByText("حسابك:").waitFor();
+  await pc.tab.locator(".account-card").first().scrollIntoViewIfNeeded();
+  await pc.tab.screenshot({ path: join(output, "account-after-playback.png") });
+  assert.equal(
+    await pc.tab.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    true,
+  );
+  step(
+    "remote settings wait during a real video, then apply after Stop at 980×680",
+  );
   await service.close();
   accountServer.close();
 

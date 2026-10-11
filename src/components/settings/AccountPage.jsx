@@ -133,11 +133,13 @@ export default function AccountPage({ state, update, act, notice }) {
             <CloudCheck size={18} /> حسابك: <b dir="ltr">{account.username}</b>
           </h2>
           <p>
-            {account.syncing
-              ? "نزامن الحين…"
-              : account.lastSync
-                ? `آخر مزامنة: ${when(account.lastSync)}`
-                : "ما تمت مزامنة بعد."}{" "}
+            {account.deferred
+              ? "وصلت تغييرات من جهاز آخر؛ نطبّقها تلقائياً بعد انتهاء المشاهدة."
+              : account.syncing
+                ? "نزامن الحين…"
+                : account.lastSync
+                  ? `آخر مزامنة: ${when(account.lastSync)}`
+                  : "ما تمت مزامنة بعد."}{" "}
             تتزامن مكتبتك ومتابعتك ومجموعاتك وملفاتك الشخصية وإعداداتك تلقائياً
             مع كل أجهزتك المسجّلة.
           </p>
@@ -291,14 +293,17 @@ export default function AccountPage({ state, update, act, notice }) {
       });
     else if (mode === "login")
       run("login", async () => {
-        if (
-          await update("accountLogin", {
-            username: form.username,
-            password: form.password,
-          })
-        ) {
+        const result = await update("accountLogin", {
+          username: form.username,
+          password: form.password,
+        });
+        if (result) {
           clearSecrets();
-          notice("دخلت حسابك، وجبنا بياناتك");
+          notice(
+            result.account?.deferred
+              ? "دخلت حسابك؛ نكمل مزامنة بياناته بعد المشاهدة"
+              : "دخلت حسابك، وجبنا بياناتك",
+          );
         }
       });
     else
