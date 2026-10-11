@@ -25,6 +25,8 @@ The app verifies the signature before trusting metadata, downloads a canonical i
 3. Push a matching tag such as `v0.8.1` for beta, or dispatch **Release Windows build** with a matching tag and select stable/beta. Stable versions must not have a prerelease suffix.
 4. The workflow builds/tests on Windows, signs installer metadata, records checksums, uploads every file to a draft, then publishes. A missing or mismatched key fails before publication. Dispatch without a tag produces build artifacts only.
 
+To correct the text of a published release, fix `.github/release-notes.md` on `main` and dispatch **Release notes** with that version's tag. It only rewrites the release page; the signed `riwaq-update.json` keeps the notes it was signed with.
+
 Assets: `Riwaq-Setup-<version>-win-x64.exe`, `Riwaq-<version>-win-x64.exe`, `riwaq-update.json`, `SHA256SUMS.txt`. Only the installer is an automatic update target.
 
 For local signing, set `RIWAQ_UPDATE_KEY_FILE` to the private PEM path and run `node scripts/sign-release.mjs release`. Never put the key under assets, in source archives or release artifacts. The script validates the key against the embedded public key and checks an explicit tag against package.json.

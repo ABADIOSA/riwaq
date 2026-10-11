@@ -1,0 +1,38 @@
+name: Release notes
+
+# Rewrites the text of the current version's published release from
+# .github/release-notes.md, for a correction after publishing. Nothing else
+# changes: files, tag and channel stay as they are, and the signed update
+# manifest (riwaq-update.json) keeps the notes it was signed with.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release to correct; must match package.json, for example v0.40.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rewrite the release text
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          # The notes file describes package.json's version only.
+          expected="v$(node -p 'require("./package.json").version')"
+          if [ "$TAG" != "$expected" ]; then
+            echo "::error::.github/release-notes.md describes $expected, not $TAG."
+            exit 1
+          fi
+          gh release view "$TAG" --json tagName > /dev/null
+          gh release edit "$TAG" --notes-file .github/release-notes.md
+          echo "Rewrote the text of $TAG from .github/release-notes.md." >> "$GITHUB_STEP_SUMMARY"
