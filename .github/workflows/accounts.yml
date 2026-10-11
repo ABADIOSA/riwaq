@@ -50,28 +50,19 @@ jobs:
             echo "ok=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Pasted values often carry spaces, line breaks, quotes or the
-          # backticks of a chat message; Wrangler refuses any of them.
-          token=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]`"'"'"'')
-          echo "::add-mask::$token"
-          if printf '%s' "$token" | grep -Eqi '^[0-9a-f]{32}$'; then
-            echo "::error::CLOUDFLARE_API_TOKEN holds the Account ID, not the token. Put the token from Cloudflare → Account API tokens in it."
-            exit 1
-          fi
-          if printf '%s' "$token" | grep -q '://'; then
-            echo "::error::CLOUDFLARE_API_TOKEN holds a link, not the token."
-            exit 1
-          fi
-          echo "CLOUDFLARE_API_TOKEN=$token" >> "$GITHUB_ENV"
-          echo "ok=true" >> "$GITHUB_OUTPUT"
+          # Removes what pasting adds (spaces of any kind, invisible marks,
+          # quotes, a "Bearer" prefix) and refuses an ID, key or link.
+          node server/accounts/check-token.mjs
       - if: steps.ready.outputs.ok == 'true'
         run: npm install --global wrangler@4.141.0
       - name: Check Cloudflare accepts the token
         if: steps.ready.outputs.ok == 'true'
         working-directory: server/accounts
+        env:
+          HINT: ${{ steps.ready.outputs.hint }}
         run: |
           if ! wrangler whoami; then
-            echo "::error::Cloudflare refused CLOUDFLARE_API_TOKEN. Create it again (Edit Cloudflare Workers + D1 Edit) and replace the secret."
+            echo "::error::Cloudflare refused CLOUDFLARE_API_TOKEN. $HINT Create it again (Edit Cloudflare Workers + D1 Edit), copy the value shown once after \"Create Token\", and replace the secret."
             exit 1
           fi
       - name: Find or create the database

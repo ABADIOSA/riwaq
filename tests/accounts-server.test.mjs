@@ -4,6 +4,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { handle, MAX_DATA } from "../server/accounts/worker.mjs";
 import { sqliteD1 } from "../server/accounts/local.mjs";
+import {
+  cleanToken,
+  describeToken,
+  wrongKind,
+} from "../server/accounts/check-token.mjs";
 
 // The accounts Worker (server/accounts/worker.mjs) over Node's SQLite.
 
@@ -195,4 +200,32 @@ test("the deployment config binds D1 and allows only the site's origin", () => {
   const worker = readFileSync(root + "worker.mjs", "utf8");
   // Request bodies carry proofs; nothing logs them.
   assert.doesNotMatch(worker, /console\.\w+\([^)]*(body|request|secret)/i);
+});
+
+test("the deploy's token check cleans pasted values and names what is not a token", () => {
+  const token = "Ab3_" + "x".repeat(32) + "-9Zq";
+  // Spaces, a no-break space, bidi marks, a zero-width space, quotes, backticks
+  // and a Bearer prefix all come from copying and pasting.
+  assert.equal(cleanToken(`  \u200fBearer \`${token}\`\u00a0\n`), token);
+  assert.equal(
+    cleanToken(`"${token.slice(0, 20)}\u200b${token.slice(20)}"`),
+    token,
+  );
+  assert.equal(cleanToken(`Authorization: Bearer ${token}`), token);
+  assert.equal(wrongKind(token), null);
+  assert.match(
+    wrongKind("d83ae19aa10beea65a17f06bc10ebe3b"),
+    /32-character ID/,
+  );
+  assert.match(wrongKind("a".repeat(37)), /Global API Key/);
+  assert.match(wrongKind("v1.0-abc"), /Origin CA/);
+  assert.match(wrongKind("https://dash.cloudflare.com/x"), /link/);
+  assert.match(wrongKind(cleanToken(" \u00a0 ")), /empty/);
+  // The description gives the shape and never the characters.
+  const shape = describeToken("EditCloudflareWorkers");
+  assert.equal(shape, "21 characters (small letters, capital letters)");
+  assert.equal(
+    describeToken(`${token}é`),
+    "41 characters (small letters, capital letters, digits, - or _, 1 other character)",
+  );
 });
