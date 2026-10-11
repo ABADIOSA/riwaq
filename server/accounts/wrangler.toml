@@ -3,6 +3,8 @@
 # on the first run and fills in its ID; AUTH_PEPPER is a Worker secret.
 name = "riwaq-accounts"
 main = "worker.mjs"
+# Not a secret: the ID shown in the dashboard's address bar.
+account_id = "d83ae19aa10beea65a17f06bc10ebe3b"
 compatibility_date = "2025-09-01"
 workers_dev = true
 
