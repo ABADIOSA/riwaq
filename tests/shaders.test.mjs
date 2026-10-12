@@ -452,7 +452,10 @@ test("a viewing switches presets live by name, and the key cycles them", () => {
   assert.equal(set[0], "set_property");
   assert.equal(set[1], "glsl-shaders");
   assert.equal(set[2].length, 6);
-  assert.ok(set[2].every((f) => f.startsWith("/data/shaders/anime4k-4.0.1")));
+  // The player joins with node:path, so on Windows the separator is "\\".
+  assert.ok(
+    set[2].every((f) => f.startsWith(join("/data/shaders/anime4k-4.0.1"))),
+  );
   player.command({ action: "cycleShader" });
   assert.equal(player.state.glsl, "anime4k-c-fast");
   player.command({ action: "glsl", value: "" });

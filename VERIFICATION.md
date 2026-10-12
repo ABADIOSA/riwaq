@@ -7,6 +7,7 @@
   - Before, the revision was not advanced while deferred, so every save, timer pull, nudge and flush downloaded and decrypted the whole envelope again only to defer again.
   - The new test counted 4 extra requests on the old code and none with the fix. After the video ends one sync applies the change and the other device receives the local addition.
 - **706 Node tests pass** (691 + 14 from #68 + 1). Prettier and both Vite builds pass.
+- The first release run ([38261939133](https://github.com/ABADIOSA/riwaq/actions/runs/38261939133)) failed in `npm test` on Windows before anything was built or published. One shader test compared player paths with a `/data/...` prefix, but the player joins with `node:path`, which uses backslashes on Windows; the application was right. The test now joins its expected prefix the same way. Running the player tests with `node:path` redirected to `path.win32` reproduced the failure with the old assertion and passes with the new one. The AniList, presence, integrations and audio-tag tests also pass under that redirect.
 - README.md is now a short bilingual (Arabic, English) page under the app logo, covering 0.41.0 only. The former README moved unchanged to docs/CHANGELOG.md, with relative links re-pointed. The README's settings page names were checked against the app; one wrong name («مكتبة البيانات») was corrected to «مزوّدو البيانات الوصفية». GitHub's markdown renderer is not reachable from here, so the page was not rendered.
 
 ## 2026-10-12 — 0.41.0: issues #69–#71 (Simkl V2, Discord, shaders, AniList)
