@@ -388,9 +388,9 @@ export default function Details({
         setSong(found);
         if (
           songMode !== "auto" ||
-          resumeSource ||
           document.visibilityState !== "visible" ||
-          videoIsPlaying()
+          videoIsPlaying() ||
+          resumeSource
         )
           return;
         // The first time a theme starts by itself, say what it is: viewers
