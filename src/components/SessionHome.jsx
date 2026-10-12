@@ -19,12 +19,13 @@ import { imgUrl } from "../lib/helpers.js";
 import { tasteProfile, tasteAffinity } from "../../core/taste.mjs";
 import { titleKey } from "../../core/library.mjs";
 import { arabicCount, MINUTES, WORKS } from "../../core/arabic.mjs";
+import { loc } from "../lib/format.js";
 
 // The unit after a bare number: "5 دقائق", "45 دقيقة".
 const minuteUnit = (n) => (n >= 3 && n <= 10 ? "دقائق" : "دقيقة");
 
 const endTime = (minutes, started) =>
-  new Intl.DateTimeFormat("ar-SA", {
+  new Intl.DateTimeFormat(loc("ar-SA"), {
     hour: "numeric",
     minute: "2-digit",
     numberingSystem: "latn",

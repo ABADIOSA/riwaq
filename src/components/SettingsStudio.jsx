@@ -1,5 +1,6 @@
 import UpdatesCard from "./UpdatesCard.jsx";
 import AccountPage from "./settings/AccountPage.jsx";
+import { LanguageCard } from "./settings/LanguageCard.jsx";
 import DiagnosticsCard from "./DiagnosticsCard.jsx";
 import AppearanceStudio from "./AppearanceStudio.jsx";
 import {
@@ -121,6 +122,7 @@ import {
   moveCatalog,
   visibleHomeSections,
 } from "../../core/home.mjs";
+import { loc } from "../lib/format.js";
 
 /**
  * The home page editor: which sections show and in what order, and every
@@ -521,7 +523,7 @@ const ALL_GROUPS = [
       [
         "subtitles",
         "اللغة والترجمة",
-        "عربي لغة حجم توقيت مسارات صوت",
+        "عربي لغة الواجهة English إنجليزي إنجليزية language حجم توقيت مسارات صوت",
         Subtitles,
       ],
       [
@@ -1321,6 +1323,9 @@ export default function SettingsStudio({
                   act={act}
                   notice={notice}
                 />
+              )}
+              {id === "subtitles" && (
+                <LanguageCard state={state} update={update} />
               )}
               {id === "subtitles" && (
                 <form
@@ -2260,7 +2265,7 @@ function PresenceAndAlerts({ state, update, act, notice }) {
 // backup and episode dates are Gregorian, so they are shown that way everywhere.
 const when = (value) =>
   value
-    ? new Date(value).toLocaleString("ar-SA", {
+    ? new Date(value).toLocaleString(loc("ar-SA"), {
         dateStyle: "medium",
         timeStyle: "short",
         calendar: "gregory",

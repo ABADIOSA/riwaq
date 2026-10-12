@@ -20,6 +20,7 @@ import { cleanTaste } from "./taste.mjs";
 import { cleanMusic } from "./music.mjs";
 import { cleanThemeSkip } from "./theme-song.mjs";
 import { chosenPreset, cleanShaderChain } from "./shaders.mjs";
+import { LANGUAGES } from "./i18n.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -133,6 +134,8 @@ export const DEFAULT_SETTINGS = {
   shaderPath: "",
   // GLSL chains (core/shaders.mjs): a preset by name, where it applies, the
   // viewer's folder (set only by main's dialog) and their own ordered chain.
+  // The interface language (core/i18n.mjs): Arabic or English.
+  uiLanguage: "ar",
   // Continue watching plays the source the viewing used (core/resume.mjs).
   resumeSameSource: true,
   // The theme song explained itself once (issue #74).
@@ -492,6 +495,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     presenceDetail: ["title", "generic", "off"],
     shader: ["none", "sharp", "anime", "film", "custom"],
     shaderScope: ["auto", "all"],
+    uiLanguage: LANGUAGES,
     toneMapping: ["auto", "bt.2446a", "hable", "mobius", "reinhard", "off"],
     epgHours: [2, 4, 6, 12],
     cardStyle: ["glass", "flat", "outline"],

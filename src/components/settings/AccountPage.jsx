@@ -10,9 +10,10 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
+import { loc } from "../../lib/format.js";
 
 const when = (time) =>
-  new Date(time).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+  new Date(time).toLocaleString(loc("ar-SA-u-ca-gregory-nu-latn"), {
     dateStyle: "medium",
     timeStyle: "short",
   });

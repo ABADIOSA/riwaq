@@ -14,11 +14,12 @@ import {
 } from "../../core/home.mjs";
 import { call } from "../lib/api.js";
 import { ScrollRow } from "./UI.jsx";
+import { loc } from "../lib/format.js";
 
 const offset = () => -new Date().getTimezoneOffset();
 const dayLabel = (day) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString(
-    "ar-SA-u-ca-gregory-nu-latn",
+    loc("ar-SA-u-ca-gregory-nu-latn"),
     { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" },
   );
 

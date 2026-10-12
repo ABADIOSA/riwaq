@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { imgUrl } from "../lib/helpers.js";
+import { loc } from "../lib/format.js";
 
 const EVENTS = ["mousemove", "mousedown", "keydown", "wheel", "touchstart"];
 const SLIDE_MS = 9000;
@@ -80,7 +81,7 @@ export default function Screensaver({ minutes, clock, items, blocked }) {
       <div className="screensaver-shade" />
       {clock && (
         <time className="screensaver-clock">
-          {now.toLocaleTimeString("ar-SA", {
+          {now.toLocaleTimeString(loc("ar-SA"), {
             hour: "numeric",
             minute: "2-digit",
             numberingSystem: "latn",

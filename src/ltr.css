@@ -1,0 +1,16 @@
+/*
+ * The English interface (core/i18n.mjs) reads left to right. Layout follows
+ * dir on its own (flex, grid and the logical properties); what is left here
+ * are the arrows drawn for right-to-left reading, which point the other way.
+ * Media icons (rewind, skip) and external-link arrows keep their meaning in
+ * both directions and are not flipped.
+ */
+html[dir="ltr"] .lucide-arrow-left,
+html[dir="ltr"] .lucide-arrow-right,
+html[dir="ltr"] .lucide-chevron-left,
+html[dir="ltr"] .lucide-chevron-right,
+html[dir="ltr"] .lucide-arrow-up-left,
+html[dir="ltr"] .lucide-chevrons-left,
+html[dir="ltr"] .lucide-chevrons-right {
+  transform: scaleX(-1);
+}

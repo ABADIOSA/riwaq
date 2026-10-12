@@ -103,6 +103,7 @@ import {
   useCredits,
   AwardTrophies,
 } from "./Credits.jsx";
+import { loc } from "../lib/format.js";
 export default function Details({
   selection,
   state,
@@ -1416,7 +1417,7 @@ export default function Details({
                               d.runtime ? `${d.runtime} د` : "",
                               v.released
                                 ? new Date(v.released).toLocaleDateString(
-                                    "ar-SA-u-ca-gregory-nu-latn",
+                                    loc("ar-SA-u-ca-gregory-nu-latn"),
                                     {
                                       day: "numeric",
                                       month: "short",
@@ -1577,7 +1578,7 @@ function TitleFacts({ meta, credits }) {
       Calendar,
       "تاريخ العرض",
       released && !Number.isNaN(released.getTime())
-        ? released.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+        ? released.toLocaleDateString(loc("ar-SA-u-ca-gregory-nu-latn"), {
             day: "numeric",
             month: "long",
             year: "numeric",

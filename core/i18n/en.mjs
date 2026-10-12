@@ -1,0 +1,17 @@
+/**
+ * English for Riwaq's interface, keyed by the Arabic text the code shows
+ * (core/i18n.mjs). `{name}` marks a part filled in at run time. Each area
+ * keeps its own file under en/, built from scripts/i18n-strings.mjs.
+ */
+import core from "./en/core.mjs";
+import library from "./en/library.mjs";
+import shell from "./en/shell.mjs";
+import title from "./en/title.mjs";
+
+export default {
+  ...core,
+  ...library,
+  ...shell,
+  ...title,
+  الإعدادات: "Settings",
+};
