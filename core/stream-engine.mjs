@@ -745,7 +745,7 @@ export function scoreStream(parsed, preferences = {}) {
     add(
       Math.min(80, Math.log2(parsed.seeders + 1) * 14),
       "seeders",
-      `${parsed.seeders} مصدر`,
+      `${parsed.seeders} مشارك`,
     );
   if (parsed.trustedGroup) add(45, "group", `فريق موثوق: ${parsed.group}`);
   if (parsed.suspectGroup)

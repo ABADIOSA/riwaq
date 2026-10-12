@@ -5,12 +5,20 @@
  */
 import core from "./en/core.mjs";
 import library from "./en/library.mjs";
+import settings from "./en/settings.mjs";
+import settingsPlayer from "./en/settings-player.mjs";
+import settingsContent from "./en/settings-content.mjs";
+import settingsMore from "./en/settings-more.mjs";
 import shell from "./en/shell.mjs";
 import title from "./en/title.mjs";
 
 export default {
   ...core,
   ...library,
+  ...settings,
+  ...settingsPlayer,
+  ...settingsContent,
+  ...settingsMore,
   ...shell,
   ...title,
   الإعدادات: "Settings",

@@ -123,6 +123,8 @@ import {
   visibleHomeSections,
 } from "../../core/home.mjs";
 import { loc } from "../lib/format.js";
+import { translate } from "../../core/i18n.mjs";
+import SEARCH_EN from "../../core/i18n/en/settings-search.mjs";
 
 /**
  * The home page editor: which sections show and in what order, and every
@@ -715,6 +717,9 @@ const GROUPS = ALL_GROUPS.map((g) => ({
 const sections = GROUPS.flatMap((g) => g.pages);
 const groupOf = (page) =>
   GROUPS.find((g) => g.pages.some(([id]) => id === page));
+// Search finds a page by its Arabic and English names in either language.
+const pageWords = ([id, title, keywords]) =>
+  `${title} ${keywords} ${translate(title, "en")} ${SEARCH_EN[id] || ""}`;
 // Pages that moved: an old link still lands somewhere sensible.
 const MOVED = { appearance: "theme", ...(isWeb ? WEB_HIDDEN : {}) };
 
@@ -738,8 +743,8 @@ export default function SettingsStudio({
   useEffect(() => {
     setDraft(s);
   }, [s]);
-  const visible = sections.filter(([id, title, keywords]) =>
-    search ? matchesWords(`${title} ${keywords}`, search) : id === tab,
+  const visible = sections.filter((page) =>
+    search ? matchesWords(pageWords(page), search) : page[0] === tab,
   );
   const save = (key, value) => update("settings", { [key]: value });
   const toggle = (key, title, description) => (
@@ -832,9 +837,9 @@ export default function SettingsStudio({
             </div>
             <div className="studio-index-pages">
               {GROUPS.flatMap((group) => group.pages)
-                .filter(([id, title, keywords]) =>
+                .filter(([id], i, list) =>
                   search
-                    ? matchesWords(`${title} ${keywords}`, search)
+                    ? matchesWords(pageWords(list[i]), search)
                     : (
                         GROUPS.find((g) => g.pages.some(([p]) => p === tab)) ||
                         GROUPS[0]
@@ -868,8 +873,7 @@ export default function SettingsStudio({
             </label>
             {GROUPS.map((group) => {
               const pages = group.pages.filter(
-                ([, title, keywords]) =>
-                  !search || matchesWords(`${title} ${keywords}`, search),
+                (page) => !search || matchesWords(pageWords(page), search),
               );
               if (!pages.length) return null;
               const expanded = !!search || open.has(group.id);
