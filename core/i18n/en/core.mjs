@@ -124,6 +124,8 @@ export default {
   "مسلسلات يتابعها الجميع": "Series everyone's watching",
   "مسلسلات رسوم متحركة": "Animated series",
   "مختارات أخرى{1}": "More picks{1}",
+  "مختارات أخرى: {1}": "More picks: {1}",
+  "مختارات أخرى": "More picks",
   "رائج هذا الأسبوع": "Trending this week",
   "في السينما الآن": "In cinemas now",
   "مسلسلات رائجة": "Trending series",

@@ -159,6 +159,8 @@ export default {
   "عرض {1}": "Show {1}",
   "{n1} س {n2}": "{n1} h {n2}",
   "{n} د": "{n} min",
+  "{n1} س {n2} د": "{n1} h {n2} min",
+  "{n} س": "{n} h",
   "أوقات الصلاة في {1}": "Prayer times in {1}",
   بعد: "in",
   "أوقات الصلاة": "Prayer times",

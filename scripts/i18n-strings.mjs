@@ -87,13 +87,23 @@ export const interfaceFiles = () =>
     (f) => !/jsx-(dev-)?runtime\.js$/.test(f),
   );
 
-/** Whether a key is translated: exactly, or by a pattern entry. */
+// Arabic letters and punctuation, without the Arabic-Indic digits that
+// stand in for a template's expressions.
+const LETTERS = /[\u0600-\u065F\u066A-\u06FF]/;
+
+/**
+ * Whether a key is translated: exactly, or by pattern entries that leave
+ * no Arabic behind. A short pattern ("لون {1}") would otherwise "cover" a
+ * whole sentence that merely starts with its word, and the sentence would
+ * render half in English.
+ */
 export function covered(key, dictionary = EN) {
   if (dictionary[key] !== undefined) return true;
   // A template's own pattern is covered by the same entry, or by a
   // pattern that reads its parts (its placeholders standing in as text).
   const sample = key.replace(/\{(\d+)\}/g, "٠");
-  return translate(sample, "en", dictionary) !== sample;
+  const out = translate(sample, "en", dictionary);
+  return out !== sample && !LETTERS.test(out);
 }
 
 export function extract(list = interfaceFiles()) {

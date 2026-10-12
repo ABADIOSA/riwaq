@@ -121,6 +121,33 @@ test("placeholder values are translated in turn, and lines split at ·", () => {
   assert.equal(translate("مجهول · 2024", "en", dictionary), "مجهول · 2024");
 });
 
+test("a short pattern never counts as translating a sentence", () => {
+  const dictionary = {
+    "لون {1}": "{1} colour",
+    "{1} على {2}": "{1} on {2}",
+    أحمر: "red",
+  };
+  assert.equal(translate("لون أحمر", "en", dictionary), "red colour");
+  assert.ok(covered("لون أحمر", dictionary));
+  assert.ok(covered("لون {1}", dictionary));
+  assert.equal(covered("حكاياتك، على ترتيبك.", dictionary), false);
+  assert.equal(covered("لون التمييز", dictionary), false);
+});
+
+test("a pattern that leaves no Arabic beats a longer one that does", () => {
+  const dictionary = {
+    "ابدأ {1} الآن": "Start {1} now",
+    "ابدأ {1}": "Begin {1}",
+    "الفيلم الآن": "the film now",
+  };
+  assert.equal(
+    translate("ابدأ الفيلم الآن", "en", dictionary),
+    "Begin the film now",
+  );
+  // With nothing better, a viewer's own Arabic stays inside the English.
+  assert.equal(translate("ابدأ سهرة الآن", "en", dictionary), "Start سهرة now");
+});
+
 test("the language switch sets direction, locale and t()", () => {
   try {
     assert.equal(cleanLanguage("fr"), "ar");

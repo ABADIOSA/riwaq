@@ -17,6 +17,8 @@ import EN from "./i18n/en.mjs";
 
 export const LANGUAGES = ["ar", "en"];
 const ARABIC = /[؀-ۿ]/;
+// Arabic letters and punctuation, without the Arabic-Indic digits.
+const LETTERS = /[\u0600-\u065F\u066A-\u06FF]/;
 const PLACEHOLDER = /\{(\w+)\}/g;
 
 let current = "ar";
@@ -83,15 +85,24 @@ export function translate(text, lang = current, dictionary = EN) {
   const end = text.slice(start.length).match(/\s*$/)[0];
   const core = text.slice(start.length, text.length - end.length);
   let out = dictionary[core];
+  // A pattern whose filled-in English still holds Arabic may have matched
+  // a sentence that merely starts with its words ("لون {1}"): a pattern
+  // that leaves none wins, and the first partial one is the fallback (a
+  // viewer's own Arabic name inside an English phrase).
+  let partial;
   if (out === undefined)
     for (const p of compiled(dictionary)) {
       const m = p.regex.exec(core);
       if (!m) continue;
-      out = p.value.replace(PLACEHOLDER, (all, name) => {
+      const next = p.value.replace(PLACEHOLDER, (all, name) => {
         const at = p.names.indexOf(name);
         return at < 0 ? all : translate(m[at + 1], lang, dictionary);
       });
-      break;
+      if (!LETTERS.test(next)) {
+        out = next;
+        break;
+      }
+      partial ??= next;
     }
   // Riwaq joins labels with " · " ("فيلم · 2024 · دراما"): with no entry
   // for the whole line, each part is translated on its own.
@@ -100,6 +111,7 @@ export function translate(text, lang = current, dictionary = EN) {
     const next = parts.map((part) => translate(part, lang, dictionary));
     if (next.some((part, i) => part !== parts[i])) out = next.join(" · ");
   }
+  if (out === undefined) out = partial;
   const result = out === undefined ? text : start + out + end;
   if (useCache) {
     if (cache.size > 5000) cache = new Map();
