@@ -102,6 +102,14 @@ export const SONGS = {
   many: "{n} أغنية",
   other: "{n} أغنية",
 };
+export const ALBUMS = {
+  zero: "لا ألبومات",
+  one: "ألبوم واحد",
+  two: "ألبومان",
+  few: "{n} ألبومات",
+  many: "{n} ألبوماً",
+  other: "{n} ألبوم",
+};
 export const CATALOGS = {
   zero: "لا كتالوجات",
   one: "كتالوج واحد",

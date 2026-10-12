@@ -777,7 +777,11 @@ export async function startBridge({ version, store }) {
   }
 
   const methods = {
-    musicLocalLibrary: (a) => music.view(a?.profileId),
+    musicLocalLibrary: async (a) => {
+      await music.tagSome(a?.profileId);
+      return music.view(a?.profileId);
+    },
+    musicLocalCover: (a) => music.cover(a || {}),
     musicLocalImport: async (a) => {
       music.gate(a?.profileId);
       const files = await pickFile({

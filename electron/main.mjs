@@ -960,7 +960,13 @@ function rememberTrack(kind, value, info) {
   client.rememberSeries(series, { [kind]: identity });
 }
 const methods = {
-  musicLocalLibrary: (a) => musicLibrary.view(a?.profileId),
+  // Songs from before 0.41 get their tags a batch at a time; the interface
+  // asks again while `untagged` is above zero.
+  musicLocalLibrary: async (a) => {
+    await musicLibrary.tagSome(a?.profileId);
+    return musicLibrary.view(a?.profileId);
+  },
+  musicLocalCover: (a) => musicLibrary.cover(a || {}),
   musicLocalImport: async (a) => {
     musicLibrary.gate(a?.profileId);
     const picked = await dialog.showOpenDialog(window, {
@@ -1935,7 +1941,23 @@ app
       app.exit(1);
     }
     if (client) {
-      musicLibrary = new MusicLibrary(client);
+      // Covers become small JPEG data URLs, made and kept in memory only.
+      musicLibrary = new MusicLibrary(client, {
+        thumbnail: (bytes) => {
+          const image = nativeImage.createFromBuffer(Buffer.from(bytes));
+          if (image.isEmpty()) return null;
+          const { width, height } = image.getSize();
+          const scaled =
+            Math.max(width, height) > 320
+              ? image.resize(
+                  width >= height
+                    ? { width: 320, quality: "good" }
+                    : { height: 320, quality: "good" },
+                )
+              : image;
+          return `data:image/jpeg;base64,${scaled.toJPEG(82).toString("base64")}`;
+        },
+      });
       protocol.handle("riwaq-audio", (request) =>
         musicLibrary.respond(request),
       );

@@ -4,6 +4,8 @@ import { api, call } from "./api.js";
 import { setLocalPlaying } from "./audio.js";
 
 const empty = { tracks: [], playlists: [], queue: [] };
+// Covers per profile and song, as small data URLs (null: none).
+const covers = new Map();
 export function useLocalMusic(state, videoActive, notice) {
   const owner = state.profiles?.active;
   const current = useRef({
@@ -56,16 +58,20 @@ export function useLocalMusic(state, videoActive, notice) {
     engine.queue([]);
     setLibrary(empty);
     setProblem("");
-    if (owner)
+    covers.clear();
+    // Songs added before 0.41 get their tags a batch per request.
+    const load = (first) =>
       call("musicLocalLibrary", { profileId: owner })
         .then((data) => {
           if (token !== version.current) return;
           setLibrary(data);
-          engine.queue(data.queue);
+          if (first) engine.queue(data.queue);
+          if (data.untagged > 0) setTimeout(() => load(false), 300);
         })
         .catch(
           (error) => token === version.current && setProblem(error.message),
         );
+    if (owner) load(true);
     return () => {
       ++version.current;
       engine.stop();
@@ -99,16 +105,34 @@ export function useLocalMusic(state, videoActive, notice) {
       }
     };
   }, [!!playback?.id, videoActive, engine]);
+  const cover = (id) => {
+    const key = `${owner}:${id}`;
+    if (!covers.has(key))
+      covers.set(
+        key,
+        call("musicLocalCover", { profileId: owner, id }).catch(() => null),
+      );
+    return covers.get(key);
+  };
   useEffect(() => {
     if (!navigator.mediaSession) return;
     const track = library.tracks.find((t) => t.id === playback?.id);
-    navigator.mediaSession.metadata =
-      track && typeof window.MediaMetadata !== "undefined"
-        ? new window.MediaMetadata({
-            title: track.title,
-            artist: "مكتبتك في رِواق",
-          })
-        : null;
+    const describe = (artwork) =>
+      new window.MediaMetadata({
+        title: track.title,
+        artist: track.artist || "مكتبتك في رِواق",
+        album: track.album || "",
+        artwork: artwork ? [{ src: artwork, type: "image/jpeg" }] : [],
+      });
+    const supported = typeof window.MediaMetadata !== "undefined";
+    navigator.mediaSession.metadata = track && supported ? describe() : null;
+    // Windows' media controls show the cover once it is read.
+    if (track?.cover && supported)
+      cover(track.id).then((url) => {
+        const now = library.tracks.find((t) => t.id === engine.state.id);
+        if (url && now?.id === track.id)
+          navigator.mediaSession.metadata = describe(url);
+      });
     navigator.mediaSession.playbackState = !track
       ? "none"
       : playback?.playing
@@ -157,6 +181,7 @@ export function useLocalMusic(state, videoActive, notice) {
     problem,
     edit,
     play,
+    cover,
     importFiles: async () => {
       const data = await mutate("musicLocalImport");
       if (data)

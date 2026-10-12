@@ -1,5 +1,32 @@
 # Verification — Riwaq
 
+## 2026-10-12 — 0.41.0: song tags for local music
+
+- **658 Node tests pass** (642 on main + 16 new). Prettier and both the desktop and web Vite builds pass.
+- `tests/audio-tags.test.mjs` builds each format in memory:
+  - ID3v2.3: UTF-16 text, "n/total" track, and a front cover chosen over a back cover.
+  - ID3v2.4 (syncsafe frame sizes) and ID3v2.2 (three-letter frames).
+  - ID3v1, and Arabic in Windows-1256 read as Arabic.
+  - FLAC comments and picture behind a 200 KB seek table. Under 2 KB is read, counted.
+  - Ogg Vorbis with a METADATA_BLOCK_PICTURE cover, and an Opus comment packet spanning two pages.
+  - MP4 with `moov` after a 3 MB `mdat`. Under 4 KB is read.
+  - WAV INFO plus an `id3 ` chunk.
+  - Eight broken or hostile inputs and a throwing reader all give empty tags without throwing.
+  - File-name fallbacks.
+- `tests/music-tags.test.mjs` uses real temporary files through `electron/music-library.mjs`:
+  - Import reads tags and falls back to the file name, and paths stay out of the view.
+  - A 0.40-shaped library is tagged in batches of 40, keeping favourites.
+  - Tags read during a profile switch are refused and nothing is written.
+  - Covers come from an injected thumbnail maker, one per album, are forgotten on `revoke()`, are refused for another profile, and are absent without a maker.
+  - `web/music.js` gives the same tags and covers from `File` objects.
+  - The album, artist and track ordering and the compilation label are checked.
+- Headless Chromium render with a mock bridge at 980×680 and 1440×900:
+  - The songs list shows artist and album lines and covers loaded when visible.
+  - Search finds by artist, and the Albums grid, album page (track numbers, year, count) and Artists cards all render.
+  - The player bar shows the cover, counts use `arabicCount`, and there are no page errors or horizontal overflow.
+  - The render caught album card text squeezed to zero width by `.local-music button { display: inline-flex }`; fixed before commit.
+- Not run here: Windows, Electron's `nativeImage` thumbnails, real music collections, Windows' media overlay showing the artwork, or the web edition with real picked files.
+
 ## 2026-10-11 — 0.40.0: optional, end-to-end encrypted Riwaq accounts
 
 - What: `core/account.mjs` (keys, sealing, pull–merge–push), `core/sync-merge.mjs` (three-way merge), `server/accounts/` (Cloudflare Worker + D1, deployed by `.github/workflows/accounts.yml`), the Settings page `src/components/settings/AccountPage.jsx`, IPC `account*` in preload, main and the web bridge. Details in docs/ACCOUNTS.md. `core/account-server.mjs` points at `https://riwaq-accounts.abadiosa2007.workers.dev` (the Worker's name on the subdomain shown in the owner's Cloudflare dashboard); an empty value turns accounts off.

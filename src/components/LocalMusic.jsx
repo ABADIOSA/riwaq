@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Disc3,
   FolderPlus,
@@ -16,25 +16,105 @@ import {
   X,
   Volume2,
   ArrowUp,
+  ArrowRight,
+  Mic2,
 } from "lucide-react";
-import { matchesWords } from "../../core/arabic.mjs";
+import {
+  ALBUMS,
+  SONGS,
+  arabicCount,
+  matchesWords,
+} from "../../core/arabic.mjs";
+import {
+  albumsOf,
+  artistsOf,
+  songLine,
+  songWords,
+  songsOf,
+} from "../../core/music-groups.mjs";
 const time = (seconds) =>
   `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+
+/**
+ * A song's cover from its own tags, loaded once it scrolls near the view
+ * (each is read from the file and shrunk in main); a disc until then.
+ */
+export function SongCover({ music, id, has, size = "row", spinning }) {
+  const [url, setUrl] = useState(null);
+  const box = useRef(null);
+  useEffect(() => {
+    setUrl(null);
+    if (!has || !id) return;
+    let alive = true;
+    const load = () => music.cover(id).then((u) => alive && setUrl(u));
+    const node = box.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      load();
+      return () => (alive = false);
+    }
+    const seen = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        seen.disconnect();
+        load();
+      },
+      { rootMargin: "240px" },
+    );
+    seen.observe(node);
+    return () => {
+      alive = false;
+      seen.disconnect();
+    };
+  }, [id, has]);
+  return (
+    <span
+      ref={box}
+      className={`song-cover ${size}${url ? " has-art" : ""}`}
+      aria-hidden="true"
+    >
+      {url ? (
+        <img src={url} alt="" draggable="false" />
+      ) : (
+        <Disc3
+          size={size === "row" ? 18 : size === "bar" ? 26 : 38}
+          className={spinning ? "spinning" : ""}
+        />
+      )}
+    </span>
+  );
+}
 
 export function LocalMusicRoom({ music }) {
   const { library, playback, busy, problem, edit, play } = music;
   const [query, setQuery] = useState(""),
     [tab, setTab] = useState("all"),
+    [group, setGroup] = useState(null),
     [name, setName] = useState("");
   const playlist = library.playlists.find((p) => p.id === tab);
   const ids = tab === "queue" ? library.queue : playlist?.ids;
+  const albums = albumsOf(library.tracks),
+    artists = artistsOf(library.tracks);
+  const browsing = (tab === "albums" || tab === "artists") && !group;
   const tracks = (
     ids
       ? ids.map((id) => library.tracks.find((t) => t.id === id)).filter(Boolean)
-      : library.tracks
+      : songsOf(library.tracks, group)
   ).filter(
-    (t) => (tab !== "favorites" || t.favorite) && matchesWords(t.title, query),
+    (t) =>
+      (tab !== "favorites" || t.favorite) && matchesWords(songWords(t), query),
   );
+  const shown = (tab === "albums" ? albums : artists).filter((g) =>
+    matchesWords(`${g.name} ${g.artist || ""}`, query),
+  );
+  const chosen = group
+    ? (group.kind === "album" ? albums : artists).find(
+        (g) => g.key === group.key,
+      )
+    : null;
+  const pick = (id) => {
+    setTab(id);
+    setGroup(null);
+  };
   const addQueue = (id) =>
     edit({ action: "queue", ids: [...library.queue, id] });
   const savePlaylist = async (e) => {
@@ -60,7 +140,7 @@ export function LocalMusicRoom({ music }) {
       <div className="local-music-summary">
         <Disc3 size={32} />
         <span>
-          <b>{library.tracks.length} أغنية</b>
+          <b>{arabicCount(library.tracks.length, SONGS)}</b>
           <small>MP3 · FLAC · WAV · OGG · OPUS · M4A · AAC</small>
         </span>
         <p>
@@ -72,6 +152,8 @@ export function LocalMusicRoom({ music }) {
         <nav aria-label="مكتبة الموسيقى">
           {[
             ["all", "كل الأغاني"],
+            ...(albums.length ? [["albums", "الألبومات"]] : []),
+            ...(artists.length ? [["artists", "الفنانون"]] : []),
             ["favorites", "أحببتها"],
             ["queue", `قائمة الانتظار (${library.queue.length})`],
             ...library.playlists.map((p) => [p.id, p.name]),
@@ -80,7 +162,7 @@ export function LocalMusicRoom({ music }) {
               key={id}
               aria-pressed={tab === id}
               className={tab === id ? "chosen" : ""}
-              onClick={() => setTab(id)}
+              onClick={() => pick(id)}
             >
               {title}
             </button>
@@ -88,7 +170,7 @@ export function LocalMusicRoom({ music }) {
         </nav>
         <input
           aria-label="ابحث في أغانيك"
-          placeholder="ابحث في أغانيك…"
+          placeholder="ابحث بالأغنية أو الفنان أو الألبوم…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -123,7 +205,7 @@ export function LocalMusicRoom({ music }) {
             disabled={busy}
             onClick={async () => {
               if (await edit({ action: "deletePlaylist", id: playlist.id }))
-                setTab("all");
+                pick("all");
             }}
           >
             احذف هذه القائمة
@@ -131,7 +213,93 @@ export function LocalMusicRoom({ music }) {
         )}
       </div>
       {problem && <p role="alert">{problem}</p>}
-      {tracks.length ? (
+      {library.untagged > 0 && (
+        <p className="local-music-tagging" role="status">
+          نقرأ معلومات أغانيك من ملفاتها… بقي {library.untagged}
+        </p>
+      )}
+      {chosen && (
+        <div className="local-group-head">
+          <button className="secondary" onClick={() => setGroup(null)}>
+            <ArrowRight size={16} />{" "}
+            {group.kind === "album" ? "كل الألبومات" : "كل الفنانين"}
+          </button>
+          <SongCover
+            music={music}
+            id={chosen.coverId}
+            has={!!chosen.coverId}
+            size="tile"
+          />
+          <span>
+            <b dir="auto">{chosen.name}</b>
+            <small dir="auto">
+              {[
+                chosen.artist,
+                chosen.year,
+                arabicCount(chosen.count, SONGS),
+                chosen.albumCount ? arabicCount(chosen.albumCount, ALBUMS) : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </small>
+          </span>
+        </div>
+      )}
+      {browsing ? (
+        shown.length ? (
+          <div
+            className={tab === "albums" ? "local-albums" : "local-artists"}
+            role="list"
+          >
+            {shown.map((g) => (
+              <button
+                key={g.key}
+                role="listitem"
+                className="local-group"
+                onClick={() =>
+                  setGroup({
+                    kind: tab === "albums" ? "album" : "artist",
+                    key: g.key,
+                  })
+                }
+                title={g.name}
+              >
+                {tab === "albums" ? (
+                  <SongCover
+                    music={music}
+                    id={g.coverId}
+                    has={!!g.coverId}
+                    size="tile"
+                  />
+                ) : (
+                  <span className="song-cover artist" aria-hidden="true">
+                    <Mic2 size={26} />
+                  </span>
+                )}
+                <b dir="auto">{g.name}</b>
+                <small dir="auto">
+                  {tab === "albums"
+                    ? [g.artist, arabicCount(g.count, SONGS)]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : [
+                        arabicCount(g.count, SONGS),
+                        g.albumCount ? arabicCount(g.albumCount, ALBUMS) : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                </small>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="local-music-empty">
+            <Disc3 size={46} />
+            <h3>لا نتائج</h3>
+            <p>غيّر البحث.</p>
+          </div>
+        )
+      ) : tracks.length ? (
         <ol className="local-track-list">
           {tracks.map((t) => (
             <li
@@ -152,10 +320,14 @@ export function LocalMusicRoom({ music }) {
               >
                 <Play size={16} />
               </button>
+              <SongCover music={music} id={t.id} has={t.cover} />
               <span className="local-track-title">
-                <b dir="auto">{t.title}</b>
-                <small>
-                  {t.format}
+                <b dir="auto">
+                  {group?.kind === "album" && t.track ? `${t.track}. ` : ""}
+                  {t.title}
+                </b>
+                <small dir="auto">
+                  {songLine(t)}
                   {playback.id === t.id ? " · في المشغّل" : ""}
                 </small>
               </span>
@@ -250,14 +422,20 @@ export function LocalMusicBar({ music, hidden, onRoom }) {
   return (
     <aside className="local-music-bar" aria-label="مشغّل الأغاني المدمج">
       <div className="local-bar-top">
-        <Disc3 size={29} className={p.playing ? "spinning" : ""} />
+        <SongCover
+          music={music}
+          id={track.id}
+          has={track.cover}
+          size="bar"
+          spinning={p.playing}
+        />
         <button className="local-bar-title" onClick={onRoom}>
           <b dir="auto">{track.title}</b>
-          <small>
+          <small dir="auto">
             {p.error ||
               (p.loading
                 ? "جارٍ التحميل…"
-                : `مكتبتك · ${p.queue.indexOf(p.id) + 1} / ${p.queue.length}`)}
+                : `${track.artist || "مكتبتك"} · ${p.queue.indexOf(p.id) + 1} / ${p.queue.length}`)}
           </small>
         </button>
         <div className="local-bar-controls" dir="ltr">

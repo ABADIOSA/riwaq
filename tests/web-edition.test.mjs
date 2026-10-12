@@ -299,13 +299,14 @@ test("the bridge drops headers a browser refuses and keeps errors free of addres
   );
 });
 
-test("web local music keeps the desktop's limits and profile gate", () => {
+test("web local music keeps the desktop's limits and profile gate", async () => {
   const client = {
     profiles: { gate() {}, store: { active: "p1" } },
   };
   const music = new WebMusicLibrary(client);
   const file = (name, size = 10) => ({ name, size, lastModified: 1 });
-  const added = music.importFiles("p1", [
+  // Picking reads each file's tags first (core/audio-tags.mjs).
+  const added = await music.importFiles("p1", [
     file("a.mp3"),
     file("a.mp3"),
     file("b.txt"),

@@ -4,6 +4,7 @@ const allowed = new Set([
   "musicLocalImport",
   "musicLocalEdit",
   "musicLocalSource",
+  "musicLocalCover",
   "init",
   "windowInfo",
   "windowControl",
