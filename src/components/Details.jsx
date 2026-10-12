@@ -59,6 +59,7 @@ import {
   chipCounts,
   filterSources,
 } from "../../core/source-view.mjs";
+import { resumePick } from "../../core/resume.mjs";
 import { IconButton, Busy, Empty, Modal, ScrollRow } from "./UI.jsx";
 import { TitleLogo } from "./TitleLogo.jsx";
 import { dominantColor, titleTheme } from "../../core/title-theme.mjs";
@@ -352,6 +353,14 @@ export default function Details({
   // The theme song: asked once the title is loaded; it plays at once in
   // "auto" (never over Spotify, a viewing or a hidden window), waits for a
   // press in "button", and stops when the page goes.
+  // Continue watching on the same source (core/resume.mjs, issue #74):
+  // opened from that row, the page asks for sources and plays the one the
+  // viewing used, or the closest, before showing any list.
+  const resumeSource =
+    selection.resume && state.settings.resumeSameSource !== false
+      ? state.progress?.[`${selection.meta.type}:${selection.videoId}`]?.source
+      : null;
+  const [autoResume, setAutoResume] = useState(!!resumeSource);
   const songMode = state.settings.themeSong || "auto";
   const songKey = `${meta.type}:${meta.id}`;
   const songRefused = (state.settings.themeSongSkip || []).includes(songKey);
@@ -379,10 +388,19 @@ export default function Details({
         setSong(found);
         if (
           songMode !== "auto" ||
+          resumeSource ||
           document.visibilityState !== "visible" ||
           videoIsPlaying()
         )
           return;
+        // The first time a theme starts by itself, say what it is: viewers
+        // took it for the film playing before they chose a source.
+        if (!state.settings.themeSongHinted) {
+          notice(
+            "هذي أغنية العمل تشتغل لما تفتح صفحته، وتوقف لما تختار المصدر. تقدر توقفها من زرها أو من الإعدادات ← الأجواء.",
+          );
+          update("settings", { themeSongHinted: true });
+        }
         if (found.spotifyUri && spotifyTheme) {
           const ok = await startSpotifyTheme(found.spotifyUri);
           if (ok && !live) {
@@ -455,6 +473,10 @@ export default function Details({
     });
   };
   const openSources = () => {
+    // Choosing a source is the start of watching: the theme fades out, so it
+    // is never taken for the film's own sound.
+    stopAudio(songOwner.current, { fadeMs: 400 });
+    stopSpotifyTheme(onSpotify);
     setShowSources(true);
     if (popupMode) {
       setSourcesOpen(true);
@@ -501,6 +523,35 @@ export default function Details({
         .finally(() => setSubLoading(false));
     }
   };
+  useEffect(() => {
+    if (!autoResume || loading || !videoId) return;
+    let live = true;
+    call("streams", { type: meta.type, id: videoId, seriesId: meta.id })
+      .then(async (r) => {
+        if (!live) return;
+        setAutoResume(false);
+        const pick = resumePick(r?.streams || [], resumeSource);
+        if (pick) {
+          notice(
+            pick.exact
+              ? "نكمل من حيث وقفت على نفس المصدر"
+              : "المصدر السابق تغيّر؛ نكمل على أقرب مصدر له من نفس الإضافة",
+          );
+          await playStream(pick.stream);
+        } else {
+          notice("المصدر اللي كنت تشاهد عليه ما عاد متاحاً؛ اختر مصدراً");
+          openSources();
+        }
+      })
+      .catch(() => {
+        if (!live) return;
+        setAutoResume(false);
+        openSources();
+      });
+    return () => {
+      live = false;
+    };
+  }, [autoResume, loading, videoId]);
   const settings = state.settings;
   const allShown =
     result?.streams?.filter(
@@ -1012,6 +1063,21 @@ export default function Details({
             <p className="cast" dir="auto">
               {meta.cast.slice(0, 5).join(" · ")}
             </p>
+          )}
+          {autoResume && (
+            <div className="resume-banner" role="status">
+              <LoaderCircle className="spin" size={16} />
+              <span>نكمل من حيث وقفت على نفس المصدر…</span>
+              <button
+                className="text-button"
+                onClick={() => {
+                  setAutoResume(false);
+                  openSources();
+                }}
+              >
+                اختر مصدراً آخر
+              </button>
+            </div>
           )}
           <div className="title-actions">
             <button

@@ -727,3 +727,18 @@
   align-items: center;
   background: #171a1f;
 }
+
+/* Continue watching on the same source: a short wait before playback. */
+.resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft, #ffffff12);
+  font-size: 13px;
+}
+.resume-banner .text-button {
+  margin-inline-start: auto;
+}

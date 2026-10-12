@@ -133,6 +133,10 @@ export const DEFAULT_SETTINGS = {
   shaderPath: "",
   // GLSL chains (core/shaders.mjs): a preset by name, where it applies, the
   // viewer's folder (set only by main's dialog) and their own ordered chain.
+  // Continue watching plays the source the viewing used (core/resume.mjs).
+  resumeSameSource: true,
+  // The theme song explained itself once (issue #74).
+  themeSongHinted: false,
   shaderPreset: "",
   shaderScope: "auto",
   shaderDir: "",
@@ -416,6 +420,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "prayerPause",
     "heroAutoplay",
     "rememberSeries",
+    "resumeSameSource",
+    "themeSongHinted",
     "skipOnline",
     "simpleColor",
     "rtxUpscale",

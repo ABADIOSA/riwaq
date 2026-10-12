@@ -565,6 +565,13 @@ export default function App() {
     (meta, videoId) => latest.current.open(meta, videoId),
     [],
   );
+  // Continue watching opens the viewing itself, on the source it used.
+  latest.current.resume = (meta) => {
+    const record = continueRail.progressMap[titleKey(meta)];
+    if (!record) return open(meta);
+    openTitle({ meta, videoId: record.videoId, resume: true });
+  };
+  const resumeStable = useCallback((meta) => latest.current.resume(meta), []);
   const moreStable = useCallback((row) => latest.current.more(row), []);
   const noticeStable = useCallback((m) => latest.current.notice(m), []);
   const settingsStable = useCallback((tab) => latest.current.settings(tab), []);
@@ -1232,7 +1239,7 @@ export default function App() {
                                 subtitle="متابعة المشاهدة"
                                 metas={continueRail.metas}
                                 progressMap={continueRail.progressMap}
-                                onOpen={openStable}
+                                onOpen={resumeStable}
                               />
                             )}
                             {id === "taste" && ready && (

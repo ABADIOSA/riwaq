@@ -830,6 +830,8 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   nowPlaying = { key, type: meta.type, id: videoId, series };
   if (series && stream.memory)
     client.rememberSeries(series, { source: stream.memory });
+  // Continue watching plays this source again (core/resume.mjs).
+  client.rememberResume(meta, videoId, { key, memory: stream.memory });
   // True HDR in MPV's own window is for sources labelled HDR; everything
   // else stays in Riwaq's window with its controls.
   const parsed = parseStream(stream);

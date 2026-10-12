@@ -388,6 +388,7 @@ export async function startBridge({ version, store }) {
     nowPlaying = { key, type: meta.type, id: videoId, series };
     if (series && stream.memory)
       client.rememberSeries(series, { source: stream.memory });
+    client.rememberResume(meta, videoId, { key, memory: stream.memory });
     if (stream.behaviorHints?.proxyHeaders?.request && !(await serverUp()))
       emit(
         "notice",
