@@ -12,7 +12,9 @@ Riwaq is an independent implementation of a desktop client for the Stremio HTTP 
 - MPV IPC documentation: https://mpv.io/manual/stable/#json-ipc
 - XMLTV DTD (guide format): https://github.com/XMLTV/xmltv/blob/master/xmltv.dtd
 - Discord RPC / IPC documentation: https://discord.com/developers/docs/topics/rpc
-- Anime4K is referenced for context only. Riwaq bundles no Anime4K files and no third-party shaders; its picture profiles are built from MPV's own scaler, deband and sigmoid options.
+- Riwaq bundles no Anime4K files and no third-party shaders; its picture profiles are built from MPV's own scaler, deband and sigmoid options. Since 0.41 a viewer may press Download to fetch, into their own Riwaq data folder, these upstream releases, pinned by URL, size and SHA-256 in `core/shaders.mjs`. They keep their own licenses, and nothing from them is redistributed with Riwaq:
+  - Anime4K 4.0.1 by bloc97, MIT: https://github.com/bloc97/Anime4K (release asset `Anime4K_v4.0.zip`)
+  - FSRCNNX 1.1 by igv, LGPL-3.0 shader files: https://github.com/igv/FSRCNN-TensorFlow (`FSRCNNX_x2_8-0-4-1.glsl`, `FSRCNNX_x2_16-0-4-1.glsl`)
 
 ## Bundled runtimes
 

@@ -201,7 +201,7 @@ test("a custom shader path is only passed with the custom profile", () => {
     url: "https://a.test/v",
     title: "t",
   });
-  assert.ok(withPath.includes("--glsl-shaders=C:/shaders/a.glsl"));
+  assert.ok(withPath.includes("--glsl-shader=C:/shaders/a.glsl"));
   const ignored = playerArgs({
     pipe: "p",
     settings: {
@@ -212,7 +212,7 @@ test("a custom shader path is only passed with the custom profile", () => {
     url: "https://a.test/v",
     title: "t",
   });
-  assert.ok(!ignored.some((arg) => arg.startsWith("--glsl-shaders=")));
+  assert.ok(!ignored.some((arg) => arg.startsWith("--glsl")));
 });
 
 test("live sources buffer and reconnect instead of ending", () => {

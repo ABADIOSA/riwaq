@@ -304,6 +304,12 @@ test("CSV parses quoted titles and commas, rejects truncation and only accepts e
 test("Simkl PIN authentication never exposes bearer token and imports supported titles", async () => {
   const c = create(async (url) => {
     const p = new URL(url).pathname;
+    // An app registered before AUTH V2 is refused by the device endpoint.
+    if (p === "/oauth2/device")
+      throw Object.assign(new Error("HTTP 401"), {
+        status: 401,
+        code: "invalid_client",
+      });
     if (p === "/oauth/pin")
       return { user_code: "PIN", interval: 5, expires_in: 600 };
     if (p === "/oauth/pin/PIN")
@@ -320,4 +326,153 @@ test("Simkl PIN authentication never exposes bearer token and imports supported 
   await c.integrations.sync("simkl");
   assert.equal(c.state.connectedLists.flatMap((l) => l.metas).length, 2);
   assert.ok(!JSON.stringify(c.publicState()).includes("simkl-private"));
+});
+
+const oauthError = (status, code) =>
+  Object.assign(new Error(`HTTP ${status}`), { status, code });
+
+test("Simkl AUTH V2: device code, pending and slow-down answers, then a token", async () => {
+  const calls = [];
+  let polls = 0;
+  const c = create(async (url, init = {}) => {
+    const u = new URL(url);
+    calls.push({ path: u.pathname, params: u.searchParams, init });
+    if (u.pathname === "/oauth2/device")
+      return {
+        device_code: "dev-code",
+        user_code: "ABCD-1234",
+        verification_uri: "https://simkl.com/pin",
+        verification_uri_complete: "https://simkl.com/pin/ABCD-1234",
+        expires_in: 900,
+        interval: 5,
+      };
+    if (u.pathname === "/oauth2/token") {
+      polls++;
+      if (polls === 1) throw oauthError(400, "authorization_pending");
+      if (polls === 2) throw oauthError(400, "slow_down");
+      return {
+        access_token: "v2-access",
+        refresh_token: "v2-refresh",
+        expires_in: 604800,
+        token_type: "Bearer",
+      };
+    }
+    return { movies: [{ movie: { title: "Movie", ids: { imdb: "tt111" } } }] };
+  });
+  c.version = "0.41.0";
+  c.integrations.save({ id: "simkl", clientId: "v2-public-id" });
+  const started = await c.integrations.begin("simkl");
+  assert.equal(started.code, "ABCD-1234");
+  assert.equal(started.url, "https://simkl.com/pin/ABCD-1234");
+  const device = calls[0];
+  assert.equal(device.init.method, "POST");
+  const body = new URLSearchParams(device.init.body);
+  assert.equal(body.get("client_id"), "v2-public-id");
+  assert.equal(body.get("scope"), "media:read media:write");
+  assert.equal(body.get("client_secret"), null, "V2 apps have no secret");
+  for (const [name, value] of [
+    ["client_id", "v2-public-id"],
+    ["app-name", "riwaq"],
+    ["app-version", "0.41.0"],
+  ])
+    assert.equal(device.params.get(name), value, name);
+  assert.match(device.init.headers["User-Agent"], /^Riwaq\/0\.41\.0/);
+
+  const d = c.integrations.devices.get("simkl");
+  d.next = 0;
+  assert.equal((await c.integrations.poll("simkl")).pending, true);
+  d.next = 0;
+  assert.deepEqual(await c.integrations.poll("simkl"), {
+    pending: true,
+    interval: 10,
+  });
+  d.next = 0;
+  assert.equal((await c.integrations.poll("simkl")).connected, true);
+  const token = calls.find((x) => x.path === "/oauth2/token");
+  assert.equal(
+    new URLSearchParams(token.init.body).get("grant_type"),
+    "urn:ietf:params:oauth:grant-type:device_code",
+  );
+  await c.integrations.sync("simkl");
+  const list = calls.at(-1);
+  assert.equal(list.path, "/sync/all-items/all/plantowatch");
+  assert.equal(list.init.headers.Authorization, "Bearer v2-access");
+  assert.equal(list.params.get("app-name"), "riwaq");
+  assert.equal(c.state.connectedLists.flatMap((l) => l.metas).length, 1);
+  assert.doesNotMatch(JSON.stringify(c.publicState()), /v2-access|v2-refresh/);
+});
+
+test("Simkl V2 tokens refresh when expired or refused, once at a time", async () => {
+  let refreshes = 0,
+    lists = 0;
+  const c = create(async (url, init = {}) => {
+    const u = new URL(url);
+    if (u.pathname === "/oauth2/token") {
+      refreshes++;
+      const body = new URLSearchParams(init.body);
+      assert.equal(body.get("grant_type"), "refresh_token");
+      assert.equal(body.get("refresh_token"), "old-refresh");
+      return { access_token: `fresh-${refreshes}`, expires_in: 604800 };
+    }
+    lists++;
+    if (init.headers.Authorization === "Bearer stale")
+      throw oauthError(401, "invalid_token");
+    return { movies: [] };
+  });
+  c.integrations.save({ id: "simkl", clientId: "id" });
+  const s = c.integrations.get("simkl");
+  // Expired a week ago: refreshed before the request.
+  s.token = {
+    access_token: "old",
+    refresh_token: "old-refresh",
+    expires_in: 604800,
+    created_at: Math.floor(Date.now() / 1000) - 700000,
+    v2: true,
+  };
+  await Promise.all([c.integrations.sync("simkl"), c.integrations.simkl("/x")]);
+  assert.equal(refreshes, 1, "two requests share one refresh");
+  assert.equal(s.token.access_token, "fresh-1");
+  assert.equal(s.token.refresh_token, "old-refresh", "kept when not rotated");
+  // Refused (401) while not yet expired: one refresh, one retry.
+  s.token.access_token = "stale";
+  s.token.created_at = Math.floor(Date.now() / 1000);
+  await c.integrations.simkl("/y");
+  assert.equal(refreshes, 2);
+  assert.equal(s.token.access_token, "fresh-2");
+});
+
+test("a refused Simkl refresh ends the session but keeps the client ID", async () => {
+  const c = create(async (url) => {
+    if (new URL(url).pathname === "/oauth2/token")
+      throw oauthError(400, "invalid_grant");
+    return {};
+  });
+  c.integrations.save({ id: "simkl", clientId: "keep-me" });
+  const s = c.integrations.get("simkl");
+  s.token = {
+    access_token: "a",
+    refresh_token: "r",
+    expires_in: 10,
+    created_at: 1,
+    v2: true,
+  };
+  await assert.rejects(c.integrations.simkl("/z"), /اربط الحساب من جديد/);
+  assert.equal(s.token, undefined);
+  assert.equal(s.clientId, "keep-me");
+  assert.equal(
+    c.publicState().integrations.find((i) => i.id === "simkl").connected,
+    false,
+  );
+});
+
+test("a V2 app sent to the old PIN, and Simkl's other refusals, read in Arabic", async () => {
+  const { simklProblem } = await import("../core/integrations.mjs");
+  assert.match(
+    simklProblem(oauthError(400, "unauthorized_client")).message,
+    /Client ID/,
+  );
+  assert.match(simklProblem(oauthError(429, "")).message, /429/);
+  assert.equal(simklProblem(oauthError(503, "")).status, 503);
+  const plain = new Error("offline");
+  assert.equal(simklProblem(plain), plain);
 });

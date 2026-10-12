@@ -224,6 +224,8 @@ export function reportSettings(settings = {}) {
         "homeHidden",
         "mpvPath",
         "customShader",
+        "shaderPath",
+        "shaderDir",
         "prayerCustom",
         "serverUrl",
       ].includes(key)
@@ -243,6 +245,9 @@ export function reportSettings(settings = {}) {
     else if (Array.isArray(value)) out[key] = `[${value.length}]`;
   }
   if (settings.mpvPath) out.mpvPath = "مخصّص";
+  // Shader folders are the viewer's own paths: only whether one is set.
+  if (settings.shaderPath) out.shaderPath = "مخصّص";
+  if (settings.shaderDir) out.shaderDir = "مخصّص";
   if (settings.serverUrl)
     out.serverUrl = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(
       settings.serverUrl,

@@ -19,6 +19,7 @@ import { cleanSeenVersion } from "./whats-new.mjs";
 import { cleanTaste } from "./taste.mjs";
 import { cleanMusic } from "./music.mjs";
 import { cleanThemeSkip } from "./theme-song.mjs";
+import { chosenPreset, cleanShaderChain } from "./shaders.mjs";
 import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
@@ -130,6 +131,12 @@ export const DEFAULT_SETTINGS = {
   // Series whose intro and outro are never skipped on their own.
   skipExcept: [],
   shaderPath: "",
+  // GLSL chains (core/shaders.mjs): a preset by name, where it applies, the
+  // viewer's folder (set only by main's dialog) and their own ordered chain.
+  shaderPreset: "",
+  shaderScope: "auto",
+  shaderDir: "",
+  shaderChain: [],
   sleepTimer: 0,
   shader: "none",
   toneMapping: "auto",
@@ -478,6 +485,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     volumeOsdPosition: ["center", "top", "top-left", "top-right"],
     presenceDetail: ["title", "generic", "off"],
     shader: ["none", "sharp", "anime", "film", "custom"],
+    shaderScope: ["auto", "all"],
     toneMapping: ["auto", "bt.2446a", "hable", "mobius", "reinhard", "off"],
     epgHours: [2, 4, 6, 12],
     cardStyle: ["glass", "flat", "outline"],
@@ -556,6 +564,12 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.seenVersion = cleanSeenVersion(input.seenVersion);
   if (Array.isArray(input.skipExcept))
     next.skipExcept = cleanSkipExcept(input.skipExcept);
+  if (typeof input.shaderPreset === "string")
+    next.shaderPreset = chosenPreset({ shaderPreset: input.shaderPreset })
+      ? input.shaderPreset
+      : "";
+  if (Array.isArray(input.shaderChain))
+    next.shaderChain = cleanShaderChain(input.shaderChain);
   if (input.seriesMemory && typeof input.seriesMemory === "object")
     next.seriesMemory = cleanSeriesMemory(input.seriesMemory);
   if (input.taste && typeof input.taste === "object")

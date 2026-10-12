@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import net from "node:net";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { join as joinPath } from "node:path";
 import { webUrl } from "../core/protocol.mjs";
 import {
   activeSegment,
@@ -13,6 +14,13 @@ import {
 import { seekAmount } from "../core/hotkeys.mjs";
 import { SurfaceWatch } from "../core/surface.mjs";
 import {
+  resolveShaders,
+  shaderCycle,
+  shaderFields,
+  shaderOptions,
+  shaderWish,
+} from "../core/shaders.mjs";
+import {
   audioArgs,
   bufferArgs,
   liveTuning,
@@ -22,9 +30,9 @@ import {
 } from "../core/player-tuning.mjs";
 
 /**
- * Picture profiles built from MPV's own scalers and filters. Riwaq ships no
- * third-party shader files; a viewer who owns a .glsl chain points at it with
- * the custom profile instead.
+ * Picture profiles built from MPV's own scalers and filters. GLSL chains are
+ * separate (core/shaders.mjs): Riwaq bundles none, and main resolves the
+ * viewer's chosen preset to files in their folder or a pinned download.
  */
 const PICTURE_PROFILES = {
   none: [],
@@ -67,6 +75,7 @@ export function playerArgs({
   local = false,
   bufferMiB = 512,
   deferLoad = false,
+  shaders,
 }) {
   const args = [
     "--no-config",
@@ -105,12 +114,14 @@ export function playerArgs({
   ];
   const profile = PICTURE_PROFILES[settings.shader] ? settings.shader : "none";
   args.push(...PICTURE_PROFILES[profile]);
-  if (
-    profile === "custom" &&
-    typeof settings.shaderPath === "string" &&
-    settings.shaderPath
-  )
-    args.push(`--glsl-shaders=${settings.shaderPath}`);
+  // One --glsl-shader per file appends in order, so no path ever meets the
+  // list separator. Without a resolved chain, only the old single file plays.
+  const chain = Array.isArray(shaders)
+    ? shaders
+    : resolveShaders(settings).files;
+  for (const file of chain)
+    if (typeof file === "string" && file && !/[\r\n\0]/.test(file))
+      args.push(`--glsl-shader=${file}`);
   if (settings.toneMapping && settings.toneMapping !== "off") {
     if (TONE_MAPPING.includes(settings.toneMapping))
       args.push(`--tone-mapping=${settings.toneMapping}`);
@@ -190,6 +201,7 @@ export function safeVideo(stage = 2, { dolbyVision = false } = {}) {
     hdrMode: "tonemap",
     shader: "none",
     shaderPath: "",
+    shaderPreset: "",
     toneMapping: "off",
   };
   if (stage >= 2)
@@ -269,6 +281,7 @@ export class Player {
     settingsNow,
     skipPrefs,
     displayHeight,
+    shaderLibrary,
     spawnProcess = spawn,
     connectSocket = (pipe) => net.createConnection(pipe),
   }) {
@@ -286,6 +299,9 @@ export class Player {
     this.skipPrefs = skipPrefs;
     // The viewer's settings as they are now; seek keys read the step here.
     this.settingsNow = settingsNow;
+    // The GLSL library (electron/shaders.mjs): pack folders and the viewer's
+    // own folder with its file names, read at each start and pick.
+    this.shaderLibrary = shaderLibrary;
     this.inputConf = inputConf;
     this.onFullscreen = onFullscreen;
     this.onEscape = onEscape;
@@ -372,6 +388,8 @@ export class Player {
       liveTuning(settings).map(([name, value]) => [name, String(value)]),
     );
     const pipe = `\\\\.\\pipe\\riwaq-${randomUUID()}`;
+    const glsl = this.glslFor(settings, meta);
+    this.glslWish = shaderWish(settings);
     this.state = {
       active: true,
       loading: true,
@@ -411,6 +429,11 @@ export class Player {
       stats: false,
       compatibilityStage: this.compatibility ? this.safeStage : 0,
       shader: settings.shader || "none",
+      // The GLSL chain by name only; files and folders stay in main.
+      glsl: glsl.id,
+      glslLabel: glsl.label,
+      glslSkipped: glsl.skipped || "",
+      glslOptions: glsl.options,
     };
     // MPV creates its window at the surface's size of the moment: give the
     // hidden surface its size first, so that window never starts at 1×1.
@@ -433,6 +456,7 @@ export class Player {
         local,
         bufferMiB,
         deferLoad: true,
+        shaders: glsl.files,
       }),
       // MPV is a GUI process. SW_HIDE can also hide its child video window;
       // the host owns visibility of embedded playback.
@@ -857,6 +881,19 @@ export class Player {
       this.send(["set_property", name, value]);
     }
     this.state.volumeMax = volumeMax(settings);
+    // A changed shader choice in Settings applies to the running viewing.
+    const wish = shaderWish(settings);
+    if (
+      !this.compatibility &&
+      this.glslWish !== undefined &&
+      wish !== this.glslWish
+    ) {
+      this.glslWish = wish;
+      this.settings = { ...this.settings, ...shaderFields(settings) };
+      const glsl = this.glslFor(this.settings, this.meta);
+      this.state.glslOptions = glsl.options;
+      this.applyGlsl(glsl.id || glsl.skipped || "", { force: false });
+    }
     this.refreshRtx();
     this.onState(this.state);
   }
@@ -1255,11 +1292,20 @@ export class Player {
       const profile = PICTURE_PROFILES[value] ? value : "none";
       this.state.shader = profile;
       this.applyShader(profile);
+    } else if (action === "glsl") {
+      this.applyGlsl(typeof value === "string" ? value : "");
     } else if (action === "cycleShader") {
-      const names = Object.keys(PICTURE_PROFILES);
-      const next = names[(names.indexOf(this.state.shader) + 1) % names.length];
-      this.state.shader = next;
-      this.applyShader(next);
+      // With a GLSL library the key steps through its presets (Anime4K's
+      // modes, say); otherwise through MPV's own picture profiles.
+      if (this.state.glslOptions?.length)
+        this.applyGlsl(shaderCycle(this.state.glsl, this.state.glslOptions));
+      else {
+        const names = Object.keys(PICTURE_PROFILES);
+        const next =
+          names[(names.indexOf(this.state.shader) + 1) % names.length];
+        this.state.shader = next;
+        this.applyShader(next);
+      }
     } else if (action === "abLoop") {
       this.toggleLoop(Number.isFinite(number) ? number : this.state.position);
     } else if (action === "clearLoop") {
@@ -1276,6 +1322,39 @@ export class Player {
     }
     this.onState(this.state);
     return this.state;
+  }
+  /**
+   * The GLSL chain one viewing starts with, and the choices the HUD offers.
+   * A compatibility retry plays none.
+   */
+  glslFor(settings, meta, options = {}) {
+    const none = { id: "", label: "", files: [], options: [] };
+    if (this.compatibility) return none;
+    const library = this.shaderLibrary?.(settings) || {};
+    const choices = shaderOptions(settings, library).map(
+      ({ id, label, pack }) => ({ id, label, pack }),
+    );
+    return {
+      ...resolveShaders(settings, library, {
+        meta,
+        join: joinPath,
+        ...options,
+      }),
+      options: choices,
+    };
+  }
+  /** A pick during the viewing (HUD, key or settings): applied at once. */
+  applyGlsl(id, { force = true, settings = this.settings || {} } = {}) {
+    if (this.compatibility || !this.state.active) return;
+    const glsl = id
+      ? this.glslFor(settings, this.meta, { preset: id, force })
+      : { id: "", label: "", files: [], options: this.state.glslOptions };
+    if (id && !glsl.id && !glsl.skipped) return;
+    this.state.glsl = glsl.id;
+    this.state.glslLabel = glsl.label;
+    this.state.glslSkipped = glsl.skipped || "";
+    this.state.glslOptions = glsl.options || [];
+    this.send(["set_property", "glsl-shaders", glsl.files]);
   }
   applyShader(profile) {
     // MPV cannot swap a whole profile live, but the pieces that matter can be

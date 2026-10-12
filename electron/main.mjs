@@ -65,6 +65,8 @@ import {
 } from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
+import { ShaderStore } from "./shaders.mjs";
+import { shaderOptions } from "../core/shaders.mjs";
 import {
   bufferMiB,
   parseAudioDevices,
@@ -610,6 +612,23 @@ function screenshotDir() {
   mkdirSync(path, { recursive: true });
   return path;
 }
+/** Downloaded shader packs live in Riwaq's data folder (electron/shaders.mjs). */
+let shaderStoreInstance = null;
+function shaderStore() {
+  return (shaderStoreInstance ||= new ShaderStore({
+    dir: join(app.getPath("userData"), "shaders"),
+  }));
+}
+/** The shader library as the interface sees it: names, never paths. */
+function shaderLibraryView() {
+  const settings = client.state.settings;
+  const { packs, own, library } = shaderStore().describe(settings);
+  return {
+    packs,
+    own: { dir: own.dir, missing: own.missing, files: own.files },
+    options: shaderOptions(settings, library),
+  };
+}
 /**
  * Rich Presence mirrors whatever the player is doing. It is rebuilt on every
  * player state change, which is cheap, and skipped entirely when the viewer
@@ -623,19 +642,27 @@ function updatePresence() {
     return;
   }
   const state = player?.state || {};
+  // The poster, year and episode title come from main's own copy of the
+  // title's metadata; local files have none of them.
+  const meta = state.mediaType === "local" ? {} : player?.meta || {};
+  const [, season, number] =
+    /:(\d+):(\d+)$/.exec(
+      state.mediaType === "series" ? String(state.videoId || "") : "",
+    ) || [];
+  const video = (meta.videos || []).find((v) => v.id === state.videoId);
   presence.set(
     buildActivity({
       playing: !!state.active,
       paused: !!state.pause,
       live: !!state.live,
       title: state.name || "",
-      episode:
-        state.mediaType === "series"
-          ? String(state.videoId || "")
-              .split(":")
-              .slice(1)
-              .join("×")
-          : "",
+      year:
+        /\d{4}/.exec(String(meta.year || meta.releaseInfo || ""))?.[0] || "",
+      poster: meta.poster || "",
+      imdb: meta.imdb_id || meta.id || "",
+      season,
+      number,
+      episodeTitle: video?.title || video?.name || "",
       position: Number(state.position) || 0,
       duration: Number(state.duration) || 0,
       detail: settings.presenceDetail || "title",
@@ -960,7 +987,13 @@ function rememberTrack(kind, value, info) {
   client.rememberSeries(series, { [kind]: identity });
 }
 const methods = {
-  musicLocalLibrary: (a) => musicLibrary.view(a?.profileId),
+  // Songs from before 0.41 get their tags a batch at a time; the interface
+  // asks again while `untagged` is above zero.
+  musicLocalLibrary: async (a) => {
+    await musicLibrary.tagSome(a?.profileId);
+    return musicLibrary.view(a?.profileId);
+  },
+  musicLocalCover: (a) => musicLibrary.cover(a || {}),
   musicLocalImport: async (a) => {
     musicLibrary.gate(a?.profileId);
     const picked = await dialog.showOpenDialog(window, {
@@ -1302,6 +1335,7 @@ const methods = {
   integrationSync: (a) => client.integrations.sync(a.id),
   integrationDisconnect: (a) => client.integrations.disconnect(a.id),
   traktLogin: (a) => client.integrations.begin(a?.id || "trakt"),
+  anilistConnect: (a) => client.integrations.anilistConnect(a?.token),
   traktPoll: (a) => client.integrations.poll(a?.id || "trakt"),
   traktSuggestions: (a) =>
     client.integrations.recommendations(
@@ -1335,6 +1369,7 @@ const methods = {
       traktActivate: "https://trakt.tv/activate",
       simkl: "https://simkl.com/settings/developer/",
       simklActivate: "https://simkl.com/pin/",
+      anilist: "https://anilist.co/settings/developer",
       letterboxd: "https://letterboxd.com/settings/data/",
       stremboxd: "https://stremboxd.com",
       discord: "https://support.discord.com/hc/articles/228383668",
@@ -1343,6 +1378,9 @@ const methods = {
       ...Object.fromEntries(DEBRID.map((d) => [d.id, d.url])),
       ...Object.fromEntries(AI_PROVIDERS.map((p) => [p.id, p.keys])),
     };
+    // AniList's authorize page carries the viewer's own client ID.
+    if (id === "anilistActivate")
+      urls.anilistActivate = client.integrations.anilistAuthorizeUrl();
     if (!urls[id]) throw new Error("رابط الخدمة غير معروف");
     await shell.openExternal(urls[id]);
     return true;
@@ -1433,16 +1471,47 @@ const methods = {
     await shell.openPath(screenshotDir());
     return true;
   },
+  shaderLibrary: () => shaderLibraryView(),
+  // A pinned upstream release, downloaded only on this click and checked by
+  // size and SHA-256 before it is written.
+  shaderDownload: async (a) => {
+    await shaderStore().download(String(a?.pack || ""));
+    player?.applyTuning(client.state.settings);
+    return shaderLibraryView();
+  },
+  shaderRemove: (a) => {
+    shaderStore().remove(String(a?.pack || ""));
+    return shaderLibraryView();
+  },
+  // The viewer's own folder of .glsl/.hook files; only its file names are
+  // read. `clear` forgets it and the chain built from it.
+  chooseShaderFolder: async (a) => {
+    if (a?.clear === true) {
+      client.state.settings.shaderDir = "";
+      client.state.settings.shaderChain = [];
+    } else {
+      const result = await dialog.showOpenDialog(window, {
+        title: "اختيار مجلد الشيدرات",
+        properties: ["openDirectory"],
+      });
+      if (result.canceled) return null;
+      client.state.settings.shaderDir = result.filePaths[0];
+    }
+    client.persist();
+    player?.applyTuning(client.state.settings);
+    return client.publicState();
+  },
   chooseShader: async () => {
     const result = await dialog.showOpenDialog(window, {
       title: "اختيار مرشّح GLSL",
       filters: [{ name: "GLSL shader", extensions: ["glsl", "hook"] }],
       properties: ["openFile"],
     });
-    if (!result.canceled) {
-      client.state.settings.shaderPath = result.filePaths[0];
-      client.persist();
-    }
+    if (result.canceled) return null;
+    client.state.settings.shaderPath = result.filePaths[0];
+    client.state.settings.shaderPreset = "file";
+    client.persist();
+    player?.applyTuning(client.state.settings);
     return client.publicState();
   },
   login: beginLogin,
@@ -1935,7 +2004,23 @@ app
       app.exit(1);
     }
     if (client) {
-      musicLibrary = new MusicLibrary(client);
+      // Covers become small JPEG data URLs, made and kept in memory only.
+      musicLibrary = new MusicLibrary(client, {
+        thumbnail: (bytes) => {
+          const image = nativeImage.createFromBuffer(Buffer.from(bytes));
+          if (image.isEmpty()) return null;
+          const { width, height } = image.getSize();
+          const scaled =
+            Math.max(width, height) > 320
+              ? image.resize(
+                  width >= height
+                    ? { width: 320, quality: "good" }
+                    : { height: 320, quality: "good" },
+                )
+              : image;
+          return `data:image/jpeg;base64,${scaled.toJPEG(82).toString("base64")}`;
+        },
+      });
       protocol.handle("riwaq-audio", (request) =>
         musicLibrary.respond(request),
       );
@@ -2040,6 +2125,7 @@ app
         host: videoHost,
         inputConf: join(root, "assets", "player-input.conf"),
         settingsNow: () => client.state.settings,
+        shaderLibrary: (settings) => shaderStore().library(settings),
         displayHeight: () => {
           const display = screen.getDisplayMatching(window.getBounds());
           return Math.round(display.size.height * display.scaleFactor);

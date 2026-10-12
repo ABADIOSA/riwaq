@@ -147,6 +147,18 @@ const streamIdentity = (stream) =>
     stream.ytId,
     stream.behaviorHints?.proxyHeaders,
   ]);
+/**
+ * The `error` word of an OAuth-style JSON error body ("authorization_pending",
+ * "invalid_client"…), or "". Only that word is kept, never the body.
+ */
+export function errorCode(text) {
+  try {
+    const code = JSON.parse(String(text).slice(0, 65536))?.error;
+    return typeof code === "string" && /^[a-z_]{1,64}$/.test(code) ? code : "";
+  } catch {
+    return "";
+  }
+}
 export async function fetchJson(url, init = {}) {
   const { timeout = 16000, ...rest } = init;
   try {
@@ -154,7 +166,13 @@ export async function fetchJson(url, init = {}) {
       ...rest,
       signal: AbortSignal.timeout(timeout),
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      const code = errorCode(await response.text().catch(() => ""));
+      throw Object.assign(new Error(`HTTP ${response.status}`), {
+        status: response.status,
+        code,
+      });
+    }
     const text = await response.text();
     if (text.length > 20_000_000) throw new Error("Response too large");
     // A 204 or an empty body (Trakt's deletes) is a success with nothing in it.
@@ -162,11 +180,12 @@ export async function fetchJson(url, init = {}) {
     return JSON.parse(text);
   } catch (error) {
     // URLs may contain addon credentials. Never include them in errors or logs.
-    throw new Error(
-      error.message?.startsWith("HTTP ")
-        ? error.message
-        : "تعذّر الاتصال بالمصدر. تحقق من الإنترنت ثم أعد المحاولة.",
-    );
+    if (error.message?.startsWith("HTTP "))
+      throw Object.assign(new Error(error.message), {
+        status: error.status,
+        code: error.code || "",
+      });
+    throw new Error("تعذّر الاتصال بالمصدر. تحقق من الإنترنت ثم أعد المحاولة.");
   }
 }
 /** Playlists and XMLTV guides are text, and large: fetched separately from JSON. */

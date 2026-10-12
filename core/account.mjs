@@ -666,6 +666,11 @@ export class AccountHub {
     if (!this.bag) return Promise.resolve(this.client.publicState());
     const bag = this.bag;
     if (this.running && this.runningBag === bag) return this.running;
+    // A remote change already waits for the video to end: another pull would
+    // download and decrypt it again only to wait again (the revision is not
+    // advanced while deferred). playbackChanged(false) syncs when it ends.
+    if (this.deferred && this.playbackActive())
+      return Promise.resolve(this.client.publicState());
     this.runningBag = bag;
     const running = this.run(prefer)
       .finally(() => {

@@ -1,9 +1,10 @@
 // Only native-dialog selections enter this library. Paths never reach React.
-import { realpath, stat } from "node:fs/promises";
+import { open, realpath, stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { basename, extname } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { Readable } from "node:stream";
+import { namedTags, readAudioTags } from "../core/audio-tags.mjs";
 
 export const AUDIO_TYPES = {
   ".mp3": "audio/mpeg",
@@ -35,10 +36,59 @@ export function audioRange(header, size) {
     : null;
 }
 
+/** Covers kept in memory (they are never written to disk or state). */
+const COVER_CACHE = 300;
+/** Songs from before 0.41 whose tags are read per library request. */
+export const TAG_BATCH = 40;
+
+/** A song's tags from its file, read in bounded pieces (core/audio-tags.mjs). */
+export async function fileTags(path, { picture = false } = {}) {
+  let handle;
+  try {
+    handle = await open(path, "r");
+    const { size } = await handle.stat();
+    const read = async (offset, length) => {
+      const want = Math.max(0, Math.min(length, size - offset));
+      const buffer = Buffer.alloc(want);
+      if (!want) return new Uint8Array(0);
+      const { bytesRead } = await handle.read(buffer, 0, want, offset);
+      return new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead);
+    };
+    return await readAudioTags({ read, size, picture });
+  } catch {
+    return {};
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+/** The fields a song keeps: its tags, or what its file name says. */
+export function songFields(tags, fileName) {
+  const named = namedTags(fileName);
+  const fields = {
+    title: label(tags.title || named.title),
+    artist: label(tags.artist || tags.albumArtist || named.artist || ""),
+    album: label(tags.album || ""),
+    tagged: true,
+  };
+  if (tags.albumArtist) fields.albumArtist = label(tags.albumArtist);
+  if (tags.year) fields.year = tags.year;
+  if (tags.track) fields.track = tags.track;
+  if (tags.cover) fields.cover = true;
+  return fields;
+}
+
 export class MusicLibrary {
-  constructor(client) {
+  /**
+   * `thumbnail(bytes, mime)` turns a cover into a small data URL (main uses
+   * Electron's nativeImage); without it there are no covers.
+   */
+  constructor(client, { thumbnail, readTags = fileTags } = {}) {
     this.client = client;
     this.tokens = new Map();
+    this.thumbnail = thumbnail;
+    this.readTags = readTags;
+    this.covers = new Map();
   }
   gate(profileId) {
     this.client.profiles.gate("library");
@@ -53,18 +103,69 @@ export class MusicLibrary {
   view(profileId) {
     const b = this.bucket(profileId);
     return {
-      tracks: b.tracks.map(({ id, title, favorite, format }) => ({
-        id,
-        title,
-        favorite: !!favorite,
-        format,
+      tracks: b.tracks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        artist: t.artist || "",
+        album: t.album || "",
+        ...(t.albumArtist ? { albumArtist: t.albumArtist } : {}),
+        ...(t.year ? { year: t.year } : {}),
+        ...(t.track ? { track: t.track } : {}),
+        cover: !!t.cover,
+        favorite: !!t.favorite,
+        format: t.format,
       })),
       playlists: b.playlists.map((p) => ({ ...p, ids: [...p.ids] })),
       queue: [...b.queue],
+      untagged: b.tracks.filter((t) => !t.tagged).length,
     };
+  }
+  /**
+   * Reads the tags of songs added before 0.41, a batch per library request,
+   * so an old library fills in without one long wait.
+   */
+  async tagSome(profileId, limit = TAG_BATCH) {
+    const waiting = this.bucket(profileId)
+      .tracks.filter((t) => !t.tagged)
+      .slice(0, limit)
+      .map((t) => ({ id: t.id, path: t.path }));
+    if (!waiting.length) return 0;
+    const found = [];
+    for (const t of waiting)
+      found.push({ ...t, tags: await this.readTags(t.path) });
+    // The reads may outlive a profile switch or a lock.
+    const b = this.bucket(profileId);
+    for (const { id, path, tags } of found) {
+      const track = b.tracks.find((t) => t.id === id && t.path === path);
+      if (track)
+        Object.assign(track, songFields(tags, basename(path, extname(path))));
+    }
+    this.client.persist();
+    return found.length;
+  }
+  /** A song's cover as a small data URL, or null. Kept in memory only. */
+  async cover({ profileId, id }) {
+    const track = this.bucket(profileId).tracks.find((t) => t.id === id);
+    if (!track?.cover || !this.thumbnail) return null;
+    // The songs of one album share one picture.
+    const key = track.album
+      ? `${profileId}|${track.artist || ""}|${track.album}`
+      : `${profileId}|${track.id}`;
+    if (this.covers.has(key)) return this.covers.get(key);
+    const { picture } = await this.readTags(track.path, { picture: true });
+    this.gate(profileId);
+    let url = null;
+    try {
+      url = picture ? this.thumbnail(picture.data, picture.mime) : null;
+    } catch {}
+    this.covers.set(key, url);
+    if (this.covers.size > COVER_CACHE)
+      this.covers.delete(this.covers.keys().next().value);
+    return url;
   }
   revoke() {
     this.tokens.clear();
+    this.covers.clear();
     this.generation = (this.generation || 0) + 1;
   }
   async importFiles(profileId, paths) {
@@ -81,7 +182,7 @@ export class MusicLibrary {
         }
         additions.push({
           path: file,
-          title: label(basename(file, extname(file))),
+          ...songFields(await this.readTags(file), basename(file, ext)),
           format: ext.slice(1).toUpperCase(),
         });
       } catch {

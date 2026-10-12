@@ -20,6 +20,7 @@ import {
 } from "../../../core/player-tuning.mjs";
 import { BANDWIDTH_CAPS } from "../../../core/stream-engine.mjs";
 import { arabicCount, SERIES } from "../../../core/arabic.mjs";
+import { ShaderCard } from "./ShaderCard.jsx";
 
 function Toggle({ on, title, text, onChange, tag }) {
   return (
@@ -298,40 +299,21 @@ export function VideoPage({ state, update, act, notice }) {
       <section className="settings-card">
         <h2>مرشّح الصورة</h2>
         <p>
-          مرشّحات مبنية على محرّك MPV نفسه. رِواق لا يرفق ملفات شيدر من طرف
-          ثالث؛ إن كان لديك سلسلة GLSL خاصة بك فاخترها من الملف المخصص.
+          مرشّحات مبنية على محرّك MPV نفسه، وتعمل مع شيدرات GLSL تحت أو بدونها.
         </p>
         <Choices
           label="مرشّح الصورة"
-          value={s.shader || "none"}
+          value={s.shader === "custom" ? "none" : s.shader || "none"}
           options={[
             ["none", "بدون"],
             ["sharp", "حِدّة"],
             ["anime", "رسوم متحركة"],
             ["film", "سينمائي"],
-            ["custom", "ملف GLSL"],
           ]}
           onPick={(shader) => set({ shader })}
         />
-        {s.shader === "custom" && (
-          <div className="setting-row">
-            <div>
-              <b>ملف الشيدر</b>
-              <p className="path" dir="ltr">
-                {s.shaderPath || "لم يُختر ملف"}
-              </p>
-            </div>
-            <button
-              className="secondary small"
-              onClick={async () => {
-                if (await act("chooseShader")) notice("تم اختيار ملف الشيدر");
-              }}
-            >
-              اختيار…
-            </button>
-          </div>
-        )}
       </section>
+      <ShaderCard state={state} update={update} act={act} notice={notice} />
     </>
   );
 }

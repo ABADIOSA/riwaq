@@ -777,7 +777,11 @@ export async function startBridge({ version, store }) {
   }
 
   const methods = {
-    musicLocalLibrary: (a) => music.view(a?.profileId),
+    musicLocalLibrary: async (a) => {
+      await music.tagSome(a?.profileId);
+      return music.view(a?.profileId);
+    },
+    musicLocalCover: (a) => music.cover(a || {}),
     musicLocalImport: async (a) => {
       music.gate(a?.profileId);
       const files = await pickFile({
@@ -1084,6 +1088,7 @@ export async function startBridge({ version, store }) {
     integrationSync: (a) => client.integrations.sync(a.id),
     integrationDisconnect: (a) => client.integrations.disconnect(a.id),
     traktLogin: (a) => client.integrations.begin(a?.id || "trakt"),
+    anilistConnect: (a) => client.integrations.anilistConnect(a?.token),
     traktPoll: (a) => client.integrations.poll(a?.id || "trakt"),
     traktSuggestions: (a) =>
       client.integrations.recommendations(
@@ -1112,6 +1117,7 @@ export async function startBridge({ version, store }) {
         traktActivate: "https://trakt.tv/activate",
         simkl: "https://simkl.com/settings/developer/",
         simklActivate: "https://simkl.com/pin/",
+        anilist: "https://anilist.co/settings/developer",
         letterboxd: "https://letterboxd.com/settings/data/",
         stremboxd: "https://stremboxd.com",
         discord: "https://support.discord.com/hc/articles/228383668",
@@ -1120,6 +1126,8 @@ export async function startBridge({ version, store }) {
         ...Object.fromEntries(DEBRID.map((d) => [d.id, d.url])),
         ...Object.fromEntries(AI_PROVIDERS.map((p) => [p.id, p.keys])),
       };
+      if (id === "anilistActivate")
+        urls.anilistActivate = client.integrations.anilistAuthorizeUrl();
       if (!urls[id]) throw new Error("رابط الخدمة غير معروف");
       return openExternal(urls[id]);
     },

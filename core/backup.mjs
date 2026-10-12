@@ -48,7 +48,13 @@ const AVATARS = ["amber", "teal", "violet", "rose", "forest", "nord"];
 // Paths to files on the machine that made the backup mean nothing elsewhere,
 // and a stale MPV path would stop playback outright on the new machine.
 // Paths and this PC's audio output belong to the installation, not a backup.
-const MACHINE_SETTINGS = ["mpvPath", "shaderPath", "audioDevice"];
+const MACHINE_SETTINGS = [
+  "mpvPath",
+  "shaderPath",
+  "shaderDir",
+  "shaderChain",
+  "audioDevice",
+];
 
 const isObject = (value) =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -566,7 +572,8 @@ export function restoreState(current, payload) {
   // Machine-specific paths belong to this installation, not to the backup.
   for (const id of Object.keys(profiles.data))
     for (const key of MACHINE_SETTINGS)
-      profiles.data[id].settings[key] = current.settings?.[key] || "";
+      profiles.data[id].settings[key] =
+        current.settings?.[key] ?? (key === "shaderChain" ? [] : "");
   const hotkeys = {};
   if (isObject(payload.hotkeys))
     for (const action of HOTKEY_ACTIONS)
@@ -627,6 +634,7 @@ export function restoreState(current, payload) {
       ? cleanSecretBag(payload.integrations, [
           "trakt",
           "letterboxd",
+          "anilist",
           "simkl",
           "spotify",
         ])

@@ -574,6 +574,19 @@ body:has(.theater:not(.mini-theater)) {
   color: #93b1e8;
   background: #93b1e812;
 }
+.service-mark.anilist {
+  color: #3db4f2;
+  background: #3db4f212;
+}
+/* AniList's token, pasted from its PIN page. */
+.anilist-pin textarea {
+  width: 100%;
+  min-height: 72px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  resize: vertical;
+}
 .provider-card > p {
   margin: 0;
   min-height: 46px;
@@ -2275,4 +2288,74 @@ em.tag-custom {
     monospace;
   letter-spacing: 2px;
   text-align: center;
+}
+
+/* GLSL shaders (ShaderCard.jsx): packs, the viewer's folder and chain. */
+.shader-card h3 {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  color: var(--muted, #a1a1aa);
+}
+.shader-card .row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.shader-group {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.shader-group small {
+  font-size: 11px;
+  color: var(--muted, #a1a1aa);
+}
+.shader-group .choice-row {
+  flex-wrap: wrap;
+}
+.shader-chain {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding-inline-start: 22px;
+}
+.shader-chain li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.shader-chain li span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.shader-chain button {
+  min-height: 28px !important;
+  padding: 4px 8px !important;
+}
+.shader-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.shader-files .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  font-size: 11.5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+}
+.shader-files .chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

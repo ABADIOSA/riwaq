@@ -190,9 +190,8 @@
   align-items: center;
   gap: 18px;
 }
-.local-bar-top > svg {
+.local-bar-top > .song-cover {
   color: var(--accent);
-  flex: none;
 }
 .local-music-bar button {
   color: var(--text);
@@ -265,6 +264,125 @@
 }
 .local-music-bar .spinning {
   animation: local-disc 12s linear infinite;
+}
+/* Covers read from the songs' own tags (core/audio-tags.mjs). */
+.song-cover {
+  display: grid;
+  place-items: center;
+  flex: none;
+  overflow: hidden;
+  color: var(--muted);
+  background: var(--raised);
+  border-radius: 8px;
+}
+.song-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.song-cover.row {
+  width: 40px;
+  height: 40px;
+}
+.song-cover.bar {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+}
+.song-cover.bar:not(.has-art) {
+  background: transparent;
+  color: var(--accent);
+}
+.song-cover.tile {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+}
+.song-cover.artist {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  color: var(--accent);
+}
+.local-music-tagging {
+  color: var(--muted);
+  font-size: 13px;
+}
+.local-albums {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 16px;
+  max-height: 560px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.local-artists {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  max-height: 560px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.local-music .local-group {
+  display: grid;
+  justify-content: stretch;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  text-align: start;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 8px;
+}
+.local-artists .local-group {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  border-color: var(--line);
+}
+.local-artists .local-group .song-cover {
+  grid-row: span 2;
+}
+.local-group:hover,
+.local-group:focus-visible {
+  background: var(--raised);
+  border-color: var(--line);
+}
+.local-group b,
+.local-group small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.local-group small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.local-group-head {
+  display: grid;
+  grid-template-columns: auto 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.local-group-head span {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.local-group-head b {
+  font-size: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.local-group-head small {
+  color: var(--muted);
 }
 @keyframes local-disc {
   to {
