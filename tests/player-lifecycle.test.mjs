@@ -127,6 +127,9 @@ test("a late retired socket cannot overwrite a new viewing or finish its command
 test("forced termination clears the active state even without an exit event", async (t) => {
   const h = harness({ exitOnQuit: false });
   await h.player.start(h.args);
+  const states = [];
+  h.player.onState = (s) =>
+    states.push({ active: s.active, child: !!h.player.child });
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const stopped = h.player.stop();
   assert.equal(h.player.state.active, false);
@@ -135,6 +138,10 @@ test("forced termination clears the active state even without an exit event", as
   assert.equal(h.children[0].killed, true);
   assert.equal(h.player.child, null);
   assert.equal(h.player.socket, null);
+  assert.deepEqual(states, [
+    { active: false, child: true },
+    { active: false, child: false },
+  ]);
 });
 
 test("compatibility disables custom picture effects and cannot restore RTX from live settings", async () => {

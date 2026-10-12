@@ -54,6 +54,30 @@ function device(server, load = {}) {
 const film = (id, name) => ({ id, type: "movie", name });
 const names = (client) => client.state.favorites.map((f) => f.name).sort();
 
+// Delay an actual service reply, rather than mocking account state. This models
+// a slow connection while another account action or playback happens locally.
+function holdReply(server, matches) {
+  const ready = Promise.withResolvers();
+  const resume = Promise.withResolvers();
+  let held = false;
+  return {
+    ready: ready.promise,
+    release: () => resume.resolve(),
+    request: async (url, init) => {
+      const hold = !held && matches(new URL(url).pathname, init);
+      if (hold) held = true;
+      const reply = await server.request(url, init);
+      if (hold) {
+        ready.resolve();
+        await resume.promise;
+      }
+      return reply;
+    },
+  };
+}
+
+const credentials = { username: "viewer", password: "long enough password" };
+
 test("three-way merge keeps both sides' additions and honours removals", () => {
   const base = { favorites: [film("tt1", "A"), film("tt2", "B")], volume: 50 };
   const local = { favorites: [film("tt1", "A"), film("tt3", "C")], volume: 50 };
@@ -293,4 +317,295 @@ test("without a configured server the account stays off and sends nothing", asyn
     /غير متاحة/,
   );
   assert.equal(sent, 0);
+});
+
+test("sign-out cancels a pending sign-in before its reply arrives", async () => {
+  const server = service();
+  await device(server).account.signup(credentials);
+  const pc = device(server);
+  const held = holdReply(server, (path) => path === "/v1/login");
+  pc.account.request = held.request;
+  const login = pc.account.login(credentials);
+  const rejected = assert.rejects(login, /تغيّرت جلسة/);
+  await held.ready;
+  await pc.account.logout();
+  held.release();
+  await rejected;
+  assert.equal(pc.account.publicState().signedIn, false);
+});
+
+test("a late sign-in cannot replace a newer account", async () => {
+  const server = service();
+  await device(server).account.signup(credentials);
+  const other = { ...credentials, username: "other" };
+  await device(server).account.signup(other);
+  const pc = device(server);
+  const held = holdReply(server, (path) => path === "/v1/login");
+  pc.account.request = held.request;
+  const rejected = assert.rejects(pc.account.login(credentials), /تغيّرت جلسة/);
+  await held.ready;
+  await pc.account.login(other);
+  held.release();
+  await rejected;
+  assert.equal(pc.account.publicState().username, "other");
+  await pc.account.sync();
+});
+
+test("a pending sign-in must still own an unlocked Settings room", async () => {
+  const server = service();
+  await device(server).account.signup(credentials);
+  const pc = device(server);
+  const id = pc.profiles.store.active;
+  pc.profiles.setPin({ id, pin: "1234" });
+  pc.profiles.update({ id, pin: "1234", lockedRooms: ["settings"] });
+  const held = holdReply(server, (path) => path === "/v1/login");
+  pc.account.request = held.request;
+  const rejected = assert.rejects(pc.account.login(credentials));
+  await held.ready;
+  pc.profiles.lock();
+  held.release();
+  await rejected;
+  assert.equal(pc.account.publicState().signedIn, false);
+});
+
+test("a slow logout takes effect locally and cannot end a replacement session", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const held = holdReply(server, (path) => path === "/v1/logout");
+  pc.account.request = held.request;
+  const logout = pc.account.logout();
+  assert.equal(pc.account.publicState().signedIn, false);
+  await held.ready;
+  await pc.account.login(credentials);
+  const token = pc.state.account.token;
+  held.release();
+  await logout;
+  assert.equal(pc.state.account.token, token);
+  await pc.account.sync();
+});
+
+test("an old sync finishing cannot clear the new session's running sync", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const old = holdReply(
+    server,
+    (path, init) => path === "/v1/data" && init.method === "GET",
+  );
+  pc.account.request = old.request;
+  const oldSync = pc.account.sync();
+  await old.ready;
+  await pc.account.logout();
+  const fresh = holdReply(
+    server,
+    (path, init) => path === "/v1/data" && init.method === "GET",
+  );
+  pc.account.request = fresh.request;
+  const login = pc.account.login(credentials);
+  await fresh.ready;
+  const newSync = pc.account.running;
+  old.release();
+  await oldSync;
+  assert.equal(pc.account.running, newSync);
+  assert.equal(pc.account.publicState().syncing, true);
+  fresh.release();
+  await login;
+  assert.equal(pc.account.publicState().syncing, false);
+});
+
+test("a revoked old session cannot sign out or report errors on the new one", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const oldBag = pc.account.bag;
+  await server.request("https://accounts.riwaq.test/v1/logout", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${oldBag.token}` },
+  });
+  const held = holdReply(server, (path) => path === "/v1/data");
+  pc.account.request = held.request;
+  const oldSync = pc.account.sync();
+  await held.ready;
+  pc.account.request = server.request;
+  await pc.account.login(credentials);
+  held.release();
+  await oldSync;
+  assert.equal(pc.account.publicState().signedIn, true);
+  assert.equal(pc.account.publicState().error, "");
+  const expired = Object.assign(new Error("expired"), {
+    code: "unauthorized",
+    status: 401,
+  });
+  await assert.rejects(
+    pc.account.proving(() => Promise.reject(expired), oldBag),
+  );
+  assert.equal(pc.account.publicState().signedIn, true);
+});
+
+test("the secrets choice syncs even when the viewer has no keys", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const web = device(server);
+  await web.account.login(credentials);
+  for (const secrets of [true, false]) {
+    await pc.account.configure({ secrets });
+    await web.account.sync();
+    assert.equal(web.account.publicState().secrets, secrets);
+  }
+});
+
+test("changing the secrets choice during an upload schedules the final choice", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const web = device(server);
+  await web.account.login(credentials);
+  const held = holdReply(
+    server,
+    (path, init) => path === "/v1/data" && init.method === "PUT",
+  );
+  pc.account.request = held.request;
+  const first = pc.account.configure({ secrets: true });
+  await held.ready;
+  const last = pc.account.configure({ secrets: false });
+  held.release();
+  await Promise.all([first, last]);
+  await web.account.sync();
+  assert.equal(web.account.publicState().secrets, false);
+  assert.equal(pc.account.bag.secretsChanged, false);
+});
+
+test("remote changes wait for the native video process, then merge both devices", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const web = device(server);
+  await web.account.login(credentials);
+  web.settings({ seekStep: 30 });
+  web.favorite(film("tt1", "من الجهاز الآخر"));
+  await web.account.sync();
+  const before = pc.state.settings.seekStep;
+  const revision = pc.account.bag.revision;
+  let child = true;
+  pc.account.playbackActive = () => !!pc.account.watching || child;
+  pc.account.playbackChanged(true);
+  pc.favorite(film("tt2", "أثناء المشاهدة"));
+  await pc.account.sync();
+  assert.equal(pc.account.publicState().deferred, true);
+  assert.equal(pc.state.settings.seekStep, before);
+  assert.equal(pc.account.bag.revision, revision);
+  assert.deepEqual(names(pc), ["أثناء المشاهدة"]);
+  pc.account.playbackChanged(false);
+  assert.equal(pc.account.running, null); // MPV still exiting.
+  child = false;
+  pc.account.playbackChanged(false);
+  await pc.account.running;
+  assert.equal(pc.account.publicState().deferred, false);
+  assert.equal(pc.state.settings.seekStep, 30);
+  assert.deepEqual(names(pc), ["أثناء المشاهدة", "من الجهاز الآخر"]);
+  await web.account.sync();
+  assert.deepEqual(names(web), names(pc));
+});
+
+test("a deferred first sign-in keeps remote conflict priority", async () => {
+  const server = service();
+  const web = device(server);
+  web.settings({ seekStep: 30 });
+  await web.account.signup(credentials);
+  const pc = device(server);
+  pc.settings({ seekStep: 15 });
+  pc.account.playbackChanged(true);
+  await pc.account.login(credentials);
+  assert.equal(pc.account.publicState().deferred, true);
+  assert.equal(pc.state.settings.seekStep, 15);
+  pc.account.playbackChanged(false);
+  await pc.account.running;
+  assert.equal(pc.state.settings.seekStep, 30);
+  await web.account.sync();
+  assert.equal(web.state.settings.seekStep, 30);
+});
+
+test("sign-out during the first sync never returns a stale sign-in success", async () => {
+  const server = service();
+  await device(server).account.signup(credentials);
+  const pc = device(server);
+  const held = holdReply(server, (path) => path === "/v1/data");
+  pc.account.request = held.request;
+  const rejected = assert.rejects(pc.account.login(credentials), /تغيّرت جلسة/);
+  await held.ready;
+  let notified = false;
+  pc.account.onChange = () => {
+    if (!pc.account.publicState().signedIn) notified = true;
+  };
+  await pc.account.logout();
+  assert.equal(notified, true);
+  held.release();
+  await rejected;
+  assert.equal(pc.account.publicState().signedIn, false);
+});
+
+test("a failed deferred sync waits for the normal retry instead of spinning", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const web = device(server);
+  await web.account.login(credentials);
+  web.settings({ seekStep: 30 });
+  await web.account.sync();
+  pc.account.playbackChanged(true);
+  await pc.account.sync();
+  let requests = 0;
+  pc.account.request = async () => {
+    requests++;
+    return { status: 503, text: "" };
+  };
+  pc.account.playbackChanged(false);
+  await assert.rejects(pc.account.running);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(requests, 1);
+  assert.equal(pc.account.publicState().deferred, true);
+  assert.ok(pc.account.publicState().error);
+  pc.account.request = server.request;
+  await pc.account.sync();
+  assert.equal(pc.account.publicState().deferred, false);
+  assert.equal(pc.state.settings.seekStep, 30);
+});
+
+test("a remote PIN change cannot lock the viewing or move its progress mid-video", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const web = device(server);
+  await web.account.login(credentials);
+  const id = pc.profiles.store.active;
+  const unlocked = pc.profiles.unlocked;
+  web.profiles.setPin({ id, pin: "1234" });
+  web.profiles.update({ id, pin: "1234", lockedRooms: ["library"] });
+  await web.account.sync();
+  pc.account.playbackChanged(true);
+  pc.recordProgress(film("tt9", "المشاهدة الحالية"), "tt9", 120, 1000);
+  await pc.account.sync();
+  assert.equal(pc.profiles.active().pin, undefined);
+  assert.equal(pc.profiles.store.active, id);
+  assert.equal(pc.profiles.unlocked, unlocked);
+  pc.recordProgress(film("tt9", "المشاهدة الحالية"), "tt9", 240, 1000);
+  pc.account.playbackChanged(false);
+  await pc.account.running;
+  assert.ok(pc.profiles.active().pin);
+  assert.equal(pc.profiles.store.active, id);
+  assert.equal(pc.profiles.unlocked, false);
+  assert.equal(pc.state.progress["movie:tt9"].position, 240);
+  await web.account.sync();
+  assert.equal(web.profiles.store.data[id].progress["movie:tt9"].position, 240);
+});
+
+test("a completed sync returns an idle snapshot to the interface", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const result = await pc.account.sync();
+  assert.equal(result.account.syncing, false);
+  assert.equal(pc.account.publicState().syncing, false);
 });

@@ -279,6 +279,10 @@ export class AccountHub {
     this.request = request;
     this.now = now;
     this.running = null;
+    this.epoch = 0;
+    this.deferred = false;
+    this.deferredPrefer = null;
+    this.playbackActive = () => !!this.watching;
     this.applying = false;
     this.error = "";
     this.onChange = () => {};
@@ -295,7 +299,8 @@ export class AccountHub {
       signedIn: !!bag,
       username: bag?.username || this.client.state.accountName || "",
       lastSync: bag?.lastSync || null,
-      syncing: !!this.running,
+      syncing: !!bag && this.runningBag === bag && !!this.running,
+      deferred: !!bag && this.deferred,
       secrets: !!bag?.secrets,
       error: this.error,
     };
@@ -363,6 +368,11 @@ export class AccountHub {
 
   /** Signs this device in with a fresh session and data key. */
   begin(username, token, dataKey, secrets = false) {
+    this.epoch++;
+    this.running = null;
+    this.runningBag = null;
+    this.deferred = false;
+    this.deferredPrefer = null;
     this.client.state.account = {
       username,
       token,
@@ -376,11 +386,24 @@ export class AccountHub {
     this.client.persist();
   }
 
+  /** Bind asynchronous sign-in to this attempt and the originating profile. */
+  attempt() {
+    const epoch = ++this.epoch;
+    const owner = this.client.profiles.store.active;
+    return () => {
+      if (this.epoch !== epoch || this.client.profiles.store.active !== owner)
+        throw new Error("تغيّرت جلسة الحساب؛ أعد المحاولة");
+      this.client.profiles.gate("settings");
+    };
+  }
+
   async signup({ username, password, secrets = false } = {}) {
     this.client.profiles.gate("settings");
+    const current = this.attempt();
     const name = normalizeUsername(username);
     checkNewPassword(password);
     const keys = await deriveAccountKeys(name, password);
+    current();
     const dataKey = randomBytes(32);
     const recoveryCode = newRecoveryCode();
     const recovery = recoveryKeys(name, recoveryCode);
@@ -393,36 +416,46 @@ export class AccountHub {
         recoveryKey: wrapKey(recovery.wrapKey, dataKey, name, "recovery"),
       },
     });
+    current();
     this.begin(name, data.token, dataKey, secrets === true);
+    const bag = this.bag;
     // The account exists from here; a failed first upload is retried later.
     await this.sync().catch(() => {});
+    if (this.bag !== bag) throw new Error("تغيّرت جلسة الحساب؛ أعد المحاولة");
     return { recoveryCode, state: this.client.publicState() };
   }
 
   async login({ username, password } = {}) {
     this.client.profiles.gate("settings");
+    const current = this.attempt();
     const name = normalizeUsername(username);
     if (typeof password !== "string" || !password)
       throw new Error("اكتب كلمة المرور");
     const keys = await deriveAccountKeys(name, password);
+    current();
     const { data } = await this.api("POST", "/v1/login", {
       json: { username: name, authSecret: keys.authSecret },
     });
+    current();
     const dataKey = unwrapKey(keys.wrapKey, data.wrappedKey, name, "password");
     this.begin(name, data.token, dataKey);
+    const bag = this.bag;
     // The account's data wins over this device's where both set something.
     await this.sync({ prefer: "remote" });
+    if (this.bag !== bag) throw new Error("تغيّرت جلسة الحساب؛ أعد المحاولة");
     return this.client.publicState();
   }
 
   async recover({ username, code, password } = {}) {
     this.client.profiles.gate("settings");
+    const current = this.attempt();
     const name = normalizeUsername(username);
     const recovery = recoveryKeys(name, code);
     checkNewPassword(password);
     const start = await this.api("POST", "/v1/recover/start", {
       json: { username: name, recoveryAuth: recovery.recoveryAuth },
     });
+    current();
     const dataKey = unwrapKey(
       recovery.wrapKey,
       start.data.recoveryKey,
@@ -430,6 +463,7 @@ export class AccountHub {
       "recovery",
     );
     const keys = await deriveAccountKeys(name, password);
+    current();
     const { data } = await this.api("POST", "/v1/recover/finish", {
       json: {
         username: name,
@@ -438,8 +472,11 @@ export class AccountHub {
         wrappedKey: wrapKey(keys.wrapKey, dataKey, name, "password"),
       },
     });
+    current();
     this.begin(name, data.token, dataKey);
+    const bag = this.bag;
     await this.sync({ prefer: "remote" });
+    if (this.bag !== bag) throw new Error("تغيّرت جلسة الحساب؛ أعد المحاولة");
     return this.client.publicState();
   }
 
@@ -452,16 +489,25 @@ export class AccountHub {
       deriveAccountKeys(bag.username, String(password || "")),
       deriveAccountKeys(bag.username, newPassword),
     ]);
+    if (this.bag !== bag) throw new Error("تغيّرت جلسة الحساب؛ أعد المحاولة");
+    this.client.profiles.gate("settings");
     const dataKey = Buffer.from(bag.key, "base64");
-    await this.proving(() =>
-      this.api("POST", "/v1/password", {
-        token: bag.token,
-        json: {
-          authSecret: current.authSecret,
-          newAuthSecret: next.authSecret,
-          wrappedKey: wrapKey(next.wrapKey, dataKey, bag.username, "password"),
-        },
-      }),
+    await this.proving(
+      () =>
+        this.api("POST", "/v1/password", {
+          token: bag.token,
+          json: {
+            authSecret: current.authSecret,
+            newAuthSecret: next.authSecret,
+            wrappedKey: wrapKey(
+              next.wrapKey,
+              dataKey,
+              bag.username,
+              "password",
+            ),
+          },
+        }),
+      bag,
     );
     return this.client.publicState();
   }
@@ -470,11 +516,12 @@ export class AccountHub {
   async logout() {
     this.client.profiles.gate("settings");
     const bag = this.bag;
+    // Local sign-out takes effect immediately, even if the network is slow.
+    this.end();
     if (bag)
       await this.api("POST", "/v1/logout", { token: bag.token }).catch(
         () => {},
       );
-    this.end();
     return this.client.publicState();
   }
 
@@ -483,13 +530,17 @@ export class AccountHub {
     const bag = this.bag;
     if (!bag) throw new Error("سجّل الدخول أولاً");
     const keys = await deriveAccountKeys(bag.username, String(password || ""));
-    await this.proving(() =>
-      this.api("DELETE", "/v1/account", {
-        token: bag.token,
-        json: { authSecret: keys.authSecret },
-      }),
+    if (this.bag !== bag) throw new Error("تغيّرت جلسة الحساب؛ أعد المحاولة");
+    this.client.profiles.gate("settings");
+    await this.proving(
+      () =>
+        this.api("DELETE", "/v1/account", {
+          token: bag.token,
+          json: { authSecret: keys.authSecret },
+        }),
+      bag,
     );
-    this.end();
+    if (this.bag === bag) this.end();
     return this.client.publicState();
   }
 
@@ -503,30 +554,45 @@ export class AccountHub {
       bag.secretsChanged = true;
       this.client.persist();
       await this.sync();
+      if (this.bag === bag && bag.secretsChanged && !this.deferred)
+        await this.sync();
     }
     return this.client.publicState();
   }
 
   /** A request that proves the password of a signed-in account. */
-  async proving(send) {
+  async proving(send, bag = this.bag) {
     try {
       return await send();
     } catch (error) {
       if (error.code === "invalid_credentials")
         throw accountProblem(401, "wrong_password");
-      if (error.code === "unauthorized") this.end();
+      if (error.code === "unauthorized" && this.bag === bag) this.end();
       throw error;
     }
   }
 
   end() {
+    this.epoch++;
+    this.running = null;
+    this.runningBag = null;
+    this.error = "";
+    this.deferred = false;
+    this.deferredPrefer = null;
     clearTimeout(this.pushTimer);
     this.pushTimer = null;
     this.client.state.account = null;
     this.client.persist();
+    this.onChange();
   }
 
   // --- Syncing -----------------------------------------------------------------
+
+  /** Remote profile/settings changes wait until the video process has ended. */
+  playbackChanged(active) {
+    this.watching = !!active;
+    if (this.deferred && !this.playbackActive()) this.sync().catch(() => {});
+  }
 
   /** Called on every save: a change goes up within a minute. */
   touch() {
@@ -596,13 +662,24 @@ export class AccountHub {
    * Pull, merge, push. Serialized: a call during a sync waits for it.
    * `prefer` decides real conflicts ("remote" right after signing in).
    */
-  sync({ prefer = "local" } = {}) {
+  sync({ prefer = this.deferredPrefer || "local" } = {}) {
     if (!this.bag) return Promise.resolve(this.client.publicState());
-    if (this.running) return this.running;
-    this.running = this.run(prefer).finally(() => {
-      this.running = null;
-      this.onChange();
-    });
+    const bag = this.bag;
+    if (this.running && this.runningBag === bag) return this.running;
+    this.runningBag = bag;
+    const running = this.run(prefer)
+      .finally(() => {
+        if (this.running !== running) return;
+        this.running = null;
+        this.runningBag = null;
+        this.onChange();
+        if (this.deferred && !this.playbackActive() && !this.error)
+          queueMicrotask(() => this.sync().catch(() => {}));
+      })
+      // IPC applies this result after onChange: do not put an old "syncing"
+      // snapshot back into the interface once the request has finished.
+      .then(() => this.client.publicState());
+    this.running = running;
     this.onChange();
     return this.running;
   }
@@ -616,9 +693,18 @@ export class AccountHub {
         if (this.bag !== bag) return this.client.publicState();
         if (pulled.envelope) {
           const remote = pulled.envelope.payload;
-          if (!bag.secretsChanged) bag.secrets = !!pulled.envelope.secrets;
-          const local = this.collect(bag.secrets);
+          const secrets = bag.secretsChanged
+            ? bag.secrets
+            : !!pulled.envelope.secrets;
+          const local = this.collect(secrets);
           const merged = merge3(bag.base, local, remote, { prefer });
+          if (!same(merged, local) && this.playbackActive()) {
+            this.deferred = true;
+            this.deferredPrefer = prefer;
+            this.error = "";
+            return this.client.publicState();
+          }
+          bag.secrets = secrets;
           if (!same(merged, local)) {
             this.apply(merged);
             this.onChange("remote");
@@ -629,17 +715,24 @@ export class AccountHub {
           bag.revision = 0;
           bag.base = undefined;
         }
+        this.deferred = false;
+        this.deferredPrefer = null;
         const local = this.collect(bag.secrets);
-        if (bag.base !== undefined && same(local, bag.base)) {
+        if (
+          !bag.secretsChanged &&
+          bag.base !== undefined &&
+          same(local, bag.base)
+        ) {
           bag.lastSync = this.now();
           this.error = "";
           this.client.persist();
           return this.client.publicState();
         }
+        const secrets = !!bag.secrets;
         const text = sealData(Buffer.from(bag.key, "base64"), bag.username, {
           format: "riwaq-sync",
           version: 1,
-          secrets: !!bag.secrets,
+          secrets,
           app: this.client.version || "",
           at: this.now(),
           payload: local,
@@ -654,7 +747,7 @@ export class AccountHub {
         if (pushed.status === 409) continue; // Another device moved first.
         bag.revision = Number(pushed.data?.revision) || bag.revision + 1;
         bag.base = local;
-        bag.secretsChanged = false;
+        bag.secretsChanged = bag.secrets !== secrets;
         bag.lastSync = this.now();
         this.error = "";
         this.client.persist();
@@ -664,6 +757,7 @@ export class AccountHub {
         "تعذّرت المزامنة بسبب تعديلات متزامنة؛ نعيد المحاولة لاحقاً",
       );
     } catch (error) {
+      if (this.bag !== bag) return this.client.publicState();
       this.error = error.message;
       // An expired or revoked session signs this device out; data stays.
       if (error.status === 401 && this.bag === bag) this.end();

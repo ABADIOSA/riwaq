@@ -1428,8 +1428,12 @@ export class Player {
       const finish = () => {
         clearTimeout(timer);
         child.removeListener("exit", finish);
-        if (this.child === child) this.child = null;
+        const retired = this.child === child;
+        if (retired) this.child = null;
         if (this.socket === socket) this.disconnect();
+        // The forced-stop timeout can retire MPV before its exit event. Publish
+        // that transition too, so deferred account sync can resume now.
+        if (retired) this.onState(this.state);
         resolve();
       };
       const timer = setTimeout(() => {

@@ -23,6 +23,7 @@ React (sandboxed, RTL)
 
 ## Files
 
+- 0.40 accounts: `core/account.mjs` seals the backup payload with the account's data key, and serializes pull/three-way merge/conditional push through `core/sync-merge.mjs`. `server/accounts/` holds the optional Cloudflare Worker/D1 service. The same hub runs behind main and the web bridge, with session tokens and data keys confined to encrypted device storage. Review after 0.40 binds asynchronous replies to their session/attempt, returns final sync status to IPC and defers remote profile/settings changes during video until MPV's process retires (or the browser player stops). See [ACCOUNTS.md](ACCOUNTS.md).
 - Unreleased after 0.34: `electron/music-library.mjs` holds the native-dialog-selected local music catalog under `state.localMusic[profileId]` in encrypted state, outside public/profile settings and portable backups. Four main-window-only `musicLocal*` IPC methods require the active profile and library PIN. Only file IDs and labels are public; a source request grants an opaque `riwaq-audio://track/<token>` capability. `protocol.handle` serves bounded byte-range file streams after rechecking ownership. No renderer-supplied path or network URL is accepted. Profile changes, lock, backup restore and video start revoke capabilities and stop the renderer audio.
 - `core/music-player.mjs` owns transport sequencing, seek, volume, repeat and shuffle history. Injected element/source callbacks allow deterministic race tests. `src/lib/local-music.jsx` keeps one transport mounted across navigation, checks Spotify before starts/resumes, and binds Media Session actions while local music owns playback. `LocalMusic.jsx` supplies library and mini-player UI, with `local-music.css`. Local playlists/queue persist, playback does not auto-resume after relaunch. Spotify auth requests now check their originating account epoch before applying asynchronous responses.
 
@@ -116,7 +117,7 @@ No remote web page is loaded as the app UI. The renderer has CSP, context isolat
 
 ## Backups
 
-A backup file is the only way data leaves the DPAPI seal, so it is always encrypted with the viewer's passphrase and its header is authenticated. Import is untrusted input: every section passes the validation the app applies to hand-entered data. A picked file stays in main between preview and restore; the renderer holds an opaque token. The previous `profile.bin` is kept as `profile.before-restore.bin`, still DPAPI-sealed. Backup operations are gated by the Settings room lock in core.
+A portable backup is encrypted with the viewer's passphrase and its header is authenticated. The optional Riwaq account also carries the backup payload between devices, sealed with its account data key; neither route sends a plaintext copy of the device store. Import is untrusted input: every section passes the validation the app applies to hand-entered data. A picked file stays in main between preview and restore; the renderer holds an opaque token. The previous `profile.bin` is kept as `profile.before-restore.bin`, still DPAPI-sealed. Backup operations are gated by the Settings room lock in core.
 
 ## Limits to preserve in product copy
 
