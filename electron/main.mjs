@@ -64,6 +64,13 @@ import {
   hudVisible,
 } from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
+import {
+  direction,
+  language,
+  setLanguage,
+  t,
+  translate,
+} from "../core/i18n.mjs";
 import { Player } from "./player.mjs";
 import { ShaderStore } from "./shaders.mjs";
 import { shaderOptions } from "../core/shaders.mjs";
@@ -365,7 +372,16 @@ function applyZoom() {
   appliedZoom = zoom;
   window.webContents.setZoomFactor(zoom);
 }
+// Text main writes itself (dialog titles, the sign-in result pages, MPV's
+// messages) follows the active profile's interface language.
+const syncLanguage = () => setLanguage(client.state.settings?.uiLanguage);
+/** The page a browser shows after a sign-in returns to the loopback server. */
+const resultPage = (message) => {
+  syncLanguage();
+  return `<html dir="${direction()}" lang="${language()}"><meta charset="UTF-8"><title>Riwaq</title><body style="background:#111316;color:#f5ead9;font:22px Segoe UI;text-align:center;padding:100px">${translate(message)}</body></html>`;
+};
 const broadcast = () => {
+  syncLanguage();
   applyZoom();
   applyTitleOverlay();
   emit("state", client.publicState());
@@ -475,9 +491,7 @@ async function beginLogin() {
         "Content-Security-Policy":
           "default-src 'none'; style-src 'unsafe-inline'",
       });
-      res.end(
-        '<html dir="rtl"><meta charset="UTF-8"><title>Riwaq</title><body style="background:#111316;color:#f5ead9;font:22px Segoe UI;text-align:center;padding:100px">تم تسجيل الدخول. ارجع إلى رِواق.</body></html>',
-      );
+      res.end(resultPage("تم تسجيل الدخول. ارجع إلى رِواق."));
       cancelLogin();
       broadcast();
       window?.show();
@@ -542,9 +556,7 @@ async function beginSpotifyLink(clientId) {
       "Content-Security-Policy":
         "default-src 'none'; style-src 'unsafe-inline'",
     });
-    res.end(
-      `<html dir="rtl"><meta charset="UTF-8"><title>Riwaq</title><body style="background:#111316;color:#f5ead9;font:22px Segoe UI;text-align:center;padding:100px">${message}</body></html>`,
-    );
+    res.end(resultPage(message));
   };
   spotifyServer = createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
@@ -999,7 +1011,7 @@ const methods = {
   musicLocalImport: async (a) => {
     musicLibrary.gate(a?.profileId);
     const picked = await dialog.showOpenDialog(window, {
-      title: "أضف أغاني إلى رِواق",
+      title: t("أضف أغاني إلى رِواق"),
       properties: ["openFile", "multiSelections"],
       filters: [
         {
@@ -1351,7 +1363,7 @@ const methods = {
     ),
   letterboxdImport: async () => {
     const r = await dialog.showOpenDialog(window, {
-      title: "اختيار تصدير Letterboxd",
+      title: t("اختيار تصدير Letterboxd"),
       filters: [{ name: "Letterboxd CSV", extensions: ["csv"] }],
       properties: ["openFile"],
     });
@@ -1493,7 +1505,7 @@ const methods = {
       client.state.settings.shaderChain = [];
     } else {
       const result = await dialog.showOpenDialog(window, {
-        title: "اختيار مجلد الشيدرات",
+        title: t("اختيار مجلد الشيدرات"),
         properties: ["openDirectory"],
       });
       if (result.canceled) return null;
@@ -1505,7 +1517,7 @@ const methods = {
   },
   chooseShader: async () => {
     const result = await dialog.showOpenDialog(window, {
-      title: "اختيار مرشّح GLSL",
+      title: t("اختيار مرشّح GLSL"),
       filters: [{ name: "GLSL shader", extensions: ["glsl", "hook"] }],
       properties: ["openFile"],
     });
@@ -1604,7 +1616,7 @@ const methods = {
   },
   localSubtitle: async () => {
     const r = await dialog.showOpenDialog(window, {
-      title: "اختيار ملف ترجمة",
+      title: t("اختيار ملف ترجمة"),
       filters: [
         { name: "Subtitles", extensions: ["srt", "ass", "ssa", "vtt", "sub"] },
       ],
@@ -1615,7 +1627,7 @@ const methods = {
   },
   localVideo: async () => {
     const r = await dialog.showOpenDialog(window, {
-      title: "تشغيل ملف فيديو",
+      title: t("تشغيل ملف فيديو"),
       filters: [
         {
           name: "Video",
@@ -1629,7 +1641,7 @@ const methods = {
   },
   choosePlayer: async () => {
     const r = await dialog.showOpenDialog(window, {
-      title: "اختيار MPV",
+      title: t("اختيار MPV"),
       filters: [{ name: "MPV executable", extensions: ["exe"] }],
       properties: ["openFile"],
     });
@@ -1670,7 +1682,7 @@ const methods = {
       .slice(0, 16)
       .replace(/[:T]/g, "-");
     const r = await dialog.showSaveDialog(window, {
-      title: "حفظ تقرير التشخيص",
+      title: t("حفظ تقرير التشخيص"),
       defaultPath: `riwaq-diagnostics-${stamp}.txt`,
       filters: [{ name: "Text", extensions: ["txt"] }],
     });
@@ -1735,7 +1747,7 @@ const methods = {
   },
   collectionsSaveNuvio: async () => {
     const r = await dialog.showSaveDialog(window, {
-      title: "حفظ المجموعات بصيغة نوفيو",
+      title: t("حفظ المجموعات بصيغة نوفيو"),
       defaultPath: "riwaq-collections.json",
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
@@ -1788,7 +1800,7 @@ const methods = {
   nuvioPickBackup: async () => {
     client.profiles.gate("settings");
     const r = await dialog.showOpenDialog(window, {
-      title: "اختيار نسخة إعدادات نوفيو",
+      title: t("اختيار نسخة إعدادات نوفيو"),
       filters: [{ name: "Nuvio backup", extensions: ["zip"] }],
       properties: ["openFile"],
     });
@@ -1844,8 +1856,8 @@ const methods = {
     const stamp = new Date().toISOString().slice(0, 10);
     const r = await dialog.showSaveDialog(window, {
       title: includeSecrets
-        ? "حفظ نسخة احتياطية — تتضمن مفاتيحك وحساباتك"
-        : "حفظ نسخة احتياطية من رِواق",
+        ? t("حفظ نسخة احتياطية — تتضمن مفاتيحك وحساباتك")
+        : t("حفظ نسخة احتياطية من رِواق"),
       defaultPath: `riwaq-backup-${stamp}.riwaq`,
       filters: [{ name: "Riwaq backup", extensions: ["riwaq"] }],
     });
@@ -1855,7 +1867,7 @@ const methods = {
   },
   backupPick: async () => {
     const r = await dialog.showOpenDialog(window, {
-      title: "اختيار نسخة احتياطية من رِواق",
+      title: t("اختيار نسخة احتياطية من رِواق"),
       filters: [{ name: "Riwaq backup", extensions: ["riwaq"] }],
       properties: ["openFile"],
     });
@@ -1948,7 +1960,7 @@ const methods = {
   },
   exportAddons: async () => {
     const r = await dialog.showSaveDialog(window, {
-      title: "حفظ روابط الإضافات — قد تتضمن مفاتيح خاصة",
+      title: t("حفظ روابط الإضافات — قد تتضمن مفاتيح خاصة"),
       defaultPath: "riwaq-addons.json",
       filters: [{ name: "JSON", extensions: ["json"] }],
     });
@@ -2056,6 +2068,7 @@ app
       await client.updates.restore();
       runningFrame = client.state.settings.windowFrame || "native";
       const look = resolveAppearance(client.state.settings);
+      syncLanguage();
       window = new BrowserWindow({
         ...(runningFrame === "hybrid"
           ? {
@@ -2074,7 +2087,7 @@ app
         minWidth: 980,
         minHeight: 680,
         backgroundColor: "#101215",
-        title: "رِواق — Riwaq",
+        title: t("رِواق — Riwaq"),
         icon: join(root, "assets", "icon.png"),
         show: !process.env.RIWAQ_SMOKE,
         autoHideMenuBar: true,

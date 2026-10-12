@@ -10,6 +10,8 @@ import settingsPlayer from "./en/settings-player.mjs";
 import settingsContent from "./en/settings-content.mjs";
 import settingsMore from "./en/settings-more.mjs";
 import sentences from "./en/sentences.mjs";
+import mainMessages from "./en/main.mjs";
+import messages from "./en/messages.mjs";
 import shell from "./en/shell.mjs";
 import title from "./en/title.mjs";
 
@@ -21,6 +23,8 @@ export default {
   ...settingsContent,
   ...settingsMore,
   ...sentences,
+  ...mainMessages,
+  ...messages,
   ...shell,
   ...title,
   الإعدادات: "Settings",

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   anchorOf,
@@ -14,7 +14,12 @@ import {
 } from "../core/i18n.mjs";
 import EN from "../core/i18n/en.mjs";
 import SEARCH_EN from "../core/i18n/en/settings-search.mjs";
-import { covered, extract, jsxText } from "../scripts/i18n-strings.mjs";
+import {
+  covered,
+  extract,
+  jsxText,
+  stringsOf,
+} from "../scripts/i18n-strings.mjs";
 import { localize } from "../src/lib/jsx-runtime.js";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 
@@ -32,6 +37,66 @@ test("every Arabic string in the interface has English", () => {
       if (!BUILT_FROM_PARTS.has(key) && !covered(key))
         gaps.push(`${file}: ${key}`);
   assert.deepEqual(gaps, [], `untranslated:\n${gaps.join("\n")}`);
+});
+
+// Arabic in core/, electron/ and web/ that never reaches the screen as is
+// (single letters are folding tables for Arabic matching).
+const UNSHOWN = {
+  // English clocks say AM and PM instead.
+  "core/prayer.mjs": (s) => s === "ص" || s === "م",
+  // The copied diagnostic report stays Arabic for whoever reads it.
+  "core/diagnose.mjs": (s) =>
+    /^(---|===|\[|\(لا يحتوي|الحالة العامة:|وقت التقرير)/.test(s),
+};
+
+test("messages from core, main and the web bridge have English", () => {
+  const roots = ["core", "electron", "web"];
+  const list = roots.flatMap((dir) =>
+    readdirSync(fileURLToPath(new URL(`../${dir}`, import.meta.url)))
+      .filter((name) => /\.(mjs|js|cjs)$/.test(name))
+      .map((name) => `${dir}/${name}`),
+  );
+  const gaps = [];
+  for (const file of list) {
+    // What's new is written per release and shown as written.
+    if (file === "core/whats-new.mjs" || file === "core/i18n.mjs") continue;
+    for (const key of stringsOf(read(file), file))
+      if (key.length > 1 && !UNSHOWN[file]?.(key) && !covered(key))
+        gaps.push(`${file}: ${key}`);
+  }
+  assert.deepEqual(gaps, [], `untranslated:\n${gaps.join("\n")}`);
+});
+
+test("text main writes itself follows the interface language", () => {
+  const main = read("electron/main.mjs");
+  assert.doesNotMatch(
+    main,
+    /\btitle: "[^"]*[؀-ۿ]/,
+    "dialog titles go through t()",
+  );
+  assert.match(main, /const broadcast = \(\) => \{\n  syncLanguage\(\);/);
+  assert.match(main, /resultPage\("تم تسجيل الدخول/);
+  assert.doesNotMatch(main, /<html dir="rtl">/);
+  assert.match(read("electron/player.mjs"), /t\("Esc للخروج من ملء الشاشة"\)/);
+  assert.match(read("src/lib/language.js"), /document\.title = translate\(/);
+});
+
+test("Discord presence speaks the interface language", async () => {
+  const { buildActivity } = await import("../core/presence.mjs");
+  try {
+    setLanguage("en");
+    assert.equal(buildActivity({}).details, "Browsing Riwaq");
+    const paused = buildActivity({
+      playing: true,
+      paused: true,
+      title: "Dune",
+    });
+    assert.match(paused.state, /Paused/);
+    setLanguage("ar");
+    assert.equal(buildActivity({}).details, "يتصفّح رِواق");
+  } finally {
+    setLanguage("ar");
+  }
 });
 
 test("the count phrases Collections builds are translated", () => {

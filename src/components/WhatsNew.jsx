@@ -1,16 +1,18 @@
 import React from "react";
 import { Sparkles } from "lucide-react";
 import { Modal } from "./UI.jsx";
-import { unseenNotes, WHATS_NEW } from "../../core/whats-new.mjs";
+import { notesIn, unseenNotes, WHATS_NEW } from "../../core/whats-new.mjs";
+import { language } from "../../core/i18n.mjs";
 
 /**
  * The highlights of the releases since the one the viewer last saw
  * (core/whats-new.mjs), or the recent ones when opened from Settings.
  */
 export default function WhatsNew({ current, seen, all = false, onClose }) {
+  const list = notesIn(language());
   const notes = all
-    ? unseenNotes({ current, list: WHATS_NEW, limit: 6 })
-    : unseenNotes({ seen, current });
+    ? unseenNotes({ current, list, limit: 6 })
+    : unseenNotes({ seen, current, list });
   return (
     <Modal onClose={onClose} className="whats-new">
       <span className="eyebrow">

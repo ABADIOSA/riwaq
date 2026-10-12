@@ -5,7 +5,12 @@
  * remembered on this device for the very first paint after a restart.
  */
 import { useEffect } from "react";
-import { cleanLanguage, direction, setLanguage } from "../../core/i18n.mjs";
+import {
+  cleanLanguage,
+  direction,
+  setLanguage,
+  translate,
+} from "../../core/i18n.mjs";
 
 const SAVED = "riwaq.language";
 
@@ -21,6 +26,7 @@ export function savedLanguage() {
 export function applyDocumentLanguage(lang) {
   document.documentElement.lang = lang;
   document.documentElement.dir = direction(lang);
+  document.title = translate("رِواق — Riwaq", lang);
 }
 
 export function useInterfaceLanguage(value) {

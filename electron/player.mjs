@@ -1,4 +1,5 @@
 import { styleArgs, styleProperties } from "../core/subtitles.mjs";
+import { t } from "../core/i18n.mjs";
 import { spawn } from "node:child_process";
 import net from "node:net";
 import { randomUUID } from "node:crypto";
@@ -660,7 +661,7 @@ export class Player {
     this.state.fullscreen = this.fullscreen;
     this.applyController();
     if (this.fullscreen && !this.state.pip)
-      this.send(["show-text", "Esc للخروج من ملء الشاشة", 2500]);
+      this.send(["show-text", t("Esc للخروج من ملء الشاشة"), 2500]);
     this.onState(this.state);
   }
   applyController() {

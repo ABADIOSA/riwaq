@@ -56,7 +56,9 @@ function compiled(dictionary = EN) {
       .map((part, i) => {
         if (i % 2) {
           names.push(part);
-          return /^n\d*$/.test(part) ? "([\\d٠-٩][\\d٠-٩,.]*)" : "(.+?)";
+          // A generic part may be empty: templates often add an optional
+          // clause ("{1} إضافة{2}") that is "" when it does not apply.
+          return /^n\d*$/.test(part) ? "([\\d٠-٩][\\d٠-٩,.]*)" : "(.*?)";
         }
         return escape(part);
       })

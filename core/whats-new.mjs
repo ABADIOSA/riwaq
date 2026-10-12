@@ -7,6 +7,25 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.42.0",
+    title: "رِواق بالإنجليزي، و«نكمل الحكاية» على نفس المصدر",
+    items: [
+      "واجهة إنجليزية كاملة: الإعدادات ← اللغة والترجمة ← لغة الواجهة. تتغير فوراً والتخطيط ينقلب من اليسار لليمين، ولكل ملف شخصي لغته.",
+      "«نكمل الحكاية» يكمّل على نفس المصدر اللي كنت تشاهد منه بدون قائمة المصادر، وإذا ما عاد متاح يختار أقرب مصدر من نفس الإضافة.",
+      "أغنية العمل توقف أول ما تفتح المصادر، فما يتداخل صوتها مع الفيلم، وتنبيه أول مرة يشرح وش هي.",
+      "البحث في الإعدادات يفهم العربي والإنجليزي.",
+    ],
+    en: {
+      title: "Riwaq in English, and “Continue watching” on the same source",
+      items: [
+        "A full English interface: Settings → Language & subtitles → Interface language. It switches at once, the layout turns left-to-right, and each profile keeps its own language.",
+        "“Continue watching” resumes on the source you were watching, without the sources list; if it's gone, Riwaq picks the closest source from the same addon.",
+        "The title's theme song stops as soon as the sources open, so it never plays over the film, and a one-time hint explains what it is.",
+        "Settings search understands Arabic and English.",
+      ],
+    },
+  },
+  {
     version: "0.41.0",
     title: "شيدرات Anime4K، تتبّع AniList، وأغانيك بأغلفتها",
     items: [
@@ -234,6 +253,19 @@ export const WHATS_NEW = [
 ];
 
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,6}$/;
+
+/**
+ * The notes in an interface language. Arabic is the text itself; English
+ * uses each release's `en` block, so a release without one is left out.
+ * With none in English at all, the Arabic notes stand.
+ */
+export function notesIn(lang, list = WHATS_NEW) {
+  if (lang !== "en") return list;
+  const english = list
+    .filter((n) => n.en?.title && Array.isArray(n.en.items))
+    .map((n) => ({ version: n.version, title: n.en.title, items: n.en.items }));
+  return english.length ? english : list;
+}
 
 /** -1, 0 or 1, comparing dotted numeric versions. */
 export function compareVersions(a = "", b = "") {
