@@ -120,6 +120,7 @@ test("the dictionary is well formed", () => {
     if (typeof value !== "string" || !value.trim())
       problems.push(`${key}: empty`);
     else if (/[؀-ۿ]/.test(value)) problems.push(`${key}: Arabic in English`);
+    if (/[«»]/.test(value)) problems.push(`${key}: Arabic quote marks`);
     if (key !== key.trim()) problems.push(`${key}: spaces around the key`);
     const names = (text) => (text.match(/\{\w+\}/g) || []).sort().join();
     if (names(key) !== names(value))
@@ -155,6 +156,17 @@ test("translate keeps text it has no entry for and the spaces around it", () => 
   );
   assert.equal(translate("Breaking Bad", "en"), "Breaking Bad");
   assert.equal(translate(42, "en"), 42);
+});
+
+test("quote marks beside an expression become English ones", () => {
+  assert.equal(translate("»", "en"), "”");
+  assert.equal(translate(" «", "en"), " “");
+  assert.equal(translate("»", "ar"), "»");
+  assert.equal(
+    translate("Dune «2»", "en"),
+    "Dune «2»",
+    "text that is not Arabic stays",
+  );
 });
 
 test("number placeholders match numbers only", () => {
@@ -298,4 +310,35 @@ test("both editions build JSX through the translating runtime", () => {
   assert.match(app, /useInterfaceLanguage\(state\.settings\.uiLanguage\)/);
   assert.match(app, /key=\{uiLanguage\}/);
   assert.match(read("src/components/Hud.jsx"), /key=\{uiLanguage\}/);
+});
+
+// Elements forced to direction: ltr (and what lives inside them) keep
+// physical sides on purpose; src/ltr.css mirrors the few that need it.
+const PHYSICAL_OK =
+  /\.(session-kicker|session-poster-stack|window-buttons|brand-mark|hero-pages|rating|progress-line|toggle|stream-quality|epg-scale|epg-block|explore-map-tiles|dock-stepper|hud-)|search-box kbd|stream-info em|live-source-name small|setting-row \.path/;
+
+test("layout CSS uses logical sides, so English mirrors the Arabic design", () => {
+  const dir = fileURLToPath(new URL("../src/", import.meta.url));
+  const found = [];
+  for (const name of readdirSync(dir).filter((f) => f.endsWith(".css"))) {
+    // The HUD lays out its own window; ltr.css holds the LTR overrides.
+    if (name === "hud.css" || name === "ltr.css") continue;
+    const css = read(`src/${name}`).replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const sel = selector.trim();
+      if (PHYSICAL_OK.test(sel) || /^(from|to|\d+%)/.test(sel)) continue;
+      for (const line of body.split(";")) {
+        const m =
+          /^\s*(left|right|(?:margin|padding|border)-(?:left|right)[\w-]*|border-(?:top|bottom)-(?:left|right)-radius)\s*:\s*(.*)$/.exec(
+            line,
+          ) || /^\s*(text-align|float)\s*:\s*(left|right)\b/.exec(line);
+        if (!m || /50%/.test(m[2])) continue;
+        found.push(`${name}: ${sel.split("\n").pop()} { ${line.trim()} }`);
+      }
+    }
+  }
+  assert.deepEqual(found, []);
+  const ltr = read("src/ltr.css");
+  assert.match(ltr, /html \{\s*--align-start: right;\s*--align-end: left;/);
+  assert.match(ltr, /html\[dir="ltr"\] \{\s*--align-start: left;/);
 });

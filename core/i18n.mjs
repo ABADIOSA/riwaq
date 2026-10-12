@@ -79,8 +79,13 @@ export const anchorOf = (key) =>
  * and trailing spaces are kept, so text beside an expression still reads.
  */
 export function translate(text, lang = current, dictionary = EN) {
-  if (lang !== "en" || typeof text !== "string" || !ARABIC.test(text))
-    return text;
+  if (lang !== "en" || typeof text !== "string") return text;
+  // A quote mark left on its own beside an expression ("«{name}»") turns
+  // into the English one.
+  if (!ARABIC.test(text))
+    return /[«»]/.test(text) && !/[\p{L}]/u.test(text)
+      ? text.replace(/«/g, "“").replace(/»/g, "”")
+      : text;
   const useCache = dictionary === EN && lang === current;
   if (useCache && cache.has(text)) return cache.get(text);
   const start = text.match(/^\s*/)[0];

@@ -1477,9 +1477,7 @@ export default function Details({
           <div className="sources-closed">
             <Play size={18} />
             <span>
-              المصادر تظهر {popupMode ? "في نافذة " : ""}بعد ما تضغط «
-              {playLabel}»
-              {videos.length > 0 ? "، أو تضغط الحلقة المختارة مرة ثانية" : ""}.
+              {`المصادر تظهر ${popupMode ? "في نافذة " : ""}بعد ما تضغط «${playLabel}»${videos.length > 0 ? "، أو تضغط الحلقة المختارة مرة ثانية" : ""}.`}
             </span>
             <button className="secondary small" onClick={openSources}>
               اعرض المصادر

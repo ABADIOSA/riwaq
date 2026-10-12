@@ -264,7 +264,7 @@ export default {
   "أزرار ويندوز الأصلية فوق شريط بلون تصميمك، فيبدو رِواق كأنه شريط نظامك.":
     "Windows' own buttons on a bar in your design's colour, so Riwaq looks like part of your system.",
   "رِواق يرسم الشريط والأزرار بنفسه، على اليسار كما في ويندوز العربي، وبالأسلوب الذي تختاره تحت.":
-    "Riwaq draws the bar and buttons itself, on the left as in Arabic Windows, in the style you choose below.",
+    "Riwaq draws the bar and buttons itself, on the right as in English Windows, in the style you choose below.",
   "أثناء التمرير يبقى الشريط العلوي ظاهراً ويصبح ضبابياً فوق المحتوى تحته. مطفأ افتراضياً لأنه يستخدم التمويه؛ اتركه مطفأ على الأجهزة الأضعف.":
     "While scrolling, the top bar stays visible and blurs over the content beneath it. Off by default because it uses blur; leave it off on weaker devices.",
   "حرّك رِواق بسحب أي مساحة فارغة في الصفحة، لا شريط العنوان فقط. اتركه مطفأ حتى لا تتحرك النافذة بنقرة غير مقصودة.":

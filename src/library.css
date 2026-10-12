@@ -266,7 +266,7 @@
   background: none;
   border: 0;
   padding: 0;
-  text-align: right;
+  text-align: var(--align-start);
   color: inherit;
   width: 280px;
   flex-shrink: 0;
@@ -351,7 +351,7 @@
   background: #ffffff03;
   border-radius: 10px;
   padding: 8px 12px;
-  text-align: right;
+  text-align: var(--align-start);
   color: inherit;
 }
 .calendar-entry:hover {

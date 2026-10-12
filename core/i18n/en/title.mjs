@@ -167,6 +167,9 @@ export default {
   شاهدتها: "Watched",
   "الحلقة {n}": "Episode {n}",
   "المصادر تظهر": "Sources appear",
+  "متابعة {1}": "Continue {1}",
+  "المصادر تظهر {1}بعد ما تضغط «{2}»{3}.":
+    "Sources appear {1}after you press “{2}”{3}.",
   "في نافذة": "in a window",
   "بعد ما تضغط «": "after you press “",
   "، أو تضغط الحلقة المختارة مرة ثانية":

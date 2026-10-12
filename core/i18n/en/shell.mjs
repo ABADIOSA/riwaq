@@ -108,7 +108,7 @@ export default {
     "in your sources. Try another description, or add a TMDB key for closer matches.",
   يوم: "day",
   ساعة: "hour",
-  دقيقة: "minute",
+  دقيقة: "min",
   ثانية: "second",
   "العد التنازلي": "Countdown",
   "{1} بعد": "{1} to go",

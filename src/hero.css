@@ -100,10 +100,10 @@
     transform 0.2s;
 }
 .hero-arrow.prev {
-  right: 16px;
+  inset-inline-start: 16px;
 }
 .hero-arrow.next {
-  left: 16px;
+  inset-inline-end: 16px;
 }
 .hero:hover .hero-arrow,
 .hero-arrow:focus-visible {

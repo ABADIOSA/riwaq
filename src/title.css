@@ -380,7 +380,7 @@
   flex-direction: column;
   gap: 5px;
   padding: 11px 13px 13px;
-  text-align: right;
+  text-align: var(--align-start);
   min-width: 0;
 }
 .episode-card .episode-title {
@@ -633,7 +633,7 @@
   border: 0;
   background: none;
   color: inherit;
-  text-align: right;
+  text-align: var(--align-start);
 }
 .countdown-shade {
   position: absolute;
@@ -688,8 +688,8 @@
   border-color: var(--accent);
 }
 .identity-riwaq .countdown-card {
-  border-top-left-radius: 50% 22%;
-  border-top-right-radius: 50% 22%;
+  border-start-end-radius: 50% 22%;
+  border-start-start-radius: 50% 22%;
 }
 .identity-riwaq .countdown-remove {
   top: 24%;

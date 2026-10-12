@@ -15,8 +15,8 @@
 .app.identity-riwaq .poster-image,
 .app.identity-riwaq .episode-card .episode-still,
 .app.identity-riwaq .gallery-posters .gallery-item {
-  border-top-left-radius: var(--arch);
-  border-top-right-radius: var(--arch);
+  border-start-end-radius: var(--arch);
+  border-start-start-radius: var(--arch);
 }
 .identity-riwaq .episode-card .episode-still {
   --arch: 50% 34%;
@@ -28,10 +28,10 @@
   inset: 5px;
   z-index: 2;
   border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  border-top-left-radius: var(--arch);
-  border-top-right-radius: var(--arch);
-  border-bottom-left-radius: 6px;
-  border-bottom-right-radius: 6px;
+  border-start-end-radius: var(--arch);
+  border-start-start-radius: var(--arch);
+  border-end-end-radius: 6px;
+  border-end-start-radius: 6px;
   opacity: 0;
   transition: opacity 0.2s;
   pointer-events: none;
@@ -134,8 +134,8 @@
 
 /* The active page in the menu is an arch, not a rounded pill. */
 .identity-riwaq .nav-item.active {
-  border-top-left-radius: 50% 40%;
-  border-top-right-radius: 50% 40%;
+  border-start-end-radius: 50% 40%;
+  border-start-start-radius: 50% 40%;
 }
 .identity-riwaq .nav-item.active::before {
   display: none;

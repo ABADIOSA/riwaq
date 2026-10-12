@@ -67,7 +67,7 @@
   border: 0;
   background: none;
   color: inherit;
-  text-align: right;
+  text-align: var(--align-start);
 }
 .collection-open > span:last-child {
   display: flex;
@@ -374,7 +374,7 @@ button.danger,
   border: 0;
   background: none;
   color: inherit;
-  text-align: right;
+  text-align: var(--align-start);
 }
 .folder-tile .collection-face {
   border-radius: var(--poster-radius, 12px);
@@ -434,7 +434,7 @@ button.danger,
   border-radius: 8px;
   background: none;
   color: inherit;
-  text-align: right;
+  text-align: var(--align-start);
 }
 .add-folder:hover {
   background: #ffffff0a;
@@ -479,7 +479,7 @@ button.danger,
   border-radius: 12px;
   background: var(--panel, #ffffff06);
   color: inherit;
-  text-align: right;
+  text-align: var(--align-start);
 }
 .nuvio-options button svg {
   grid-row: span 2;
