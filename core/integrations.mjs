@@ -7,6 +7,65 @@ const POST = (body, headers = {}) => ({
   redirect: "error",
 });
 const TRAKT_ACTIVATE = "https://trakt.tv/activate";
+/**
+ * Simkl (docs: api.simkl.org). AUTH V2 (2026-09) is an OAuth 2.0 device flow
+ * with a public client ID and no secret; apps registered before it keep the
+ * V1 PIN until Simkl retires it (announced for about April 2027). A V2
+ * client ID asked for a PIN answers 400 "unauthorized_client", and a V1 one
+ * asked for a device code 401 "invalid_client". Every request names the app
+ * in `client_id`, `app-name` and `app-version` (required since 2026-04).
+ */
+const SIMKL_API = "https://api.simkl.com";
+export const SIMKL_SCOPE = "media:read media:write";
+export const SIMKL_DEVICE_GRANT =
+  "urn:ietf:params:oauth:grant-type:device_code";
+const SIMKL_PIN = "https://simkl.com/pin/";
+const FORM = (fields, headers = {}) => ({
+  method: "POST",
+  headers: {
+    "Content-Type": "application/x-www-form-urlencoded",
+    Accept: "application/json",
+    ...headers,
+  },
+  body: new URLSearchParams(fields).toString(),
+  redirect: "error",
+});
+/** Simkl's own activation page from its reply, or the usual one. */
+function simklActivation(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      (url.hostname === "simkl.com" || url.hostname.endsWith(".simkl.com"))
+      ? url.toString()
+      : SIMKL_PIN;
+  } catch {
+    return SIMKL_PIN;
+  }
+}
+/** Simkl's refusals in words the viewer can act on; `status` stays. */
+export function simklProblem(error) {
+  const code = Number(/^HTTP (\d{3})$/.exec(error?.message || "")?.[1]);
+  if (!code) return error;
+  const said = (message) =>
+    Object.assign(new Error(message), { status: code, code: error.code });
+  if (error.code === "unauthorized_client" || error.code === "invalid_client")
+    return said(
+      `رفض Simkl معرّف التطبيق (${code}). تأكد من Client ID في إعدادات Simkl.`,
+    );
+  const text = {
+    401: "انتهت جلسة Simkl أو أُلغيت (401). افصل الحساب واربطه من جديد.",
+    403: "رفض Simkl الطلب (403). أعد ربط الحساب ليعطي رِواق صلاحية القراءة والكتابة.",
+    429: "وصلت لحدّ طلبات Simkl اليومي أو طلبات كثيرة (429). جرّب لاحقاً.",
+  }[code];
+  return said(
+    text ||
+      (code >= 500
+        ? `خوادم Simkl لا تستجيب الآن (${code}). جرّب بعد قليل.`
+        : `ردّ Simkl برمز ${code}.`),
+  );
+}
 /** Trakt's own activation page from its reply, or the usual one. */
 function traktActivation(value) {
   try {
@@ -224,6 +283,18 @@ export class Integrations {
   disconnect(id) {
     const s = this.get(id);
     this.devices.delete(id);
+    if (id === "simkl" && s.token?.v2 && s.token.access_token)
+      Promise.resolve()
+        .then(() =>
+          this.client.request(
+            this.simklUrl("/oauth2/revoke", s),
+            FORM(
+              { token: s.token.access_token, client_id: s.clientId },
+              this.simklHeaders(s),
+            ),
+          ),
+        )
+        .catch(() => {});
     if (id === "trakt") {
       this.session = null;
       // Disconnecting forgets the account's suggestions too.
@@ -256,7 +327,7 @@ export class Integrations {
             .catch((error) => {
               throw traktProblem(error, "connect");
             })
-        : await this.simkl("/oauth/pin", false);
+        : await this.simklDevice(s);
     if (!data.user_code) throw new Error("تعذّر الحصول على رمز الربط");
     const interval = Math.max(5, Number(data.interval) || 5);
     this.devices.set(id, {
@@ -274,7 +345,11 @@ export class Integrations {
       url:
         id === "trakt"
           ? traktActivation(data.verification_url)
-          : "https://simkl.com/pin/",
+          : data.v2
+            ? simklActivation(
+                data.verification_uri_complete || data.verification_uri,
+              )
+            : SIMKL_PIN,
       expiresIn: data.expires_in || 600,
     };
   }
@@ -303,22 +378,54 @@ export class Integrations {
                 this.traktHeaders(s),
               ),
             )
-          : await this.simkl(
-              `/oauth/pin/${encodeURIComponent(d.user_code)}`,
-              false,
-            );
-      if (!token.access_token) return { pending: true, interval: d.interval };
+          : d.v2
+            ? await this.client.request(
+                this.simklUrl("/oauth2/token", s),
+                FORM(
+                  {
+                    grant_type: SIMKL_DEVICE_GRANT,
+                    device_code: d.device_code,
+                    client_id: s.clientId,
+                  },
+                  this.simklHeaders(s),
+                ),
+              )
+            : await this.simkl(
+                `/oauth/pin/${encodeURIComponent(d.user_code)}`,
+                false,
+              );
+      if (!token?.access_token) return { pending: true, interval: d.interval };
       if (this.get(id) !== s || this.devices.get(id) !== d)
         return { cancelled: true };
       s.token = {
         ...token,
         created_at: token.created_at || Math.floor(Date.now() / 1000),
+        ...(d.v2 ? { v2: true } : {}),
       };
       this.devices.delete(id);
       this.client.persist();
       return { connected: true, state: this.client.publicState() };
     } catch (error) {
-      if (error.message === "HTTP 400")
+      // RFC 8628 answers (Simkl V2): wait, wait longer, or start again.
+      if (error.code === "slow_down") {
+        d.interval += 5;
+        d.next = Date.now() + d.interval * 1000;
+        return { pending: true, interval: d.interval };
+      }
+      if (error.code === "expired_token") {
+        this.devices.delete(id);
+        throw new Error("انتهت صلاحية رمز الربط. ابدأ من جديد.");
+      }
+      if (error.code === "access_denied") {
+        this.devices.delete(id);
+        throw new Error(
+          "رُفض الربط من صفحة Simkl. ابدأ من جديد إذا كان ذلك بالخطأ.",
+        );
+      }
+      if (
+        error.message === "HTTP 400" &&
+        (!error.code || error.code === "authorization_pending")
+      )
         return { pending: true, interval: d.interval };
       if (error.message === "HTTP 429") {
         d.interval += 5;
@@ -337,7 +444,9 @@ export class Integrations {
       }[error.message];
       if (why) throw new Error(why);
       if (/^HTTP \d{3}$/.test(error.message))
-        throw traktProblem(error, "connect");
+        throw id === "simkl"
+          ? simklProblem(error)
+          : traktProblem(error, "connect");
       throw new Error("تعذّر الربط أو تم رفضه. ابدأ من جديد.");
     } finally {
       d.busy = false;
@@ -460,19 +569,125 @@ export class Integrations {
       };
     return true;
   }
-  async simkl(path, authed = true) {
+  /** A Simkl API address naming the app, as Simkl requires on every call. */
+  simklUrl(path, s = this.get("simkl")) {
+    const url = new URL(path, SIMKL_API);
+    url.searchParams.set("client_id", s.clientId || "");
+    url.searchParams.set("app-name", "riwaq");
+    url.searchParams.set(
+      "app-version",
+      String(this.client.version || "dev").replace(/[^\w.-]/g, ""),
+    );
+    return url.toString();
+  }
+  simklHeaders(s = this.get("simkl")) {
+    return {
+      "User-Agent": this.traktHeaders(s)["User-Agent"],
+      "simkl-api-key": s.clientId || "",
+    };
+  }
+  /**
+   * A device code: AUTH V2 first; a client registered for V1 is refused
+   * there with 401 and gets its PIN instead.
+   */
+  async simklDevice(s) {
+    try {
+      const data = await this.client.request(
+        this.simklUrl("/oauth2/device", s),
+        FORM(
+          { client_id: s.clientId, scope: SIMKL_SCOPE },
+          this.simklHeaders(s),
+        ),
+      );
+      return { ...data, v2: true };
+    } catch (error) {
+      if (error.status !== 401 && error.code !== "invalid_client")
+        throw simklProblem(error);
+      return this.simkl("/oauth/pin", false);
+    }
+  }
+  /**
+   * A fresh V2 access token (they last seven days); one refresh at a time,
+   * since a refresh retires the previous token. A refused refresh ends the
+   * session: the token goes, the client ID stays.
+   */
+  simklRefresh(s) {
+    if (this.simklRefreshing?.session === s)
+      return this.simklRefreshing.promise;
+    const job = { session: s };
+    job.promise = (async () => {
+      try {
+        const token = await this.client.request(
+          this.simklUrl("/oauth2/token", s),
+          FORM(
+            {
+              grant_type: "refresh_token",
+              refresh_token: s.token.refresh_token,
+              client_id: s.clientId,
+            },
+            this.simklHeaders(s),
+          ),
+        );
+        if (!token?.access_token) throw new Error("HTTP 401");
+        if (this.get("simkl") !== s || !s.token) return;
+        s.token = {
+          ...s.token,
+          ...token,
+          refresh_token: token.refresh_token || s.token.refresh_token,
+          created_at: Math.floor(Date.now() / 1000),
+          v2: true,
+        };
+        this.client.persist();
+      } catch (error) {
+        if ([400, 401].includes(error.status) && this.get("simkl") === s) {
+          delete s.token;
+          this.client.persist();
+          throw new Error("انتهت جلسة Simkl. اربط الحساب من جديد.");
+        }
+        throw simklProblem(error);
+      } finally {
+        if (this.simklRefreshing === job) this.simklRefreshing = null;
+      }
+    })();
+    this.simklRefreshing = job;
+    return job.promise;
+  }
+  async simkl(path, authed = true, retried = false) {
     const s = this.get("simkl");
     if (authed && !s.token) throw new Error("اربط حساب Simkl أولاً");
-    const url = new URL(path, "https://api.simkl.com");
-    url.searchParams.set("client_id", s.clientId);
-    return this.client.request(url.toString(), {
-      redirect: "error",
-      headers: {
-        "User-Agent": this.traktHeaders(s)["User-Agent"],
-        "simkl-api-key": s.clientId,
-        ...(authed ? { Authorization: `Bearer ${s.token.access_token}` } : {}),
-      },
-    });
+    const expires =
+      (Number(s.token?.created_at) || 0) + (Number(s.token?.expires_in) || 0);
+    if (
+      authed &&
+      s.token.v2 &&
+      s.token.refresh_token &&
+      s.token.expires_in &&
+      Date.now() / 1000 > expires - 300
+    )
+      await this.simklRefresh(s);
+    try {
+      return await this.client.request(this.simklUrl(path, s), {
+        redirect: "error",
+        headers: {
+          ...this.simklHeaders(s),
+          ...(authed
+            ? { Authorization: `Bearer ${s.token.access_token}` }
+            : {}),
+        },
+      });
+    } catch (error) {
+      if (
+        authed &&
+        !retried &&
+        error.status === 401 &&
+        s.token?.v2 &&
+        s.token.refresh_token
+      ) {
+        await this.simklRefresh(s);
+        return this.simkl(path, authed, true);
+      }
+      throw simklProblem(error);
+    }
   }
   async sync(id) {
     const s = this.get(id);

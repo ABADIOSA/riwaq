@@ -11,12 +11,61 @@ import net from "node:net";
 const HANDSHAKE = 0;
 const FRAME = 1;
 
-/** The activity object Discord renders. Pure, so the copy can be tested. */
+/** Riwaq's icon, public on GitHub: Discord shows images by https address. */
+export const RIWAQ_ICON =
+  "https://raw.githubusercontent.com/ABADIOSA/riwaq/main/assets/icon.png";
+
+/** An https picture without credentials that Discord can fetch, or "". */
+function picture(url) {
+  try {
+    const u = new URL(String(url || ""));
+    return u.protocol === "https:" &&
+      !u.username &&
+      !u.password &&
+      u.toString().length <= 300
+      ? u.toString()
+      : "";
+  } catch {
+    return "";
+  }
+}
+/** Discord wants 2 to 128 characters in its text fields. */
+const line = (value, max = 128) => {
+  const text = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+  return text.length >= 2 ? text : "";
+};
+
+/** "S1 · E3 — Title" for an episode; an older plain label passes through. */
+export function episodeLine({ season, number, episodeTitle, episode } = {}) {
+  if (Number(season) >= 0 && Number(number) > 0 && season !== "")
+    return [`S${Number(season)} · E${Number(number)}`, line(episodeTitle, 80)]
+      .filter(Boolean)
+      .join(" — ");
+  return line(episode);
+}
+
+/**
+ * The activity object Discord renders, pure so the copy can be tested.
+ * A viewing shows as "Watching" with the title in the member list
+ * (`status_display_type` 2), the poster, the episode, a progress bar from
+ * start and end times, and an IMDb button. The detail level decides how
+ * much the people in their server learn: the actual title, a generic line,
+ * or nothing.
+ */
 export function buildActivity({
   playing = false,
   paused = false,
   live = false,
   title = "",
+  year = "",
+  poster = "",
+  imdb = "",
+  season,
+  number,
+  episodeTitle = "",
   episode = "",
   position = 0,
   duration = 0,
@@ -26,28 +75,54 @@ export function buildActivity({
   if (detail === "off") return null;
   if (!playing)
     return {
+      type: 0,
       details: "يتصفّح رِواق",
-      assets: { large_image: "riwaq", large_text: "رِواق" },
+      assets: { large_image: RIWAQ_ICON, large_text: "رِواق" },
       instance: false,
     };
   const generic = detail !== "title";
+  const name = line(title) || "بلا عنوان";
+  const art = generic ? "" : picture(poster);
+  const status = paused ? "متوقف مؤقتاً" : live ? "بث مباشر" : "";
   const activity = {
-    details: generic
-      ? "يشاهد شيئاً"
-      : String(title || "بلا عنوان").slice(0, 128),
+    type: 3, // Watching
+    status_display_type: generic ? 0 : 2,
+    details: generic ? "يشاهد شيئاً" : name,
     state: generic
-      ? "رِواق"
-      : [episode, paused ? "متوقف مؤقتاً" : live ? "بث مباشر" : ""]
+      ? "على رِواق"
+      : [episodeLine({ season, number, episodeTitle, episode }), status]
           .filter(Boolean)
           .join(" · ")
-          .slice(0, 128) || "رِواق",
-    assets: { large_image: "riwaq", large_text: "رِواق" },
+          .slice(0, 128) ||
+        line(year) ||
+        "على رِواق",
+    assets: {
+      large_image: art || RIWAQ_ICON,
+      large_text: generic
+        ? "رِواق"
+        : line(year ? `${name} (${year})` : name) || "رِواق",
+      ...(art
+        ? {
+            small_image: RIWAQ_ICON,
+            small_text: paused ? "متوقف مؤقتاً" : "على رِواق",
+          }
+        : {}),
+    },
     instance: false,
   };
-  // Discord renders a countdown from an end timestamp and a stopwatch from a
-  // start one. A paused or live stream has neither.
+  const imdbId = /^tt\d{5,}$/.exec(String(imdb || ""))?.[0];
+  if (!generic && imdbId)
+    activity.buttons = [
+      {
+        label: "صفحة العمل على IMDb",
+        url: `https://www.imdb.com/title/${imdbId}/`,
+      },
+    ];
+  // Start and end make Discord draw a progress bar for a viewing; a live
+  // stream only counts up, and a paused one shows no clock.
   if (!paused && !live && duration > 0 && position >= 0)
     activity.timestamps = {
+      start: Math.round(at - position * 1000),
       end: Math.round(at + (duration - position) * 1000),
     };
   else if (!paused && live)

@@ -1705,6 +1705,22 @@ function IntegrationCard({ integration: s, update, act, notice }) {
               </li>
             </ol>
           )}
+          {id === "simkl" && (
+            <ol className="subtle trakt-steps">
+              <li>
+                افتح صفحة المطوّرين في Simkl (زر «إعدادات الخدمة» فوق) وأنشئ
+                تطبيقاً جديداً بأي اسم.
+              </li>
+              <li>
+                انسخ Client ID هنا واحفظ. تطبيقات Simkl الجديدة (AUTH V2) ما
+                تحتاج Client Secret.
+              </li>
+              <li>
+                اضغط «ربط» وأدخل الرمز في صفحة Simkl. التطبيقات القديمة تشتغل
+                بنفس الطريقة لين يوقفها Simkl.
+              </li>
+            </ol>
+          )}
           {id === "letterboxd" && (
             <p className="subtle">
               عند الربط يُرسل اسم المستخدم العام إلى api.stremboxd.com لجلب
@@ -1919,7 +1935,11 @@ function PresenceAndAlerts({ state, update, act, notice }) {
         <div className="setting-row">
           <div>
             <b>تفعيل الحضور</b>
-            <p>إظهار ما تشاهده في ملفك على Discord.</p>
+            <p>
+              يظهر في ملفك «يشاهد» مع اسم العمل وبوستره والحلقة وشريط التقدم وزر
+              لصفحته على IMDb. سمِّ تطبيقك في بوابة Discord «رِواق» ليظهر بهذا
+              الاسم.
+            </p>
           </div>
           <button
             className={`toggle ${s.discordPresence ? "on" : ""}`}

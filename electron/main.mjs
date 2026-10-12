@@ -623,19 +623,27 @@ function updatePresence() {
     return;
   }
   const state = player?.state || {};
+  // The poster, year and episode title come from main's own copy of the
+  // title's metadata; local files have none of them.
+  const meta = state.mediaType === "local" ? {} : player?.meta || {};
+  const [, season, number] =
+    /:(\d+):(\d+)$/.exec(
+      state.mediaType === "series" ? String(state.videoId || "") : "",
+    ) || [];
+  const video = (meta.videos || []).find((v) => v.id === state.videoId);
   presence.set(
     buildActivity({
       playing: !!state.active,
       paused: !!state.pause,
       live: !!state.live,
       title: state.name || "",
-      episode:
-        state.mediaType === "series"
-          ? String(state.videoId || "")
-              .split(":")
-              .slice(1)
-              .join("×")
-          : "",
+      year:
+        /\d{4}/.exec(String(meta.year || meta.releaseInfo || ""))?.[0] || "",
+      poster: meta.poster || "",
+      imdb: meta.imdb_id || meta.id || "",
+      season,
+      number,
+      episodeTitle: video?.title || video?.name || "",
       position: Number(state.position) || 0,
       duration: Number(state.duration) || 0,
       detail: settings.presenceDetail || "title",
