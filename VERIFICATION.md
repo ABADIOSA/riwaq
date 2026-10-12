@@ -1,5 +1,35 @@
 # Verification — Riwaq
 
+## 2026-10-12 — 0.41.0: issues #69–#71 (Simkl V2, Discord, shaders, AniList)
+
+- **691 Node tests pass** (658 + 33). Prettier and the desktop and web Vite builds pass.
+- New and changed tests:
+  - `tests/integrations.test.mjs` (Simkl AUTH V2): device code, pending and slow-down answers, then a token. Expired or refused tokens refresh once at a time. A refused refresh keeps the client ID. A V2 client sent to the PIN reads in Arabic. The V1 mock now answers the device endpoint with 401 `invalid_client`, as Simkl does.
+  - `tests/presence.test.mjs` (Discord): the Watching activity, episode line, poster and icon, IMDb button, timestamps (none when paused, start only for live), field lengths and the generic mode.
+  - `tests/shaders.test.mjs`:
+    - The Anime4K chains are compared file by file with Anime4K's own `GLSL_Windows_High-end`/`Low-end` `input.conf` templates, fetched from raw.githubusercontent.com here.
+    - Shader file names refuse folders and traversal. Presets resolve from a pack, or from a folder that holds every file. The anime scope, forced picks, the viewer's chain and the legacy single file are covered.
+    - `fetchPinned` refuses other hosts, plain HTTP, credentials, a wrong size and a wrong digest. `zipFiles` keeps only wanted flat names.
+    - The store: a failed download leaves no folder, a stale marker counts as not installed, and the folder scan keeps files only. Live switching and the shader key work, compatibility mode plays nothing, and a Settings change reaches the running viewing once.
+  - `tests/anilist.test.mjs`:
+    - Targets and the IMDb first-season rule. Pasted tokens and redirect addresses. ARM's single-entry rule.
+    - `nextListEntry` (never lower, never touch COMPLETED, last episode completes). List import with AniList-only covers.
+    - Sign-in, the 90% gate and opt-in. Kitsu through ARM and MAL through `idMal`. A rate limit pauses the queue and an unmapped work is counted.
+    - A reply after a disconnect and reconnect writes nothing, and disconnect clears everything.
+- Shader packs, checked once against the real upstream files:
+  - The Anime4K 4.0.1 zip (776,303 bytes) and both FSRCNNX 1.1 files were downloaded from GitHub here, and their SHA-256 values are what `SHADER_PACKS` pins.
+  - Running `ShaderStore.download` against those bytes through a stub fetch (GitHub → release-assets redirect) installed 14 Anime4K files plus the marker and both FSRCNNX files. All 14 presets became available.
+  - GitHub redirects these downloads to `release-assets.githubusercontent.com`, which is in `SHADER_HOSTS`.
+- Headless Chromium render with a mock bridge at 980×680 and 1440×900:
+  - Shader card: packs with install state, download, the preset groups (Anime4K HQ and Fast, FSRCNNX after its download, your folder), scope, and the chain builder. Settings calls were `shaderPreset`, `shaderScope` and `shaderChain`.
+  - AniList card: steps, the PIN paste box, then connected with the expiry note and the tracking toggle.
+  - HUD: the shader menu with 16 entries, the active preset marked, the preset as a quality chip, and a pick sending `glsl:fsrcnnx-8`.
+  - No page errors and no horizontal overflow.
+- Not run here:
+  - No live Simkl, AniList or ARM request: api.simkl.org, graphql.anilist.co and arm.haglund.dev are refused by this environment's proxy. Request shapes follow their documentation and are checked with mocks only.
+  - No Discord client.
+  - No Windows run, and no MPV playback with any GLSL chain on a real GPU. Anime4K and FSRCNNX cost and look are unverified here.
+
 ## 2026-10-12 — 0.41.0: song tags for local music
 
 - **658 Node tests pass** (642 on main + 16 new). Prettier and both the desktop and web Vite builds pass.
@@ -140,6 +170,7 @@
 **Report:** on 0.38.0, with SDR conversion (the default), a Dolby Vision episode still played sound with no picture. HDR was not the cause.
 
 What was found:
+
 - Arguments: the MPV arguments of 0.36.0 and 0.38.0 were compared by running both versions of `playerArgs`. 0.37.0 added only `--volume-max`; 0.38 added the buffer and the log.
 - MPV build: 0.37.0 also changed the bundled build, from shinchiro 20260610 (mpv 0.41.0-744) to 20261007 (0.41.0-1104).
 - Since 0.37, `refreshRtx` sent `vf remove @riwaqrtx` at every start, with RTX off.
@@ -149,11 +180,13 @@ What was found:
   - all of this while hardware decoding is starting.
 
 What changed:
+
 - **No stray filter command.** `vf remove` is sent only after Riwaq added an RTX filter.
 - **Stable MPV.** Riwaq now bundles MPV's own stable release v0.41.0 (git 41f6a64, MinGW, SHA-256 pinned). It was downloaded here and checked: it carries every option Riwaq passes, including d3d11, gpu-next, d3d11vpp with `nvidia-true-hdr`, `target-contrast`, the cache options, `audio-spdif` and the log.
 - **Stronger picture check.** The check now runs throughout the viewing (`video-out-params` and `estimated-vf-fps`, absent values recorded as null), skips pause and buffering, and throttles the frame-rate updates.
 
 Executed:
+
 - `npm test`: **593 passing, 0 failing**, including:
   - a viewing without RTX sends no filter command;
   - RTX removes only what it added;
@@ -170,6 +203,7 @@ Not executed: MPV on Windows. That the stray `vf remove` (or the daily build) hi
 **Owner's request:** the picture must never disappear and the player must never freeze. Learn from Netflix and Disney+, and play the largest Blu-ray remux.
 
 What changed after the HDR-modes work below:
+
 - **No embedded true HDR.** `HDR_MODES` is `tonemap` and `window`. True HDR always uses MPV's own full-screen surface, as the large services present HDR from a dedicated full-screen surface. RTX Video HDR also opens SDR sources there.
 - **Buffer.** `bufferArgs` covers network sources: the demuxer buffer follows memory (up to 2 GiB), the first frame waits for an initial fill, the stream buffer is 4 MiB, and lavf reconnects on drops. Live and local files are untouched.
 - **Watchdog.** `checkStall`: 15 s without movement while playing, or 30 s waiting on the network. It triggers one reconnect from the same moment, then the next ranked source. A buffering pill shows in the HUD.
@@ -180,6 +214,7 @@ What changed after the HDR-modes work below:
 What large services do that Riwaq cannot: switching bitrate mid-file (ABR) needs several encodings of one title. An addon link is one file, so the speed cap and the buffer stand in for it.
 
 Executed:
+
 - `npm test`: **591 passing, 0 failing**. The new tests cover:
   - buffer sizes by memory, and the buffer arguments (with none for local files and live);
   - passthrough;
@@ -197,6 +232,7 @@ Not executed: any of this with MPV on Windows. That includes a real remux over a
 The owner then sent a Harbor support thread. True HDR in Harbor's embedded window is not treated as HDR by Windows, so Harbor added a separate MPV window without controls, and users complained they could not pause or leave it. 0.37.0 had made the old "HDR signal" switch prominent on the new video page.
 
 Riwaq now has three HDR modes:
+
 - `tonemap`: the default. The old switch alone no longer signals HDR, so a viewer who turned it on returns to SDR conversion.
 - `window`: MPV's own full-screen, on-top window, for streams labelled HDR. It has MPV's controller, its pointer hiding, Esc to return to Riwaq, and double click for MPV's own full screen.
 - `embedded`: experimental.
@@ -205,19 +241,21 @@ Tests added: the HDR signal per mode; the `separate` arguments (no `--wid`, full
 
 Not executed: MPV's own HDR window on a real Windows HDR display.
 
-
 **Report:** on 0.37.0 a 4K HDR10 HEVC episode played sound, and the HUD read its quality, but no picture appeared.
 
 What is known:
+
 - The default picture arguments are unchanged from 0.36. The MPV build did change, from 20260610 to 20261007 (v0.41), because the old build was removed upstream.
 - Which optional picture settings the viewer had on is not known yet.
 - The cause was not found: there is no Windows machine here.
 
 What changed:
+
 - Detection: `Player.watchVideo` (`vo-configured` false six seconds after loading, with a selected video track) triggers a single restart from the same position in `SAFE_VIDEO`.
 - Logging: each viewing writes an MPV log. The diagnostic shows its sanitized problem lines (`mpvLogProblems`).
 
 Executed:
+
 - `npm test` (then): **586 passing, 0 failing**. The new tests cover:
   - reporting once after six seconds, and never with a picture or without a video track;
   - the restart keeping the URL, the position and the sound settings while applying `SAFE_VIDEO` and `safe`;
@@ -945,12 +983,12 @@ Not executed: the owner's actual addon response, Windows.
 
 The owner said Riwaq felt heavy and slow. I measured a mocked home page in headless Chromium at 1440×960: 100 addon catalogs of 60 titles each, artwork ambience on, using `scratchpad/ui/perf.mjs`. These are renderer measurements without a GPU, and not Windows ones.
 
-| | before | after |
-|---|---|---|
-| Home page fully loaded | 20.3 s (19.2 s of long tasks) | 3.6–4.0 s (2.7 s) |
-| DOM elements / poster cards | 127,513 / 6,002 | 52,921 / 2,450 |
-| 3 s of 30 Hz player updates: frame rate / long tasks | 4 fps / 63.2 s | 58–60 fps / 0 s |
-| 10 hero turns, extra time | 16.9 s | 0.7–1.0 s (scripting 55–74 ms, style 65 ms, layout 52–64 ms in total) |
+|                                                      | before                        | after                                                                 |
+| ---------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------- |
+| Home page fully loaded                               | 20.3 s (19.2 s of long tasks) | 3.6–4.0 s (2.7 s)                                                     |
+| DOM elements / poster cards                          | 127,513 / 6,002               | 52,921 / 2,450                                                        |
+| 3 s of 30 Hz player updates: frame rate / long tasks | 4 fps / 63.2 s                | 58–60 fps / 0 s                                                       |
+| 10 hero turns, extra time                            | 16.9 s                        | 0.7–1.0 s (scripting 55–74 ms, style 65 ms, layout 52–64 ms in total) |
 
 Causes found and fixed:
 
@@ -1054,6 +1092,7 @@ Executed:
   - a relative heading size shrank hero titles.
 
 Not executed:
+
 - `checkPrayer` in main (a real viewing reaching an adhan).
 - Real TMDB season requests.
 - Windows rendering of Sakkal Majalla.
@@ -1081,6 +1120,7 @@ Not executed: Windows, a touch screen.
 The owner's installed 0.16.0 showed "لم يكتمل التحديث" with "المتاح 0.16.0" after 0.17.0 was published.
 
 Diagnosis from the code (not a Windows log):
+
 - The stored latest version stayed 0.16.0, so the release list request failed before the new list was stored.
 - The generic message appears only for a non-Arabic error. That points to an HTTP status from the anonymous GitHub API: most likely its 60-per-hour limit, which carrier NAT shares, or a server error.
 
@@ -1097,6 +1137,7 @@ Executed:
 - `npm run check` and `npm run build` pass.
 
 Not executed:
+
 - The github.com feed was not fetched live: this build environment's proxy refuses github.com paths outside the session's API scope, so the parser was tested against a fixture in GitHub's documented feed shape.
 - No Windows run.
 - An installed 0.16.0 still checks with its old updater, so it needs the limit to reset or a manual download to reach this version.
@@ -1294,7 +1335,6 @@ Executed:
 - Rendered in Chromium with mocked bridge data: the Nuvio dialog shows the per-folder list with no errors or overflow.
 
 Not executed: the owner's actual Nuvio data; the clipboard copy on Windows; Windows.
-
 
 ## 0.12.2 — some folders were still empty
 

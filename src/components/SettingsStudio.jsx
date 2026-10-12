@@ -478,7 +478,7 @@ const ALL_GROUPS = [
       [
         "connections",
         "الحسابات والربط",
-        "Trakt Letterboxd Simkl Nuvio نوفيو مزامنة قوائم نقل مجموعات",
+        "Trakt Letterboxd Simkl AniList أنمي Nuvio نوفيو مزامنة قوائم نقل مجموعات",
         Link2,
       ],
     ],
@@ -497,7 +497,7 @@ const ALL_GROUPS = [
       [
         "video",
         "جودة الفيديو",
-        "جودة الصورة HDR OLED LCD تسريع العتاد العارض gpu-next ألوان 8 بت خطوط RTX NVIDIA تكبير شيدر مرشح تحويل",
+        "جودة الصورة HDR OLED LCD تسريع العتاد العارض gpu-next ألوان 8 بت خطوط RTX NVIDIA تكبير شيدر شيدرات GLSL Anime4K FSRCNNX مرشح تحويل",
         Gauge,
       ],
       [
