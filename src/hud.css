@@ -416,6 +416,18 @@ html.hud-root #root {
 .hud-sleep-off {
   color: #fca5a5 !important;
 }
+/* The shader menu shares the sleep menu's look; a pack has many modes. */
+.hud-shader-menu {
+  min-width: 200px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+}
+.hud-shader-menu button.on {
+  color: var(--hud-accent);
+}
+.hud-shader-menu button[dir="ltr"] {
+  text-align: start;
+}
 /* The volume popup while the controls sleep. */
 .hud-volume-popup {
   position: absolute;

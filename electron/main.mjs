@@ -65,6 +65,8 @@ import {
 } from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import { Player } from "./player.mjs";
+import { ShaderStore } from "./shaders.mjs";
+import { shaderOptions } from "../core/shaders.mjs";
 import {
   bufferMiB,
   parseAudioDevices,
@@ -609,6 +611,23 @@ function screenshotDir() {
   const path = join(app.getPath("userData"), "screenshots");
   mkdirSync(path, { recursive: true });
   return path;
+}
+/** Downloaded shader packs live in Riwaq's data folder (electron/shaders.mjs). */
+let shaderStoreInstance = null;
+function shaderStore() {
+  return (shaderStoreInstance ||= new ShaderStore({
+    dir: join(app.getPath("userData"), "shaders"),
+  }));
+}
+/** The shader library as the interface sees it: names, never paths. */
+function shaderLibraryView() {
+  const settings = client.state.settings;
+  const { packs, own, library } = shaderStore().describe(settings);
+  return {
+    packs,
+    own: { dir: own.dir, missing: own.missing, files: own.files },
+    options: shaderOptions(settings, library),
+  };
 }
 /**
  * Rich Presence mirrors whatever the player is doing. It is rebuilt on every
@@ -1447,16 +1466,47 @@ const methods = {
     await shell.openPath(screenshotDir());
     return true;
   },
+  shaderLibrary: () => shaderLibraryView(),
+  // A pinned upstream release, downloaded only on this click and checked by
+  // size and SHA-256 before it is written.
+  shaderDownload: async (a) => {
+    await shaderStore().download(String(a?.pack || ""));
+    player?.applyTuning(client.state.settings);
+    return shaderLibraryView();
+  },
+  shaderRemove: (a) => {
+    shaderStore().remove(String(a?.pack || ""));
+    return shaderLibraryView();
+  },
+  // The viewer's own folder of .glsl/.hook files; only its file names are
+  // read. `clear` forgets it and the chain built from it.
+  chooseShaderFolder: async (a) => {
+    if (a?.clear === true) {
+      client.state.settings.shaderDir = "";
+      client.state.settings.shaderChain = [];
+    } else {
+      const result = await dialog.showOpenDialog(window, {
+        title: "اختيار مجلد الشيدرات",
+        properties: ["openDirectory"],
+      });
+      if (result.canceled) return null;
+      client.state.settings.shaderDir = result.filePaths[0];
+    }
+    client.persist();
+    player?.applyTuning(client.state.settings);
+    return client.publicState();
+  },
   chooseShader: async () => {
     const result = await dialog.showOpenDialog(window, {
       title: "اختيار مرشّح GLSL",
       filters: [{ name: "GLSL shader", extensions: ["glsl", "hook"] }],
       properties: ["openFile"],
     });
-    if (!result.canceled) {
-      client.state.settings.shaderPath = result.filePaths[0];
-      client.persist();
-    }
+    if (result.canceled) return null;
+    client.state.settings.shaderPath = result.filePaths[0];
+    client.state.settings.shaderPreset = "file";
+    client.persist();
+    player?.applyTuning(client.state.settings);
     return client.publicState();
   },
   login: beginLogin,
@@ -2068,6 +2118,7 @@ app
         host: videoHost,
         inputConf: join(root, "assets", "player-input.conf"),
         settingsNow: () => client.state.settings,
+        shaderLibrary: (settings) => shaderStore().library(settings),
         displayHeight: () => {
           const display = screen.getDisplayMatching(window.getBounds());
           return Math.round(display.size.height * display.scaleFactor);

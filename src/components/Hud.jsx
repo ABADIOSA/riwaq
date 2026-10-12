@@ -18,6 +18,7 @@ import {
   Radio,
   Loader2,
   Moon,
+  Sparkles,
 } from "lucide-react";
 import PlayerDock from "./PlayerDock.jsx";
 import { api, call } from "../lib/api.js";
@@ -82,6 +83,8 @@ export default function Hud() {
   const [flash, setFlash] = useState(null);
   const [skipNext, setSkipNext] = useState("");
   const [sleepMenu, setSleepMenu] = useState(false);
+  // GLSL presets (Anime4K's modes, FSRCNNX, the viewer's chain) by name.
+  const [shaderMenu, setShaderMenu] = useState(false);
   // The volume popup while the controls sleep (Harbor's volume OSD).
   const [volumePopup, setVolumePopup] = useState(0);
   const lastVolume = useRef(null);
@@ -139,6 +142,7 @@ export default function Hud() {
     setDock(null);
     setThumb(null);
     setSleepMenu(false);
+    setShaderMenu(false);
     lastVolume.current = null;
   }, [player.videoId]);
   // A preview is asked for only once the pointer rests on the timeline, so
@@ -166,6 +170,7 @@ export default function Hud() {
     (player.pause && settings.hudShowOnPause !== false) ||
     !!dock ||
     sleepMenu ||
+    shaderMenu ||
     player.loading;
   // A volume change while the controls sleep (a key, the wheel on a mouse
   // over another window) shows a short popup instead of waking everything.
@@ -212,7 +217,9 @@ export default function Hud() {
       : [
           ...qualityChips(player),
           ...(RTX_LABELS[player.rtx] ? [RTX_LABELS[player.rtx]] : []),
+          ...(player.glslLabel ? [player.glslLabel] : []),
         ];
+  const shaders = Array.isArray(player.glslOptions) ? player.glslOptions : [];
   const sleeping = sleepLabel(player);
   const setSleep = (action, value) => {
     command(action, value);
@@ -334,12 +341,60 @@ export default function Hud() {
           <div className="hud-title" />
         )}
         <div className="hud-buttons">
+          {shaders.length > 0 && (
+            <div className="hud-sleep hud-shader">
+              <button
+                title="الشيدر"
+                className={player.glsl ? "on" : ""}
+                onClick={() => {
+                  setSleepMenu(false);
+                  setShaderMenu((open) => !open);
+                }}
+              >
+                <Sparkles size={18} />
+              </button>
+              {shaderMenu && (
+                <div className="hud-sleep-menu hud-shader-menu" role="menu">
+                  <b>الشيدر</b>
+                  <button
+                    role="menuitemradio"
+                    aria-checked={!player.glsl}
+                    className={!player.glsl ? "on" : ""}
+                    onClick={() => {
+                      command("glsl", "");
+                      setShaderMenu(false);
+                    }}
+                  >
+                    بدون
+                  </button>
+                  {shaders.map((o) => (
+                    <button
+                      key={o.id}
+                      role="menuitemradio"
+                      dir="ltr"
+                      aria-checked={player.glsl === o.id}
+                      className={player.glsl === o.id ? "on" : ""}
+                      onClick={() => {
+                        command("glsl", o.id);
+                        setShaderMenu(false);
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {settings.hudSleep !== false && !player.live && (
             <div className="hud-sleep">
               <button
                 title="مؤقت النوم"
                 className={sleeping ? "on" : ""}
-                onClick={() => setSleepMenu((open) => !open)}
+                onClick={() => {
+                  setShaderMenu(false);
+                  setSleepMenu((open) => !open);
+                }}
               >
                 <Moon size={18} />
                 {sleeping && <small>{sleeping}</small>}
