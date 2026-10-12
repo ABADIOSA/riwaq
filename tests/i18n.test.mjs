@@ -53,7 +53,7 @@ test("messages from core, main and the web bridge have English", () => {
   const roots = ["core", "electron", "web"];
   const list = roots.flatMap((dir) =>
     readdirSync(fileURLToPath(new URL(`../${dir}`, import.meta.url)))
-      .filter((name) => /\.(mjs|js|cjs)$/.test(name))
+      .filter((name) => /\.(mjs|js|cjs|jsx)$/.test(name))
       .map((name) => `${dir}/${name}`),
   );
   const gaps = [];

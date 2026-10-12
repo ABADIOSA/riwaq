@@ -6,20 +6,34 @@
 import "./globals.js";
 import "./web.css";
 import { deliverCallback, readCallback } from "./callback.js";
+import { cleanLanguage, direction, translate } from "../core/i18n.mjs";
 
 const VERSION = import.meta.env.RIWAQ_VERSION;
 
+// Before the interface loads, its language is the one this device last
+// used (src/lib/language.js keeps it).
+function deviceLanguage() {
+  try {
+    return cleanLanguage(localStorage.getItem("riwaq.language"));
+  } catch {
+    return "ar";
+  }
+}
+
 function message(text, { retry = false } = {}) {
+  const lang = deviceLanguage();
+  document.documentElement.lang = lang;
+  document.documentElement.dir = direction(lang);
   const root = document.getElementById("root");
   root.innerHTML = "";
   const box = document.createElement("div");
   box.className = "web-boot";
   box.setAttribute("role", "alert");
-  box.textContent = text;
+  box.textContent = translate(text, lang);
   if (retry) {
     const button = document.createElement("button");
     button.className = "primary";
-    button.textContent = "أعد المحاولة";
+    button.textContent = translate("أعد المحاولة", lang);
     button.onclick = () => location.reload();
     box.append(document.createElement("br"), button);
   }

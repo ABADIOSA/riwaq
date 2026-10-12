@@ -40,3 +40,15 @@ export function useInterfaceLanguage(value) {
   }, [lang]);
   return lang;
 }
+
+// Switching the language remounts the interface; the settings page the
+// switch was made from opens again instead of the first one.
+let settingsPage = null;
+export const reopenSettingsPage = (id) => {
+  settingsPage = id;
+};
+export function takeSettingsPage() {
+  const id = settingsPage;
+  settingsPage = null;
+  return id;
+}

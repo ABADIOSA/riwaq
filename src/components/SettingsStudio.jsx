@@ -123,6 +123,7 @@ import {
   visibleHomeSections,
 } from "../../core/home.mjs";
 import { loc } from "../lib/format.js";
+import { takeSettingsPage } from "../lib/language.js";
 import { translate } from "../../core/i18n.mjs";
 import SEARCH_EN from "../../core/i18n/en/settings-search.mjs";
 
@@ -731,10 +732,11 @@ export default function SettingsStudio({
   initialTab = "theme",
   onNuvio,
 }) {
-  const [tab, setTab] = useState(MOVED[initialTab] || initialTab),
-    [open, setOpen] = useState(
-      () => new Set([groupOf(MOVED[initialTab] || initialTab)?.id || "look"]),
-    ),
+  const [first] = useState(
+    () => takeSettingsPage() || MOVED[initialTab] || initialTab,
+  );
+  const [tab, setTab] = useState(first),
+    [open, setOpen] = useState(() => new Set([groupOf(first)?.id || "look"])),
     [search, setSearch] = useState(""),
     [draft, setDraft] = useState(state.settings),
     [diag, setDiag] = useState(null);

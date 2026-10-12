@@ -1,6 +1,7 @@
 import React from "react";
 import { Languages } from "lucide-react";
 import { cleanLanguage } from "../../../core/i18n.mjs";
+import { reopenSettingsPage } from "../../lib/language.js";
 
 // Each language is named in its own script and never translated.
 const CHOICES = [
@@ -35,7 +36,11 @@ export function LanguageCard({ state, update }) {
             dir={id === "ar" ? "rtl" : "ltr"}
             aria-checked={current === id}
             className={current === id ? "selected" : ""}
-            onClick={() => update("settings", { uiLanguage: id })}
+            onClick={() => {
+              if (id === current) return;
+              reopenSettingsPage("subtitles");
+              update("settings", { uiLanguage: id });
+            }}
           >
             {name}
           </button>

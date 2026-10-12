@@ -240,4 +240,10 @@ export default {
   "{n} لا ترد": "{n} not answering",
   "{n} حُذفت من مصدرها": "{n} removed at their source",
   "تم تسجيل الدخول. ارجع إلى رِواق.": "Signed in. Go back to Riwaq.",
+  "رِواق مفتوح في تبويب آخر في هذا المتصفح. استخدمه هناك، أو أغلقه ثم أعد المحاولة هنا.":
+    "Riwaq is open in another tab of this browser. Use it there, or close it and try again here.",
+  "تعذّر بدء رِواق في هذا المتصفح. حدّث المتصفح ثم أعد المحاولة.":
+    "Riwaq couldn't start in this browser. Update the browser, then try again.",
+  "نسخة الويب": "Web edition",
+  "رِواق على الويب": "Riwaq on the web",
 };
