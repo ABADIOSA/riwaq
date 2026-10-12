@@ -1,5 +1,15 @@
 # Verification — Riwaq
 
+## 2026-10-11 — review after 0.40.0: account timing and playback-safe sync (source, unreleased)
+
+- Base: `e3da9c3254176d9adc4f0cb3c1090146ac777e48` (main after PR #67). Details and follow-up opportunities in [docs/REVIEW-2026-10-11.md](docs/REVIEW-2026-10-11.md).
+- **656 Node tests pass** (642 baseline + 14). The account tests use the real Worker over SQLite with delayed replies to cover cancelled/overlapping auth, Settings locking during auth, immediate logout and replacement sessions, old sync/proof errors, an upload with a changing secrets choice, final idle status returned to IPC, deferred remote changes with retained conflict priority, network failure without spinning, and a remote PIN change preserving the active viewing's final progress. Four regressions were run against the unchanged base account/client modules and fail there: cancelled login, immediate local logout, a choice changed mid-upload, and the completed sync's returned idle status.
+- Prettier, the desktop build and the web build pass. Chromium 141 / Playwright 1.56.1 web smoke passes: existing account flows plus the manual button re-enabling, real video playback, the waiting message during mini playback, and applying remote settings after Stop at 980×680 without horizontal overflow. Screenshots under `.cache/web-smoke/` were inspected.
+- Native source smoke (`scripts/test-packaged.mjs --source --offline`) passes: Electron startup, DPAPI, embedded MPV fixture decoding, and its output window visible at 2560×1440 covering the native surface. The forced-stop lifecycle test now requires an inactive state with no child even when MPV emits no exit event.
+- Local music UI smoke passes: real WAV decode/position and IPC (only chooser stubbed), transport, persistence without autoplay, video/profile isolation and 980×680. The deferred account merge covers video only.
+- Not run here: a new installer/upgrade, Windows account sign-in through the interface, long-lived sync against the deployed service, or the user's original grey-frame media/GPU/HDR conditions. No release published; source validation does not claim those flows.
+- CI exposed a smoke-harness dependency on live Cinemeta CORS responses after all new playback/account assertions passed. The Chromium contexts now abort non-loopback HTTP(S) as offline; all tested addon, video and account requests still use the real local servers. Application exceptions remain asserted. This removes live-service timing from this test and does not verify production catalog availability.
+
 ## 2026-10-11 — 0.40.0: optional, end-to-end encrypted Riwaq accounts
 
 - What: `core/account.mjs` (keys, sealing, pull–merge–push), `core/sync-merge.mjs` (three-way merge), `server/accounts/` (Cloudflare Worker + D1, deployed by `.github/workflows/accounts.yml`), the Settings page `src/components/settings/AccountPage.jsx`, IPC `account*` in preload, main and the web bridge. Details in docs/ACCOUNTS.md. `core/account-server.mjs` points at `https://riwaq-accounts.abadiosa2007.workers.dev` (the Worker's name on the subdomain shown in the owner's Cloudflare dashboard); an empty value turns accounts off.

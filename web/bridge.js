@@ -223,7 +223,7 @@ export async function startBridge({ version, store }) {
       )
         document.exitFullscreen?.().catch(() => {});
       watching = { active: !!s.active, error: !!s.error };
-      client.account.watching = !!s.active;
+      client.account.playbackChanged(!!s.active);
       mediaSession(s);
       if (failed) tryNextSource();
       emit("player", s);

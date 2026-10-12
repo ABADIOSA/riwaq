@@ -159,7 +159,20 @@ const siteUrl = `http://127.0.0.1:${sitePort}/`;
 const browser = await chromium.launch({
   args: ["--autoplay-policy=no-user-gesture-required"],
 });
-const context = await browser.newContext({
+const openContext = async (options) => {
+  const ctx = await browser.newContext(options);
+  // This smoke owns its addon/account servers. Cinemeta and other remote
+  // services must not make CI depend on live availability, CORS or rate limits.
+  // Model them as offline; application errors are still collected below.
+  await ctx.route(/^https?:\/\//, (route) => {
+    const url = new URL(route.request().url());
+    return url.hostname === "127.0.0.1"
+      ? route.continue()
+      : route.abort("internetdisconnected");
+  });
+  return ctx;
+};
+const context = await openContext({
   viewport: { width: 1280, height: 800 },
   acceptDownloads: true,
 });
@@ -167,8 +180,8 @@ const problems = [];
 const watch = (page) => {
   page.on("pageerror", (error) => problems.push(`pageerror: ${error.message}`));
   page.on("console", (m) => {
-    // Hosts outside this machine (Cinemeta, Wikidata…) may be unreachable
-    // where this runs; only the page's own errors count.
+    // External requests are deliberately offline; their browser resource
+    // notices do not count as application exceptions.
     if (m.type() === "error" && !/Failed to load resource/.test(m.text()))
       problems.push(`console: ${m.text()}`);
   });
@@ -378,7 +391,7 @@ try {
     },
   );
   const openDevice = async () => {
-    const ctx = await browser.newContext({
+    const ctx = await openContext({
       viewport: { width: 1280, height: 800 },
     });
     const tab = await ctx.newPage();
@@ -458,7 +471,67 @@ try {
   await pc.call("accountSync");
   const back = await pc.call("init");
   assert.ok(back.favorites.some((f) => f.name === "مدينة هادئة"));
+  await pc.tab.getByRole("button", { name: "زامن الآن" }).click();
+  await pc.tab.waitForFunction(
+    () =>
+      [...document.querySelectorAll("button")].some(
+        (button) =>
+          button.textContent.includes("زامن الآن") && !button.disabled,
+      ),
+    null,
+    { timeout: 5000 },
+  );
   step("a change on one device reaches the other");
+
+  // A remote settings change must not replace the viewing's active profile.
+  const videoMeta = await pc.call("metadata", {
+    type: "movie",
+    id: "webfix:last-train",
+  });
+  const videoSources = await pc.call("streams", {
+    type: "movie",
+    id: "webfix:last-train",
+  });
+  await pc.call("play", {
+    key: videoSources.streams[0].key,
+    meta: videoMeta,
+    videoId: "webfix:last-train",
+  });
+  await pc.tab.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.currentTime > 0.5,
+  );
+  await pc.call("playerCommand", { action: "pause" });
+  await pc.call("playerCommand", { action: "pip" });
+  await pc.tab.setViewportSize({ width: 980, height: 680 });
+  await phone.call("settings", { seekStep: 15 });
+  await phone.call("accountSync");
+  const deferred = await pc.call("accountSync");
+  assert.equal(deferred.account.deferred, true);
+  assert.equal(deferred.settings.seekStep, 30);
+  const waiting = pc.tab.getByText(
+    "وصلت تغييرات من جهاز آخر؛ نطبّقها تلقائياً بعد انتهاء المشاهدة.",
+    { exact: false },
+  );
+  await waiting.waitFor();
+  await pc.tab.locator(".account-card").first().scrollIntoViewIfNeeded();
+  await pc.tab.screenshot({ path: join(output, "account-deferred.png") });
+  await pc.call("stop");
+  await pc.tab.waitForFunction(async () => {
+    const state = await window.riwaq.call("init");
+    return !state.account.deferred && state.settings.seekStep === 15;
+  });
+  await pc.tab.getByText("حسابك:").waitFor();
+  await pc.tab.locator(".account-card").first().scrollIntoViewIfNeeded();
+  await pc.tab.screenshot({ path: join(output, "account-after-playback.png") });
+  assert.equal(
+    await pc.tab.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    true,
+  );
+  step(
+    "remote settings wait during a real video, then apply after Stop at 980×680",
+  );
   await service.close();
   accountServer.close();
 
