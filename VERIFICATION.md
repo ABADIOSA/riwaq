@@ -1,5 +1,14 @@
 # Verification — Riwaq
 
+## 2026-10-12 — 0.41.0: release merge (PR #68, deferral fix, README)
+
+- PR #68 (account timing and playback-safe sync) was merged into main first, then main into this branch. The only conflict was this file, and both sides were kept.
+- Deferral fix (`core/account.mjs` `sync`): while a remote change waits for the video, `sync()` makes no request.
+  - Before, the revision was not advanced while deferred, so every save, timer pull, nudge and flush downloaded and decrypted the whole envelope again only to defer again.
+  - The new test counted 4 extra requests on the old code and none with the fix. After the video ends one sync applies the change and the other device receives the local addition.
+- **706 Node tests pass** (691 + 14 from #68 + 1). Prettier and both Vite builds pass.
+- README.md is now a short bilingual (Arabic, English) page under the app logo, covering 0.41.0 only. The former README moved unchanged to docs/CHANGELOG.md, with relative links re-pointed. The README's settings page names were checked against the app; one wrong name («مكتبة البيانات») was corrected to «مزوّدو البيانات الوصفية». GitHub's markdown renderer is not reachable from here, so the page was not rendered.
+
 ## 2026-10-12 — 0.41.0: issues #69–#71 (Simkl V2, Discord, shaders, AniList)
 
 - **691 Node tests pass** (658 + 33). Prettier and the desktop and web Vite builds pass.

@@ -509,6 +509,43 @@ test("remote changes wait for the native video process, then merge both devices"
   assert.deepEqual(names(web), names(pc));
 });
 
+test("while a remote change waits for the video, pulls stop until it ends", async () => {
+  const server = service();
+  const pc = device(server);
+  await pc.account.signup(credentials);
+  const web = device(server);
+  await web.account.login(credentials);
+  web.settings({ seekStep: 30 });
+  await web.account.sync();
+  let requests = 0;
+  const request = pc.account.request;
+  pc.account.request = (...args) => {
+    requests++;
+    return request(...args);
+  };
+  pc.account.playbackChanged(true);
+  await pc.account.sync();
+  assert.equal(pc.account.publicState().deferred, true);
+  const counted = requests;
+  // Saves during the viewing, the timer and the window coming back.
+  pc.favorite(film("tt3", "أثناء المشاهدة"));
+  await pc.account.sync();
+  await pc.account.sync();
+  pc.account.nudged = 0;
+  pc.account.nudge();
+  await pc.account.flush();
+  assert.equal(requests, counted);
+  assert.equal(pc.account.running, null);
+  pc.account.playbackChanged(false);
+  await pc.account.running;
+  assert.ok(requests > counted);
+  assert.equal(pc.account.publicState().deferred, false);
+  assert.equal(pc.state.settings.seekStep, 30);
+  assert.deepEqual(names(pc), ["أثناء المشاهدة"]);
+  await web.account.sync();
+  assert.deepEqual(names(web), ["أثناء المشاهدة"]);
+});
+
 test("a deferred first sign-in keeps remote conflict priority", async () => {
   const server = service();
   const web = device(server);
