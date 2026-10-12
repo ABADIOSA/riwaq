@@ -8,6 +8,9 @@
  * nothing else is ever fetched. Presets name files, never paths: main joins
  * them to the folder that holds them. Browser-safe.
  */
+import { isAnime } from "./anime.mjs";
+
+export { isAnime };
 
 /** Upstream releases Riwaq can download on the viewer's click. */
 export const SHADER_PACKS = {
@@ -254,21 +257,6 @@ export function chosenPreset(settings = {}) {
   if (!id && settings.shader === "custom" && legacyPath(settings))
     return "file";
   return "";
-}
-
-/** Titles Anime4K is meant for: anime IDs, the anime type or genre. */
-export function isAnime(meta = {}) {
-  const id = String(meta.id || "");
-  if (/^(kitsu|mal|anilist|anidb):/i.test(id)) return true;
-  if (meta.type === "anime") return true;
-  const genres = (Array.isArray(meta.genres) ? meta.genres : [])
-    .map((g) => String(g))
-    .join(" ");
-  if (/anime|أنمي|انمي|انيمي/i.test(genres)) return true;
-  const japanese =
-    meta.originalLanguage === "ja" ||
-    /japan|اليابان|\bJP\b/i.test(String(meta.country || ""));
-  return japanese && /animation|رسوم متحركة|أنيميشن/i.test(genres);
 }
 
 /**

@@ -574,6 +574,19 @@ body:has(.theater:not(.mini-theater)) {
   color: #93b1e8;
   background: #93b1e812;
 }
+.service-mark.anilist {
+  color: #3db4f2;
+  background: #3db4f212;
+}
+/* AniList's token, pasted from its PIN page. */
+.anilist-pin textarea {
+  width: 100%;
+  min-height: 72px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  resize: vertical;
+}
 .provider-card > p {
   margin: 0;
   min-height: 46px;

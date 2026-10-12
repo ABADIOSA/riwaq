@@ -634,6 +634,7 @@ export function restoreState(current, payload) {
       ? cleanSecretBag(payload.integrations, [
           "trakt",
           "letterboxd",
+          "anilist",
           "simkl",
           "spotify",
         ])

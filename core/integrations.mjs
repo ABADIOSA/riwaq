@@ -1,4 +1,23 @@
 import { keyFor, validateManifest, mergeAddons } from "./protocol.mjs";
+import {
+  ANILIST_API,
+  LISTS_QUERY,
+  MEDIA_QUERY,
+  SAVE_ENTRY,
+  VIEWER_QUERY,
+  anilistAuthorize,
+  anilistClientId,
+  anilistLists,
+  anilistProblem,
+  anilistTarget,
+  anilistToken,
+  armAnilist,
+  armLookup,
+  nextListEntry,
+  validTarget,
+} from "./anime.mjs";
+
+const SERVICES = ["trakt", "letterboxd", "simkl", "anilist"];
 
 const POST = (body, headers = {}) => ({
   method: "POST",
@@ -219,7 +238,7 @@ export class Integrations {
     this.inflight = new Set();
   }
   publicState() {
-    return ["trakt", "letterboxd", "simkl"].map((id) => {
+    return SERVICES.map((id) => {
       const s = this.client.state.integrations?.[id] || {};
       return {
         id,
@@ -231,12 +250,17 @@ export class Integrations {
         trackHistory: !!s.trackHistory,
         scrobble: !!s.scrobble,
         pending: (s.pending || []).length,
+        ...(id === "anilist"
+          ? {
+              expiresAt: s.token?.expiresAt || null,
+              unmatched: s.unmatched || 0,
+            }
+          : {}),
       };
     });
   }
   get(id) {
-    if (!["trakt", "letterboxd", "simkl"].includes(id))
-      throw new Error("منصة غير معروفة");
+    if (!SERVICES.includes(id)) throw new Error("منصة غير معروفة");
     return ((this.client.state.integrations ||= {})[id] ||= {});
   }
   save({ id, clientId, clientSecret, username, trackHistory, scrobble }) {
@@ -251,6 +275,8 @@ export class Integrations {
         throw new Error("بيانات التطبيق غير صالحة");
     if (username !== undefined && !/^[\w-]{1,50}$/.test(username))
       throw new Error("اسم المستخدم غير صالح");
+    if (id === "anilist" && clientId?.trim() && !anilistClientId(clientId))
+      throw new Error("Client ID في AniList أرقام فقط");
     const changed =
       (clientId?.trim() && s.clientId !== clientId.trim()) ||
       (clientSecret?.trim() && s.clientSecret !== clientSecret.trim()) ||
@@ -271,6 +297,11 @@ export class Integrations {
         s.scrobble = false;
         this.session = null;
       }
+    }
+    // AniList progress is opt-in too; turning it off drops what is queued.
+    if (id === "anilist" && typeof trackHistory === "boolean") {
+      s.trackHistory = trackHistory && !!s.token;
+      if (!s.trackHistory) s.pending = [];
     }
     // Live scrobbling is a mode of history tracking, never a way around it.
     if (id === "trakt" && typeof scrobble === "boolean") {
@@ -740,6 +771,14 @@ export class Integrations {
         });
       }
       await this.flushHistory().catch(() => {});
+    } else if (id === "anilist") {
+      if (!s.token?.access_token) throw new Error("اربط حساب AniList أولاً");
+      const viewer = await this.anilist(VIEWER_QUERY);
+      s.username = String(viewer?.Viewer?.name || s.username || "AniList");
+      s.userId = Number(viewer?.Viewer?.id) || s.userId;
+      const data = await this.anilist(LISTS_QUERY, { userId: s.userId });
+      lists = anilistLists(data?.MediaListCollection);
+      await this.flushAnilist().catch(() => {});
     } else if (id === "simkl") {
       const result = await this.simkl(
         "/sync/all-items/all/plantowatch?extended=full",
@@ -770,6 +809,7 @@ export class Integrations {
     return this.client.publicState();
   }
   queueHistory(meta, videoId, position, duration) {
+    this.queueAnilist(meta, videoId, position, duration);
     const s = this.get("trakt");
     if (
       !s.token ||
@@ -928,6 +968,144 @@ export class Integrations {
       this.flushing = null;
     });
     return this.flushing;
+  }
+  /** AniList's authorize page for the viewer's saved client ID. */
+  anilistAuthorizeUrl() {
+    return anilistAuthorize(this.get("anilist").clientId);
+  }
+  /**
+   * Signs in with the token the viewer copied from AniList's PIN page. The
+   * token is checked by reading the viewer's name before it is kept.
+   */
+  async anilistConnect(text) {
+    const s = this.get("anilist");
+    if (!s.clientId)
+      throw new Error("احفظ Client ID من تطبيقك في AniList أولاً");
+    const token = anilistToken(text);
+    if (!token)
+      throw new Error("هذا ليس رمز AniList؛ انسخ الرمز كاملاً من الصفحة");
+    if (token.expiresAt && token.expiresAt < Date.now())
+      throw new Error("انتهت صلاحية هذا الرمز؛ اطلب رمزاً جديداً");
+    const viewer = await this.anilist(VIEWER_QUERY, {}, token.access_token);
+    if (this.get("anilist") !== s) throw new Error("تغير الحساب أثناء الربط");
+    if (!Number.isInteger(viewer?.Viewer?.id))
+      throw new Error("لم يتعرف AniList على هذا الرمز");
+    s.token = token;
+    s.userId = viewer.Viewer.id;
+    s.username = String(viewer.Viewer.name || "AniList").slice(0, 60);
+    s.pending = [];
+    s.sent = [];
+    s.unmatched = 0;
+    this.client.persist();
+    return this.client.publicState();
+  }
+  /** One GraphQL call with the viewer's token; refusals read in Arabic. */
+  async anilist(query, variables = {}, token) {
+    // Read, never create: a disconnect mid-queue must not leave an account.
+    const bearer =
+      token || this.client.state.integrations?.anilist?.token?.access_token;
+    if (!bearer) throw new Error("اربط حساب AniList أولاً");
+    let result;
+    try {
+      result = await this.client.request(
+        ANILIST_API,
+        POST(
+          { query, variables },
+          { Accept: "application/json", Authorization: `Bearer ${bearer}` },
+        ),
+      );
+    } catch (error) {
+      throw anilistProblem(error);
+    }
+    if (Array.isArray(result?.errors) && result.errors.length) {
+      const first = result.errors[0] || {};
+      throw anilistProblem({
+        status: Number(first.status) || 400,
+        message: String(first.message || "").slice(0, 200),
+      });
+    }
+    return result?.data || {};
+  }
+  /**
+   * A finished anime episode joins AniList's queue when the viewer turned
+   * tracking on. Only IDs that name the work on AniList's side are queued.
+   */
+  queueAnilist(meta, videoId, position, duration) {
+    // Read, never create: this runs on every saved position.
+    const s = this.client.state.integrations?.anilist;
+    if (
+      !s?.token?.access_token ||
+      !s.trackHistory ||
+      !(duration >= 30) ||
+      position / duration < 0.9
+    )
+      return;
+    const target = anilistTarget(meta, videoId);
+    if (!target) return;
+    const key = `${target.source}:${target.id}:${target.episode}`;
+    if (s.sent?.includes(key) || s.pending?.some((e) => e.key === key)) return;
+    s.pending = [...(s.pending || []), { key, ...target }].slice(-200);
+    this.client.persist();
+    this.flushAnilist().catch(() => {});
+  }
+  /** The AniList ID behind a queued entry, or 0 when nothing maps to it. */
+  async anilistMedia(entry) {
+    if (entry.source === "anilist" || entry.source === "mal") {
+      const data = await this.anilist(
+        MEDIA_QUERY,
+        entry.source === "anilist" ? { id: entry.id } : { idMal: entry.id },
+      );
+      return data?.Media || null;
+    }
+    const url = armLookup(entry);
+    if (!url) return null;
+    let body;
+    try {
+      body = await this.client.request(url, { redirect: "error" });
+    } catch (error) {
+      if (error.status === 404) return null;
+      throw error;
+    }
+    const id = armAnilist(body);
+    if (!id) return null;
+    return (await this.anilist(MEDIA_QUERY, { id }))?.Media || null;
+  }
+  /**
+   * Sends queued episodes in order. A reply only ever writes into the
+   * account that sent it; a rate limit pauses the queue for a minute.
+   */
+  async flushAnilist() {
+    if (this.anilistFlushing) return this.anilistFlushing;
+    const s = this.client.state.integrations?.anilist;
+    if (!s?.trackHistory || !s.token?.access_token) return;
+    if (s.retryAt && Date.now() < s.retryAt) return;
+    this.anilistFlushing = (async () => {
+      for (const entry of [...(s.pending || [])]) {
+        if (this.client.state.integrations?.anilist !== s || !s.trackHistory)
+          break;
+        let media = null;
+        try {
+          // A restored backup's queue is checked like a fresh one.
+          media = validTarget(entry) ? await this.anilistMedia(entry) : null;
+          if (this.client.state.integrations?.anilist !== s) break;
+          const write = media && nextListEntry(media, entry);
+          if (write) await this.anilist(SAVE_ENTRY, write);
+        } catch (error) {
+          if (error.status === 429) s.retryAt = Date.now() + 60000;
+          // A missing work is not worth retrying; anything else waits.
+          if (error.status !== 404) break;
+          media = null;
+        }
+        if (this.client.state.integrations?.anilist !== s) break;
+        s.pending = (s.pending || []).filter((e) => e !== entry);
+        if (media) s.sent = [...(s.sent || []), entry.key].slice(-3000);
+        else s.unmatched = (s.unmatched || 0) + 1;
+        this.client.persist();
+      }
+    })().finally(() => {
+      this.anilistFlushing = null;
+    });
+    return this.anilistFlushing;
   }
   async importLetterboxd(text) {
     if (!this.client.state.providers?.tmdb?.key)

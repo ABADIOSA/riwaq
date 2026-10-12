@@ -91,6 +91,7 @@ const allowed = new Set([
   "integrationDisconnect",
   "traktLogin",
   "traktPoll",
+  "anilistConnect",
   "letterboxdImport",
   "openService",
   "playerCommand",

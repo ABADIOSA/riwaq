@@ -1559,9 +1559,16 @@ function IntegrationCard({ integration: s, update, act, notice }) {
     [secret, setSecret] = useState(""),
     [username, setUsername] = useState(s.username),
     [busy, setBusy] = useState(false),
-    [device, setDevice] = useState(null);
+    [device, setDevice] = useState(null),
+    // AniList: the token the viewer copies from its PIN page.
+    [pin, setPin] = useState(null);
   const id = s.id,
-    name = { trakt: "Trakt", letterboxd: "Letterboxd", simkl: "Simkl" }[id];
+    name = {
+      trakt: "Trakt",
+      letterboxd: "Letterboxd",
+      simkl: "Simkl",
+      anilist: "AniList",
+    }[id];
   useEffect(() => {
     if (!device) return;
     let cancelled = false,
@@ -1604,6 +1611,8 @@ function IntegrationCard({ integration: s, update, act, notice }) {
       setSecret("");
       if (id === "letterboxd") {
         await update("integrationSync", { id });
+      } else if (id === "anilist") {
+        if (await act("openService", { id: "anilistActivate" })) setPin("");
       } else {
         const d = await act("traktLogin", { id });
         if (d) {
@@ -1641,7 +1650,9 @@ function IntegrationCard({ integration: s, update, act, notice }) {
           ? "قوائم الأفلام والمسلسلات، مع تسجيل المشاهدة اختياريًا عند إكمال 90% من العمل."
           : id === "letterboxd"
             ? "قوائم المشاهدة والإعجابات العامة عبر إضافة Stremboxd، أو استيراد ملفات CSV الرسمية."
-            : "استيراد قائمة «أريد المشاهدة» للأفلام والمسلسلات والأنمي المتطابق مع IMDb."}
+            : id === "anilist"
+              ? "تتبّع الأنمي: يرفع تقدّمك في AniList عند إكمال الحلقة (اختياري)، ويستورد قائمتي «أشاهده» و«أريد مشاهدته»."
+              : "استيراد قائمة «أريد المشاهدة» للأفلام والمسلسلات والأنمي المتطابق مع IMDb."}
       </p>
       {!s.connected && (
         <>
@@ -1721,6 +1732,23 @@ function IntegrationCard({ integration: s, update, act, notice }) {
               </li>
             </ol>
           )}
+          {id === "anilist" && (
+            <ol className="subtle trakt-steps">
+              <li>
+                افتح صفحة المطوّرين في AniList (زر «إعدادات الخدمة» فوق) واضغط
+                Create New Client، بأي اسم.
+              </li>
+              <li>
+                في خانة Redirect URL اكتب:{" "}
+                <code dir="ltr">https://anilist.co/api/v2/oauth/pin</code>
+              </li>
+              <li>
+                انسخ Client ID (أرقام) هنا واحفظ، ثم اضغط «ربط»: وافق في صفحة
+                AniList، وانسخ الرمز الطويل والصقه هنا. ما نطلب كلمة مرورك
+                أبداً.
+              </li>
+            </ol>
+          )}
           {id === "letterboxd" && (
             <p className="subtle">
               عند الربط يُرسل اسم المستخدم العام إلى api.stremboxd.com لجلب
@@ -1728,6 +1756,54 @@ function IntegrationCard({ integration: s, update, act, notice }) {
             </p>
           )}
         </>
+      )}
+      {pin !== null && !s.connected && (
+        <form
+          className="device-code anilist-pin"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            try {
+              if (await update("anilistConnect", { token: pin })) {
+                setPin(null);
+                await update("integrationSync", { id });
+                notice("تم ربط AniList");
+              }
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <span>الصق الرمز من صفحة AniList</span>
+          <textarea
+            dir="ltr"
+            rows={3}
+            autoComplete="off"
+            spellCheck={false}
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            placeholder="eyJ0eXAiOiJKV1Qi…"
+          />
+          <div className="button-row">
+            <button className="primary" disabled={busy || !pin.trim()}>
+              تأكيد
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => act("openService", { id: "anilistActivate" })}
+            >
+              فتح صفحة الإذن
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setPin(null)}
+            >
+              إلغاء
+            </button>
+          </div>
+        </form>
       )}
       {device && (
         <div className="device-code">
@@ -1745,7 +1821,7 @@ function IntegrationCard({ integration: s, update, act, notice }) {
       <div className="button-row">
         {!s.connected ? (
           <button
-            disabled={busy || !!device}
+            disabled={busy || !!device || pin !== null}
             className="primary"
             onClick={connect}
           >
@@ -1801,6 +1877,38 @@ function IntegrationCard({ integration: s, update, act, notice }) {
         )}
       </div>
       {s.lastSync && <p className="subtle">آخر مزامنة: {when(s.lastSync)}</p>}
+      {id === "anilist" && s.connected && s.expiresAt && (
+        <p className="subtle">
+          ينتهي رمز AniList في {when(s.expiresAt)}؛ بعدها اربط الحساب من جديد.
+          فصل الحساب يحذف الرمز من رِواق، ولإلغائه من AniList نفسه احذف التطبيق
+          من إعدادات حسابك هناك.
+        </p>
+      )}
+      {id === "anilist" && s.connected && (
+        <div className="setting-row">
+          <div>
+            <b>تسجيل تقدّم الأنمي في AniList</b>
+            <p>
+              عند إكمال 90% من حلقة أنمي يرفع رِواق تقدّمك في قائمتك، ولا ينقصه
+              أبداً ولا يلمس عملاً أكملته. يتعرف على الحلقة من معرّفات AniList
+              وMAL وKitsu في الإضافة، ومن IMDb للموسم الأول فقط عبر خدمة ARM
+              (يُرسل رقم العمل وحده).{" "}
+              {s.pending > 0 && `بانتظار الإرسال: ${s.pending}. `}
+              {s.unmatched > 0 && `لم تُطابق: ${s.unmatched}.`}
+            </p>
+          </div>
+          <button
+            className={`toggle ${s.trackHistory ? "on" : ""}`}
+            aria-label="تسجيل تقدّم الأنمي في AniList"
+            aria-pressed={!!s.trackHistory}
+            onClick={() =>
+              update("integrationSave", { id, trackHistory: !s.trackHistory })
+            }
+          >
+            <span />
+          </button>
+        </div>
+      )}
       {id === "trakt" && s.connected && (
         <div className="setting-row">
           <div>

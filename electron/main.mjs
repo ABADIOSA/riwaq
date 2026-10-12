@@ -1335,6 +1335,7 @@ const methods = {
   integrationSync: (a) => client.integrations.sync(a.id),
   integrationDisconnect: (a) => client.integrations.disconnect(a.id),
   traktLogin: (a) => client.integrations.begin(a?.id || "trakt"),
+  anilistConnect: (a) => client.integrations.anilistConnect(a?.token),
   traktPoll: (a) => client.integrations.poll(a?.id || "trakt"),
   traktSuggestions: (a) =>
     client.integrations.recommendations(
@@ -1368,6 +1369,7 @@ const methods = {
       traktActivate: "https://trakt.tv/activate",
       simkl: "https://simkl.com/settings/developer/",
       simklActivate: "https://simkl.com/pin/",
+      anilist: "https://anilist.co/settings/developer",
       letterboxd: "https://letterboxd.com/settings/data/",
       stremboxd: "https://stremboxd.com",
       discord: "https://support.discord.com/hc/articles/228383668",
@@ -1376,6 +1378,9 @@ const methods = {
       ...Object.fromEntries(DEBRID.map((d) => [d.id, d.url])),
       ...Object.fromEntries(AI_PROVIDERS.map((p) => [p.id, p.keys])),
     };
+    // AniList's authorize page carries the viewer's own client ID.
+    if (id === "anilistActivate")
+      urls.anilistActivate = client.integrations.anilistAuthorizeUrl();
     if (!urls[id]) throw new Error("رابط الخدمة غير معروف");
     await shell.openExternal(urls[id]);
     return true;
