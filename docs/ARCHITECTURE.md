@@ -105,6 +105,10 @@ The browser build (docs/WEB.md, `vite.web.config.mjs`) compiles the same `src/` 
 
 Optional Riwaq accounts (docs/ACCOUNTS.md) sync the backup payload between devices, end-to-end encrypted. `core/account.mjs` derives keys, seals data and runs the pull–merge–push loop; `core/sync-merge.mjs` merges three ways; `server/accounts/worker.mjs` is the Cloudflare Worker (D1) that stores hashes, wrapped keys and ciphertext. Main and the web bridge expose the same `account*` methods and start the hub; the Settings page is `src/components/settings/AccountPage.jsx`.
 
+## Interface language (0.42)
+
+The interface is written in Arabic, and the Arabic text is the key. `core/i18n.mjs` holds the current language, `translate()` (exact entries, then `{name}` patterns, then « · »-joined parts) and `t()`. `core/i18n/en/*.mjs` hold the English by area. `src/lib/jsx-runtime.js` is the JSX runtime both Vite builds use (`riwaq-jsx`): it wraps React's and translates each host element's text and readable labels as it renders, so labels from `core/` and notices from main need no wrapping. `src/lib/language.js` applies the profile's `uiLanguage` during render and sets `lang`, `dir` and the document title. Main calls `setLanguage` in `broadcast` for the text it writes itself. Layout CSS uses logical properties; `src/ltr.css` holds the alignment variables and the few left-to-right overrides. `scripts/i18n-strings.mjs` extracts every Arabic string the way the runtime meets it, and `tests/i18n.test.mjs` keeps them translated.
+
 ## Storage and network
 
 `core/library.mjs` contains pure queue, identity, Arabic search, completion and episode-release rules shared with React. `LibraryView.jsx` presents the saved/continue/queue/history/platform tabs. `queueEdit` and `historyEdit` are narrow IPC actions. Queue storage joins the profile bucket; old profiles migrate to an empty queue. History edits remain local and never generate tracker completion writes. MPV file-loaded consumes a queued entry; failures retain it. Profile switches stop/save playback before applying a new bucket. See `docs/RELEASE-0.4.md`.

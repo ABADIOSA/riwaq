@@ -1,5 +1,27 @@
 # Verification — Riwaq
 
+## 2026-10-12 — 0.42.0: English interface and issue #74
+
+- **731 Node tests pass** (706 + 25). Prettier, the desktop and web Vite builds, and `node scripts/test-web.mjs` (the Chromium web smoke, with the account service) pass.
+- New and changed tests:
+  - `tests/i18n.test.mjs`:
+    - Every Arabic string in `src/` and in `core/`, `electron/` and `web/` has English. Coverage counts only translations that leave no Arabic; short patterns such as «لون {1}» used to count as covering whole sentences, and 227 such sentences were found and given English. The exceptions are listed: the copied diagnostic report stays Arabic, folding-table letters and the clock's ص/م.
+    - The dictionary is well formed: placeholders match, no Arabic or Arabic quote marks in English, every pattern keeps Arabic words of its own, and no two patterns with the same words say different things.
+    - Number placeholders match numbers only. A pattern that translates fully beats one that leaves Arabic. Lines split at « · ». Quote marks beside an expression become English ones. The JSX runtime translates host elements only and skips `translate="no"`.
+    - The setting survives `safeSettings`. Settings search knows every page in English. Main's dialog titles go through `t()`, and Discord presence speaks the interface language.
+    - Layout CSS uses logical sides outside the elements forced to `direction: ltr`. Against the CSS from before the change, the same check finds 64 physical declarations in `styles.css` alone.
+  - `tests/whats-new.test.mjs`: the newest release has an English block of the same length, and English shows only releases that have one.
+  - `tests/resume.test.mjs` (from the #74 commit): exact key, same addon and group, gone, and external links never started.
+- Headless Chromium against the built interface with a mock bridge:
+  - English, riwaq and classic styles, 980×680 and 1440×900: home, Discover, library, title page, settings (theme, video, sources, window, language, player, ambience) and the HUD. No page errors, no horizontal overflow, and no Arabic left except title data from the fixture and «العربية» in the language picker.
+  - Arabic: 34 screens (both styles, both sizes, home, Discover, library, title page and five settings pages) were taken before and after the CSS change with a fixed clock and compared pixel by pixel: no difference. A first pass found Latin titles on Arabic cards moving left (`text-align: start` follows `dir="auto"`); `--align-start` fixed it before the final comparison.
+  - Continue watching (#74), four cases: the saved key plays with no list; a changed link plays the closest offer from the same addon; a source that is gone opens the sources window with a notice; with the setting off, nothing starts. During every resume the theme song is fetched for its button but never plays. A normal open plays it once with the first-time hint, and pressing Play pauses it and opens the sources window.
+- The web edition with its real bridge and core in Chromium: Arabic to English through Settings, kept across a reload from the encrypted store, the web pill and the language page following, and back to Arabic. No page errors.
+- Not run here:
+  - No Windows run. The English interface, save dialogs, the window title, MPV's on-screen message and the sign-in result pages in English were not seen on a real machine.
+  - No Discord client.
+  - No real addon streams for the resume flow; its stream objects were built in the shape `core/client.mjs` returns.
+
 ## 2026-10-12 — 0.41.0: release merge (PR #68, deferral fix, README)
 
 - PR #68 (account timing and playback-safe sync) was merged into main first, then main into this branch. The only conflict was this file, and both sides were kept.

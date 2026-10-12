@@ -9,16 +9,16 @@ Riwaq's web edition is for viewers who cannot or do not want to install the Wind
 
 ## How it fits together
 
-| Desktop | Web (`web/`) |
-| --- | --- |
-| `electron/preload.cjs` exposes `window.riwaq` | `web/bridge.js` installs the same `window.riwaq` (`call`, `on`, plus `platform: "web"`) |
-| `electron/main.mjs` `methods` table | `web/bridge.js` `methods` table, built on the same `core/Client` |
-| `profile.bin` sealed with DPAPI (`safeStorage`) | `web/store.js`: AES-256-GCM under a **non-extractable** WebCrypto key kept in IndexedDB; no plaintext fallback |
-| MPV embedded with `--wid` | `web/player.js`: an HTML5 `<video>` (with hls.js) placed inside the theater's `.video-surface`, with the same state shape and commands |
-| Native file dialogs | `web/files.js`: the browser's file picker and downloads |
+| Desktop                                          | Web (`web/`)                                                                                                                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `electron/preload.cjs` exposes `window.riwaq`    | `web/bridge.js` installs the same `window.riwaq` (`call`, `on`, plus `platform: "web"`)                                                                            |
+| `electron/main.mjs` `methods` table              | `web/bridge.js` `methods` table, built on the same `core/Client`                                                                                                   |
+| `profile.bin` sealed with DPAPI (`safeStorage`)  | `web/store.js`: AES-256-GCM under a **non-extractable** WebCrypto key kept in IndexedDB; no plaintext fallback                                                     |
+| MPV embedded with `--wid`                        | `web/player.js`: an HTML5 `<video>` (with hls.js) placed inside the theater's `.video-surface`, with the same state shape and commands                             |
+| Native file dialogs                              | `web/files.js`: the browser's file picker and downloads                                                                                                            |
 | Loopback servers for Stremio and Spotify sign-in | A popup that returns to the site; the answer reaches the tab over a same-origin `BroadcastChannel` and is taken only with that attempt's nonce (`web/callback.js`) |
-| `DesktopUpdates` (signed NSIS packages) | `web/updates.js`: the open page checks `version.json` and offers a reload |
-| `node:crypto`, `node:zlib`, `node:net` | `web/shims/` (aliased in `vite.web.config.mjs`), byte-for-byte compatible: a backup made on one edition opens on the other |
+| `DesktopUpdates` (signed NSIS packages)          | `web/updates.js`: the open page checks `version.json` and offers a reload                                                                                          |
+| `node:crypto`, `node:zlib`, `node:net`           | `web/shims/` (aliased in `vite.web.config.mjs`), byte-for-byte compatible: a backup made on one edition opens on the other                                         |
 
 The interface checks `isWeb` (`src/lib/api.js`) in two places only: Settings leaves out the MPV picture and sound pages, the window page and MPV's key map (links to them land on a sensible page), and the updates card explains that the site updates itself.
 
@@ -29,6 +29,7 @@ The interface checks `isWeb` (`src/lib/api.js`) in two places only: Settings lea
 - Keys, tokens and addon URLs stay on the bridge's side exactly as they stay in main: subtitles, channels and sources are opaque keys, addresses are opened only after main's own checks (`musicLink`, `artworkHost`, `trailerOf`, the fixed service list).
 - One tab owns the store at a time (Web Locks), as the desktop runs one instance.
 - `web/` holds only what differs. Behaviour belongs in `core/` so both editions run it.
+- The interface language (0.42) is the same setting in both editions. Web text drawn outside the interface follows it too: the pill (its own React root) renders again when the page's `lang` changes, and boot messages shown before the interface loads use the language this device last used. Sentences in `web/desktop-only.js` are written in Arabic and translated like every other string.
 
 ## What the browser cannot do (said, not pretended)
 
