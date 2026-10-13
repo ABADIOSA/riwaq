@@ -9,6 +9,7 @@
  * from the day's Julian date, hour angles for each twilight angle), refined
  * once with the time of day. Pure functions.
  */
+import { language } from "./i18n.mjs";
 
 export const PRAYERS = [
   ["fajr", "الفجر"],
@@ -239,12 +240,13 @@ export function prayersBetween(start, end, place, options = {}) {
   return out;
 }
 
-/** "3:27 م" in the place's own clock, with Latin digits. */
+/** "3:27 م" (or "3:27 PM" in English) in the place's own clock. */
 export function clockAt(date, tz) {
   const local = new Date(date.getTime() + tz * 3600000);
   let h = local.getUTCHours();
   const m = String(local.getUTCMinutes()).padStart(2, "0");
-  const suffix = h < 12 ? "ص" : "م";
+  const english = language() === "en";
+  const suffix = h < 12 ? (english ? "AM" : "ص") : english ? "PM" : "م";
   h = h % 12 || 12;
   return `${h}:${m} ${suffix}`;
 }

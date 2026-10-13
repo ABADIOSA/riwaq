@@ -30,28 +30,21 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.41.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.41.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.42.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.42.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.41.0
+### الجديد في 0.42.0
 
-- **شيدرات GLSL مثل Harbor:**
-  - أوضاع Anime4K الاثنا عشر، وFSRCNNX للأفلام.
-  - رِواق ما يرفق أي شيدر: زر «تنزيل» يجيب الإصدار الرسمي من GitHub ويتحقق من بصمته قبل حفظه، أو تختار مجلدك وترتّب سلسلتك.
-  - زر «الشيدر» في المشغّل يبدّل الوضع فوراً.
-- **تتبّع الأنمي في AniList:**
-  - تربط حسابك برمز من صفحة AniList، بدون كلمة مرور.
-  - إذا فعّلت التسجيل، كل حلقة تكملها ترفع تقدّمك في قائمتك، والتقدّم ما ينقص أبداً.
-  - قائمتا «أشاهده» و«أريد مشاهدته» تنضم لرِواق.
-- **إصلاح Simkl:** تطبيقات Simkl الجديدة (AUTH V2) كانت ترجع خطأ 400، وصارت تنربط برمز تدخله في موقع Simkl. التطبيقات القديمة تكمل بنفس الطريقة.
-- **حالة Discord:** «يشاهد» مع البوستر والحلقة وشريط التقدم وزر لصفحة العمل على IMDb.
-- **أغانيك بأسمائها وأغلفتها:** العنوان والفنان والألبوم والغلاف من الملف نفسه، مع تبويبي «الألبومات» و«الفنانون».
-- **مزامنة الحساب أثناء المشاهدة:**
-  - تسجيل الخروج يسري فوراً.
-  - تغييرات جهازك الثاني تنتظر نهاية الفيديو بدل ما تقطع المشاهدة، وبدون تنزيل متكرر وهي تنتظر.
+- **واجهة إنجليزية كاملة:**
+  - من **الإعدادات ← اللغة والترجمة ← لغة الواجهة** اختر English.
+  - القوائم والإعدادات والرسائل ونوافذ الحفظ وحالة Discord والمشغّل كلها تتغير فوراً، والتخطيط ينقلب من اليسار لليمين.
+  - لكل ملف شخصي لغته، والبحث في الإعدادات يفهم العربي والإنجليزي.
+  - الواجهة العربية ما تغيّرت: 34 شاشة عربية متطابقة بكسل ببكسل قبل التغيير وبعده.
+- **«نكمل الحكاية» على نفس المصدر:** يكمل من حيث وقفت بدون قائمة المصادر. إذا تغيّر الرابط يختار أقرب مصدر من نفس الإضافة، وإذا ما عاد موجود تظهر القائمة.
+- **أغنية العمل ما تتداخل مع الفيلم:** توقف أول ما تفتح المصادر، وما تشتغل مع «نكمل الحكاية»، وأول مرة يطلع تنبيه يشرح وش هي.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -71,6 +64,7 @@
 - **ملفات شخصية:** حتى ستة، مع رمز حماية وأقسام تنقفل.
 - **موسيقى:** أغانيك المحلية، والتحكم بـ Spotify، وأغنية كل عمل.
 - **أوقات الصلاة:** تنحسب على جهازك، بدون إنترنت.
+- **بالعربي أو بالإنجليزي:** واجهة عربية من اليمين لليسار، أو إنجليزية من اليسار لليمين.
 
 ### البدء
 
@@ -84,7 +78,7 @@
 
 - مفاتيحك وحساباتك تنحفظ مشفّرة على جهازك. رِواق ما يطلب كلمات مرور المنصات، وما يرسل سجل مشاهدتك إلا للمنصات اللي تفعّل التسجيل فيها.
 - استيراد Stremio باتجاه واحد إلى رِواق.
-- اختبارات المنصات استخدمت المحاكاة، ولم تُجرَّب الشيدرات على كرت شاشة حقيقي بعد. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
+- اختبارات المنصات استخدمت المحاكاة، ولم تُجرَّب الشيدرات على كرت شاشة حقيقي ولا الواجهة الإنجليزية على ويندوز حقيقي بعد. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
 
 ### البناء من المصدر
 
@@ -109,34 +103,27 @@ npm run package   # المثبّت والنسخة المحمولة في release/
 
 ## English
 
-Riwaq brings Stremio addons into a right-to-left Arabic interface. It has an MPV player embedded in its own window and a source engine that explains how it ranks streams. It also offers live TV with a programme guide and profiles with parental locks. Riwaq supplies no content: everything comes from your own addons and subscriptions.
+Riwaq brings Stremio addons into a right-to-left Arabic interface, also available in English. It has an MPV player embedded in its own window and a source engine that explains how it ranks streams. It also offers live TV with a programme guide and profiles with parental locks. Riwaq supplies no content: everything comes from your own addons and subscriptions.
 
 ### Download
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.41.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.41.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.42.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.42.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.41.0
+### What's new in 0.42.0
 
-- **GLSL shaders, as in Harbor:**
-  - Anime4K's twelve modes, and FSRCNNX for films.
-  - Riwaq bundles none. Download fetches the official GitHub release and checks its SHA-256 before saving it, or you pick your own folder and order your own chain.
-  - The Shader button in the player switches modes instantly.
-- **AniList anime tracking:**
-  - Sign in with a token from AniList's page; no password is involved.
-  - With tracking on, each finished episode raises your list progress, which never goes down.
-  - Watching and Planning join Riwaq as rows.
-- **Simkl fixed:** new Simkl apps (AUTH V2) returned error 400; they now link with a code entered on Simkl. Older apps keep working as before.
-- **Discord presence:** Watching, with the poster, episode, a progress bar and an IMDb button.
-- **Songs with their names and covers:** title, artist, album and cover read from the file itself, with Albums and Artists views.
-- **Account sync during playback:**
-  - Signing out applies at once.
-  - Changes from your other device wait until the video ends instead of interrupting it, with no repeated downloads while they wait.
+- **A full English interface:**
+  - In **Settings → Language & subtitles → Interface language**, choose English.
+  - Menus, settings, messages, save dialogs, Discord presence and the player switch at once, and the layout turns left-to-right.
+  - Each profile keeps its own language, and settings search understands Arabic and English.
+  - The Arabic interface is unchanged: 34 Arabic screens are pixel-identical before and after.
+- **"Continue watching" on the same source:** it resumes where you stopped without the sources list. If the link changed it picks the closest source from the same addon; if it is gone, the list shows.
+- **The theme song stays out of the film:** it stops as soon as the sources open, never plays when you continue watching, and a one-time hint explains what it is.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
@@ -156,20 +143,22 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 - **Profiles:** up to six, with a PIN and lockable rooms.
 - **Music:** your local songs, Spotify control, and each title's theme song.
 - **Prayer times:** computed on your machine, offline.
+- **Arabic or English:** a right-to-left Arabic interface, or a left-to-right English one.
 
 ### Getting started
 
-1. Open **Stremio account** and sign in on Stremio's own page. Riwaq imports your addons, library and progress, or you can add `manifest.json` links yourself.
-2. Pick a title, then an episode and a source. The video plays inside Riwaq.
-3. In **Settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
-4. In **Settings → Accounts & linking**, connect Trakt, Simkl or AniList, or create a Riwaq account.
-5. Torrent sources need **Stremio Service** running on your PC; direct links do not.
+1. For English, open **Settings → Language & subtitles → Interface language** and choose English.
+2. Open **Stremio account** and sign in on Stremio's own page. Riwaq imports your addons, library and progress, or you can add `manifest.json` links yourself.
+3. Pick a title, then an episode and a source. The video plays inside Riwaq.
+4. In **Settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
+5. In **Settings → Accounts & linking**, connect Trakt, Simkl or AniList, or create a Riwaq account.
+6. Torrent sources need **Stremio Service** running on your PC; direct links do not.
 
 ### Privacy and limits
 
 - Keys and accounts are stored encrypted on your machine. Riwaq never asks for platform passwords. It sends your viewing history only to platforms where you turn tracking on.
 - Stremio import is one-way, into Riwaq.
-- Platform tests used mocks, and shaders have not yet been tried on a real GPU. See [what was and was not tested](VERIFICATION.md).
+- Platform tests used mocks; shaders have not yet been tried on a real GPU, nor the English interface on a real Windows machine. See [what was and was not tested](VERIFICATION.md).
 
 ### Building from source
 

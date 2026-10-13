@@ -1,0 +1,71 @@
+/*
+ * Reading direction (core/i18n.mjs): Arabic reads right to left, English
+ * left to right. Layout follows dir on its own through flex, grid and the
+ * logical properties (inset-inline-*, margin-inline-*…), which in Arabic
+ * resolve to exactly the sides the design was drawn with.
+ *
+ * Text alignment follows the interface, not the text: a Latin title on an
+ * Arabic card (dir="auto") stays right-aligned, and an Arabic title in the
+ * English interface stays left-aligned. Rules use var(--align-start).
+ */
+html {
+  --align-start: right;
+  --align-end: left;
+}
+html[dir="ltr"] {
+  --align-start: left;
+  --align-end: right;
+}
+
+/*
+ * Arrows drawn for right-to-left reading point the other way. Media icons
+ * (rewind, skip) and external-link arrows keep their meaning in both
+ * directions and are not flipped.
+ */
+html[dir="ltr"] .lucide-arrow-left,
+html[dir="ltr"] .lucide-arrow-right,
+html[dir="ltr"] .lucide-chevron-left,
+html[dir="ltr"] .lucide-chevron-right,
+html[dir="ltr"] .lucide-arrow-up-left,
+html[dir="ltr"] .lucide-chevrons-left,
+html[dir="ltr"] .lucide-chevrons-right {
+  transform: scaleX(-1);
+}
+
+/*
+ * Elements forced to direction: ltr (badges, window buttons) keep physical
+ * sides, so their place is mirrored here by hand.
+ */
+html[dir="ltr"] .rating {
+  left: auto;
+  right: 8px;
+}
+/* Riwaq's own window buttons sit where Windows puts them: left in Arabic
+ * Windows, right in English. */
+html[dir="ltr"] .window-buttons {
+  left: auto;
+  right: 8px;
+}
+/* …and in Windows' order there: minimise, maximise, close. */
+html[dir="ltr"] .window-buttons,
+html[dir="ltr"] .window-buttons-preview {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+}
+
+/* "Riwaq" in Latin letters is wider than رِواق in the classic sidebar. */
+html[dir="ltr"] .brand b {
+  font-size: 32px;
+  letter-spacing: 0;
+}
+
+/*
+ * The scrims behind hero and title text darken the reading side; they are
+ * pure gradients, so mirroring the layer moves them to the left exactly.
+ */
+html[dir="ltr"] .hero-gradient,
+html[dir="ltr"] .detail-backdrop:after,
+html[dir="ltr"] .identity-riwaq .hero::before,
+html[dir="ltr"] .identity-riwaq .title-hero::before {
+  transform: scaleX(-1);
+}

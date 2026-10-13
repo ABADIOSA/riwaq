@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Download, Globe, X } from "lucide-react";
 
@@ -17,6 +17,16 @@ function WebPill({ version }) {
       return true;
     }
   });
+  // A root of its own: it renders again when the interface language
+  // changes the page's lang, so its words follow (core/i18n.mjs).
+  const [, setLang] = useState(document.documentElement.lang);
+  useEffect(() => {
+    const watch = new MutationObserver(() =>
+      setLang(document.documentElement.lang),
+    );
+    watch.observe(document.documentElement, { attributeFilter: ["lang"] });
+    return () => watch.disconnect();
+  }, []);
   if (!open) return null;
   return (
     <aside className="web-pill" aria-label="نسخة الويب">

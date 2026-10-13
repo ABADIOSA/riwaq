@@ -15,9 +15,10 @@ import {
 } from "lucide-react";
 import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
+import { loc } from "../lib/format.js";
 
 const time = (value) =>
-  new Date(value).toLocaleTimeString("ar-SA", {
+  new Date(value).toLocaleTimeString(loc("ar-SA"), {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

@@ -9,6 +9,7 @@ import {
   lastSeen,
   shouldShowWhatsNew,
   unseenNotes,
+  notesIn,
 } from "../core/whats-new.mjs";
 import { matchesWords } from "../core/arabic.mjs";
 import { bindingLabel, publicHotkeys } from "../core/hotkeys.mjs";
@@ -29,6 +30,20 @@ test("every release ships its own highlights, newest first", () => {
     assert.ok(note.title && note.items.length > 0, note.version);
     assert.ok(note.items.every((t) => typeof t === "string" && t.length < 200));
   }
+});
+
+test("the newest release also speaks English, and English shows only those", () => {
+  const newest = WHATS_NEW[0];
+  assert.ok(newest.en?.title, "the newest release needs an English title");
+  assert.equal(newest.en.items.length, newest.items.length);
+  for (const note of WHATS_NEW.filter((n) => n.en))
+    assert.ok(note.en.items.every((t) => !/[؀-ۿ]/.test(t) && t.length < 240));
+  const english = notesIn("en");
+  assert.ok(english.length > 0 && english.every((n) => !/[؀-ۿ]/.test(n.title)));
+  assert.equal(english[0].version, newest.version);
+  assert.equal(notesIn("ar"), WHATS_NEW);
+  const old = [{ version: "0.1.0", title: "قديم", items: ["نص"] }];
+  assert.equal(notesIn("en", old), old, "with no English, the Arabic stands");
 });
 
 test("versions compare numerically, and only real versions are stored", () => {

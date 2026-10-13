@@ -104,6 +104,7 @@ import WindowBar, {
 import Screensaver from "./components/Screensaver.jsx";
 import ServiceRails from "./components/ServiceRails.jsx";
 import { drawAppIcon } from "./lib/app-icon.js";
+import { useInterfaceLanguage } from "./lib/language.js";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -565,6 +566,13 @@ export default function App() {
     (meta, videoId) => latest.current.open(meta, videoId),
     [],
   );
+  // Continue watching opens the viewing itself, on the source it used.
+  latest.current.resume = (meta) => {
+    const record = continueRail.progressMap[titleKey(meta)];
+    if (!record) return open(meta);
+    openTitle({ meta, videoId: record.videoId, resume: true });
+  };
+  const resumeStable = useCallback((meta) => latest.current.resume(meta), []);
   const moreStable = useCallback((row) => latest.current.more(row), []);
   const noticeStable = useCallback((m) => latest.current.notice(m), []);
   const settingsStable = useCallback((tab) => latest.current.settings(tab), []);
@@ -770,6 +778,9 @@ export default function App() {
     }
   };
   const appearance = resolveAppearance(state.settings);
+  // The interface language (core/i18n.mjs): set before anything renders,
+  // and the whole page is drawn again when it changes.
+  const uiLanguage = useInterfaceLanguage(state.settings.uiLanguage);
   const riwaqExperience = state.settings.interfaceStyle !== "classic";
   const barShown = win.frame !== "native" && !win.fullscreen;
   // The artwork glow follows what is on screen: an open title, else the hero.
@@ -783,6 +794,8 @@ export default function App() {
   return (
     <WatchedContext.Provider value={finished}>
       <div
+        key={uiLanguage}
+        lang={uiLanguage}
         style={{
           ...themeVariables(appearance),
         }}
@@ -1232,7 +1245,7 @@ export default function App() {
                                 subtitle="متابعة المشاهدة"
                                 metas={continueRail.metas}
                                 progressMap={continueRail.progressMap}
-                                onOpen={openStable}
+                                onOpen={resumeStable}
                               />
                             )}
                             {id === "taste" && ready && (

@@ -13,6 +13,7 @@ import { SERVICE_LIMIT, cleanServices } from "../../../core/services.mjs";
 import { HOME_SERVER_LIMIT } from "../../../core/home-servers.mjs";
 import { arabicCount } from "../../../core/arabic.mjs";
 import { call } from "../../lib/api.js";
+import { loc } from "../../lib/format.js";
 
 const DEBRID_STATUS = {
   off: ["غير مربوط", ""],
@@ -55,7 +56,7 @@ const TITLES = {
 };
 const date = (ms) =>
   ms
-    ? new Date(ms).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
+    ? new Date(ms).toLocaleDateString(loc("ar-SA-u-ca-gregory-nu-latn"), {
         day: "numeric",
         month: "short",
       })

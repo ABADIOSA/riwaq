@@ -8,6 +8,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { jsxLanguage } from "./vite.config.mjs";
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url));
 const { version } = JSON.parse(readFileSync(here("./package.json"), "utf8"));
@@ -57,7 +58,7 @@ export default defineConfig({
   root: here("./web"),
   base: "./",
   publicDir: false,
-  plugins: [react(), siteFiles()],
+  plugins: [react(jsxLanguage.plugin), siteFiles()],
   define: {
     "import.meta.env.RIWAQ_VERSION": JSON.stringify(version),
     // Empty unless a test or a developer points the site at a local
@@ -68,6 +69,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      ...jsxLanguage.alias,
       "node:crypto": here("./web/shims/crypto.js"),
       "node:zlib": here("./web/shims/zlib.js"),
       "node:net": here("./web/shims/net.js"),

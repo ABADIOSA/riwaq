@@ -1,5 +1,6 @@
 import UpdatesCard from "./UpdatesCard.jsx";
 import AccountPage from "./settings/AccountPage.jsx";
+import { LanguageCard } from "./settings/LanguageCard.jsx";
 import DiagnosticsCard from "./DiagnosticsCard.jsx";
 import AppearanceStudio from "./AppearanceStudio.jsx";
 import {
@@ -121,6 +122,10 @@ import {
   moveCatalog,
   visibleHomeSections,
 } from "../../core/home.mjs";
+import { loc } from "../lib/format.js";
+import { takeSettingsPage } from "../lib/language.js";
+import { translate } from "../../core/i18n.mjs";
+import SEARCH_EN from "../../core/i18n/en/settings-search.mjs";
 
 /**
  * The home page editor: which sections show and in what order, and every
@@ -521,7 +526,7 @@ const ALL_GROUPS = [
       [
         "subtitles",
         "اللغة والترجمة",
-        "عربي لغة حجم توقيت مسارات صوت",
+        "عربي لغة الواجهة English إنجليزي إنجليزية language حجم توقيت مسارات صوت",
         Subtitles,
       ],
       [
@@ -713,6 +718,9 @@ const GROUPS = ALL_GROUPS.map((g) => ({
 const sections = GROUPS.flatMap((g) => g.pages);
 const groupOf = (page) =>
   GROUPS.find((g) => g.pages.some(([id]) => id === page));
+// Search finds a page by its Arabic and English names in either language.
+const pageWords = ([id, title, keywords]) =>
+  `${title} ${keywords} ${translate(title, "en")} ${SEARCH_EN[id] || ""}`;
 // Pages that moved: an old link still lands somewhere sensible.
 const MOVED = { appearance: "theme", ...(isWeb ? WEB_HIDDEN : {}) };
 
@@ -724,10 +732,11 @@ export default function SettingsStudio({
   initialTab = "theme",
   onNuvio,
 }) {
-  const [tab, setTab] = useState(MOVED[initialTab] || initialTab),
-    [open, setOpen] = useState(
-      () => new Set([groupOf(MOVED[initialTab] || initialTab)?.id || "look"]),
-    ),
+  const [first] = useState(
+    () => takeSettingsPage() || MOVED[initialTab] || initialTab,
+  );
+  const [tab, setTab] = useState(first),
+    [open, setOpen] = useState(() => new Set([groupOf(first)?.id || "look"])),
     [search, setSearch] = useState(""),
     [draft, setDraft] = useState(state.settings),
     [diag, setDiag] = useState(null);
@@ -736,8 +745,8 @@ export default function SettingsStudio({
   useEffect(() => {
     setDraft(s);
   }, [s]);
-  const visible = sections.filter(([id, title, keywords]) =>
-    search ? matchesWords(`${title} ${keywords}`, search) : id === tab,
+  const visible = sections.filter((page) =>
+    search ? matchesWords(pageWords(page), search) : page[0] === tab,
   );
   const save = (key, value) => update("settings", { [key]: value });
   const toggle = (key, title, description) => (
@@ -830,9 +839,9 @@ export default function SettingsStudio({
             </div>
             <div className="studio-index-pages">
               {GROUPS.flatMap((group) => group.pages)
-                .filter(([id, title, keywords]) =>
+                .filter(([id], i, list) =>
                   search
-                    ? matchesWords(`${title} ${keywords}`, search)
+                    ? matchesWords(pageWords(list[i]), search)
                     : (
                         GROUPS.find((g) => g.pages.some(([p]) => p === tab)) ||
                         GROUPS[0]
@@ -866,8 +875,7 @@ export default function SettingsStudio({
             </label>
             {GROUPS.map((group) => {
               const pages = group.pages.filter(
-                ([, title, keywords]) =>
-                  !search || matchesWords(`${title} ${keywords}`, search),
+                (page) => !search || matchesWords(pageWords(page), search),
               );
               if (!pages.length) return null;
               const expanded = !!search || open.has(group.id);
@@ -1168,6 +1176,11 @@ export default function SettingsStudio({
                       "تشغيل التالي في الطابور، ثم الحلقة التالية إذا كان الطابور فارغاً، بأول مصدر متوافق. مغلق افتراضياً.",
                     )}
                     {toggle(
+                      "resumeSameSource",
+                      "«نكمل الحكاية» على نفس المصدر",
+                      "الضغط على عمل في متابعة المشاهدة يكمل من حيث وقفت على المصدر نفسه بدون قائمة المصادر. إذا ما عاد متاحاً يختار أقرب مصدر من نفس الإضافة، وإلا تظهر القائمة.",
+                    )}
+                    {toggle(
                       "rememberSeries",
                       "تذكّر اختياراتك لكل مسلسل",
                       "الحلقة التالية تبدأ بنفس الإضافة وفريق الإصدار، ونفس لغة الصوت والترجمة التي اخترتها. يُحفظ الاسم والجودة واللغة فقط، بدون روابط، ولكل ملف شخصي وحده.",
@@ -1316,6 +1329,9 @@ export default function SettingsStudio({
                   act={act}
                   notice={notice}
                 />
+              )}
+              {id === "subtitles" && (
+                <LanguageCard state={state} update={update} />
               )}
               {id === "subtitles" && (
                 <form
@@ -2255,7 +2271,7 @@ function PresenceAndAlerts({ state, update, act, notice }) {
 // backup and episode dates are Gregorian, so they are shown that way everywhere.
 const when = (value) =>
   value
-    ? new Date(value).toLocaleString("ar-SA", {
+    ? new Date(value).toLocaleString(loc("ar-SA"), {
         dateStyle: "medium",
         timeStyle: "short",
         calendar: "gregory",

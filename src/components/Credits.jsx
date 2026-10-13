@@ -15,6 +15,7 @@ import { Busy, Empty, Modal, Poster, ScrollRow } from "./UI.jsx";
 import { mapTiles } from "../../core/credits.mjs";
 import { arabicCount, ACTORS, AWARDS, WORKS } from "../../core/arabic.mjs";
 import { awardFamilies } from "../../core/awards.mjs";
+import { loc } from "../lib/format.js";
 
 const initials = (name) =>
   String(name || "")
@@ -27,7 +28,7 @@ const gregorian = (date) => {
   const d = new Date(date);
   return Number.isNaN(d.getTime())
     ? ""
-    : d.toLocaleDateString("ar-SA-u-nu-latn", {
+    : d.toLocaleDateString(loc("ar-SA-u-nu-latn"), {
         calendar: "gregory",
         year: "numeric",
         month: "long",

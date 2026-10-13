@@ -23,6 +23,7 @@ import PlayerDock from "./PlayerDock.jsx";
 import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
 import { seekAmount } from "../../core/hotkeys.mjs";
+import { loc } from "../lib/format.js";
 
 export default function PlayerView({
   player,
@@ -256,7 +257,7 @@ export default function PlayerView({
           {!player.live && player.duration > 0 && (
             <small className="ends-at" dir="rtl">
               ينتهي{" "}
-              {new Intl.DateTimeFormat("ar-SA", {
+              {new Intl.DateTimeFormat(loc("ar-SA"), {
                 hour: "numeric",
                 minute: "2-digit",
                 calendar: "gregory",

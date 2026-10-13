@@ -7,6 +7,7 @@
  */
 
 import net from "node:net";
+import { t } from "./i18n.mjs";
 
 const HANDSHAKE = 0;
 const FRAME = 1;
@@ -76,35 +77,35 @@ export function buildActivity({
   if (!playing)
     return {
       type: 0,
-      details: "يتصفّح رِواق",
-      assets: { large_image: RIWAQ_ICON, large_text: "رِواق" },
+      details: t("يتصفّح رِواق"),
+      assets: { large_image: RIWAQ_ICON, large_text: t("رِواق") },
       instance: false,
     };
   const generic = detail !== "title";
-  const name = line(title) || "بلا عنوان";
+  const name = line(title) || t("بلا عنوان");
   const art = generic ? "" : picture(poster);
-  const status = paused ? "متوقف مؤقتاً" : live ? "بث مباشر" : "";
+  const status = paused ? t("متوقف مؤقتاً") : live ? t("بث مباشر") : "";
   const activity = {
     type: 3, // Watching
     status_display_type: generic ? 0 : 2,
-    details: generic ? "يشاهد شيئاً" : name,
+    details: generic ? t("يشاهد شيئاً") : name,
     state: generic
-      ? "على رِواق"
+      ? t("على رِواق")
       : [episodeLine({ season, number, episodeTitle, episode }), status]
           .filter(Boolean)
           .join(" · ")
           .slice(0, 128) ||
         line(year) ||
-        "على رِواق",
+        t("على رِواق"),
     assets: {
       large_image: art || RIWAQ_ICON,
       large_text: generic
-        ? "رِواق"
-        : line(year ? `${name} (${year})` : name) || "رِواق",
+        ? t("رِواق")
+        : line(year ? `${name} (${year})` : name) || t("رِواق"),
       ...(art
         ? {
             small_image: RIWAQ_ICON,
-            small_text: paused ? "متوقف مؤقتاً" : "على رِواق",
+            small_text: paused ? t("متوقف مؤقتاً") : t("على رِواق"),
           }
         : {}),
     },
@@ -114,7 +115,7 @@ export function buildActivity({
   if (!generic && imdbId)
     activity.buttons = [
       {
-        label: "صفحة العمل على IMDb",
+        label: t("صفحة العمل على IMDb"),
         url: `https://www.imdb.com/title/${imdbId}/`,
       },
     ];

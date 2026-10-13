@@ -19,6 +19,7 @@ import { IconButton, Busy, Empty, Modal } from "./UI.jsx";
 import { call } from "../lib/api.js";
 import { arabicCount } from "../../core/arabic.mjs";
 import { HEALTH_LABELS, healthSummary } from "../../core/addon-health.mjs";
+import { loc } from "../lib/format.js";
 
 const ADDONS_FORMS = {
   one: "إضافة واحدة",
@@ -98,7 +99,7 @@ export default function Addons({
           </h2>
           <p>
             {state.lastSync
-              ? `آخر استيراد: ${new Date(state.lastSync).toLocaleString("ar-SA", { calendar: "gregory" })}`
+              ? `آخر استيراد: ${new Date(state.lastSync).toLocaleString(loc("ar-SA"), { calendar: "gregory" })}`
               : "نفس الإضافات، بنفس الإعدادات، في تجربة جديدة."}
           </p>
         </div>

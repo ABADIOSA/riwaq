@@ -5,6 +5,7 @@ import { imgUrl } from "../lib/helpers.js";
 import { ScrollRow } from "./UI.jsx";
 import { groupByDay } from "../../core/episodes.mjs";
 import { arabicCount, EPISODES } from "../../core/arabic.mjs";
+import { loc } from "../lib/format.js";
 
 const dayKey = (time) =>
   new Intl.DateTimeFormat("en-CA", {
@@ -19,7 +20,7 @@ function dayLabel(day) {
   if (day === dayKey(Date.now() + 86400000)) return "غداً";
   if (day === dayKey(Date.now() - 86400000)) return "أمس";
   // Local noon keeps the label on the right day whatever the time zone.
-  return new Date(`${day}T12:00:00`).toLocaleDateString("ar-SA", {
+  return new Date(`${day}T12:00:00`).toLocaleDateString(loc("ar-SA"), {
     weekday: "long",
     day: "numeric",
     month: "long",

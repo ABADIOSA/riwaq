@@ -104,6 +104,7 @@ import {
   reusableRun,
 } from "./source-wait.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
+import { cleanResumeSource } from "./resume.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 import {
   collectBackup,
@@ -589,9 +590,31 @@ export class Client {
     this.persist();
     return this.publicState();
   }
+  /**
+   * The source a viewing started with, kept with its progress so Continue
+   * watching can play it again (core/resume.mjs): the opaque stream key and
+   * its loose identity, never the link.
+   */
+  rememberResume(meta, videoId, source) {
+    const clean = cleanResumeSource(source);
+    if (!clean || !meta?.type || typeof videoId !== "string") return;
+    const key = `${meta.type}:${videoId}`;
+    (this.resumeSources ||= new Map()).delete(key);
+    this.resumeSources.set(key, clean);
+    while (this.resumeSources.size > 100)
+      this.resumeSources.delete(this.resumeSources.keys().next().value);
+    const record = this.state.progress[key];
+    if (record) {
+      record.source = clean;
+      this.persist();
+    }
+  }
   recordProgress(meta, videoId, position, duration) {
     if (!meta?.id || !Number.isFinite(position) || position < 0) return;
-    this.state.progress[`${meta.type}:${videoId}`] = {
+    const key = `${meta.type}:${videoId}`;
+    const source =
+      this.resumeSources?.get(key) || this.state.progress[key]?.source;
+    this.state.progress[key] = {
       meta: {
         id: meta.id,
         type: meta.type,
@@ -603,6 +626,7 @@ export class Client {
       position,
       duration: Number.isFinite(duration) ? duration : 0,
       updated: Date.now(),
+      ...(source ? { source } : {}),
     };
     this.persist();
   }

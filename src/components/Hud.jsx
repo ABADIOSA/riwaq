@@ -26,6 +26,8 @@ import { clock } from "../lib/helpers.js";
 import { resolveAppearance } from "../../core/appearance.mjs";
 import { hudHidden } from "../../core/hud-layout.mjs";
 import { qualityChips } from "../../core/player-tuning.mjs";
+import { useInterfaceLanguage } from "../lib/language.js";
+import { loc } from "../lib/format.js";
 
 // Controls fade after the pointer has been still this long, and the pointer
 // hides with them. Paused playback and an open panel keep them up.
@@ -34,7 +36,7 @@ const IDLE_MS = 2500;
 const CLICK_MS = 230;
 
 const endsAt = (player) =>
-  new Intl.DateTimeFormat("ar-SA", {
+  new Intl.DateTimeFormat(loc("ar-SA"), {
     hour: "numeric",
     minute: "2-digit",
     calendar: "gregory",
@@ -82,6 +84,8 @@ export default function Hud() {
   const thumbAsk = useRef(0);
   const [flash, setFlash] = useState(null);
   const [skipNext, setSkipNext] = useState("");
+  // The HUD speaks the main window's language (core/i18n.mjs).
+  const uiLanguage = useInterfaceLanguage(state?.settings?.uiLanguage);
   const [sleepMenu, setSleepMenu] = useState(false);
   // GLSL presets (Anime4K's modes, FSRCNNX, the viewer's chain) by name.
   const [shaderMenu, setShaderMenu] = useState(false);
@@ -287,6 +291,7 @@ export default function Hud() {
 
   return (
     <div
+      key={uiLanguage}
       className={`hud-stage ${shown ? "awake" : "asleep"}`}
       style={
         state

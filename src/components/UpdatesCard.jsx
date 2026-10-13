@@ -10,6 +10,7 @@ import {
   RotateCw,
   Radio,
 } from "lucide-react";
+import { loc } from "../lib/format.js";
 
 const labels = {
   idle: "رِواق يتجدد معك",
@@ -246,7 +247,7 @@ export default function UpdatesCard({ state, update, act }) {
         <p className="subtle">
           آخر تحقق:{" "}
           {new Date(info.checkedAt).toLocaleString(
-            "ar-SA-u-ca-gregory-nu-latn",
+            loc("ar-SA-u-ca-gregory-nu-latn"),
           )}
         </p>
       )}
@@ -342,7 +343,7 @@ function WebUpdates({ info, working, run, act }) {
         <p className="subtle">
           آخر تحقق:{" "}
           {new Date(info.checkedAt).toLocaleString(
-            "ar-SA-u-ca-gregory-nu-latn",
+            loc("ar-SA-u-ca-gregory-nu-latn"),
           )}
         </p>
       )}
