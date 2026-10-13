@@ -28,7 +28,7 @@ export default {
   picker:
     "source picker sources list compact detailed torrent direct release name",
   filters: "stream filters filter quality atmos size seeders peers",
-  p2p: "p2p torrent engine connections speed cache",
+  p2p: "p2p torrent engine connections speed cache built-in webtorrent stremio service upload sharing peers",
   server: "streaming server address connection version",
   home: "home order rows catalogs hide sections pinned collections",
   cards: "poster cards card size corners ratings title",

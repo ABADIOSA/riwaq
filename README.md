@@ -30,21 +30,21 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.42.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.42.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.43.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.43.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.42.0
+### الجديد في 0.43.0
 
-- **واجهة إنجليزية كاملة:**
-  - من **الإعدادات ← اللغة والترجمة ← لغة الواجهة** اختر English.
-  - القوائم والإعدادات والرسائل ونوافذ الحفظ وحالة Discord والمشغّل كلها تتغير فوراً، والتخطيط ينقلب من اليسار لليمين.
-  - لكل ملف شخصي لغته، والبحث في الإعدادات يفهم العربي والإنجليزي.
-  - الواجهة العربية ما تغيّرت: 34 شاشة عربية متطابقة بكسل ببكسل قبل التغيير وبعده.
-- **«نكمل الحكاية» على نفس المصدر:** يكمل من حيث وقفت بدون قائمة المصادر. إذا تغيّر الرابط يختار أقرب مصدر من نفس الإضافة، وإذا ما عاد موجود تظهر القائمة.
-- **أغنية العمل ما تتداخل مع الفيلم:** توقف أول ما تفتح المصادر، وما تشتغل مع «نكمل الحكاية»، وأول مرة يطلع تنبيه يشرح وش هي.
+- **التورنت بدون Stremio Service:** محرك تورنت مدمج واختياري، ما يحتاج تثبّت أي برنامج.
+  - فعّله من **الإعدادات ← المصادر والمكتبة ← محرك P2P**، أو من الدليل اللي يطلع أول ما تشغّل مصدر تورنت.
+  - يجيب الأجزاء اللي تشاهدها بس، ويحذفها لما تخلص، أو يخلّي ذاكرة 2 أو 5 أو 10 جيجا.
+  - تختار السرعة (هادئ، متوازن، سريع) وقد إيش يشارك أثناء المشاهدة.
+  - ما يفتح منافذ في الراوتر ولا يعلن عن نفسه في شبكتك. ومثل أي برنامج تورنت، عنوان IP حقك يظهر للمشاركين.
+- **أو Stremio Service الرسمي بخطوات:** الدليل يعطيك رابط صفحته الرسمية، ورِواق يتحقق كل ثلاث ثوانٍ ويكمّل التشغيل على نفس المصدر أول ما يرد.
+- **ليش ما نرفق خادم Stremio نفسه؟** فريق Stremio قال إن ملف `server.js` فيه كود مملوك وما ينفع يتوزّع خارج تطبيقاتهم ([stremio-shell#435](https://github.com/Stremio/stremio-shell/issues/435)). عشان كذا المحرك المدمج مبني على WebTorrent (رخصة MIT).
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -72,13 +72,13 @@
 2. اختر عملاً، ثم الحلقة والمصدر. الفيديو يشتغل داخل رِواق.
 3. من **الإعدادات ← مزوّدو البيانات الوصفية** أضف مفاتيحك (TMDB وغيره) لو تبغى أوصافاً عربية وصوراً أكثر.
 4. من **الإعدادات ← الحسابات والربط** اربط Trakt أو Simkl أو AniList، أو أنشئ حساب رِواق.
-5. مصادر التورنت تحتاج **Stremio Service** شغّال على جهازك. الروابط المباشرة ما تحتاجه.
+5. مصادر التورنت تحتاج محركاً: **المحرك المدمج** من **الإعدادات ← محرك P2P**، أو **Stremio Service** شغّال على جهازك. الروابط المباشرة ما تحتاج شي.
 
 ### الخصوصية والحدود
 
 - مفاتيحك وحساباتك تنحفظ مشفّرة على جهازك. رِواق ما يطلب كلمات مرور المنصات، وما يرسل سجل مشاهدتك إلا للمنصات اللي تفعّل التسجيل فيها.
 - استيراد Stremio باتجاه واحد إلى رِواق.
-- اختبارات المنصات استخدمت المحاكاة، ولم تُجرَّب الشيدرات على كرت شاشة حقيقي ولا الواجهة الإنجليزية على ويندوز حقيقي بعد. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
+- اختبارات المنصات استخدمت المحاكاة، ولم تُجرَّب الشيدرات على كرت شاشة حقيقي ولا الواجهة الإنجليزية ولا محرك التورنت المدمج على ويندوز حقيقي بعد. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
 
 ### البناء من المصدر
 
@@ -109,21 +109,21 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.42.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.42.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.43.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.43.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.42.0
+### What's new in 0.43.0
 
-- **A full English interface:**
-  - In **Settings → Language & subtitles → Interface language**, choose English.
-  - Menus, settings, messages, save dialogs, Discord presence and the player switch at once, and the layout turns left-to-right.
-  - Each profile keeps its own language, and settings search understands Arabic and English.
-  - The Arabic interface is unchanged: 34 Arabic screens are pixel-identical before and after.
-- **"Continue watching" on the same source:** it resumes where you stopped without the sources list. If the link changed it picks the closest source from the same addon; if it is gone, the list shows.
-- **The theme song stays out of the film:** it stops as soon as the sources open, never plays when you continue watching, and a one-time hint explains what it is.
+- **Torrents without Stremio Service:** an optional built-in torrent engine, with nothing to install.
+  - Turn it on in **Settings → Sources & library → P2P engine**, or from the guide that opens the first time you play a torrent source.
+  - It fetches only the pieces you watch and deletes them when you finish, or keeps a 2, 5 or 10 GB cache.
+  - You choose its speed (calm, balanced, fast) and how much it shares while you watch.
+  - It never opens router ports or announces itself on your network. Like any torrent app, your IP address is visible to the peers.
+- **Or the official Stremio Service, step by step:** the guide links to its official page, and Riwaq checks every three seconds and resumes the same source as soon as it answers.
+- **Why not bundle Stremio's own server?** Stremio's team says its `server.js` contains proprietary code and is not meant to be distributed outside their apps ([stremio-shell#435](https://github.com/Stremio/stremio-shell/issues/435)). The built-in engine is built on WebTorrent (MIT) instead.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
@@ -152,13 +152,13 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 3. Pick a title, then an episode and a source. The video plays inside Riwaq.
 4. In **Settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
 5. In **Settings → Accounts & linking**, connect Trakt, Simkl or AniList, or create a Riwaq account.
-6. Torrent sources need **Stremio Service** running on your PC; direct links do not.
+6. Torrent sources need an engine: the **built-in engine** in **Settings → P2P engine**, or **Stremio Service** running on your PC. Direct links need neither.
 
 ### Privacy and limits
 
 - Keys and accounts are stored encrypted on your machine. Riwaq never asks for platform passwords. It sends your viewing history only to platforms where you turn tracking on.
 - Stremio import is one-way, into Riwaq.
-- Platform tests used mocks; shaders have not yet been tried on a real GPU, nor the English interface on a real Windows machine. See [what was and was not tested](VERIFICATION.md).
+- Platform tests used mocks; shaders have not yet been tried on a real GPU, nor the English interface or the built-in torrent engine on a real Windows machine. See [what was and was not tested](VERIFICATION.md).
 
 ### Building from source
 

@@ -27,6 +27,7 @@ import {
 import { matchTrack, seriesOf, trackIdentity } from "../core/series-memory.mjs";
 import { skipPreferences } from "../core/skip-segments.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
+import { NEEDS_ENGINE, SERVICE_DOWNLOAD } from "../core/torrent-engine.mjs";
 import { musicLink, musicSearchUrl } from "../core/music.mjs";
 import {
   authorizeUrl as spotifyAuthorizeUrl,
@@ -366,10 +367,8 @@ export async function startBridge({ version, store }) {
     }
     let url = stream.url;
     if (!url && stream.infoHash) {
-      if (!(await serverUp()))
-        throw new Error(
-          "هذا المصدر تورنت ويحتاج Stremio Service يعمل على جهازك. شغّل ستريميو الرسمي أو Stremio Service ثم أعد المحاولة، أو اختر مصدراً مباشراً.",
-        );
+      // The interface recognises this sentence and opens the setup guide.
+      if (!(await serverUp())) throw new Error(NEEDS_ENGINE);
       url = torrentUrl(stream, client.state.settings.serverUrl);
     }
     if (!url) throw new Error("نوع المصدر غير مدعوم في هذه النسخة");
@@ -1043,6 +1042,13 @@ export async function startBridge({ version, store }) {
     homeServerCheck: (a) =>
       client.services.homeServerCheck({ id: String(a?.id || "") }),
     streamServerInfo: () => client.services.streamServerInfo(),
+    // The built-in torrent engine needs the desktop (BitTorrent speaks TCP
+    // and UDP, which a page cannot); the setup guide offers Stremio Service.
+    torrentEngineStats: () => ({ available: false, running: false }),
+    openServiceDownload: () => {
+      openExternal(SERVICE_DOWNLOAD);
+      return true;
+    },
     aiSave: (a) => {
       client.profiles.gate("settings");
       return client.ai.save({

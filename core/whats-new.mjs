@@ -7,6 +7,25 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.43.0",
+    title: "التورنت يشتغل بدون Stremio Service",
+    items: [
+      "محرك تورنت مدمج واختياري: فعّله من الإعدادات ← المصادر والمكتبة ← محرك P2P، أو من الدليل اللي يطلع أول ما تشغّل مصدر تورنت. ما يحتاج تثبّت أي برنامج.",
+      "أو Stremio Service الرسمي بخطوات واضحة: رابط صفحته الرسمية، ورِواق يتحقق كل ثلاث ثوانٍ ويكمّل التشغيل أول ما يرد.",
+      "المحرك يجيب الأجزاء اللي تشاهدها بس ويحذفها لما تخلص، أو يخلّي ذاكرة 2 أو 5 أو 10 جيجا. والسرعة والمشاركة بيدك.",
+      "رِواق ما يفتح منافذ في الراوتر ولا يعلن عن نفسه في شبكتك، والمحرك ما يشتغل إلا إذا اخترته.",
+    ],
+    en: {
+      title: "Torrents play without Stremio Service",
+      items: [
+        "An optional built-in torrent engine: turn it on in Settings → Sources & library → P2P engine, or from the guide that opens the first time you play a torrent source. Nothing to install.",
+        "Or the official Stremio Service, step by step: a link to its official page, and Riwaq checks every three seconds and resumes as soon as it answers.",
+        "The engine fetches only the pieces you watch and deletes them when you finish, or keeps a 2, 5 or 10 GB cache. Speed and sharing are up to you.",
+        "Riwaq never opens router ports or announces itself on your network, and the engine runs only if you choose it.",
+      ],
+    },
+  },
+  {
     version: "0.42.0",
     title: "رِواق بالإنجليزي، و«نكمل الحكاية» على نفس المصدر",
     items: [

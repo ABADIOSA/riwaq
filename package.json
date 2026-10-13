@@ -1,6 +1,6 @@
 {
   "name": "riwaq",
-  "version": "0.42.0",
+  "version": "0.43.0",
   "private": true,
   "type": "module",
   "description": "Riwaq — an Arabic-first desktop client for the Stremio addon ecosystem",
@@ -23,7 +23,8 @@
     "koffi": "^3.3.0",
     "lucide-react": "^0.577.0",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "webtorrent": "3.0.21"
   },
   "devDependencies": {
     "@noble/ciphers": "^2.4.0",
@@ -54,7 +55,9 @@
       "package.json",
       "LICENSE",
       "THIRD-PARTY.md",
-      "!node_modules/@koromix/koffi-!(win32)-*/**"
+      "!node_modules/@koromix/koffi-!(win32)-*/**",
+      "!node_modules/**/prebuilds/!(win32-x64)/**",
+      "!node_modules/node-datachannel/{src,cmake,test,BULDING.md}/**"
     ],
     "extraResources": [
       {
@@ -74,7 +77,11 @@
       "artifactName": "Riwaq-${version}-win-x64.exe"
     },
     "asarUnpack": [
-      "node_modules/koffi/**"
+      "node_modules/koffi/**",
+      "node_modules/node-datachannel/**",
+      "node_modules/utp-native/**",
+      "node_modules/bufferutil/**",
+      "node_modules/utf-8-validate/**"
     ],
     "nsis": {
       "oneClick": false,
@@ -84,6 +91,7 @@
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
       "artifactName": "Riwaq-Setup-${version}-win-x64.exe"
-    }
+    },
+    "npmRebuild": false
   }
 }

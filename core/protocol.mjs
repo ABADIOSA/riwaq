@@ -22,6 +22,12 @@ import { cleanThemeSkip } from "./theme-song.mjs";
 import { chosenPreset, cleanShaderChain } from "./shaders.mjs";
 import { LANGUAGES } from "./i18n.mjs";
 import {
+  ENGINE_CACHES,
+  ENGINE_PROFILE_IDS,
+  TORRENT_ENGINES,
+  UPLOAD_LIMIT_IDS,
+} from "./torrent-engine.mjs";
+import {
   DEFAULT_HOME_SECTIONS,
   safeCatalogKeys,
   safeHomeSections,
@@ -138,6 +144,12 @@ export const DEFAULT_SETTINGS = {
   uiLanguage: "ar",
   // Continue watching plays the source the viewing used (core/resume.mjs).
   resumeSameSource: true,
+  // Torrents without Stremio Service (core/torrent-engine.mjs): asked
+  // first; the built-in engine runs only after the viewer chooses it.
+  torrentEngine: "ask",
+  torrentProfile: "balanced",
+  torrentUpload: "normal",
+  torrentCache: "viewing",
   // The theme song explained itself once (issue #74).
   themeSongHinted: false,
   shaderPreset: "",
@@ -496,6 +508,10 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     shader: ["none", "sharp", "anime", "film", "custom"],
     shaderScope: ["auto", "all"],
     uiLanguage: LANGUAGES,
+    torrentEngine: TORRENT_ENGINES,
+    torrentProfile: ENGINE_PROFILE_IDS,
+    torrentUpload: UPLOAD_LIMIT_IDS,
+    torrentCache: ENGINE_CACHES,
     toneMapping: ["auto", "bt.2446a", "hable", "mobius", "reinhard", "off"],
     epgHours: [2, 4, 6, 12],
     cardStyle: ["glass", "flat", "outline"],

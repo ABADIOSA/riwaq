@@ -12,6 +12,7 @@ import {
   powerMonitor,
   nativeImage,
   protocol,
+  utilityProcess,
 } from "electron";
 import {
   readFileSync,
@@ -22,6 +23,7 @@ import {
   copyFileSync,
   statSync,
 } from "node:fs";
+import { rm } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
@@ -72,6 +74,12 @@ import {
   translate,
 } from "../core/i18n.mjs";
 import { Player } from "./player.mjs";
+import { TorrentHost } from "./torrent.mjs";
+import {
+  NEEDS_ENGINE,
+  SERVICE_DOWNLOAD,
+  chooseEngine,
+} from "../core/torrent-engine.mjs";
 import { ShaderStore } from "./shaders.mjs";
 import { shaderOptions } from "../core/shaders.mjs";
 import {
@@ -140,6 +148,41 @@ const nuvioReply = (stores, source) => {
 let watching = { active: false, pip: false, error: false };
 // What is playing from an addon stream: subtitle requests need its stream key.
 let nowPlaying = null;
+// The built-in torrent engine (core/torrent-engine.mjs), in its own process,
+// started only when the viewer chose it and a torrent plays; and the info
+// hash it is serving, released when that viewing ends.
+let torrentHost = null;
+let builtinTorrent = null;
+function torrents() {
+  torrentHost ||= new TorrentHost({
+    fork: () =>
+      utilityProcess.fork(join(root, "electron", "torrent-host.mjs"), [], {
+        serviceName: "Riwaq torrent engine",
+        stdio: "ignore",
+      }),
+    cacheDir: join(app.getPath("userData"), "torrent-cache"),
+    log: (error) => logError("torrent", error),
+  });
+  return torrentHost;
+}
+/** The viewing ended: its torrent is kept a few minutes, then let go. */
+function releaseTorrent() {
+  if (!builtinTorrent) return;
+  torrentHost?.release(builtinTorrent);
+  builtinTorrent = null;
+}
+/** Whether the viewer's Stremio Service answers. */
+async function serviceUp() {
+  try {
+    const response = await fetch(
+      client.state.settings.serverUrl + "/settings",
+      { signal: AbortSignal.timeout(2000), redirect: "error" },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 // Recent errors for the diagnostic report, sanitized as they are recorded:
 // the interface only ever shows a generic sentence for most of them.
 const errorLog = new ErrorLog();
@@ -752,7 +795,10 @@ async function trickplay(a) {
     duration: Number(player.state.duration) || 0,
     executable: executable(),
     mode: client.state.settings.seekThumbnails || "local",
-    serverUrl: client.state.settings.serverUrl,
+    // Torrents from either engine are remote, however local their address.
+    serverUrl: [client.state.settings.serverUrl, torrentHost?.origin].filter(
+      Boolean,
+    ),
   });
 }
 function executable() {
@@ -818,17 +864,38 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     return { external: true };
   }
   let url = stream.url;
+  let torrentHash = null;
   if (!url && stream.infoHash) {
-    if (!(await diagnostics()).server)
-      throw new Error(
-        "هذا المصدر يحتاج Stremio Service. شغّل ستريميو الرسمي أو اضبط عنوان الخدمة في الإعدادات.",
-      );
-    url = torrentUrl(stream, client.state.settings.serverUrl);
+    // Stremio Service when it answers; the built-in engine only when the
+    // viewer chose it; otherwise the interface opens the setup guide.
+    const setting = client.state.settings.torrentEngine;
+    const engine = chooseEngine(
+      setting,
+      setting === "builtin" ? false : await serviceUp(),
+    );
+    if (engine === "ask") throw new Error(NEEDS_ENGINE);
+    if (engine === "builtin") {
+      url = await torrents().url(stream, client.state.settings);
+      torrentHash = stream.infoHash.toLowerCase();
+    } else url = torrentUrl(stream, client.state.settings.serverUrl);
   }
   if (!url) throw new Error("نوع المصدر غير مدعوم في هذه النسخة");
   checkOwner();
-  await player.stop();
-  checkOwner();
+  // The stop below ends the last viewing; it must not release a torrent
+  // that is about to play again (a resume, a file of the same pack).
+  const previousTorrent = builtinTorrent;
+  builtinTorrent = null;
+  try {
+    await player.stop();
+    checkOwner();
+  } catch (error) {
+    for (const hash of new Set([previousTorrent, torrentHash]))
+      if (hash) torrentHost?.release(hash);
+    throw error;
+  }
+  if (previousTorrent && previousTorrent !== torrentHash)
+    torrentHost?.release(previousTorrent);
+  if (torrentHash) builtinTorrent = torrentHash;
   const progress = client.state.progress[`${meta.type}:${videoId}`];
   const start =
     resume &&
@@ -1254,6 +1321,7 @@ const methods = {
     const state = client.settings(a);
     // Sound and picture changes reach a running viewing where MPV allows it.
     player?.applyTuning(client.state.settings);
+    torrentHost?.configure(client.state.settings);
     applyZoom();
     if (overlayEnabled()) ensureHud();
     else closeHud();
@@ -1297,6 +1365,25 @@ const methods = {
   homeServerCheck: (a) =>
     client.services.homeServerCheck({ id: String(a?.id || "") }),
   streamServerInfo: () => client.services.streamServerInfo(),
+  // The built-in torrent engine: counts and speeds only, never addresses.
+  torrentEngineStats: async () => ({
+    available: true,
+    ...(await (torrentHost ? torrentHost.stats() : { running: false })),
+  }),
+  torrentEngineClear: async () => {
+    if (torrentHost?.running) await torrentHost.clear();
+    else
+      await rm(join(app.getPath("userData"), "torrent-cache"), {
+        recursive: true,
+        force: true,
+      });
+    return true;
+  },
+  // Only this fixed address: Stremio Service's official releases.
+  openServiceDownload: async () => {
+    await shell.openExternal(SERVICE_DOWNLOAD);
+    return true;
+  },
   // AI search: the key is saved behind the Settings lock and never returned.
   aiSave: (a) => {
     client.profiles.gate("settings");
@@ -1666,6 +1753,7 @@ const methods = {
       player,
       errors: errorLog,
       rendererErrors: a?.rendererErrors,
+      torrentEngine: torrentHost,
     });
     const text = formatReport(report, { home: homedir() });
     lastDiagnosis = { report, text };
@@ -2172,6 +2260,7 @@ app
           // At shutdown MPV exits after the window is gone: everything above
           // (scrobbling, presence) still runs, the window calls do not.
           if (!window || window.isDestroyed()) return;
+          if (!s.active) releaseTorrent();
           if (!s.active) {
             try {
               videoHost.hide();
@@ -2435,6 +2524,7 @@ app.on("before-quit", (event) => {
   // Stopping the player sends the final scrobble; give it a moment to land so
   // a play finished just before closing is recorded rather than queued.
   Promise.resolve(player?.stop())
+    .then(() => torrentHost?.stop())
     .then(() => client?.integrations?.settle(3000))
     // A change still waiting for the account goes up before closing.
     .then(() =>
