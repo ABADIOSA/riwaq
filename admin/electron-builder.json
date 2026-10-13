@@ -1,0 +1,26 @@
+{
+  "appId": "app.riwaq.admin",
+  "productName": "Riwaq Admin",
+  "electronDist": "node_modules/electron/dist",
+  "directories": { "output": "release-admin" },
+  "extraMetadata": {
+    "main": "admin/main.mjs",
+    "name": "riwaq-admin",
+    "dependencies": {}
+  },
+  "files": [
+    "admin/**/*",
+    "core/announcements.mjs",
+    "core/updates.mjs",
+    "package.json",
+    "LICENSE",
+    "!node_modules/**/*"
+  ],
+  "npmRebuild": false,
+  "win": {
+    "target": ["portable"],
+    "icon": "assets/icon.ico",
+    "signAndEditExecutable": true
+  },
+  "portable": { "artifactName": "Riwaq-Admin-${version}-win-x64.exe" }
+}

@@ -14,6 +14,7 @@ import { extname, join, resolve } from "node:path";
 import { execFileSync, execSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { decryptBackup } from "../core/backup.mjs";
+import { ANNOUNCEMENT_URL } from "../core/announcements.mjs";
 import { serveLocally, sqliteD1 } from "../server/accounts/local.mjs";
 
 const require = createRequire(import.meta.url);
@@ -166,6 +167,22 @@ const openContext = async (options) => {
   // Model them as offline; application errors are still collected below.
   await ctx.route(/^https?:\/\//, (route) => {
     const url = new URL(route.request().url());
+    if (url.href === ANNOUNCEMENT_URL)
+      return route.fulfill({
+        json: {
+          schema: 1,
+          items: [
+            {
+              id: "web_notice_fixture",
+              at: Date.now() - 1000,
+              expires: Date.now() + 86400000,
+              platform: "web",
+              ar: { title: "خبر الويب التجريبي", body: "رسالة اختبار محلية." },
+              link: "",
+            },
+          ],
+        },
+      });
     return url.hostname === "127.0.0.1"
       ? route.continue()
       : route.abort("internetdisconnected");
@@ -236,6 +253,19 @@ try {
 
   const call = (method, args) =>
     page.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]);
+  if (await page.locator(".whats-new").count())
+    await page.locator(".whats-new .primary").click();
+  await page.locator(".notification-trigger").click();
+  await page.getByText("خبر الويب التجريبي", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "قراءة الكل", exact: true }).click();
+  await page.waitForFunction(
+    () => !document.querySelector(".notification-count"),
+  );
+  assert.equal((await call("announcementState")).unread, 0);
+  await page.locator(".notification-center .modal-close").click();
+  step(
+    "the anonymous notification feed reaches the web inbox and read state persists",
+  );
   const installed = await call("install", { url: `${base}/manifest.json` });
   assert.ok(
     installed.addons.some((a) => a.id === "riwaq.web-fixture"),

@@ -28,6 +28,7 @@ import { matchTrack, seriesOf, trackIdentity } from "../core/series-memory.mjs";
 import { skipPreferences } from "../core/skip-segments.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { NEEDS_ENGINE, SERVICE_DOWNLOAD } from "../core/torrent-engine.mjs";
+import { announcementLink } from "../core/announcements.mjs";
 import { musicLink, musicSearchUrl } from "../core/music.mjs";
 import {
   authorizeUrl as spotifyAuthorizeUrl,
@@ -156,6 +157,7 @@ export async function startBridge({ version, store }) {
     save: store.save,
     version,
     spotifyRedirect: pageAddress(),
+    announcementPlatform: "web",
     // Set at build time for tests and development (vite.web.config.mjs).
     accountServer: import.meta.env.RIWAQ_ACCOUNT_SERVER || undefined,
   });
@@ -1178,6 +1180,20 @@ export async function startBridge({ version, store }) {
     setHotkey: (a) => client.setHotkey(a),
     resetHotkeys: () => client.resetHotkeys(),
     notifySave: (a) => client.notifier.save(a),
+    announcementState: () => client.announcements.publicState(),
+    announcementRefresh: () => client.announcements.refresh(),
+    announcementEdit: (a) => client.announcements.edit(a),
+    announcementOpen: ({ id } = {}) => {
+      const item = client.announcements
+        .publicState()
+        .items.find((n) => n.id === id);
+      if (item?.link)
+        window.open(
+          announcementLink(item.link),
+          "_blank",
+          "noopener,noreferrer",
+        );
+    },
     notifyTest: (a) => client.notifier.test(a.id),
     liveAdd: (a) => {
       client.profiles.gate("live");

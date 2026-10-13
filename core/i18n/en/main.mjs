@@ -1,5 +1,25 @@
 /** Messages from the main process and the web bridge (core/i18n.mjs). */
 export default {
+  "أدوات تحكم المشغّل": "Player controls",
+  "غير متاح في هذه النسخة": "Not available in this edition",
+  "أدوات رِواق فوق الصورة مطفأة من الإعدادات، وأدوات MPV تعمل بدلها":
+    "Riwaq's controls over the picture are off in Settings, and MPV's work instead",
+  "أدوات رِواق جاهزة، ولا توجد مشاهدة الآن؛ شغّل التشخيص أثناء المشاهدة لفحصها":
+    "Riwaq's controls are ready and nothing is playing now; run the diagnostic during a viewing to check them",
+  "أدوات رِواق لم تُحمّل بعد": "Riwaq's controls have not loaded yet",
+  "الصورة مخفية الآن خلف صفحة أخرى، والأدوات تظهر معها":
+    "The picture is hidden behind another page now, and the controls show with it",
+  "أدوات رِواق لم تؤكد أنها تعمل لهذه المشاهدة، فأدوات MPV تعمل احتياطاً. F8 يستعيدها":
+    "Riwaq's controls have not confirmed they work for this viewing, so MPV's stand in. F8 brings them back",
+  "تعذّر وضع أدوات رِواق فوق نافذة MPV، فأدوات MPV تعمل احتياطاً. F8 يعيد المشاهدة داخل رِواق":
+    "Riwaq's controls could not be laid over MPV's window, so MPV's stand in. F8 restarts the viewing inside Riwaq",
+  "أدوات رِواق تعمل لكنها مخفية الآن":
+    "Riwaq's controls work but are hidden now",
+  "أدوات رِواق فوق نافذة MPV الخاصة (HDR حقيقي)":
+    "Riwaq's controls are over MPV's own window (True HDR)",
+  "أدوات رِواق فوق الصورة": "Riwaq's controls are over the picture",
+  "أعدنا تحميل أدوات التحكم، والمشاهدة مستمرة.":
+    "The controls were reloaded, and the viewing goes on.",
   "نعيد المشاهدة داخل رِواق لاستعادة أدوات التحكم، مع تحويل HDR إلى SDR لهذه المشاهدة فقط. إعداداتك المحفوظة تبقى كما هي.":
     "Restarting inside Riwaq to restore the controls, converting HDR to SDR for this viewing only. Your saved preferences stay as they are.",
   "لم نجد ملفات شخصية في بيانات نوفيو":

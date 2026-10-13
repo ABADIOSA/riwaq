@@ -51,6 +51,63 @@ test("a loaded HUD must report this viewing and keep reporting before replacing 
   );
 });
 
+test("a new viewing keeps the HUD layout while its first report is on the way", () => {
+  let now = 0;
+  const health = new HudHealth({ now: () => now });
+  const viewing = { active: true, videoId: "tt1" };
+  // Between viewings the next one may start in the HUD layout.
+  assert.equal(health.alive({ active: false }), true);
+  health.reset(); // a viewing begins
+  assert.equal(health.alive(viewing), true, "no flip to the fallback layout");
+  assert.equal(health.usable(viewing), false, "but nothing covers MPV yet");
+  now = 1000;
+  health.report(viewing, viewing);
+  assert.equal(health.usable(viewing), true);
+  // A reply for another viewing never extends the grace.
+  now = 2000;
+  health.report(viewing, { active: true, videoId: "old" });
+  now = 3600;
+  assert.equal(health.alive(viewing), false, "silent past the grace");
+  assert.equal(health.usable(viewing), false);
+  // A frozen page loses the layout too, and gets it back when it reports.
+  health.report(viewing, viewing);
+  assert.equal(health.alive(viewing), true);
+  now = 3600 + 3501;
+  assert.equal(health.alive(viewing), false);
+  const main = readFileSync(
+    new URL("../electron/main.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    main,
+    /player\?\.setOverlay\(overlayEnabled\(\) && hudHealth\.alive\(player\?\.state\)\)/,
+  );
+});
+
+test("F8 inside Riwaq's window reloads the HUD and leaves MPV alone", async () => {
+  const events = [];
+  const player = new Player({
+    onState: () => {},
+    onEvent: (e) => events.push(e),
+  });
+  player.state = { active: true, separate: false, position: 42 };
+  let restarted = 0;
+  player.restartSafe = async () => restarted++;
+  await player.command({ action: "repairControls" });
+  assert.deepEqual(events, [{ type: "reloadControls" }]);
+  assert.equal(
+    restarted,
+    0,
+    "no compatibility restart for an embedded picture",
+  );
+  const main = readFileSync(
+    new URL("../electron/main.mjs", import.meta.url),
+    "utf8",
+  );
+  const branch = main.slice(main.indexOf('event.type === "reloadControls"'));
+  assert.match(branch.slice(0, 200), /closeHud\(\);\s*ensureHud\(\);/);
+});
+
 test("Escape stops MPV's separate window even when Riwaq stayed full screen", () => {
   let stopped = 0,
     escaped = 0;

@@ -96,6 +96,7 @@ import { Thumbnailer } from "./thumbnails.mjs";
 import { dropKind } from "../core/drop.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
 import { VideoHost, processWindow, showSystemCursor } from "./video-host.mjs";
+import { announcementLink } from "../core/announcements.mjs";
 import { CursorGate, cursorHidden } from "../core/cursor.mjs";
 import { trailerOf } from "../core/credits.mjs";
 import { toNuvio } from "../core/collections.mjs";
@@ -418,9 +419,11 @@ function placeHud() {
     return;
   }
   // Readiness drives the theater layout; temporary surface hiding during a
-  // ResizeObserver cleanup must not flip that layout back and forth.
+  // ResizeObserver cleanup must not flip that layout back and forth, and
+  // neither must the moment between a new viewing and the HUD's first
+  // report for it (HudHealth.alive). Covering needs that report.
   const healthy = overlayEnabled() && hudHealth.usable(player?.state);
-  player?.setOverlay(healthy);
+  player?.setOverlay(overlayEnabled() && hudHealth.alive(player?.state));
   const rect = separate
     ? separateHudRect()
     : hudRect({
@@ -886,6 +889,21 @@ function listAudioDevices() {
   });
   return audioDeviceList;
 }
+/** The HUD's state for the diagnostics: flags and a rectangle, nothing else. */
+function controlsState() {
+  const state = player?.state || {};
+  return {
+    enabled: overlayEnabled(),
+    loaded: hudReady,
+    active: !!state.active,
+    separate: !!state.separate,
+    ready: hudReady && hudHealth.usable(state),
+    visible: !!hud && !hud.isDestroyed() && hud.isVisible(),
+    surface: surfaceShown,
+    covered: !!player?.covered,
+    separateWindow: state.separate ? separateHudRect() : null,
+  };
+}
 async function diagnostics() {
   let server = false;
   try {
@@ -901,12 +919,7 @@ async function diagnostics() {
     encryption: safeStorage.isEncryptionAvailable(),
     version: app.getVersion(),
     video: videoHost?.inspect(),
-    controls: {
-      ready: hudReady && hudHealth.usable(player?.state),
-      visible: !!hud && !hud.isDestroyed() && hud.isVisible(),
-      covered: !!player?.covered,
-      separateWindow: player?.state.separate ? separateHudRect() : null,
-    },
+    controls: controlsState(),
   };
 }
 async function play({ key, meta, videoId, resume = true, profileId }) {
@@ -1596,6 +1609,16 @@ const methods = {
   setHotkey: (a) => client.setHotkey(a),
   resetHotkeys: () => client.resetHotkeys(),
   notifySave: (a) => client.notifier.save(a),
+  announcementState: () => client.announcements.publicState(),
+  announcementRefresh: () => client.announcements.refresh(),
+  announcementEdit: (a) => client.announcements.edit(a),
+  announcementOpen: async ({ id } = {}) => {
+    const item = client.announcements
+      .publicState()
+      .items.find((n) => n.id === id);
+    // Checked again here, like every other address main opens.
+    if (item?.link) await shell.openExternal(announcementLink(item.link));
+  },
   notifyTest: (a) => client.notifier.test(a.id),
   presenceSave: async ({ appId }) => {
     if (appId !== undefined) {
@@ -1822,6 +1845,7 @@ const methods = {
       errors: errorLog,
       rendererErrors: a?.rendererErrors,
       torrentEngine: torrentHost,
+      controls: controlsState,
     });
     const text = formatReport(report, { home: homedir() });
     lastDiagnosis = { report, text };
@@ -2380,6 +2404,12 @@ app
               "notice",
               "نعيد المشاهدة داخل رِواق لاستعادة أدوات التحكم، مع تحويل HDR إلى SDR لهذه المشاهدة فقط. إعداداتك المحفوظة تبقى كما هي.",
             );
+            return;
+          }
+          if (event.type === "reloadControls") {
+            closeHud();
+            ensureHud();
+            emit("notice", "أعدنا تحميل أدوات التحكم، والمشاهدة مستمرة.");
             return;
           }
           event.type === "panel" && player.state.overlay

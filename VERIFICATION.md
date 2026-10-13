@@ -1,5 +1,38 @@
 # Verification — Riwaq
 
+## 2026-10-13 — 0.44.0: PRs #78 and #79 with the second review, Admin kept private
+
+- The owner asked that the Admin app reach nobody else before merging. Checked:
+  - The viewer package's `build.files` takes only `dist/`, `electron/`, `core/`, `assets/` and three root files, so `admin/` is never packaged.
+  - No file under `src/`, `electron/`, `core/` or `web/` imports `admin/`, and neither Vite config mentions it. The built `dist/` and `dist-web/` contain no Admin code.
+  - The release workflow attaches only `release/*.exe`, `SHA256SUMS.txt` and `riwaq-update.json`.
+- **The one leak found:** `.github/workflows/admin.yml` (from #79) built Admin and uploaded it as an Actions artifact, which any signed-in GitHub account can download from a public repository. It had never run (no runs, no artifacts). It was deleted before merging. Admin is now built only on the owner's machine.
+- `tests/admin-private.test.mjs` (4 tests) fails on any packaged path outside the viewer's folders, any viewer or Vite import of `admin/`, any workflow that builds, uploads or names Admin, a release step that attaches anything else, or an Admin that stops refusing accounts other than ABADIOSA with push access. Run against the tree with `admin.yml` still present, the workflow test failed, as it should.
+- **775 Node tests pass** (771 + 4). Prettier, both Vite builds and the Chromium web smoke pass.
+- The Admin source stays readable in the public repository like the rest of Riwaq. It holds no keys, and publishing still needs the owner's token.
+
+## 2026-10-13 — second review of PRs #78 and #79 (source, unreleased)
+
+- Read both PRs and ran their tests on #79's head (766 pass). Four defects and one listed opportunity were handled on top of them; details in [docs/REVIEW-2026-10-13-PLAYER.md](docs/REVIEW-2026-10-13-PLAYER.md).
+- **771 Node tests pass** (766 + 5). Prettier, both Vite builds and the Chromium web smoke pass. New tests:
+  - `HudHealth.alive`: the HUD layout holds through a new viewing's first report and through a reload, a mismatched report never extends the grace, and a silent or frozen page loses the layout after 3.5 s. Main drives `setOverlay` from it.
+  - F8 inside Riwaq's window sends `reloadControls` and never calls `restartSafe`. Main closes and recreates the HUD for it.
+  - The admin's releases call uses `RELEASES_LIMIT` (2 MiB, read without the owner's token) while other admin calls keep 256 KiB. Measured on GitHub: ten releases were 206,858 bytes at 0.43.1, each new release adding about 12 KB net.
+  - Main and the web bridge pass a notice's link through `announcementLink` before opening it.
+  - The full diagnostic's `player-controls` check: skip without a source, ok with no viewing, ok with the HUD turned off and with the picture hidden behind another page, and warn when the HUD has not reported or does not cover MPV's own window.
+- Checked against GitHub: the `X-GitHub-Api-Version: 2026-03-10` header the admin sends is accepted, while an invented version is refused with 400.
+- Not run here: Windows (the layout at viewing start, F8 inside Riwaq's window, the new diagnostic check on a real viewing) and any real publication.
+
+## 2026-10-13 — separate Admin and viewer inbox foundation (unreleased)
+
+- Based on the player-review source `cff8c86b005ef6d08c4f9d9d9c9446ce6a8fae61` (PR #78, still unmerged during implementation). No viewer version bump, public release, real announcement or real publishing-token use in these checks. Setup and scope: [docs/ADMIN.md](docs/ADMIN.md).
+- **766 Node tests pass** (753 + 13). Announcement tests cover schema/text/size/link rejection, duplicate IDs, platform/time/semver targeting, cached read state, exclusion from account/backup payloads, offline retention, single-flight/throttled fetching, opt-out with a late response, stream cancellation, owner verification, preview-only writes, conditional SHA conflicts without retry, consumed/expired previews, serialized UTF-8 feed size after retention pruning, fixed task commands, secret-free child environments and package/bridge boundaries. Prettier and both production Vite builds pass.
+- `scripts/test-admin.mjs` passes on Windows with actual Electron, renderer and IPC. GitHub and native chooser use fixtures. Draft save/reload, session-only owner connection, cleared token input, edit invalidation, manual native confirmation, mock conditional write, release listing, native checkout selection and real Node/Vite build work. The launch uses the chosen checkout's Electron executable, passes the selected source path and assigns an Admin sandbox; a test bootstrap injects offline fetch fixtures into the actual Riwaq main and records its real data path and windows before normal quit. It verifies sandbox ownership, not a second installed production profile.
+- The same native smoke exercises Riwaq's actual inbox IPC, fetch, unread badge, mark-all-read and reception toggle. Arabic/English screenshots at 980×680 were inspected, with no page errors or horizontal overflow. An Arabic shell pixel comparison with the new bell hidden/visible finds **zero changed pixels outside the topbar**; this isolates the intended bell/header reflow, not a full prior-release visual baseline.
+- Chromium web smoke passes with the feed intercepted as a local fixture: inbox render/read state, real local video/subtitles, encrypted store, one-tab lock, reload, cross-edition backup, two-device accounts and deferred sync still work. No external feed is published or contacted by this smoke.
+- `npm run package:admin` produces the separate Windows portable executable. The admin ASAR contains 13 entries and **no node_modules, MPV, viewer main or signing key**. Its unpacked packaged executable and the actual portable wrapper both pass startup, real main/preload IPC, local draft save and restore on relaunch with no credential or broadcast (`scripts/test-admin-package.mjs`). The portable wrapper is controlled via its actual renderer/CDP because Playwright's Electron main-process hook times out through NSIS; this is not an application startup failure. Files and screenshots are local ignored build artifacts.
+- Limits: live GitHub publishing with the owner's real token/branch policy, CDN delivery timing, a new viewer installer/upgrade, OS/background push and delivery receipts are not verified or supplied by this foundation. Reception requires this source change to be released and the client/site open; currently published 0.43.1 has no inbox. Admin source testing requires Node 24, Git and a trusted installed checkout; it is not a full IDE or automatic branch/update installer. The previous player/HDR verification limits remain unchanged.
+
 ## 2026-10-13 — review after 0.43.1: missing controls and torrent shutdown (source, unreleased)
 
 - Base `1a672ba38a688f3110ebc375fafc4b89ea9a51a8` (main after PR #77). The user's latest-version report had True HDR on and no subtitle/audio menus, timeline or exit button. On Windows a paused HUD reload reproduced an idle page with zero buttons; it now hydrates the current viewing and reports a bounded heartbeat before replacing fallback controls. Details: [docs/REVIEW-2026-10-13-PLAYER.md](docs/REVIEW-2026-10-13-PLAYER.md).

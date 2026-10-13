@@ -87,6 +87,7 @@ export async function runDiagnostics(deps) {
     errors,
     rendererErrors = [],
     torrentEngine = null,
+    controls = null,
     fetcher = fetch,
     run = runProgram,
     userData = app.getPath("userData"),
@@ -301,6 +302,56 @@ export async function runDiagnostics(deps) {
           ? `نافذة MPV ${small.width}×${small.height} لا تغطي سطح الفيديو ${v.size.width}×${v.size.height}`
           : "سطح الفيديو أو نافذة إخراج MPV غير ظاهر، أو القص غير صحيح",
       data: v,
+    };
+  });
+
+  // The HUD (core/hud.mjs): a page that loaded is not yet a working
+  // controller; it must report the current viewing (HudHealth).
+  await add("player-controls", "أدوات تحكم المشغّل", async () => {
+    const c = controls?.();
+    if (!c) return { status: "skip", detail: "غير متاح في هذه النسخة" };
+    if (!c.enabled)
+      return {
+        detail:
+          "أدوات رِواق فوق الصورة مطفأة من الإعدادات، وأدوات MPV تعمل بدلها",
+        data: c,
+      };
+    if (!c.active)
+      return c.loaded
+        ? {
+            detail:
+              "أدوات رِواق جاهزة، ولا توجد مشاهدة الآن؛ شغّل التشخيص أثناء المشاهدة لفحصها",
+            data: c,
+          }
+        : { status: "warn", detail: "أدوات رِواق لم تُحمّل بعد", data: c };
+    // Settings opened during a viewing hide the picture and its controls.
+    if (!c.separate && !c.surface)
+      return {
+        detail: "الصورة مخفية الآن خلف صفحة أخرى، والأدوات تظهر معها",
+        data: c,
+      };
+    if (!c.ready)
+      return {
+        status: "warn",
+        detail:
+          "أدوات رِواق لم تؤكد أنها تعمل لهذه المشاهدة، فأدوات MPV تعمل احتياطاً. F8 يستعيدها",
+        data: c,
+      };
+    if (c.separate && !(c.visible && c.covered))
+      return {
+        status: "warn",
+        detail:
+          "تعذّر وضع أدوات رِواق فوق نافذة MPV، فأدوات MPV تعمل احتياطاً. F8 يعيد المشاهدة داخل رِواق",
+        data: c,
+      };
+    return {
+      status: c.visible ? "ok" : "warn",
+      detail: !c.visible
+        ? "أدوات رِواق تعمل لكنها مخفية الآن"
+        : c.separate
+          ? "أدوات رِواق فوق نافذة MPV الخاصة (HDR حقيقي)"
+          : "أدوات رِواق فوق الصورة",
+      data: c,
     };
   });
 

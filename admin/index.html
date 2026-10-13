@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>رِواق — الاستوديو الإداري</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <span class="eyebrow">RIWAQ / ADMIN</span>
+        <h1>استوديو رِواق</h1>
+        <p>مساحة تجربة وتطوير، وصوتك إلى مجتمع رِواق.</p>
+      </div>
+      <span class="badge">خاص بالأدمن · أساس أولي</span>
+    </header>
+    <main>
+      <section class="card">
+        <div class="section-head">
+          <h2>مختبر التحديثات</h2>
+          <button id="choose">اختيار المصدر</button>
+        </div>
+        <p>
+          اختر نسخة من مستودع رِواق بعد تثبيت اعتمادياتها. التجربة تستخدم بيانات
+          مستقلة عن نسختك اليومية.
+        </p>
+        <div id="workspace" class="info">لم تحدد مصدرًا بعد.</div>
+        <div class="actions">
+          <button id="build" disabled>بناء التعديلات</button
+          ><button id="test" disabled>فحص المصدر</button
+          ><button id="launch" disabled>تشغيل النسخة التجريبية</button
+          ><button id="stop" disabled>إيقاف الفحص</button>
+        </div>
+        <div class="actions">
+          <button id="source" disabled>فتح مجلد التطوير</button
+          ><button id="repo">GitHub</button
+          ><button id="reviews">التحديثات قيد المراجعة</button>
+        </div>
+        <p class="hint">
+          عدّل المصدر في محررك، ابنِه هنا ثم جرّبه. أغلق نافذة النسخة التجريبية
+          لإنهاء تشغيلها.
+        </p>
+        <pre id="log" dir="ltr" aria-live="polite">
+نتائج البناء والفحص تظهر هنا.</pre>
+      </section>
+      <section class="card">
+        <div class="section-head">
+          <h2>الإصدارات</h2>
+          <button id="refreshReleases">تحديث القائمة</button>
+        </div>
+        <p>
+          راجع الإصدار المنشور والتحديثات قيد المراجعة، ثم اختبر المصدر المناسب
+          في المختبر.
+        </p>
+        <div id="releases" class="release-list">لم تُحمّل القائمة بعد.</div>
+      </section>
+      <section class="card wide">
+        <div class="section-head">
+          <h2>رسالة إلى مجتمع رِواق</h2>
+          <span id="connection" class="badge">غير متصل</span>
+        </div>
+        <p>
+          النشر يحتاج حساب ABADIOSA ورمز GitHub محدودًا لهذا المستودع بصلاحية
+          Contents: write. الرمز يبقى في الذاكرة حتى إغلاق الاستوديو.
+        </p>
+        <div class="actions">
+          <input
+            id="token"
+            type="password"
+            autocomplete="off"
+            placeholder="رمز GitHub"
+            aria-label="رمز GitHub"
+          /><button id="connect">اتصال</button
+          ><button id="disconnect">قطع الاتصال</button
+          ><button id="tokenHelp">إنشاء رمز</button>
+        </div>
+        <form id="editor">
+          <div class="compose">
+            <div>
+              <label
+                >العنوان بالعربية<input
+                  name="arTitle"
+                  maxlength="160"
+                  required /></label
+              ><label
+                >نص الرسالة<textarea
+                  name="arBody"
+                  maxlength="3000"
+                  rows="6"
+                  required
+                ></textarea>
+              </label>
+            </div>
+            <div>
+              <label
+                >English title (optional)<input
+                  name="enTitle"
+                  maxlength="160"
+                  dir="ltr" /></label
+              ><label
+                >English message<textarea
+                  name="enBody"
+                  maxlength="3000"
+                  rows="6"
+                  dir="ltr"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="target">
+            <label
+              >الجمهور<select name="platform">
+                <option value="all">الجميع</option>
+                <option value="desktop">تطبيق ويندوز</option>
+                <option value="web">الويب</option>
+              </select></label
+            ><label
+              >مدة الظهور بالأيام<input
+                name="days"
+                type="number"
+                min="1"
+                max="90"
+                value="14"
+                required /></label
+            ><label
+              >من إصدار (اختياري)<input
+                name="minVersion"
+                placeholder="0.43.1"
+                dir="ltr" /></label
+            ><label
+              >حتى إصدار (اختياري)<input
+                name="maxVersion"
+                placeholder="0.44.0"
+                dir="ltr"
+            /></label>
+          </div>
+          <label
+            >رابط تفاصيل في مستودع رِواق (اختياري)<input
+              name="link"
+              type="url"
+              placeholder="https://github.com/ABADIOSA/riwaq/..."
+              dir="ltr"
+          /></label>
+          <div class="actions">
+            <button id="save" type="button">حفظ المسودة</button
+            ><button id="preview" type="submit">معاينة قبل النشر</button
+            ><button id="publish" type="button" class="primary" disabled>
+              نشر الإشعار
+            </button>
+          </div>
+        </form>
+        <div id="previewCard" class="preview" hidden>
+          <span class="eyebrow">معاينة ما سيصل للمستخدم</span>
+          <h3 id="previewTitle"></h3>
+          <p id="previewBody" class="message"></p>
+          <h3 id="previewEnTitle" dir="ltr"></h3>
+          <p id="previewEnBody" dir="ltr" class="message"></p>
+          <small id="previewAudience"></small>
+        </div>
+        <p class="hint">
+          الرسائل عامة. تظهر في صندوق الإشعارات بعد فتح رِواق أو تحديث الصندوق،
+          ولا تقاطع الفيديو. النسخ القديمة التي لا تحتوي الصندوق لن تستقبلها.
+        </p>
+      </section>
+    </main>
+    <footer id="status" role="status" aria-live="polite">جاهز.</footer>
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>
