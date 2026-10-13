@@ -1,4 +1,5 @@
 import UpdatesCard from "./UpdatesCard.jsx";
+import OwnerTools from "./OwnerTools.jsx";
 import AccountPage from "./settings/AccountPage.jsx";
 import { LanguageCard } from "./settings/LanguageCard.jsx";
 import DiagnosticsCard from "./DiagnosticsCard.jsx";
@@ -40,7 +41,7 @@ import {
   SpeedCard,
   VideoPage,
 } from "./settings/PlayerPages.jsx";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Palette,
   Gauge,
@@ -100,6 +101,7 @@ import {
   Trophy,
   MoonStar,
   UserRound,
+  Crown,
 } from "lucide-react";
 import { call, isWeb } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -746,6 +748,28 @@ export default function SettingsStudio({
     [draft, setDraft] = useState(state.settings),
     [diag, setDiag] = useState(null);
   const [win] = useWindowState();
+  // Owner devices (electron/owner.mjs): seven taps on the version badge open
+  // the tools; only a device the owner chose shows them afterwards.
+  const [ownerOpen, setOwnerOpen] = useState(false),
+    [ownerDevice, setOwnerDevice] = useState(false),
+    taps = useRef({ count: 0, at: 0 });
+  useEffect(() => {
+    if (isWeb) return;
+    call("ownerState")
+      .then((o) => setOwnerDevice(!!(o?.owner || o?.remembered)))
+      .catch(() => {});
+  }, []);
+  const tapBadge = () => {
+    if (isWeb) return;
+    const now = Date.now();
+    const t = taps.current;
+    t.count = now - t.at < 1500 ? t.count + 1 : 1;
+    t.at = now;
+    if (t.count >= 7) {
+      t.count = 0;
+      setOwnerOpen(true);
+    }
+  };
   const s = state.settings;
   useEffect(() => {
     setDraft(s);
@@ -801,10 +825,27 @@ export default function SettingsStudio({
           <h1>تفاصيل تصنع تجربتك.</h1>
           <p>من أول بوستر… إلى آخر مشهد.</p>
         </div>
-        <span className="version-badge">
-          BETA {(state.update?.current || "").split(".").slice(0, 2).join(".")}
-        </span>
+        <div className="version-tools">
+          {ownerDevice && (
+            <button
+              className="secondary small owner-entry"
+              onClick={() => setOwnerOpen(true)}
+            >
+              <Crown size={15} /> أدوات المالك
+            </button>
+          )}
+          <span className="version-badge" onClick={tapBadge}>
+            BETA{" "}
+            {(state.update?.current || "").split(".").slice(0, 2).join(".")}
+          </span>
+        </div>
       </div>
+      {ownerOpen && (
+        <OwnerTools
+          onClose={() => setOwnerOpen(false)}
+          onChange={(o) => setOwnerDevice(!!(o?.owner || o?.remembered))}
+        />
+      )}
       <div className="studio-layout">
         {state.settings.interfaceStyle !== "classic" ? (
           <nav className="studio-index" aria-label="أقسام الإعدادات">

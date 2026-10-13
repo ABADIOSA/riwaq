@@ -32,9 +32,30 @@ Admin is for the repository owner only, and nothing distributes it:
 - **Not on the site:** the web edition is built from `src/` and `core/` only; GitHub Pages never receives `admin/`.
 - **Not in releases or Actions:** the release workflow uploads `release/` only, and no workflow builds Admin or uploads it as an artifact. Build it with `npm run package:admin` on your own machine and keep the executable to yourself.
 - **Useless without your key:** publishing requires a GitHub token for the **ABADIOSA** account with push access to this repository; Admin refuses any other account before it can preview or publish. Anyone who can already write to the repository could edit the feed directly, so Admin adds no new way in.
+- **Owner devices are the one exception, and they hold only the notice composer** (0.44.1, below): the public app can write and publish notices on a device where you enter your own token. The workspace tools, the releases list and the preview launcher stay in Admin and never ship.
 - **The source is public:** like the rest of Riwaq, `admin/` is readable in the public repository. It holds no keys or secrets. Keeping the code itself private would mean moving it to a separate private repository.
 
 `tests/admin-private.test.mjs` fails if any of the first three ever changes.
+
+## Owner devices: the public app on the devices you choose (0.44.1)
+
+You do not need Admin to publish a notice. The public desktop app turns into the notice tool on any device you pick, and only there:
+
+1. Update that device to 0.44.1 or newer.
+2. Open **Settings** and tap the **BETA** version badge at the top seven times in a row. **أدوات المالك** opens. It never opens on the web edition.
+3. Press **صفحة إنشاء الرمز في GitHub** and create a fine-grained token for this device alone: name it after the device (for example "Home PC"), resource owner **ABADIOSA**, only the **ABADIOSA/riwaq** repository, **Contents: read and write**, and an expiry.
+4. Paste it and press **تحقق وفعّل**. Riwaq asks GitHub who the token belongs to. Anything but ABADIOSA with push access to the public `ABADIOSA/riwaq` (default branch `main`) is refused, and nothing is kept.
+5. Keep **تذكّر هذا الجهاز** ticked to stay an owner device after a restart. The token is sealed with Windows' own encryption (safeStorage, DPAPI) in `owner.bin` in Riwaq's data folder, a file of its own outside the profile, so it never enters a backup, a Riwaq account, the interface or a diagnostic report. Without Windows encryption, Riwaq refuses to remember it. Untick it for this session only.
+
+After that the device shows a **أدوات المالك** button next to the version badge. Write the notice (Arabic required, English optional, audience, days, version range, a link inside the repository), press **معاينة قبل النشر**, then **نشر الإشعار**, and confirm in Windows' own dialog. Publishing uses the same reviewed-SHA write as Admin (`core/notice-publisher.mjs`, shared by both).
+
+**Choosing and removing devices.** A device is an owner device only while it holds one of your tokens that GitHub still accepts. One token per device keeps them apart:
+
+- **Remove one device:** delete its token on GitHub (Settings → Developer settings → Fine-grained tokens). The next time that device opens the tools, GitHub refuses the token and Riwaq deletes `owner.bin` there. Or press **إلغاء هذا الجهاز** on the device itself.
+- **A network failure is not a removal:** the sealed token stays for the next try.
+- **Other people's copies:** they never contact GitHub for this. The seven taps only open the activation page, which can do nothing without your token.
+
+Each device's token gives write access to the repository's contents, the same power as your GitHub account on that repository. Choose only machines you control, and give each token an expiry.
 
 ## Connect and publish
 
@@ -59,7 +80,7 @@ The bell in both Riwaq layouts opens an inbox on desktop and web. Notices render
 
 ## Contract and checks
 
-`core/announcements.mjs` validates schema 1 (`schema`, `items`), a 64 KiB feed, up to 80 unique IDs, 160-character titles, 3,000-character bodies, time bounds, audience and repository-only HTTPS links. Fetches refuse redirects, omit credentials and abort at 12 seconds. Admin's privileged GitHub module stays outside the viewer package; Admin renderer has no Node or network access and only explicit main-frame IPC actions.
+`core/announcements.mjs` validates schema 1 (`schema`, `items`), a 64 KiB feed, up to 80 unique IDs, 160-character titles, 3,000-character bodies, time bounds, audience and repository-only HTTPS links. Fetches refuse redirects, omit credentials and abort at 12 seconds. The notice publisher (`core/notice-publisher.mjs`) ships in the viewer for owner devices and holds no secret; Admin's releases list and workspace tasks stay outside the viewer package. Admin renderer has no Node or network access and only explicit main-frame IPC actions. Owner devices: `tests/owner.test.mjs`.
 
 ```powershell
 node --test tests/announcements.test.mjs

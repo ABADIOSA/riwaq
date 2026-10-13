@@ -1,5 +1,12 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const allowed = new Set([
+  "ownerState",
+  "ownerOpen",
+  "ownerActivate",
+  "ownerForget",
+  "ownerPreview",
+  "ownerPublish",
+  "ownerTokenPage",
   "announcementState",
   "announcementRefresh",
   "announcementEdit",

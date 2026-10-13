@@ -3399,3 +3399,95 @@ em.tag-custom.has-text:not(.badge-outlined) {
   justify-content: flex-start;
   margin-top: auto;
 }
+
+/* Owner tools (OwnerTools.jsx): only on devices the owner chose. */
+.version-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.version-badge {
+  user-select: none;
+}
+.modal.owner-tools {
+  width: 720px;
+}
+.owner-tools .eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.owner-steps {
+  margin: 10px 0 14px;
+  padding-inline-start: 20px;
+  line-height: 1.8;
+}
+.owner-form {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+}
+.owner-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+.owner-field {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+.owner-field > span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.owner-field input,
+.owner-field textarea,
+.owner-field select {
+  width: 100%;
+  min-width: 0;
+}
+.owner-field textarea {
+  font: inherit;
+  line-height: 1.6;
+  background: #121519;
+  color: #e9e9e7;
+  border: 1px solid #ffffff15;
+  border-radius: 9px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+.owner-field textarea:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.owner-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.owner-preview {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 10px 0;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.owner-preview h3 {
+  margin: 4px 0 6px;
+}
+.owner-done {
+  color: var(--accent);
+}
+.owner-problem {
+  color: var(--danger, #e5484d);
+  margin-top: 10px;
+}
+.owner-tools .button-row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}

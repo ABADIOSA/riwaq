@@ -70,7 +70,10 @@ test("no workflow builds, uploads or publishes Admin", () => {
 });
 
 test("Admin refuses to publish for anyone but the owner", () => {
-  const github = read("admin/github.mjs");
+  // The publisher is shared with owner devices of the public app
+  // (electron/owner.mjs); Admin only adds the releases list on top.
+  assert.match(read("admin/github.mjs"), /extends NoticePublisher/);
+  const github = read("core/notice-publisher.mjs");
   assert.match(github, /String\(user\.login\)\.toLowerCase\(\) !== "abadiosa"/);
   assert.match(github, /!repo\.permissions\?\.push/);
   // Publishing needs a preview, which needs the owner's connection.

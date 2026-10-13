@@ -7,6 +7,19 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.44.1",
+    title: "إشعارات رِواق من أجهزة المالك",
+    items: [
+      "صاحب رِواق صار ينشر الإشعارات من التطبيق نفسه على الأجهزة اللي يختارها، بعد ما يتأكد GitHub إنه هو. ما تغيّر شي عندك.",
+    ],
+    en: {
+      title: "Riwaq notices from the owner's devices",
+      items: [
+        "Riwaq's owner can now publish notices from the app itself on the devices chosen for it, once GitHub confirms the owner's identity. Nothing changes for you.",
+      ],
+    },
+  },
+  {
     version: "0.44.0",
     title: "إشعارات رِواق، وأدوات تحكم أثبت",
     items: [
