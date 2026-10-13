@@ -1197,7 +1197,13 @@ export class Player {
   command({ action, value }) {
     if (!this.state.active) throw new Error("لا توجد مشاهدة حالية");
     if (action === "repairControls") {
-      this.onEvent({ type: "recoverControls" });
+      // Inside Riwaq's window MPV is not what hid the controls: the HUD page
+      // is loaded again and the viewing goes on untouched.
+      if (!this.state.separate) {
+        this.onEvent?.({ type: "reloadControls" });
+        return Promise.resolve();
+      }
+      this.onEvent?.({ type: "recoverControls" });
       return this.restartSafe(1);
     }
     if (action === "repairVideo")

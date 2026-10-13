@@ -88,9 +88,11 @@ export class HudHealth {
     this.maxAge = maxAge;
     this.reset();
   }
+  /** A new viewing, a reload or a new page: its heartbeat starts again. */
   reset() {
     this.at = -Infinity;
     this.videoId = null;
+    this.since = this.now();
   }
   report(viewing, report = {}) {
     if (
@@ -98,19 +100,33 @@ export class HudHealth {
       !report.active ||
       report.videoId !== viewing.videoId
     ) {
-      this.reset();
+      // A mismatched report never extends the grace below.
+      this.at = -Infinity;
+      this.videoId = null;
       return false;
     }
     this.at = this.now();
     this.videoId = report.videoId;
     return true;
   }
+  /** Whether the HUD may cover MPV's window: it reported this viewing. */
   usable(viewing) {
     return (
       !!viewing?.active &&
       viewing.videoId === this.videoId &&
       this.now() - this.at <= this.maxAge
     );
+  }
+  /**
+   * Whether the theater may keep the HUD layout. A viewing that has just
+   * begun (or a page that has just loaded) gets the same grace as a missed
+   * heartbeat, so the layout does not switch to the fallback and back at
+   * every start; a page that stays silent past it loses the layout.
+   */
+  alive(viewing) {
+    if (!viewing?.active) return true;
+    const now = this.now();
+    return now - this.at <= this.maxAge || now - this.since <= this.maxAge;
   }
 }
 

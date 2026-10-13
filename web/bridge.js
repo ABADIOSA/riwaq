@@ -28,6 +28,7 @@ import { matchTrack, seriesOf, trackIdentity } from "../core/series-memory.mjs";
 import { skipPreferences } from "../core/skip-segments.mjs";
 import { torrentUrl, webUrl } from "../core/protocol.mjs";
 import { NEEDS_ENGINE, SERVICE_DOWNLOAD } from "../core/torrent-engine.mjs";
+import { announcementLink } from "../core/announcements.mjs";
 import { musicLink, musicSearchUrl } from "../core/music.mjs";
 import {
   authorizeUrl as spotifyAuthorizeUrl,
@@ -1182,11 +1183,16 @@ export async function startBridge({ version, store }) {
     announcementState: () => client.announcements.publicState(),
     announcementRefresh: () => client.announcements.refresh(),
     announcementEdit: (a) => client.announcements.edit(a),
-    announcementOpen: ({ id }) => {
+    announcementOpen: ({ id } = {}) => {
       const item = client.announcements
         .publicState()
         .items.find((n) => n.id === id);
-      if (item?.link) window.open(item.link, "_blank", "noopener,noreferrer");
+      if (item?.link)
+        window.open(
+          announcementLink(item.link),
+          "_blank",
+          "noopener,noreferrer",
+        );
     },
     notifyTest: (a) => client.notifier.test(a.id),
     liveAdd: (a) => {

@@ -324,3 +324,52 @@ test("main runs it behind the Settings lock, logs errors, and keeps it off the H
   const api = source("src/lib/api.js");
   assert.match(api, /recordError\(`call:\$\{method\}`, error\)/);
 });
+
+test("the player controls check tells a working HUD from MPV's fallback", async () => {
+  const { deps } = rig();
+  const check = async (controls) => {
+    deps.controls = controls && (() => controls);
+    return (await runDiagnostics(deps)).checks.find(
+      (c) => c.id === "player-controls",
+    );
+  };
+  assert.equal((await check(null)).status, "skip");
+  const base = {
+    enabled: true,
+    loaded: true,
+    active: true,
+    separate: false,
+    ready: true,
+    visible: true,
+    surface: true,
+    covered: false,
+  };
+  assert.equal((await check({ ...base, active: false })).status, "ok");
+  assert.equal(
+    (await check({ ...base, active: false, loaded: false })).status,
+    "warn",
+  );
+  assert.equal((await check(base)).status, "ok");
+  // Settings opened during a viewing hide the picture: nothing to judge.
+  assert.equal(
+    (await check({ ...base, surface: false, visible: false })).status,
+    "ok",
+  );
+  const silent = await check({ ...base, ready: false });
+  assert.equal(silent.status, "warn");
+  assert.match(silent.detail, /F8/);
+  // MPV's own HDR window: the HUD must actually cover it.
+  const hdr = { ...base, separate: true, surface: false };
+  assert.equal((await check({ ...hdr, covered: true })).status, "ok");
+  assert.equal((await check({ ...hdr, covered: false })).status, "warn");
+  assert.equal(
+    (await check({ ...base, enabled: false, ready: false })).status,
+    "ok",
+    "the HUD turned off is a choice, not a fault",
+  );
+  const main = readFileSync(
+    fileURLToPath(new URL("../electron/main.mjs", import.meta.url)),
+    "utf8",
+  );
+  assert.match(main, /controls: controlsState,/);
+});

@@ -1,5 +1,17 @@
 # Verification — Riwaq
 
+## 2026-10-13 — second review of PRs #78 and #79 (source, unreleased)
+
+- Read both PRs and ran their tests on #79's head (766 pass). Four defects and one listed opportunity were handled on top of them; details in [docs/REVIEW-2026-10-13-PLAYER.md](docs/REVIEW-2026-10-13-PLAYER.md).
+- **771 Node tests pass** (766 + 5). Prettier, both Vite builds and the Chromium web smoke pass. New tests:
+  - `HudHealth.alive`: the HUD layout holds through a new viewing's first report and through a reload, a mismatched report never extends the grace, and a silent or frozen page loses the layout after 3.5 s. Main drives `setOverlay` from it.
+  - F8 inside Riwaq's window sends `reloadControls` and never calls `restartSafe`. Main closes and recreates the HUD for it.
+  - The admin's releases call uses `RELEASES_LIMIT` (2 MiB, read without the owner's token) while other admin calls keep 256 KiB. Measured on GitHub: ten releases were 206,858 bytes at 0.43.1, each new release adding about 12 KB net.
+  - Main and the web bridge pass a notice's link through `announcementLink` before opening it.
+  - The full diagnostic's `player-controls` check: skip without a source, ok with no viewing, ok with the HUD turned off and with the picture hidden behind another page, and warn when the HUD has not reported or does not cover MPV's own window.
+- Checked against GitHub: the `X-GitHub-Api-Version: 2026-03-10` header the admin sends is accepted, while an invented version is refused with 400.
+- Not run here: Windows (the layout at viewing start, F8 inside Riwaq's window, the new diagnostic check on a real viewing) and any real publication.
+
 ## 2026-10-13 — separate Admin and viewer inbox foundation (unreleased)
 
 - Based on the player-review source `cff8c86b005ef6d08c4f9d9d9c9446ce6a8fae61` (PR #78, still unmerged during implementation). No viewer version bump, public release, real announcement or real publishing-token use in these checks. Setup and scope: [docs/ADMIN.md](docs/ADMIN.md).

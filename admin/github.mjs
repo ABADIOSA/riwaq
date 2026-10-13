@@ -9,6 +9,7 @@ import {
 } from "../core/announcements.mjs";
 
 const API = "https://api.github.com";
+export const RELEASES_LIMIT = 2 * 1024 * 1024;
 const CONTENT = `/repos/${ANNOUNCEMENT_REPO}/contents/${ANNOUNCEMENT_PATH}`;
 /** This module is used only by the separate admin main process. */
 export class AdminGithub {
@@ -20,7 +21,7 @@ export class AdminGithub {
     this.epoch = 0;
     this.busy = false;
   }
-  async api(path, options = {}, token = this.token) {
+  async api(path, options = {}, token = this.token, limit = 256 * 1024) {
     return this.request(
       `${API}${path}`,
       {
@@ -32,7 +33,7 @@ export class AdminGithub {
           ...(options.body ? { "Content-Type": "application/json" } : {}),
         },
       },
-      256 * 1024,
+      limit,
     );
   }
   async connect(value) {
@@ -140,10 +141,14 @@ export class AdminGithub {
     }
   }
   async releases() {
+    // Each release carries its full notes (about 23 KB now, growing with
+    // every release): ten of them passed 200 KB at 0.43.1 and would outgrow
+    // the general 256 KB cap within a few releases.
     const releases = await this.api(
       `/repos/${ANNOUNCEMENT_REPO}/releases?per_page=10`,
       {},
       "",
+      RELEASES_LIMIT,
     );
     return releases
       .filter((r) => !r.draft)

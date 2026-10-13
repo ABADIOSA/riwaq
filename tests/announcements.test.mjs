@@ -309,3 +309,48 @@ test("standard release excludes admin app; renderer has neither network nor Node
     /items.find\(\s*\(n\) => n.id === id/,
   );
 });
+test("the admin's releases list has room for full release notes", async () => {
+  // Ten releases came to 206,858 bytes at 0.43.1, about 12 KB more with each
+  // release: the general 256 KB cap would refuse them within a few releases.
+  const { RELEASES_LIMIT } = await import("../admin/github.mjs");
+  const seen = [];
+  const notes = "ن".repeat(15000);
+  const github = new AdminGithub({
+    request: async (url, options, limit) => {
+      seen.push({ url, limit, auth: options.headers.Authorization });
+      return Array.from({ length: 10 }, (_, i) => ({
+        tag_name: `v0.${50 + i}.0`,
+        name: `رِواق v0.${50 + i}.0`,
+        published_at: "2026-10-13T08:59:00Z",
+        prerelease: true,
+        draft: i === 9,
+        body: notes,
+      }));
+    },
+  });
+  const list = await github.releases();
+  assert.equal(list.length, 9, "drafts are left out");
+  assert.deepEqual(Object.keys(list[0]).sort(), [
+    "at",
+    "name",
+    "prerelease",
+    "tag",
+  ]);
+  assert.equal(seen[0].limit, RELEASES_LIMIT);
+  assert.ok(RELEASES_LIMIT >= 1024 * 1024);
+  assert.equal(seen[0].auth, undefined, "read without the owner's token");
+  // Every other call keeps the tighter cap.
+  await github.api("/user", {}, "");
+  assert.equal(seen[1].limit, 256 * 1024);
+});
+test("a notice's link is checked again where it is opened", () => {
+  for (const file of ["../electron/main.mjs", "../web/bridge.js"]) {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    const open = source.slice(source.indexOf("announcementOpen:"));
+    assert.match(
+      open.slice(0, 400),
+      /announcementLink\(item\.link\)/,
+      `${file} opens only a re-checked link`,
+    );
+  }
+});
