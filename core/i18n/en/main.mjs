@@ -40,8 +40,8 @@ export default {
     "This source needs Stremio Service. Run the official Stremio or set the service address in Settings.",
   "نوع المصدر غير مدعوم في هذه النسخة":
     "This source type isn't supported in this version",
-  "HDR حقيقي في نافذة MPV: حرّك الفأرة لأدوات التحكم، وEsc يرجعك إلى رِواق.":
-    "True HDR in the MPV window: move the mouse for the controls, and Esc takes you back to Riwaq.",
+  "HDR حقيقي في نافذة MPV، وأدوات رِواق فوقها. Esc يرجعك إلى رِواق.":
+    "True HDR in the MPV window, with Riwaq's controls over it. Esc takes you back to Riwaq.",
   "رجّعنا اختيارك السابق في هذا المسلسل: {1}.":
     "We brought back your previous choice for this series: {1}.",
   "اخترنا ترجمة {1}. غيّرها من لوحة الترجمة (C أو الزر الأيمن).":

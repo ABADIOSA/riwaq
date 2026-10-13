@@ -64,6 +64,7 @@ import {
   HUD_REQUESTS,
   hudRect,
   hudVisible,
+  separateRect,
 } from "../core/hud.mjs";
 import { DiscordPresence, buildActivity } from "../core/presence.mjs";
 import {
@@ -93,7 +94,7 @@ import { measureDownload, suggestCap } from "../core/speed-test.mjs";
 import { Thumbnailer } from "./thumbnails.mjs";
 import { dropKind } from "../core/drop.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
-import { VideoHost, showSystemCursor } from "./video-host.mjs";
+import { VideoHost, processWindow, showSystemCursor } from "./video-host.mjs";
 import { CursorGate, cursorHidden } from "../core/cursor.mjs";
 import { trailerOf } from "../core/credits.mjs";
 import { toNuvio } from "../core/collections.mjs";
@@ -375,15 +376,43 @@ function closeHud() {
   hudReady = false;
   player?.setOverlay(false);
 }
-/** Lays the HUD exactly over the video surface, or hides it. */
+/**
+ * MPV's own true-HDR window, in DIPs for the HUD, or null. Found through
+ * Win32 by MPV's process (electron/video-host.mjs processWindow).
+ */
+function separateHudRect() {
+  if (process.platform !== "win32") return null;
+  try {
+    return separateRect(processWindow(player?.child?.pid), (r) =>
+      screen.screenToDipRect(null, r),
+    );
+  } catch {
+    return null;
+  }
+}
+/**
+ * Lays the HUD exactly over the video surface, or over MPV's own true-HDR
+ * window (always on top, since that window is), or hides it.
+ */
 function placeHud() {
-  if (!hud || hud.isDestroyed() || !hudReady || !window || window.isDestroyed())
+  const separate = !!player?.state.active && !!player.state.separate;
+  if (
+    !hud ||
+    hud.isDestroyed() ||
+    !hudReady ||
+    !window ||
+    window.isDestroyed()
+  ) {
+    player?.setCovered(false);
     return;
-  const rect = hudRect({
-    content: window.getContentBounds(),
-    surface: videoHost?.last,
-    zoom: appliedZoom || 1,
-  });
+  }
+  const rect = separate
+    ? separateHudRect()
+    : hudRect({
+        content: window.getContentBounds(),
+        surface: videoHost?.last,
+        zoom: appliedZoom || 1,
+      });
   const show =
     rect &&
     hudVisible({
@@ -392,14 +421,20 @@ function placeHud() {
       surfaceVisible: surfaceShown,
       minimized: window.isMinimized(),
     });
+  // MPV's own controller stands in while the HUD cannot cover its window.
+  player?.setCovered(!!(show && separate));
   if (!show) {
     if (hud.isVisible()) hud.hide();
     hudIdle = false;
     cursorGate.release();
     return;
   }
+  if (hud.isAlwaysOnTop() !== separate)
+    hud.setAlwaysOnTop(separate, "screen-saver");
   hud.setBounds(rect);
   if (!hud.isVisible()) hud.showInactive();
+  // MPV's window is on top as well and can come forward when it changes.
+  if (separate) hud.moveTop();
 }
 let appliedZoom = 1;
 /** The viewer's interface scale, never shrinking the layout below 980×680. */
@@ -920,7 +955,7 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   if (separate)
     emit(
       "notice",
-      "HDR حقيقي في نافذة MPV: حرّك الفأرة لأدوات التحكم، وEsc يرجعك إلى رِواق.",
+      "HDR حقيقي في نافذة MPV، وأدوات رِواق فوقها. Esc يرجعك إلى رِواق.",
     );
   return player.start({
     separate,
@@ -2313,8 +2348,9 @@ app
       const checkCursor = () => {
         if (window.isDestroyed()) return cursorGate.release();
         const state = player.state;
-        // MPV hides the pointer in its own HDR window.
-        if (!state.active || state.separate) {
+        const onHud = !!(hud && !hud.isDestroyed() && hud.isVisible());
+        // In MPV's own HDR window without the HUD, MPV hides the pointer.
+        if (!state.active || (state.separate && !onHud)) {
           lastPoint = null;
           return cursorGate.release();
         }
@@ -2322,7 +2358,6 @@ app
         if (!lastPoint || point.x !== lastPoint.x || point.y !== lastPoint.y)
           stillSince = Date.now();
         lastPoint = point;
-        const onHud = !!(hud && !hud.isDestroyed() && hud.isVisible());
         const region = onHud
           ? hud.getBounds()
           : surfaceShown &&
@@ -2349,6 +2384,11 @@ app
       };
       cursorCheck = checkCursor;
       setInterval(checkCursor, 150);
+      // MPV's own true-HDR window moves and resizes by itself (its full
+      // screen key, another monitor): the HUD follows it.
+      setInterval(() => {
+        if (player.state.active && player.state.separate) placeHud();
+      }, 400);
       // Sound without a picture: start again once in the compatibility
       // mode, and say so; a second failure points at the diagnostic.
       player.onVideoFailed = () => {

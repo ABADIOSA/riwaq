@@ -7,6 +7,23 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.43.1",
+    title: "HDR حقيقي، وأدوات رِواق فوقه",
+    items: [
+      "مع «HDR حقيقي»، المصادر بـ HDR أو Dolby Vision تفتح في نافذة MPV الخاصة، وأدوات تحكم رِواق صارت فوقها بدل أدوات MPV.",
+      "التشغيل والتقديم والترجمة والصوت وتخطي المقدمة ومعاينة الشريط كلها نفس اللي داخل رِواق. وEsc يرجعك.",
+      "إذا تعذّر وضع أدوات رِواق فوق النافذة، ترجع أدوات MPV احتياطاً، فما تبقى بدون تحكم أبداً.",
+    ],
+    en: {
+      title: "True HDR, with Riwaq's controls over it",
+      items: [
+        "With “True HDR”, HDR and Dolby Vision sources open in MPV's own window, and Riwaq's controls now sit over it instead of MPV's.",
+        "Play, seek, subtitles, audio, intro skipping and seek previews work as they do inside Riwaq. Esc takes you back.",
+        "If Riwaq's controls cannot be laid over the window, MPV's come back as a fallback, so you are never left without controls.",
+      ],
+    },
+  },
+  {
     version: "0.43.0",
     title: "التورنت يشتغل بدون Stremio Service",
     items: [

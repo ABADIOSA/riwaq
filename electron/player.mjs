@@ -436,6 +436,8 @@ export class Player {
       glslSkipped: glsl.skipped || "",
       glslOptions: glsl.options,
     };
+    // Riwaq's HUD covers MPV's own window only once main has found it.
+    this.covered = false;
     // MPV creates its window at the surface's size of the moment: give the
     // hidden surface its size first, so that window never starts at 1×1.
     if (!separate) this.host?.prepare?.();
@@ -664,14 +666,24 @@ export class Player {
       this.send(["show-text", t("Esc للخروج من ملء الشاشة"), 2500]);
     this.onState(this.state);
   }
+  /**
+   * Main reports whether the HUD lies over MPV's own true-HDR window. Until
+   * it does (and if it never can), MPV's controller is the fallback there.
+   */
+  setCovered(on) {
+    const covered = !!on;
+    if (this.covered === covered) return;
+    this.covered = covered;
+    if (this.state.active && this.state.separate) this.applyController();
+  }
   applyController() {
+    const own = this.state.separate
+      ? !this.covered
+      : this.state.fullscreen && !this.state.pip && !this.state.overlay;
     this.send([
       "script-message",
       "osc-visibility",
-      this.state.separate ||
-      (this.state.fullscreen && !this.state.pip && !this.state.overlay)
-        ? "auto"
-        : "never",
+      own ? "auto" : "never",
       "no-osd",
     ]);
   }
@@ -1201,7 +1213,11 @@ export class Player {
         ),
       ]);
     else if (action === "mute") this.send(["cycle", "mute"]);
-    else if (action === "fullscreen") this.onFullscreen?.();
+    // In MPV's own true-HDR window, full screen is that window's.
+    else if (action === "fullscreen")
+      this.state.separate
+        ? this.send(["cycle", "fullscreen"])
+        : this.onFullscreen?.();
     else if (action === "exitFullscreen") this.onEscape?.();
     else if (action === "fill") {
       this.state.fill = value === true;

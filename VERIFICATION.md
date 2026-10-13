@@ -1,5 +1,20 @@
 # Verification — Riwaq
 
+## 2026-10-13 — 0.43.1: Riwaq's HUD over MPV's true-HDR window
+
+- The report: a screenshot after 0.43.0 showing MPV's own full-screen window with MPV's bottom-bar controller instead of Riwaq's HUD. The cause was read from the code, not from the viewer's settings. `separateWindow` opens MPV's own window only with `hdrMode: "window"` ("True HDR") and an HDR source, and `parseStream` marks `2160p…DV.HDR` torrent names as HDR (checked). Before 0.43.0 torrents did not play on that machine, so 4K HDR/DV torrents ranked first only now.
+- **746 Node tests pass** (743 + 3). Prettier, both Vite builds and the Chromium web smoke pass. Changed and new tests in `tests/player-tuning.test.mjs`:
+  - `hudVisible` shows the HUD over MPV's window without an embedded surface. It still hides it with the overlay off, in the mini player, when minimised and with no viewing. An embedded viewing still needs its surface.
+  - MPV's controller is `auto` until `setCovered(true)`, `never` while covered, and `auto` again when the HUD goes. Inside Riwaq's window the old rule is unchanged.
+  - The HUD's `fullscreen` command and the full screen key cycle MPV's own full screen there, never Riwaq's window. Esc still stops.
+  - `separateRect`: DIP conversion of the client area, negative coordinates for a monitor on the left, and null when the window is not found, minimised, hidden or too small. `SEPARATE_HIDDEN` holds the mini player, settings and full screen buttons.
+  - Wiring: main looks MPV's window up by `player.child.pid`, converts with `screen.screenToDipRect`, sets the HUD always on top (`screen-saver`), calls `moveTop()`, reports `setCovered`, and follows the window every 400 ms. `video-host.mjs` finds class `mpv` windows with `FindWindowExW`, matches them with `GetWindowThreadProcessId`, and never moves or restyles them. The HUD page hides `SEPARATE_HIDDEN` controls only over MPV's window.
+- Headless Chromium, the built HUD page (`#hud`) with a mock bridge, Arabic and English: inside Riwaq's window 12 buttons, including the mini player, settings and full screen. Over MPV's window (`separate: true`, 1920×1080) 9 buttons, with those three left out. A double click on the picture asks for full screen in both cases. No page errors, no horizontal overflow.
+- koffi on Linux parsed the six new Win32 prototypes (`koffi.proto`). Against libc it also confirmed what the lookup relies on: one-element arrays and `_Inout_` struct objects are filled in, and a null pointer is falsy. `user32.dll` itself cannot be loaded here.
+- Not run here:
+  - No Windows run: finding MPV's window, the HUD staying above MPV's always-on-top full screen window, and pointer hiding over it were not seen on a machine.
+  - No HDR display: that HDR stays intact with a transparent window composed over MPV's swapchain is expected from how Windows composes HDR, but was not seen.
+
 ## 2026-10-13 — 0.43.0: a built-in torrent engine and guided Stremio Service setup
 
 - **Option 1 (bundling Stremio's server.js) was rejected on its licence, not tried.** Stremio's lead developer wrote in Stremio/stremio-shell#435 (May 2025) that server.js "includes proprietary code and is not meant to be used / distributed outside of an official Stremio app". The MIT re-implementations found (stremio-server-go, stremio-native/stream-server) are early and listen on every interface without authentication by default. Riwaq neither bundles nor downloads server.js.
@@ -18,11 +33,11 @@
   - The P2P engine settings card in both languages.
   - No page errors and no horizontal overflow.
 - Windows packaging dry run from Linux (`electron-builder --dir --win` with the repository config, minus `electronDist`): the native `.node` files land in `app.asar.unpacked` and only `win32-x64` prebuilds remain. `app.asar` grows from 38 to 61 MB and `app.asar.unpacked` from 2 to 12 MB (`node_datachannel.node` is 9 MB); compressed with 7-Zip, the app files grow from 2.3 to 7.1 MB.
+- The release run (Windows runner, Node 24, before packaging): all 743 tests passed, including the 12 engine tests. So WebTorrent loaded node-datachannel's Windows binary under Node, the offline local swarm streamed byte-identical ranges, and released pieces were deleted from a Windows disk. The published portable copy carries Windows PE binaries for node-datachannel and utp-native in `app.asar.unpacked` (with bufferutil, utf-8-validate and fs-native-extensions), no other platform's prebuilds, and the engine files in `app.asar`. The installer is 149.2 MB against 143.1 MB for 0.42.0.
 - Not run here:
-  - No Windows run: the engine in a packaged Windows build, its native modules (node-datachannel, utp-native, bufferutil, utf-8-validate) loading on Windows, Windows Firewall's first-run prompt, and MPV playing from the engine.
+  - No Windows desktop run: the engine inside a packaged Electron build on Windows, Windows Firewall's first-run prompt, and MPV playing from the engine.
   - No public swarm or real addon torrent: DHT and public trackers were never contacted, so start-up time and speed on real torrents are unmeasured.
   - No real Stremio Service: its download page is blocked from this environment, and the guide's detection ran against a mock.
-  - The installer itself was not built (`electronDist` is not available here), so the 7-Zip figure is an estimate of the download, not the installer's size.
 
 ## 2026-10-12 — 0.42.0: English interface and issue #74
 

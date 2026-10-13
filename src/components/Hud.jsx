@@ -25,6 +25,7 @@ import { api, call } from "../lib/api.js";
 import { clock } from "../lib/helpers.js";
 import { resolveAppearance } from "../../core/appearance.mjs";
 import { hudHidden } from "../../core/hud-layout.mjs";
+import { SEPARATE_HIDDEN } from "../../core/hud.mjs";
 import { qualityChips } from "../../core/player-tuning.mjs";
 import { useInterfaceLanguage } from "../lib/language.js";
 import { loc } from "../lib/format.js";
@@ -230,7 +231,9 @@ export default function Hud() {
     setSleepMenu(false);
   };
   const hidden = hudHidden(state?.settings || {});
-  const shows = (id) => !hidden.has(id);
+  // Over MPV's own true-HDR window, controls for Riwaq's window step aside.
+  const shows = (id) =>
+    !hidden.has(id) && !(player.separate && SEPARATE_HIDDEN.has(id));
   const onStageDown = (e) => {
     if (e.button !== 0 || e.target !== e.currentTarget) return;
     if (!holdRate || player.live || player.pause || dock) return;
