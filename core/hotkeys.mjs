@@ -189,6 +189,12 @@ export const HOTKEY_ACTIONS = [
     command: "script-message riwaq-stop",
     binding: "ESC",
   },
+  {
+    id: "recoverControls",
+    label: "استعادة أدوات المشغل داخل رِواق",
+    command: "script-message riwaq-controls",
+    binding: "F8",
+  },
 ];
 
 /**

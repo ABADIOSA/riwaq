@@ -38,6 +38,8 @@
 
 ### الجديد في 0.43.1
 
+**قيد المراجعة بعد هذا الإصدار:** استعادة الأدوات بعد إعادة تحميلها أو تعليقها، وإصلاح Esc في نافذة HDR وإغلاق التورنت. يضيف التعديل F8 لاستعادة التحكم داخل رِواق من نفس الموضع بتحويل HDR إلى SDR لهذه المشاهدة فقط، دون تغيير تفضيلاتك. لم يُنشر بعد؛ [التفاصيل والتحقق](docs/REVIEW-2026-10-13-PLAYER.md).
+
 - **HDR حقيقي، وأدوات رِواق فوقه:** مع **«HDR حقيقي»** في **الإعدادات ← جودة الفيديو**، مصادر HDR وDolby Vision تفتح في نافذة MPV الخاصة. الحين أدوات تحكم رِواق صارت فوقها بدل أدوات MPV، وإذا تعذّر وضعها ترجع أدوات MPV احتياطاً. ما تجرّب بعد على شاشة HDR حقيقية.
 
 #### من 0.43.0
@@ -120,6 +122,8 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
 ### What's new in 0.43.1
+
+**Under review after this release:** recover controls after a HUD reload/freeze, fix separate-window Escape and torrent shutdown. The patch adds F8 to restore controls inside Riwaq from the same position, converting HDR to SDR for this viewing only without changing saved preferences. Not released yet; [details and validation](docs/REVIEW-2026-10-13-PLAYER.md).
 
 - **True HDR, with Riwaq's controls over it:** with **"True HDR"** in **Settings → Video quality**, HDR and Dolby Vision sources open in MPV's own window. Riwaq's controls now sit over it instead of MPV's, and if they cannot, MPV's come back as a fallback. Not yet tried on a real HDR display.
 

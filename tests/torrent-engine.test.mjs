@@ -5,6 +5,9 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { TorrentHost } from "../electron/torrent.mjs";
 import WebTorrent from "webtorrent";
 import {
   ENGINE_CACHES,
@@ -25,6 +28,131 @@ import { startEngine } from "../electron/torrent-engine.mjs";
 
 // No DHT, trackers or uTP: the swarm is two clients on this machine.
 const OFFLINE = { dht: false, tracker: false, utp: false };
+
+test("closing the engine disconnects a reader waiting for unavailable pieces", async () => {
+  const started = Promise.withResolvers();
+  const reader = new PassThrough();
+  class WaitingClient extends EventEmitter {
+    add() {
+      const torrent = new EventEmitter();
+      torrent.files = [
+        {
+          name: "waiting.mkv",
+          length: 1024,
+          createReadStream: () => {
+            started.resolve();
+            return reader;
+          },
+        },
+      ];
+      torrent.destroy = (_options, done) => done();
+      queueMicrotask(() => torrent.emit("ready"));
+      return torrent;
+    }
+    destroy(done) {
+      done();
+    }
+  }
+  const engine = await startEngine({
+    cacheDir: mkdtempSync(join(tmpdir(), "riwaq-closing-")),
+    WebTorrent: WaitingClient,
+    network: OFFLINE,
+  });
+  const req = request(engine.url({ infoHash: "a".repeat(40) }));
+  req.on("error", () => {});
+  req.end();
+  await started.promise;
+  const closing = engine.close();
+  let timer;
+  try {
+    const finished = await Promise.race([
+      closing.then(() => true),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(false), 500);
+      }),
+    ]);
+    assert.equal(
+      finished,
+      true,
+      "shutdown does not await pieces or a closed socket",
+    );
+  } finally {
+    clearTimeout(timer);
+    req.destroy();
+    reader.destroy();
+    await closing;
+  }
+});
+
+test("a late engine-start reply after Stop cannot restore the retired origin", async () => {
+  let startId;
+  const child = new EventEmitter();
+  child.kill = () => {};
+  child.postMessage = ({ id, method }) => {
+    if (method === "start") startId = id;
+    if (method === "close")
+      queueMicrotask(() => child.emit("message", { id, result: true }));
+  };
+  const host = new TorrentHost({ fork: () => child, cacheDir: "/unused" });
+  const start = host.start({});
+  const rejected = assert.rejects(start);
+  await host.stop();
+  child.emit("message", {
+    id: startId,
+    result: { origin: "http://127.0.0.1:9" },
+  });
+  await rejected;
+  assert.equal(host.origin, "");
+  assert.equal(host.running, false);
+  assert.equal(host.calls.size, 0);
+});
+
+test("a failed engine message does not leave a pending call or timer", async () => {
+  const host = new TorrentHost({ fork: () => {}, cacheDir: "/unused" });
+  host.child = {
+    postMessage: () => {
+      throw new Error("closed port");
+    },
+  };
+  await assert.rejects(host.call("stats"), /closed port/);
+  assert.equal(host.calls.size, 0);
+});
+
+test("an unresponsive engine has a bounded Stop and settles old calls", async (t) => {
+  const child = new EventEmitter();
+  child.kill = () => {
+    child.killed = true;
+  };
+  child.postMessage = ({ id, method }) => {
+    if (method === "start")
+      queueMicrotask(() =>
+        child.emit("message", {
+          id,
+          result: { origin: "http://127.0.0.1:9" },
+        }),
+      );
+  };
+  const host = new TorrentHost({ fork: () => child, cacheDir: "/unused" });
+  await host.start({});
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const rejected = assert.rejects(host.call("stats"));
+  let finished = false;
+  const stopping = host.stop().then(() => {
+    finished = true;
+  });
+  try {
+    t.mock.timers.tick(1500);
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+    assert.equal(finished, true, "Stop is bounded at 1.5 seconds");
+  } finally {
+    t.mock.timers.tick(20000);
+    await stopping;
+    await rejected;
+  }
+  assert.equal(child.killed, true);
+  assert.equal(host.calls.size, 0);
+  assert.equal(host.running, false);
+});
 
 test("which engine plays a torrent", () => {
   assert.deepEqual(TORRENT_ENGINES, ["ask", "auto", "builtin"]);
