@@ -24,7 +24,9 @@ import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 import { Player, playerArgs, safeVideo } from "../electron/player.mjs";
 import { collectBackup, restoreState } from "../core/backup.mjs";
 import { mpvLogProblems } from "../core/diagnose.mjs";
-import { hudVisible } from "../core/hud.mjs";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { SEPARATE_HIDDEN, hudVisible, separateRect } from "../core/hud.mjs";
 
 test("every sound profile has one gain per band, and the filter is built from them", () => {
   for (const [id, profile] of Object.entries(AUDIO_PROFILES)) {
@@ -516,15 +518,29 @@ test("HDR modes: SDR conversion by default, true HDR in its own window for HDR s
   assert.ok(inside.includes("--target-colorspace-hint=no"));
 });
 
-test("in MPV's own window the HUD steps aside and keys act on that window", () => {
+test("in MPV's own window the HUD lies over it and keys act on that window", () => {
+  // No surface inside Riwaq: the HUD shows over MPV's window instead.
   assert.equal(
     hudVisible({
       enabled: true,
       player: { active: true, separate: true },
-      surfaceVisible: true,
+      surfaceVisible: false,
     }),
-    false,
+    true,
   );
+  for (const [why, input] of [
+    [
+      "overlay off",
+      { enabled: false, player: { active: true, separate: true } },
+    ],
+    ["mini player", { player: { active: true, separate: true, pip: true } }],
+    [
+      "minimised",
+      { player: { active: true, separate: true }, minimized: true },
+    ],
+    ["no viewing", { player: { active: false, separate: true } }],
+  ])
+    assert.equal(hudVisible(input), false, why);
   assert.equal(
     hudVisible({
       enabled: true,
@@ -532,6 +548,11 @@ test("in MPV's own window the HUD steps aside and keys act on that window", () =
       surfaceVisible: true,
     }),
     true,
+  );
+  assert.equal(
+    hudVisible({ player: { active: true }, surfaceVisible: false }),
+    false,
+    "embedded viewing still needs its surface",
   );
   const sent = [];
   let riwaqFullscreen = 0;
@@ -543,13 +564,109 @@ test("in MPV's own window the HUD steps aside and keys act on that window", () =
   player.state = { active: true, separate: true, fullscreen: false };
   player.message("riwaq-fullscreen");
   assert.deepEqual(sent.at(-1), ["cycle", "fullscreen"]);
+  // The HUD's double click is the same: MPV's window, not Riwaq's.
+  player.command({ action: "fullscreen" });
+  assert.deepEqual(sent.at(-1), ["cycle", "fullscreen"]);
   assert.equal(riwaqFullscreen, 0);
-  player.applyController();
-  assert.equal(sent.at(-1)[2], "auto");
   let stopped = 0;
   player.stop = async () => stopped++;
   player.message("riwaq-stop");
   assert.equal(stopped, 1, "Esc returns to Riwaq");
+});
+
+test("MPV's own controller stands in only until the HUD covers its window", () => {
+  const sent = [];
+  const player = new Player({ onState: () => {} });
+  player.send = (c) => sent.push(c);
+  player.state = { active: true, separate: true, fullscreen: false };
+  player.applyController();
+  assert.equal(sent.at(-1)[2], "auto", "no HUD yet: MPV's controller");
+  player.setCovered(true);
+  assert.equal(sent.at(-1)[2], "never", "the HUD covers the window");
+  const count = sent.length;
+  player.setCovered(true);
+  assert.equal(sent.length, count, "no change, nothing sent");
+  player.setCovered(false);
+  assert.equal(sent.at(-1)[2], "auto", "the HUD went away: MPV's again");
+  // Inside Riwaq's window nothing changes: covering is only for MPV's own.
+  player.state = { active: true, separate: false, fullscreen: true };
+  player.overlay = player.state.overlay = true;
+  player.setCovered(true);
+  player.applyController();
+  assert.equal(sent.at(-1)[2], "never");
+  player.state.overlay = false;
+  player.applyController();
+  assert.equal(sent.at(-1)[2], "auto", "full screen without the HUD");
+});
+
+test("the HUD's rectangle over MPV's window comes from its client area", () => {
+  const half = (r) => ({
+    x: r.x / 2,
+    y: r.y / 2,
+    width: r.width / 2,
+    height: r.height / 2,
+  });
+  assert.deepEqual(
+    separateRect(
+      { x: 0, y: 0, width: 3840, height: 2160, visible: true },
+      half,
+    ),
+    { x: 0, y: 0, width: 1920, height: 1080 },
+  );
+  // A monitor to the left of the main one has negative coordinates.
+  assert.deepEqual(
+    separateRect(
+      { x: -2560, y: 0, width: 2560, height: 1440, visible: true },
+      (r) => r,
+    ),
+    { x: -2560, y: 0, width: 2560, height: 1440 },
+  );
+  for (const [why, client] of [
+    ["not found", null],
+    [
+      "minimised",
+      { x: 0, y: 0, width: 800, height: 600, visible: true, minimized: true },
+    ],
+    ["hidden", { x: 0, y: 0, width: 800, height: 600, visible: false }],
+    ["too small", { x: 0, y: 0, width: 20, height: 600, visible: true }],
+  ])
+    assert.equal(
+      separateRect(client, (r) => r),
+      null,
+      why,
+    );
+  assert.deepEqual([...SEPARATE_HIDDEN].sort(), [
+    "fullscreen",
+    "pip",
+    "settings",
+  ]);
+});
+
+test("main lays the HUD over MPV's own window, on top, and follows it", () => {
+  const read = (p) =>
+    readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
+  const main = read("../electron/main.mjs");
+  assert.match(main, /processWindow\(player\?\.child\?\.pid\)/);
+  assert.match(main, /screen\.screenToDipRect\(null, r\)/);
+  assert.match(main, /hud\.setAlwaysOnTop\(separate, "screen-saver"\)/);
+  assert.match(main, /if \(separate\) hud\.moveTop\(\)/);
+  assert.match(main, /player\?\.setCovered\(!!\(show && separate\)\)/);
+  assert.match(main, /player\.state\.separate\) placeHud\(\)/);
+  assert.doesNotMatch(main, /MPV hides the pointer in its own HDR window\./);
+  const host = read("../electron/video-host.mjs");
+  assert.match(host, /FindWindowExW/);
+  assert.match(host, /findWindow\(null, null, "mpv", null\)/);
+  assert.match(host, /GetWindowThreadProcessId/);
+  // Read only: another program's window is never moved or restyled.
+  const lookup = host.slice(host.indexOf("export function processWindow"));
+  assert.doesNotMatch(
+    lookup.slice(0, lookup.indexOf("export class")),
+    /move\(|setStyle\(|showAsync\(/,
+  );
+  const hudPage = read("../src/components/Hud.jsx");
+  assert.match(hudPage, /player\.separate && SEPARATE_HIDDEN\.has\(id\)/);
+  const player = read("../electron/player.mjs");
+  assert.match(player, /this\.covered = false;/);
 });
 
 test("the compatibility restart leaves MPV's own window and true HDR", async () => {

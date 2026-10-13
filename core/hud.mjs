@@ -31,7 +31,9 @@ export function hudRect({ content, surface, zoom = 1 }) {
 
 /**
  * Whether the HUD should be on screen: a full-size viewing whose surface is
- * visible, with the overlay enabled and the main window not minimised.
+ * visible, with the overlay enabled and the main window not minimised. In
+ * MPV's own true-HDR window there is no surface inside Riwaq: the HUD lies
+ * over that window instead (main finds it, `separateRect`).
  */
 export function hudVisible({
   enabled,
@@ -43,12 +45,41 @@ export function hudVisible({
     enabled !== false &&
     !!player.active &&
     !player.pip &&
-    // MPV's own HDR window: the HUD cannot sit over another program.
-    !player.separate &&
-    !!surfaceVisible &&
+    (!!player.separate || !!surfaceVisible) &&
     !minimized
   );
 }
+
+/**
+ * The HUD's rectangle over MPV's own window, in DIPs. `client` is that
+ * window's client area in physical pixels (Win32), `toDip` converts it
+ * (Electron's screen.screenToDipRect). Null while the window is missing,
+ * minimised or too small to carry the controls.
+ */
+export function separateRect(client, toDip) {
+  if (!client || client.minimized || !client.visible) return null;
+  if (!(client.width >= 40 && client.height >= 40)) return null;
+  const dip = toDip({
+    x: client.x,
+    y: client.y,
+    width: client.width,
+    height: client.height,
+  });
+  if (!dip || !(dip.width >= 40 && dip.height >= 40)) return null;
+  return {
+    x: Math.round(dip.x),
+    y: Math.round(dip.y),
+    width: Math.round(dip.width),
+    height: Math.round(dip.height),
+  };
+}
+
+/**
+ * HUD controls that act on Riwaq's own window, which sits behind MPV's
+ * true-HDR window: they are left out there. Its full screen still follows a
+ * double click and the full screen key.
+ */
+export const SEPARATE_HIDDEN = new Set(["pip", "settings", "fullscreen"]);
 
 /**
  * The only actions the HUD page may ask of main. It is a second renderer, so

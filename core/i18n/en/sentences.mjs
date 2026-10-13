@@ -299,8 +299,8 @@ export default {
     "MPV's default settings, which suit most devices.",
   "يحوّل HDR إلى صورة عادية دقيقة. يعمل على أي شاشة وكل أدوات التحكم.":
     "Converts HDR into an accurate ordinary picture. Works on any screen and with every control.",
-  "لمصادر HDR فقط، بنفس طريقة نيتفليكس وديزني بلس: الصورة بملء الشاشة على سطح خاص فيعرضها ويندوز بـ HDR فعلي. أدوات التحكم من MPV (حرّك الفأرة)، وEsc يرجعك لرِواق. المصادر العادية تبقى داخل رِواق.":
-    "For HDR sources only, the way Netflix and Disney+ do it: the picture fills the screen on its own surface, so Windows shows it in true HDR. The controls are MPV's own (move the mouse), and Esc takes you back to Riwaq. Ordinary sources stay inside Riwaq.",
+  "لمصادر HDR فقط، بنفس طريقة نيتفليكس وديزني بلس: الصورة بملء الشاشة على سطح خاص فيعرضها ويندوز بـ HDR فعلي، وأدوات تحكم رِواق فوقها. Esc يرجعك لرِواق. المصادر العادية تبقى داخل رِواق.":
+    "For HDR sources only, the way Netflix and Disney+ do it: the picture fills the screen on its own surface, so Windows shows it in true HDR, with Riwaq's controls over it. Esc takes you back to Riwaq. Ordinary sources stay inside Riwaq.",
   "وازن بين جودة الصورة والأداء. تسري التغييرات على المشاهدة التالية.":
     "Balance picture quality against performance. Changes apply to the next viewing.",
   "مثل منصات البث الكبيرة: رِواق يحمّل دقائق للأمام، ويعيد الاتصال لو انقطع، ويراقب التشغيل فإن علق أعاد الاتصال من نفس اللحظة ثم جرّب المصدر التالي.":

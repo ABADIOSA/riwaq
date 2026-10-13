@@ -30,13 +30,17 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.43.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.43.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.43.1-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.43.1-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.43.0
+### الجديد في 0.43.1
+
+- **HDR حقيقي، وأدوات رِواق فوقه:** مع **«HDR حقيقي»** في **الإعدادات ← جودة الفيديو**، مصادر HDR وDolby Vision تفتح في نافذة MPV الخاصة. الحين أدوات تحكم رِواق صارت فوقها بدل أدوات MPV، وإذا تعذّر وضعها ترجع أدوات MPV احتياطاً. ما تجرّب بعد على شاشة HDR حقيقية.
+
+#### من 0.43.0
 
 - **التورنت بدون Stremio Service:** محرك تورنت مدمج واختياري، ما يحتاج تثبّت أي برنامج.
   - فعّله من **الإعدادات ← المصادر والمكتبة ← محرك P2P**، أو من الدليل اللي يطلع أول ما تشغّل مصدر تورنت.
@@ -109,13 +113,17 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.43.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.43.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.43.1-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.43.1-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.43.0
+### What's new in 0.43.1
+
+- **True HDR, with Riwaq's controls over it:** with **"True HDR"** in **Settings → Video quality**, HDR and Dolby Vision sources open in MPV's own window. Riwaq's controls now sit over it instead of MPV's, and if they cannot, MPV's come back as a fallback. Not yet tried on a real HDR display.
+
+#### From 0.43.0
 
 - **Torrents without Stremio Service:** an optional built-in torrent engine, with nothing to install.
   - Turn it on in **Settings → Sources & library → P2P engine**, or from the guide that opens the first time you play a torrent source.

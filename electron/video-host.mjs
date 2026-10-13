@@ -51,6 +51,59 @@ const rect = koffi.struct("RiwaqRect", {
 const clientRect = user32.func(
   "bool __stdcall GetClientRect(void *h, _Out_ RiwaqRect *r)",
 );
+koffi.struct("RiwaqPoint", { x: "long", y: "long" });
+const toScreen = user32.func(
+  "bool __stdcall ClientToScreen(void *h, _Inout_ RiwaqPoint *p)",
+);
+const findWindow = user32.func(
+  "void * __stdcall FindWindowExW(void *parent, void *after, str16 cls, str16 title)",
+);
+const threadOf = user32.func(
+  "uint32 __stdcall GetWindowThreadProcessId(void *h, _Out_ uint32 *pid)",
+);
+const isWindow = user32.func("bool __stdcall IsWindow(void *h)");
+const isIconic = user32.func("bool __stdcall IsIconic(void *h)");
+const ownedBy = (h, pid) => {
+  const out = [0];
+  threadOf(h, out);
+  return out[0] === pid;
+};
+
+let mpvWindow = null;
+/**
+ * MPV's own top-level window for true HDR (core/player-tuning.mjs
+ * separateWindow), matched by its process: MPV registers the window class
+ * "mpv". Returns its client area in physical screen pixels, or null. Only
+ * read here; Riwaq never moves or styles another program's window.
+ */
+export function processWindow(pid) {
+  if (!pid) return null;
+  if (!(mpvWindow && isWindow(mpvWindow) && ownedBy(mpvWindow, pid))) {
+    mpvWindow = null;
+    for (
+      let h = findWindow(null, null, "mpv", null), i = 0;
+      h && i < 32;
+      h = findWindow(null, h, "mpv", null), i++
+    )
+      if (ownedBy(h, pid)) {
+        mpvWindow = h;
+        break;
+      }
+  }
+  if (!mpvWindow) return null;
+  const size = {};
+  clientRect(mpvWindow, size);
+  const origin = { x: 0, y: 0 };
+  toScreen(mpvWindow, origin);
+  return {
+    x: origin.x,
+    y: origin.y,
+    width: size.right || 0,
+    height: size.bottom || 0,
+    visible: !!isVisible(mpvWindow),
+    minimized: !!isIconic(mpvWindow),
+  };
+}
 
 export class VideoHost {
   constructor(window) {
