@@ -1,5 +1,7 @@
 /** Messages from the main process and the web bridge (core/i18n.mjs). */
 export default {
+  "نعيد المشاهدة داخل رِواق لاستعادة أدوات التحكم، مع تحويل HDR إلى SDR لهذه المشاهدة فقط. إعداداتك المحفوظة تبقى كما هي.":
+    "Restarting inside Riwaq to restore the controls, converting HDR to SDR for this viewing only. Your saved preferences stay as they are.",
   "لم نجد ملفات شخصية في بيانات نوفيو":
     "No profiles were found in Nuvio's data",
   "تعذّر هذا المصدر؛ نجرّب المصدر التالي تلقائياً…":

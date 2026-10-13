@@ -62,6 +62,7 @@ import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
 import {
   HUD_METHODS,
   HUD_REQUESTS,
+  HudHealth,
   hudRect,
   hudVisible,
   separateRect,
@@ -252,6 +253,7 @@ const cueCache = new Map();
 // The HUD: a transparent window over the video surface; see core/hud.mjs.
 let hud = null;
 let hudReady = false;
+const hudHealth = new HudHealth();
 let surfaceShown = false;
 // Whether the HUD's controls are asleep, reported by the HUD page.
 let hudIdle = false;
@@ -316,6 +318,7 @@ function ensureHud() {
   if (!overlayEnabled() || !window || window.isDestroyed()) return null;
   if (hud && !hud.isDestroyed()) return hud;
   hudReady = false;
+  hudHealth.reset();
   try {
     hud = new BrowserWindow({
       parent: window,
@@ -339,6 +342,7 @@ function ensureHud() {
         contextIsolation: true,
         sandbox: true,
         webSecurity: true,
+        backgroundThrottling: false,
       },
     });
   } catch {
@@ -348,15 +352,20 @@ function ensureHud() {
   }
   hud.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   hud.webContents.on("will-navigate", onDropNavigate);
+  hud.webContents.on("did-start-loading", () => {
+    hudReady = false;
+    hudHealth.reset();
+    placeHud();
+  });
   hud.webContents.on("did-finish-load", () => {
     hudReady = true;
-    player?.setOverlay(true);
     placeHud();
   });
   hud.webContents.on("render-process-gone", () => closeHud());
   hud.on("closed", () => {
     hud = null;
     hudReady = false;
+    hudHealth.reset();
     hudIdle = false;
     cursorGate.release();
     player?.setOverlay(false);
@@ -374,6 +383,7 @@ function closeHud() {
   if (hud && !hud.isDestroyed()) hud.destroy();
   hud = null;
   hudReady = false;
+  hudHealth.reset();
   player?.setOverlay(false);
 }
 /**
@@ -403,9 +413,14 @@ function placeHud() {
     !window ||
     window.isDestroyed()
   ) {
+    player?.setOverlay(false);
     player?.setCovered(false);
     return;
   }
+  // Readiness drives the theater layout; temporary surface hiding during a
+  // ResizeObserver cleanup must not flip that layout back and forth.
+  const healthy = overlayEnabled() && hudHealth.usable(player?.state);
+  player?.setOverlay(healthy);
   const rect = separate
     ? separateHudRect()
     : hudRect({
@@ -420,21 +435,30 @@ function placeHud() {
       player: player?.state,
       surfaceVisible: surfaceShown,
       minimized: window.isMinimized(),
-    });
+    }) &&
+    healthy;
   // MPV's own controller stands in while the HUD cannot cover its window.
-  player?.setCovered(!!(show && separate));
   if (!show) {
+    player?.setCovered(false);
     if (hud.isVisible()) hud.hide();
     hudIdle = false;
     cursorGate.release();
     return;
   }
-  if (hud.isAlwaysOnTop() !== separate)
-    hud.setAlwaysOnTop(separate, "screen-saver");
-  hud.setBounds(rect);
-  if (!hud.isVisible()) hud.showInactive();
-  // MPV's window is on top as well and can come forward when it changes.
-  if (separate) hud.moveTop();
+  try {
+    if (hud.isAlwaysOnTop() !== separate)
+      hud.setAlwaysOnTop(separate, "screen-saver");
+    hud.setBounds(rect);
+    if (!hud.isVisible()) hud.showInactive();
+    // MPV's window is on top as well and can come forward when it changes.
+    if (separate) hud.moveTop();
+    player?.setCovered(!!(separate && hud.isVisible()));
+  } catch (error) {
+    hudHealth.reset();
+    player?.setCovered(false);
+    player?.setOverlay(false);
+    logError("hud", error);
+  }
 }
 let appliedZoom = 1;
 /** The viewer's interface scale, never shrinking the layout below 980×680. */
@@ -877,6 +901,12 @@ async function diagnostics() {
     encryption: safeStorage.isEncryptionAvailable(),
     version: app.getVersion(),
     video: videoHost?.inspect(),
+    controls: {
+      ready: hudReady && hudHealth.usable(player?.state),
+      visible: !!hud && !hud.isDestroyed() && hud.isVisible(),
+      covered: !!player?.covered,
+      separateWindow: player?.state.separate ? separateHudRect() : null,
+    },
   };
 }
 async function play({ key, meta, videoId, resume = true, profileId }) {
@@ -1682,8 +1712,11 @@ const methods = {
     return true;
   },
   // The HUD reports when its controls fall asleep or wake.
+  hudSnapshot: () => ({ state: client.publicState(), player: player.state }),
   hudIdle: (a) => {
+    hudHealth.report(player?.state, a);
     hudIdle = a?.idle === true;
+    placeHud();
     cursorCheck();
     return true;
   },
@@ -2280,6 +2313,10 @@ app
           const failed = s.active && s.error && !watching.error;
           if (failed) logError("player", s.error);
           const starting = s.active && !watching.active;
+          if (starting) {
+            hudHealth.reset();
+            ensureHud();
+          }
           if (starting) stopLocalMusic();
           const pipChanged =
             s.active && watching.active && s.pip !== watching.pip;
@@ -2337,10 +2374,18 @@ app
         // The in-player episode keys are requests: the interface owns which
         // episode comes next and which source plays it.
         // With the HUD on, the panel lives there; otherwise in the theater.
-        onEvent: (event) =>
+        onEvent: (event) => {
+          if (event.type === "recoverControls") {
+            emit(
+              "notice",
+              "نعيد المشاهدة داخل رِواق لاستعادة أدوات التحكم، مع تحويل HDR إلى SDR لهذه المشاهدة فقط. إعداداتك المحفوظة تبقى كما هي.",
+            );
+            return;
+          }
           event.type === "panel" && player.state.overlay
             ? emit("hudCommand", event)
-            : emit("playerRequest", event),
+            : emit("playerRequest", event);
+        },
       });
       // The pointer hides over a still picture; see core/cursor.mjs.
       let lastPoint = null;
@@ -2387,7 +2432,7 @@ app
       // MPV's own true-HDR window moves and resizes by itself (its full
       // screen key, another monitor): the HUD follows it.
       setInterval(() => {
-        if (player.state.active && player.state.separate) placeHud();
+        if (player.state.active) placeHud();
       }, 400);
       // Sound without a picture: start again once in the compatibility
       // mode, and say so; a second failure points at the diagnostic.

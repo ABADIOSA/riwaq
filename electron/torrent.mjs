@@ -29,6 +29,8 @@ export class TorrentHost {
     this.origin = "";
     this.calls = new Map();
     this.next = 1;
+    this.epoch = 0;
+    this.stopping = null;
   }
 
   get running() {
@@ -45,7 +47,13 @@ export class TorrentHost {
         reject(new Error("محرك التورنت لا يستجيب"));
       }, CALL_MS);
       this.calls.set(id, { resolve, reject, timer });
-      child.postMessage({ id, method, args });
+      try {
+        child.postMessage({ id, method, args });
+      } catch (error) {
+        this.calls.delete(id);
+        clearTimeout(timer);
+        reject(error);
+      }
     });
   }
 
@@ -69,8 +77,11 @@ export class TorrentHost {
 
   /** Starts the engine's process once; a failed start can be tried again. */
   start(settings) {
+    if (this.stopping) return this.stopping.then(() => this.start(settings));
     if (this.running) return Promise.resolve(this.origin);
-    this.starting ||= (async () => {
+    if (this.starting) return this.starting;
+    const epoch = this.epoch;
+    const starting = (async () => {
       let child;
       try {
         child = this.fork();
@@ -79,7 +90,9 @@ export class TorrentHost {
         throw new Error("تعذّر تشغيل محرك التورنت المدمج");
       }
       this.child = child;
-      child.on("message", (message) => this.receive(message));
+      child.on("message", (message) => {
+        if (this.child === child) this.receive(message);
+      });
       child.on("exit", () => {
         if (this.child !== child) return;
         this.child = null;
@@ -92,19 +105,26 @@ export class TorrentHost {
           options: engineOptions(settings),
           ...(this.network ? { network: this.network } : {}),
         });
+        if (this.child !== child || this.epoch !== epoch)
+          throw new Error("توقف محرك التورنت المدمج");
         this.origin = origin;
         return origin;
       } catch (error) {
-        this.log(error);
-        this.child = null;
-        try {
-          child.kill();
-        } catch {}
+        if (this.epoch === epoch) this.log(error);
+        if (this.child === child && !this.stopping) {
+          this.child = null;
+          this.origin = "";
+          this.settle(error);
+          try {
+            child.kill();
+          } catch {}
+        }
         throw new Error("تعذّر تشغيل محرك التورنت المدمج");
       }
     })().finally(() => {
-      this.starting = null;
+      if (this.starting === starting) this.starting = null;
     });
+    this.starting = starting;
     return this.starting;
   }
 
@@ -139,16 +159,36 @@ export class TorrentHost {
     return this.call("clear");
   }
 
-  async stop() {
+  stop() {
+    if (this.stopping) return this.stopping;
+    this.epoch++;
     const child = this.child;
-    if (!child) return;
-    await this.call("close").catch(() => {});
-    if (this.child === child) {
-      this.child = null;
-      this.origin = "";
+    if (!child) return Promise.resolve();
+    let timer;
+    const stopping = (async () => {
       try {
-        child.kill();
-      } catch {}
-    }
+        await Promise.race([
+          this.call("close").catch(() => {}),
+          new Promise((resolve) => {
+            timer = setTimeout(resolve, 1500);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        if (this.child === child) {
+          this.child = null;
+          this.origin = "";
+          this.settle(new Error("توقف محرك التورنت المدمج"));
+          this.starting = null;
+          try {
+            child.kill();
+          } catch {}
+        }
+      }
+    })().finally(() => {
+      if (this.stopping === stopping) this.stopping = null;
+    });
+    this.stopping = stopping;
+    return stopping;
   }
 }

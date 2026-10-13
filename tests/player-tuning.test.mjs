@@ -650,8 +650,12 @@ test("main lays the HUD over MPV's own window, on top, and follows it", () => {
   assert.match(main, /screen\.screenToDipRect\(null, r\)/);
   assert.match(main, /hud\.setAlwaysOnTop\(separate, "screen-saver"\)/);
   assert.match(main, /if \(separate\) hud\.moveTop\(\)/);
-  assert.match(main, /player\?\.setCovered\(!!\(show && separate\)\)/);
-  assert.match(main, /player\.state\.separate\) placeHud\(\)/);
+  assert.match(main, /hudHealth\.usable\(player\?\.state\)/);
+  assert.match(
+    main,
+    /player\?\.setCovered\(!!\(separate && hud\.isVisible\(\)\)\)/,
+  );
+  assert.match(main, /if \(player\.state\.active\) placeHud\(\)/);
   assert.doesNotMatch(main, /MPV hides the pointer in its own HDR window\./);
   const host = read("../electron/video-host.mjs");
   assert.match(host, /FindWindowExW/);

@@ -1240,6 +1240,7 @@ export async function startBridge({ version, store }) {
     // controls, so these keep the same answers with nothing to forward to.
     hudPanel: () => true,
     hudIdle: () => true,
+    hudSnapshot: () => ({ state: client.publicState(), player: player.state }),
     hudRequest: (a) => {
       if (!HUD_REQUESTS.has(a?.type)) throw new Error("الطلب غير مسموح");
       if (a.type === "episode") {

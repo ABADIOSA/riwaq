@@ -81,6 +81,39 @@ export function separateRect(client, toDip) {
  */
 export const SEPARATE_HIDDEN = new Set(["pip", "settings", "fullscreen"]);
 
+/** A loaded transparent page is not proof that its controls are alive. */
+export class HudHealth {
+  constructor({ now = () => Date.now(), maxAge = 3500 } = {}) {
+    this.now = now;
+    this.maxAge = maxAge;
+    this.reset();
+  }
+  reset() {
+    this.at = -Infinity;
+    this.videoId = null;
+  }
+  report(viewing, report = {}) {
+    if (
+      !viewing?.active ||
+      !report.active ||
+      report.videoId !== viewing.videoId
+    ) {
+      this.reset();
+      return false;
+    }
+    this.at = this.now();
+    this.videoId = report.videoId;
+    return true;
+  }
+  usable(viewing) {
+    return (
+      !!viewing?.active &&
+      viewing.videoId === this.videoId &&
+      this.now() - this.at <= this.maxAge
+    );
+  }
+}
+
 /**
  * The only actions the HUD page may ask of main. It is a second renderer, so
  * it gets less than the main window: playback, subtitles and its own panel.
@@ -97,6 +130,7 @@ export const HUD_METHODS = new Set([
   "settings",
   "hudRequest",
   "hudIdle",
+  "hudSnapshot",
   "metadata",
   "playerSources",
   "switchSource",

@@ -122,11 +122,19 @@ export default function Hud() {
 
   useEffect(() => {
     document.documentElement.classList.add("hud-root");
-    act("init").then((s) => s && setState(s));
     if (!api) return;
+    let playerEvents = 0,
+      stateEvents = 0,
+      mounted = true;
     const off = [
-      api.on("state", setState),
-      api.on("player", setPlayer),
+      api.on("state", (s) => {
+        stateEvents++;
+        setState(s);
+      }),
+      api.on("player", (p) => {
+        playerEvents++;
+        setPlayer(p);
+      }),
       api.on("notice", (text) => setNotice(text)),
       api.on("hudCommand", ({ type }) => {
         if (type === "panel") {
@@ -135,8 +143,18 @@ export default function Hud() {
         }
       }),
     ];
+    // Subscribe first, then hydrate even a paused viewing after a reload.
+    // A late snapshot must not replace newer playback/profile events.
+    act("hudSnapshot").then((snapshot) => {
+      if (!mounted || !snapshot) return;
+      if (!stateEvents) setState(snapshot.state);
+      if (!playerEvents) setPlayer(snapshot.player);
+    });
     wake();
-    return () => off.forEach((fn) => fn());
+    return () => {
+      mounted = false;
+      off.forEach((fn) => fn());
+    };
   }, []);
   useEffect(() => {
     if (!notice) return;
@@ -195,8 +213,17 @@ export default function Hud() {
   const series = player.mediaType === "series";
   // Main hides the pointer itself (CSS cursor alone does not in this window).
   useEffect(() => {
-    call("hudIdle", { idle: !!player.active && !shown }).catch(() => {});
-  }, [shown, player.active]);
+    const report = () =>
+      call("hudIdle", {
+        idle: !!player.active && !shown,
+        active: !!player.active,
+        videoId: player.videoId,
+      }).catch(() => {});
+    report();
+    if (!player.active) return;
+    const timer = setInterval(report, 1000);
+    return () => clearInterval(timer);
+  }, [shown, player.active, player.videoId]);
   const pulse = (kind) => {
     setFlash({ kind, at: Date.now() });
   };

@@ -4,17 +4,94 @@ import { readFileSync } from "node:fs";
 import {
   HUD_METHODS,
   HUD_REQUESTS,
+  HudHealth,
   hudRect,
   hudVisible,
 } from "../core/hud.mjs";
 import { FAILOVER_LIMIT, nextSource, playableKeys } from "../core/failover.mjs";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 import { Player } from "../electron/player.mjs";
+import { inputConf } from "../core/hotkeys.mjs";
 
 const preload = readFileSync(
   new URL("../electron/preload.cjs", import.meta.url),
   "utf8",
 );
+
+test("a loaded HUD must report this viewing and keep reporting before replacing fallback controls", () => {
+  let now = 0;
+  const health = new HudHealth({ now: () => now });
+  const viewing = { active: true, videoId: "tt1" };
+  assert.equal(health.usable(viewing), false);
+  assert.equal(health.report(viewing, { active: true, videoId: "old" }), false);
+  assert.equal(health.report(viewing, viewing), true);
+  assert.equal(health.usable(viewing), true);
+  assert.equal(health.usable({ active: true, videoId: "tt2" }), false);
+  now = 3501;
+  assert.equal(
+    health.usable(viewing),
+    false,
+    "a frozen page releases fallback controls",
+  );
+  health.report(viewing, viewing);
+  assert.equal(
+    health.usable(viewing),
+    true,
+    "a recovered page can cover again",
+  );
+  health.reset();
+  assert.equal(
+    health.usable(viewing),
+    false,
+    "reload is not a working controller",
+  );
+  assert.equal(
+    health.report(viewing, { active: false, videoId: "tt1" }),
+    false,
+  );
+});
+
+test("Escape stops MPV's separate window even when Riwaq stayed full screen", () => {
+  let stopped = 0,
+    escaped = 0;
+  const player = new Player({ onState: () => {}, onEscape: () => escaped++ });
+  player.stop = () => stopped++;
+  player.state = { active: true, separate: true, fullscreen: true };
+  player.message("riwaq-stop");
+  assert.equal(stopped, 1);
+  assert.equal(escaped, 0, "the window behind MPV does not receive Escape");
+  player.state.separate = false;
+  player.message("riwaq-stop");
+  assert.equal(escaped, 1, "embedded playback keeps its full-screen exit");
+});
+
+test("F8 recovers controls inside Riwaq from the same position without saving HDR preferences", async () => {
+  const settings = { ...DEFAULT_SETTINGS, hdrMode: "window", rtxUpscale: true };
+  const events = [];
+  const player = new Player({
+    onState: () => {},
+    onEvent: (e) => events.push(e),
+  });
+  player.state = { active: true, separate: true, position: 42 };
+  player.lastStart = {
+    settings,
+    url: "http://127.0.0.1/video",
+    separate: true,
+  };
+  let start;
+  player.start = async (args) => {
+    start = args;
+    return args;
+  };
+  await player.command({ action: "repairControls" });
+  assert.equal(start.start, 42);
+  assert.equal(start.separate, false);
+  assert.equal(start.settings.hdrMode, "tonemap");
+  assert.equal(settings.hdrMode, "window");
+  assert.equal(settings.rtxUpscale, true);
+  assert.deepEqual(events, [{ type: "recoverControls" }]);
+  assert.match(inputConf(), /F8 script-message riwaq-controls/);
+});
 
 test("the HUD sits exactly over the video surface in screen DIPs", () => {
   const content = { x: 100, y: 50, width: 1440, height: 900 };

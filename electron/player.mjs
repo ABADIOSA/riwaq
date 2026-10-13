@@ -157,13 +157,13 @@ export function playerArgs({
   if (logFile) args.push(`--log-file=${logFile}`);
   if (separate)
     // True HDR in MPV's own window (core/player-tuning.mjs HDR_MODES):
-    // full screen and on top, with MPV's controller and pointer hiding,
-    // since Riwaq's HUD cannot sit over another program's window.
+    // full screen and on top. MPV's controller (including its close button)
+    // stands in until Riwaq's HUD confirms that its controls are alive.
     args.push(
       "--fullscreen=yes",
       "--ontop=yes",
       "--cursor-autohide=1000",
-      "--script-opts=osc-visibility=auto,osc-layout=bottombar,osc-windowcontrols=no,osc-hidetimeout=1800,osc-idlescreen=no",
+      "--script-opts=osc-visibility=auto,osc-layout=bottombar,osc-windowcontrols=yes,osc-hidetimeout=1800,osc-idlescreen=no",
     );
   else if (host) args.push(`--wid=${host}`);
   if (inputConf) args.push(`--input-conf=${inputConf}`);
@@ -702,13 +702,17 @@ export class Player {
         : this.onFullscreen?.();
     // Escape leaves full screen before it closes anything.
     else if (name === "riwaq-stop")
-      this.state.fullscreen && this.onEscape ? this.onEscape() : this.stop();
+      !this.state.separate && this.state.fullscreen && this.onEscape
+        ? this.onEscape()
+        : this.stop();
     else if (name === "riwaq-screenshot")
       this.command({ action: "screenshot" });
     else if (name === "riwaq-stats") this.command({ action: "stats" });
     else if (name === "riwaq-skip") this.command({ action: "skipSegment" });
     else if (name === "riwaq-loop") this.command({ action: "abLoop" });
     else if (name === "riwaq-shader") this.command({ action: "cycleShader" });
+    else if (name === "riwaq-controls")
+      this.command({ action: "repairControls" })?.catch(() => {});
     else if (name === "riwaq-mini") this.command({ action: "pip" });
     else if (name === "riwaq-panel") this.onEvent({ type: "panel" });
     else if (name === "riwaq-next" || name === "riwaq-prev")
@@ -1192,6 +1196,10 @@ export class Player {
   }
   command({ action, value }) {
     if (!this.state.active) throw new Error("لا توجد مشاهدة حالية");
+    if (action === "repairControls") {
+      this.onEvent({ type: "recoverControls" });
+      return this.restartSafe(1);
+    }
     if (action === "repairVideo")
       return this.restartSafe(Math.min(2, (this.safeStage || 0) + 1));
     const number = Number(value);

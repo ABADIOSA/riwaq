@@ -43,6 +43,7 @@ const allowed = new Set([
   "hudPanel",
   "hudRequest",
   "hudIdle",
+  "hudSnapshot",
   "titleCredits",
   "creditsEntity",
   "searchPeople",

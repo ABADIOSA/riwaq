@@ -1,0 +1,331 @@
+// Windows source integration: real Electron, its transparent controls window,
+// MPV's embedded and separate-window paths, IPC and a local media fixture.
+// The fixture is SDR even when labelled HDR to select the window path: this
+// tests controls and lifecycle, not HDR luminance or Dolby Vision hardware.
+// Build first. Needs Playwright (RIWAQ_PLAYWRIGHT or globally installed).
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import { createRequire } from "node:module";
+import { execFileSync, execSync } from "node:child_process";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+if (process.platform !== "win32")
+  throw new Error("Run the native HUD test on Windows");
+const require = createRequire(import.meta.url);
+const candidates = [
+  process.env.RIWAQ_PLAYWRIGHT,
+  "playwright",
+  join(execSync("npm root -g").toString().trim(), "playwright"),
+].filter(Boolean);
+let playwright;
+for (const candidate of candidates) {
+  try {
+    playwright = require(candidate);
+    break;
+  } catch {}
+}
+assert.ok(playwright, "Playwright must be installed for the native HUD test");
+const output = resolve(".cache/player-hud-test");
+mkdirSync(output, { recursive: true });
+const frame = Buffer.concat([
+  Buffer.from("FRAME\n"),
+  Buffer.alloc(320 * 180, 95),
+  Buffer.alloc(160 * 90, 115),
+  Buffer.alloc(160 * 90, 145),
+]);
+writeFileSync(
+  join(output, "video.y4m"),
+  Buffer.concat([
+    Buffer.from("YUV4MPEG2 W320 H180 F5:1 Ip A1:1 C420jpeg\n"),
+    ...Array(300).fill(frame),
+  ]),
+);
+const samples = Buffer.alloc(60 * 8000 * 2);
+const wav = Buffer.alloc(44);
+wav.write("RIFF");
+wav.writeUInt32LE(36 + samples.length, 4);
+wav.write("WAVEfmt ", 8);
+wav.writeUInt32LE(16, 16);
+wav.writeUInt16LE(1, 20);
+wav.writeUInt16LE(1, 22);
+wav.writeUInt32LE(8000, 24);
+wav.writeUInt32LE(16000, 28);
+wav.writeUInt16LE(2, 32);
+wav.writeUInt16LE(16, 34);
+wav.write("data", 36);
+wav.writeUInt32LE(samples.length, 40);
+writeFileSync(join(output, "audio.wav"), Buffer.concat([wav, samples]));
+// Encode a tiny file with a real audio track using the bundled MPV itself.
+execFileSync(
+  resolve("vendor/mpv/mpv.exe"),
+  [
+    "--no-config",
+    "--terminal=yes",
+    "--ovc=ffv1",
+    "--oac=pcm_s16le",
+    "--of=matroska",
+    "--o=" + join(output, "fixture.mkv"),
+    "--audio-file=" + join(output, "audio.wav"),
+    join(output, "video.y4m"),
+  ],
+  { timeout: 20000, windowsHide: true, stdio: "pipe" },
+);
+const video = readFileSync(join(output, "fixture.mkv"));
+const subtitle = "1\n00:00:00,000 --> 00:01:00,000\nHUD subtitle fixture\n";
+let base;
+const server = createServer((req, res) => {
+  if (req.url.endsWith(".mkv")) {
+    res.writeHead(200, {
+      "Content-Type": "video/x-matroska",
+      "Content-Length": video.length,
+    });
+    return res.end(video);
+  }
+  if (req.url === "/ar.srt") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    return res.end(subtitle);
+  }
+  const data =
+    req.url === "/manifest.json"
+      ? {
+          id: "riwaq.hud-fixture",
+          name: "HUD fixture",
+          version: "1.0.0",
+          resources: ["stream", "subtitles"],
+          types: ["movie"],
+          catalogs: [],
+          idPrefixes: ["hudfix:"],
+        }
+      : req.url.startsWith("/subtitles/")
+        ? {
+            subtitles: [
+              { id: "fixture-ar", lang: "ara", url: base + "/ar.srt" },
+            ],
+          }
+        : {
+            streams: [
+              { name: "Fixture 1080p", url: base + "/sdr.mkv" },
+              { name: "Fixture 2160p HDR10", url: base + "/hdr.mkv" },
+            ],
+          };
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(data));
+});
+await new Promise((r) => server.listen(0, "127.0.0.1", r));
+base = "http://127.0.0.1:" + server.address().port;
+const env = {
+  ...process.env,
+  RIWAQ_DATA_DIR: join(output, "profile-" + Date.now()),
+};
+delete env.RIWAQ_SMOKE;
+delete env.ELECTRON_RUN_AS_NODE;
+const app = await playwright._electron.launch({
+  executablePath: resolve("node_modules/electron/dist/electron.exe"),
+  args: ["."],
+  cwd: process.cwd(),
+  env,
+  timeout: 20000,
+});
+const errors = [],
+  checks = [];
+try {
+  const main = await app.firstWindow();
+  main.setDefaultTimeout(10000);
+  main.on("pageerror", (e) => errors.push(e.message));
+  await main.waitForFunction(() => !!window.riwaq);
+  await main.waitForSelector(".app", { timeout: 20000 });
+  const call = (method, args) =>
+    main.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]);
+  await call("settings", {
+    hdrMode: "window",
+    autoFullscreen: false,
+    playerOverlay: true,
+    seekThumbnails: "off",
+  });
+  await call("install", { url: base + "/manifest.json" });
+  let hud = app.windows().find((p) => p.url().endsWith("#hud"));
+  for (let i = 0; !hud && i < 100; i++) {
+    await main.waitForTimeout(100);
+    hud = app.windows().find((p) => p.url().endsWith("#hud"));
+  }
+  assert.ok(hud, "the HUD page navigates after its window is created");
+  hud.setDefaultTimeout(10000);
+  hud.on("pageerror", (e) => errors.push(e.message));
+  const snapshot = () => hud.evaluate(() => window.riwaq.call("hudSnapshot"));
+  const waitFor = async (predicate, message) => {
+    for (let i = 0; i < 100; i++) {
+      if (await predicate()) return;
+      await main.waitForTimeout(100);
+    }
+    throw new Error(message);
+  };
+  for (const separate of [false, true]) {
+    const streams = await call("streams", {
+      type: "movie",
+      id: "hudfix:video",
+    });
+    const source = streams.streams.find((s) =>
+      s.name.includes(separate ? "HDR10" : "1080p"),
+    );
+    await call("play", {
+      key: source.key,
+      meta: { id: "hudfix:video", type: "movie", name: "HUD fixture" },
+      videoId: "hudfix:video",
+    });
+    await waitFor(async () => {
+      const s = await snapshot();
+      return (
+        s.player.duration > 0 && s.player.tracks.some((t) => t.type === "audio")
+      );
+    }, "MPV loads the duration and audio track");
+    if (!(await snapshot()).player.pause)
+      await call("playerCommand", { action: "pause" });
+    await waitFor(async () => {
+      const d = await call("diagnostics");
+      return (
+        d.controls.ready &&
+        d.controls.visible &&
+        d.controls.covered === separate
+      );
+    }, "the native HUD covers the viewing");
+    const controls = (await call("diagnostics")).controls;
+    if (separate)
+      assert.ok(
+        controls.separateWindow.width > 800,
+        "Win32 finds MPV's actual window",
+      );
+    assert.equal((await snapshot()).player.separate, separate);
+    await hud.getByTitle("الترجمة والصوت (C أو الزر الأيمن)").click();
+    await hud.locator(".player-side").waitFor();
+    await hud.getByRole("tab", { name: "الصوت", exact: true }).click();
+    assert.ok(
+      await hud.getByText("المسار الصوتي", { exact: true }).isVisible(),
+    );
+    await hud.getByRole("tab", { name: "الترجمة", exact: true }).click();
+    const subs = await call("subtitles");
+    assert.ok(subs.length, "local subtitle addon is available");
+    await call("subtitle", { key: subs[0].key });
+    await waitFor(
+      async () =>
+        (await snapshot()).player.tracks.some((t) => t.type === "sub"),
+      "MPV loads the subtitle",
+    );
+    await hud.screenshot({
+      path: join(
+        output,
+        separate ? "separate-panel.png" : "embedded-panel.png",
+      ),
+    });
+    await hud.getByTitle("إغلاق اللوحة").click();
+    const timeline = hud.locator(".hud-track");
+    const rect = await timeline.boundingBox();
+    await timeline.click({
+      position: { x: rect.width * 0.25, y: rect.height / 2 },
+    });
+    await waitFor(
+      async () => (await snapshot()).player.position >= 10,
+      "the HUD seeks the video",
+    );
+    await waitFor(async () => {
+      const clock = await hud.locator(".hud-seek > span").first().textContent();
+      const parts = clock.trim().split(":").map(Number);
+      return (
+        parts.every(Number.isFinite) &&
+        parts.reduce((time, part) => time * 60 + part, 0) >= 10
+      );
+    }, "the visible clock follows the actual seek");
+    await hud.screenshot({
+      path: join(
+        output,
+        separate ? "separate-controls.png" : "embedded-controls.png",
+      ),
+    });
+    if (!(await snapshot()).player.pause)
+      await call("playerCommand", { action: "pause" });
+    await waitFor(
+      async () => (await snapshot()).player.pause,
+      "the viewing pauses before reload",
+    );
+    await hud.reload();
+    await hud.getByTitle("إيقاف المشاهدة").waitFor();
+    assert.equal(
+      (await snapshot()).player.pause,
+      true,
+      "reload hydrates paused playback",
+    );
+    if (separate) {
+      const debug = await hud.context().newCDPSession(hud);
+      await debug.send("Debugger.enable");
+      await debug.send("Debugger.pause");
+      try {
+        await waitFor(async () => {
+          const d = await call("diagnostics");
+          return (
+            !d.controls.ready && !d.controls.covered && !d.controls.visible
+          );
+        }, "the frozen HUD releases fallback controls");
+      } finally {
+        await debug.send("Debugger.resume");
+        await debug.detach();
+      }
+      await waitFor(
+        async () => (await call("diagnostics")).controls.covered,
+        "the HUD recovers after resume",
+      );
+      checks.push(
+        "frozen HDR HUD releases fallback controls and recovers after resume",
+      );
+    }
+    await hud.getByTitle("إيقاف المشاهدة").click();
+    await waitFor(
+      async () => !(await call("hudSnapshot")).player.active,
+      "the HUD Stop ends MPV",
+    );
+    checks.push(
+      (separate ? "separate" : "embedded") +
+        ": visible controls, subtitle/audio panels, real tracks, seek, paused reload and Stop",
+    );
+    if (separate) {
+      await call("play", {
+        key: source.key,
+        meta: { id: "hudfix:video", type: "movie", name: "HUD fixture" },
+        videoId: "hudfix:video",
+      });
+      await waitFor(
+        async () => (await snapshot()).player.duration > 0,
+        "the recovery viewing starts",
+      );
+      await call("playerCommand", { action: "seek", value: 12 });
+      await waitFor(
+        async () => (await snapshot()).player.position >= 10,
+        "the recovery position is saved",
+      );
+      await call("playerCommand", { action: "repairControls" });
+      await waitFor(async () => {
+        const p = (await snapshot()).player;
+        return p.active && !p.separate && !p.loading && p.position >= 10;
+      }, "F8's recovery command returns the viewing inside Riwaq");
+      assert.equal(
+        (await call("init")).settings.hdrMode,
+        "window",
+        "saved HDR preference is preserved",
+      );
+      await hud.mouse.move(20, 20);
+      await hud.mouse.move(60, 60);
+      await hud.getByTitle("إيقاف المشاهدة").click();
+      await waitFor(
+        async () => !(await call("hudSnapshot")).player.active,
+        "recovered playback stops",
+      );
+      checks.push(
+        "F8 recovery command resumes inside Riwaq and preserves the saved HDR preference",
+      );
+    }
+  }
+  assert.deepEqual(errors, []);
+  console.log(JSON.stringify({ passed: true, checks, errors, output }));
+} finally {
+  await app.close();
+  server.close();
+}

@@ -1,5 +1,6 @@
 /** English for labels and messages that come from core/ (core/i18n.mjs). */
 export default {
+  "استعادة أدوات المشغل داخل رِواق": "Restore player controls inside Riwaq",
   فاجئني: "Surprise me",
   "شيء خفيف": "Something light",
   كوميديا: "Comedy",

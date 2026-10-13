@@ -319,8 +319,9 @@ export async function startEngine({
       if (closed) return true;
       closed = true;
       for (const entry of entries.values()) clearTimeout(entry.timer);
-      await new Promise((resolve) => server.close(() => resolve()));
+      const closing = new Promise((resolve) => server.close(() => resolve()));
       server.closeAllConnections?.();
+      await closing;
       await new Promise((resolve) => client.destroy(() => resolve()));
       entries.clear();
       await prune();
