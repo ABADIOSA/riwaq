@@ -18,11 +18,11 @@
   - The P2P engine settings card in both languages.
   - No page errors and no horizontal overflow.
 - Windows packaging dry run from Linux (`electron-builder --dir --win` with the repository config, minus `electronDist`): the native `.node` files land in `app.asar.unpacked` and only `win32-x64` prebuilds remain. `app.asar` grows from 38 to 61 MB and `app.asar.unpacked` from 2 to 12 MB (`node_datachannel.node` is 9 MB); compressed with 7-Zip, the app files grow from 2.3 to 7.1 MB.
+- The release run (Windows runner, Node 24, before packaging): all 743 tests passed, including the 12 engine tests. So WebTorrent loaded node-datachannel's Windows binary under Node, the offline local swarm streamed byte-identical ranges, and released pieces were deleted from a Windows disk. The published portable copy carries Windows PE binaries for node-datachannel and utp-native in `app.asar.unpacked` (with bufferutil, utf-8-validate and fs-native-extensions), no other platform's prebuilds, and the engine files in `app.asar`. The installer is 149.2 MB against 143.1 MB for 0.42.0.
 - Not run here:
-  - No Windows run: the engine in a packaged Windows build, its native modules (node-datachannel, utp-native, bufferutil, utf-8-validate) loading on Windows, Windows Firewall's first-run prompt, and MPV playing from the engine.
+  - No Windows desktop run: the engine inside a packaged Electron build on Windows, Windows Firewall's first-run prompt, and MPV playing from the engine.
   - No public swarm or real addon torrent: DHT and public trackers were never contacted, so start-up time and speed on real torrents are unmeasured.
   - No real Stremio Service: its download page is blocked from this environment, and the guide's detection ran against a mock.
-  - The installer itself was not built (`electronDist` is not available here), so the 7-Zip figure is an estimate of the download, not the installer's size.
 
 ## 2026-10-12 — 0.42.0: English interface and issue #74
 
