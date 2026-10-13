@@ -16,6 +16,7 @@ import torrents from "./en/torrents.mjs";
 import shell from "./en/shell.mjs";
 import title from "./en/title.mjs";
 import announcements from "./en/announcements.mjs";
+import owner from "./en/owner.mjs";
 
 export default {
   ...core,
@@ -31,5 +32,6 @@ export default {
   ...shell,
   ...title,
   ...announcements,
+  ...owner,
   الإعدادات: "Settings",
 };

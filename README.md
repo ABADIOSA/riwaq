@@ -30,13 +30,17 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.44.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.44.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.44.1-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.44.0
+### الجديد في 0.44.1
+
+- **إشعارات رِواق من أجهزة المالك:** صاحب رِواق صار ينشر الإشعارات من التطبيق العام نفسه على الأجهزة اللي يختارها، بعد ما يتأكد GitHub من حسابه. ما تغيّر شي عند المشاهدين. [كيف يشتغل](docs/ADMIN.md).
+
+#### من 0.44.0
 
 - **إشعارات رِواق:** جرس في الشريط العلوي فيه أخبار رِواق وتنبيهات الفريق بالعربي والإنجليزي، مع عدّاد لغير المقروء. توقف الاستقبال من نفس النافذة بـ **«استقبال أخبار رِواق»**.
 - **أدوات تحكم أثبت:** ترجع لو انعاد تحميلها أو علّقت، وأدوات MPV تشتغل احتياطاً لين ترجع، والمشاهدة ما تبدأ بقفزة في الصورة.
@@ -107,13 +111,17 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.44.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.44.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.44.1-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.44.0
+### What's new in 0.44.1
+
+- **Riwaq notices from the owner's devices:** Riwaq's owner can now publish notices from the public app itself on the devices chosen for it, once GitHub confirms the owner's account. Nothing changes for viewers. [How it works](docs/ADMIN.md).
+
+#### From 0.44.0
 
 - **Riwaq notifications:** a bell in the top bar with Riwaq news and team notices in Arabic and English, and an unread count. Turn reception off in the same window with **"Receive Riwaq news"**.
 - **Steadier controls:** they come back after a reload or a freeze, MPV's controls stand in until they do, and a viewing no longer starts with the picture jumping.

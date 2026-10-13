@@ -1,5 +1,26 @@
 # Verification — Riwaq
 
+## 2026-10-13 — 0.44.1: owner devices (the public app as the notice tool on chosen devices)
+
+- The owner asked how to turn the public app into the admin app, choosing which devices may. 0.44.0 had no way, so owner devices were built: `electron/owner.mjs`, `src/components/OwnerTools.jsx`, and the publisher moved from `admin/github.mjs` to `core/notice-publisher.mjs` (Admin extends it with its releases list).
+- **782 Node tests pass** (775 + 7, `tests/owner.test.mjs`), with GitHub mocked:
+  - Only a token GitHub answers for as ABADIOSA with push access activates a device. Another account, no write access and a 401 are refused, and nothing is written.
+  - The sealed file never holds the token as text, and the state returned to the interface never holds it.
+  - A restart reopens a remembered device without any GitHub request until the tools open.
+  - A refused token (401) deletes `owner.bin`. A network failure keeps it. "Cancel this device" deletes it.
+  - Session-only keeps no file, and without Windows encryption remembering is refused.
+  - Publishing needs a preview, its nonce and the native "yes". A "no" sends no PUT, and the one PUT goes to `announcements/feed.json`.
+  - Wiring: no `owner*` method is in the HUD's bridge; the actions are behind the Settings lock; all seven are desktop-only on the web; GitHub's token page is the only page opened; `owner.bin` is read by no backup, account, client or diagnostic module; the seven-tap entry is skipped on the web.
+- `tests/admin-private.test.mjs` still passes: Admin's own tools (`admin/`) stay out of the viewer package, the site and every workflow. The built `dist/` and `dist-web/` contain neither Admin code nor the publisher; only `electron/owner.mjs` imports it on the viewer side.
+- **Chromium, mock bridge, Arabic and English at 980×680 and 1440×900:**
+  - Six taps on the version badge open nothing; the seventh opens the owner tools.
+  - Activation, the composer, the preview and the publication all render, with one publish call.
+  - The "Owner tools" button appears next to the badge afterwards.
+  - No page errors, no horizontal overflow in the dialog, and no Arabic left in the English screens.
+  - The text areas were restyled to match the inputs after the first screenshots.
+- Prettier, both Vite builds and the Chromium web smoke pass.
+- Not run here: Windows (safeStorage/DPAPI sealing of `owner.bin`, the native confirmation dialog), a real fine-grained token against GitHub, and a real publication.
+
 ## 2026-10-13 — 0.44.0: PRs #78 and #79 with the second review, Admin kept private
 
 - The owner asked that the Admin app reach nobody else before merging. Checked:

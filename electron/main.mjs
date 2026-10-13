@@ -97,6 +97,7 @@ import { dropKind } from "../core/drop.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
 import { VideoHost, processWindow, showSystemCursor } from "./video-host.mjs";
 import { announcementLink } from "../core/announcements.mjs";
+import { OwnerDevice } from "./owner.mjs";
 import { CursorGate, cursorHidden } from "../core/cursor.mjs";
 import { trailerOf } from "../core/credits.mjs";
 import { toNuvio } from "../core/collections.mjs";
@@ -889,6 +890,33 @@ function listAudioDevices() {
   });
   return audioDeviceList;
 }
+// An owner device (electron/owner.mjs): made only when the owner opens the
+// tools, so other people's copies never touch GitHub for it.
+let ownerDevice = null;
+const OWNER_TOKEN_PAGE =
+  "https://github.com/settings/personal-access-tokens/new";
+function owner() {
+  ownerDevice ||= new OwnerDevice({
+    file: join(app.getPath("userData"), "owner.bin"),
+    safeStorage,
+    log: (error) => logError("owner", error),
+    confirm: async (item) => {
+      const { response } = await dialog.showMessageBox(window, {
+        type: "question",
+        title: t("نشر إشعار رِواق"),
+        message: item.ar.title,
+        detail: t(
+          "يوصل لكل من يطابق الجمهور المحدد عند فتح رِواق أو تحديث صندوق الإشعارات، ويبقى في سجل GitHub.",
+        ),
+        buttons: [t("إلغاء"), t("نشر الإشعار")],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      return response === 1;
+    },
+  });
+  return ownerDevice;
+}
 /** The HUD's state for the diagnostics: flags and a rectangle, nothing else. */
 function controlsState() {
   const state = player?.state || {};
@@ -1609,6 +1637,34 @@ const methods = {
   setHotkey: (a) => client.setHotkey(a),
   resetHotkeys: () => client.resetHotkeys(),
   notifySave: (a) => client.notifier.save(a),
+  // Owner devices: main-window only (the HUD's list never has them) and
+  // behind the Settings room lock; the token never comes back.
+  ownerState: () => (ownerDevice || owner()).state(),
+  ownerOpen: () => {
+    client.profiles.gate("settings");
+    return owner().open();
+  },
+  ownerActivate: (a) => {
+    client.profiles.gate("settings");
+    return owner().activate({
+      token: a?.token,
+      remember: a?.remember !== false,
+    });
+  },
+  ownerForget: () => {
+    client.profiles.gate("settings");
+    return owner().forget();
+  },
+  ownerPreview: (a) => {
+    client.profiles.gate("settings");
+    return owner().preview(a?.draft);
+  },
+  ownerPublish: (a) => {
+    client.profiles.gate("settings");
+    return owner().publish({ nonce: a?.nonce });
+  },
+  // Only GitHub's own page for a new fine-grained token.
+  ownerTokenPage: () => shell.openExternal(OWNER_TOKEN_PAGE).then(() => true),
   announcementState: () => client.announcements.publicState(),
   announcementRefresh: () => client.announcements.refresh(),
   announcementEdit: (a) => client.announcements.edit(a),
