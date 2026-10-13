@@ -1,5 +1,16 @@
 # Verification — Riwaq
 
+## 2026-10-13 — 0.44.0: PRs #78 and #79 with the second review, Admin kept private
+
+- The owner asked that the Admin app reach nobody else before merging. Checked:
+  - The viewer package's `build.files` takes only `dist/`, `electron/`, `core/`, `assets/` and three root files, so `admin/` is never packaged.
+  - No file under `src/`, `electron/`, `core/` or `web/` imports `admin/`, and neither Vite config mentions it. The built `dist/` and `dist-web/` contain no Admin code.
+  - The release workflow attaches only `release/*.exe`, `SHA256SUMS.txt` and `riwaq-update.json`.
+- **The one leak found:** `.github/workflows/admin.yml` (from #79) built Admin and uploaded it as an Actions artifact, which any signed-in GitHub account can download from a public repository. It had never run (no runs, no artifacts). It was deleted before merging. Admin is now built only on the owner's machine.
+- `tests/admin-private.test.mjs` (4 tests) fails on any packaged path outside the viewer's folders, any viewer or Vite import of `admin/`, any workflow that builds, uploads or names Admin, a release step that attaches anything else, or an Admin that stops refusing accounts other than ABADIOSA with push access. Run against the tree with `admin.yml` still present, the workflow test failed, as it should.
+- **775 Node tests pass** (771 + 4). Prettier, both Vite builds and the Chromium web smoke pass.
+- The Admin source stays readable in the public repository like the rest of Riwaq. It holds no keys, and publishing still needs the owner's token.
+
 ## 2026-10-13 — second review of PRs #78 and #79 (source, unreleased)
 
 - Read both PRs and ran their tests on #79's head (766 pass). Four defects and one listed opportunity were handled on top of them; details in [docs/REVIEW-2026-10-13-PLAYER.md](docs/REVIEW-2026-10-13-PLAYER.md).

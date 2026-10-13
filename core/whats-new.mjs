@@ -7,6 +7,25 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.44.0",
+    title: "إشعارات رِواق، وأدوات تحكم أثبت",
+    items: [
+      "جرس إشعارات في الشريط العلوي: أخبار رِواق وتنبيهات الفريق بالعربي والإنجليزي، وتقدر توقف الاستقبال من نفس النافذة.",
+      "أدوات التحكم ترجع لو انعاد تحميلها أو علّقت، وأدوات MPV تشتغل احتياطاً لين ترجع. والمشاهدة ما تبدأ بقفزة في الصورة.",
+      "F8 يستعيد أدوات التحكم: داخل رِواق يعيد تحميلها، ومع «HDR حقيقي» يكمل المشاهدة داخل رِواق من نفس اللحظة.",
+      "Esc يغلق نافذة «HDR حقيقي» دائماً، وإغلاق محرك التورنت ما يعلّق، و«تشخيص كامل» صار يفحص أدوات التحكم.",
+    ],
+    en: {
+      title: "Riwaq notifications, and steadier player controls",
+      items: [
+        "A notification bell in the top bar: Riwaq news and team notices in Arabic and English, with reception switchable from the same window.",
+        "The controls come back after a reload or a freeze, with MPV's controls standing in until they do, and a viewing no longer starts with the picture jumping.",
+        "F8 restores the controls: inside Riwaq it reloads them; with “True HDR” it continues the viewing inside Riwaq from the same moment.",
+        "Esc always closes the “True HDR” window, the torrent engine no longer hangs when it shuts down, and the full diagnostic now checks the player controls.",
+      ],
+    },
+  },
+  {
     version: "0.43.1",
     title: "HDR حقيقي، وأدوات رِواق فوقه",
     items: [

@@ -1,4 +1,4 @@
-# Riwaq Admin foundation (unreleased)
+# Riwaq Admin (0.44, owner only)
 
 رِواق أدمن تطبيق ويندوز منفصل عن تطبيق المشاهد. يتيح حفظ مسودة إشعار ومعاينتها ونشرها يدويًا، واختيار مصدر رِواق وبناء تعديلاتك وفحصها وتشغيلها ببيانات مستقلة. هذا أساس أولي، ولا يتضمن محرر كود كاملًا أو تحديثًا تلقائيًا لتطبيق الأدمن نفسه.
 
@@ -22,7 +22,19 @@ Build a separate portable administrator app:
 npm run package:admin
 ```
 
-Output: `release-admin/Riwaq-Admin-0.43.1-win-x64.exe`. It has its own app ID, name and data directory. The normal viewer package does not include `admin/`; the admin package includes no MPV or viewer credentials. A portable admin app can compose/publish notices without Node, but development tasks require Node 24, Git and an installed source checkout. It does not use the viewer's updater or release-signing key. A manual **Build Riwaq Admin** Actions workflow builds the executable as an artifact, without publishing a viewer release.
+Output: `release-admin/Riwaq-Admin-<version>-win-x64.exe`. It has its own app ID, name and data directory. The normal viewer package does not include `admin/`; the admin package includes no MPV or viewer credentials. A portable admin app can compose/publish notices without Node, but development tasks require Node 24, Git and an installed source checkout. It does not use the viewer's updater or release-signing key. It is built only on the owner's own machine: there is no Actions workflow for it, because an Actions artifact on a public repository can be downloaded by any signed-in GitHub account.
+
+## Who can reach it
+
+Admin is for the repository owner only, and nothing distributes it:
+
+- **Not in the viewer app:** the installer, the portable copy and signed updates package only `dist/`, `electron/`, `core/` and `assets/` (`package.json` `build.files`); `admin/` is never among them, and no viewer code imports it.
+- **Not on the site:** the web edition is built from `src/` and `core/` only; GitHub Pages never receives `admin/`.
+- **Not in releases or Actions:** the release workflow uploads `release/` only, and no workflow builds Admin or uploads it as an artifact. Build it with `npm run package:admin` on your own machine and keep the executable to yourself.
+- **Useless without your key:** publishing requires a GitHub token for the **ABADIOSA** account with push access to this repository; Admin refuses any other account before it can preview or publish. Anyone who can already write to the repository could edit the feed directly, so Admin adds no new way in.
+- **The source is public:** like the rest of Riwaq, `admin/` is readable in the public repository. It holds no keys or secrets. Keeping the code itself private would mean moving it to a separate private repository.
+
+`tests/admin-private.test.mjs` fails if any of the first three ever changes.
 
 ## Connect and publish
 

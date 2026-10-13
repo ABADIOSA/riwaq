@@ -30,29 +30,18 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.43.1-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.43.1-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.44.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.44.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.43.1
+### الجديد في 0.44.0
 
-**أساس جديد قيد المراجعة:** تطبيق [رِواق أدمن](docs/ADMIN.md) منفصل لتجربة المصدر ببيانات معزولة وكتابة إشعارات ومعاينتها ثم نشرها يدويًا. وصندوق إشعارات للمشاهدين على ويندوز والويب، بحالة قراءة وإمكانية إيقاف الاستقبال. لم يُنشر في نسخة المستخدمين بعد.
-
-**قيد المراجعة بعد هذا الإصدار:** استعادة الأدوات بعد إعادة تحميلها أو تعليقها، وإصلاح Esc في نافذة HDR وإغلاق التورنت. يضيف التعديل F8 لاستعادة التحكم داخل رِواق من نفس الموضع بتحويل HDR إلى SDR لهذه المشاهدة فقط، دون تغيير تفضيلاتك. لم يُنشر بعد؛ [التفاصيل والتحقق](docs/REVIEW-2026-10-13-PLAYER.md).
-
-- **HDR حقيقي، وأدوات رِواق فوقه:** مع **«HDR حقيقي»** في **الإعدادات ← جودة الفيديو**، مصادر HDR وDolby Vision تفتح في نافذة MPV الخاصة. الحين أدوات تحكم رِواق صارت فوقها بدل أدوات MPV، وإذا تعذّر وضعها ترجع أدوات MPV احتياطاً. ما تجرّب بعد على شاشة HDR حقيقية.
-
-#### من 0.43.0
-
-- **التورنت بدون Stremio Service:** محرك تورنت مدمج واختياري، ما يحتاج تثبّت أي برنامج.
-  - فعّله من **الإعدادات ← المصادر والمكتبة ← محرك P2P**، أو من الدليل اللي يطلع أول ما تشغّل مصدر تورنت.
-  - يجيب الأجزاء اللي تشاهدها بس، ويحذفها لما تخلص، أو يخلّي ذاكرة 2 أو 5 أو 10 جيجا.
-  - تختار السرعة (هادئ، متوازن، سريع) وقد إيش يشارك أثناء المشاهدة.
-  - ما يفتح منافذ في الراوتر ولا يعلن عن نفسه في شبكتك. ومثل أي برنامج تورنت، عنوان IP حقك يظهر للمشاركين.
-- **أو Stremio Service الرسمي بخطوات:** الدليل يعطيك رابط صفحته الرسمية، ورِواق يتحقق كل ثلاث ثوانٍ ويكمّل التشغيل على نفس المصدر أول ما يرد.
-- **ليش ما نرفق خادم Stremio نفسه؟** فريق Stremio قال إن ملف `server.js` فيه كود مملوك وما ينفع يتوزّع خارج تطبيقاتهم ([stremio-shell#435](https://github.com/Stremio/stremio-shell/issues/435)). عشان كذا المحرك المدمج مبني على WebTorrent (رخصة MIT).
+- **إشعارات رِواق:** جرس في الشريط العلوي فيه أخبار رِواق وتنبيهات الفريق بالعربي والإنجليزي، مع عدّاد لغير المقروء. توقف الاستقبال من نفس النافذة بـ **«استقبال أخبار رِواق»**.
+- **أدوات تحكم أثبت:** ترجع لو انعاد تحميلها أو علّقت، وأدوات MPV تشتغل احتياطاً لين ترجع، والمشاهدة ما تبدأ بقفزة في الصورة.
+- **F8 يستعيد أدوات التحكم:** داخل رِواق يعيد تحميلها والمشاهدة مستمرة. ومع «HDR حقيقي» يكمل المشاهدة داخل رِواق من نفس اللحظة بألوان SDR لهذه المشاهدة بس، وإعداداتك تبقى.
+- **إصلاحات:** Esc يغلق نافذة «HDR حقيقي» دائماً، وإغلاق محرك التورنت ما يعلّق، و«تشخيص كامل» صار يفحص أدوات التحكم.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -85,6 +74,7 @@
 ### الخصوصية والحدود
 
 - مفاتيحك وحساباتك تنحفظ مشفّرة على جهازك. رِواق ما يطلب كلمات مرور المنصات، وما يرسل سجل مشاهدتك إلا للمنصات اللي تفعّل التسجيل فيها.
+- صندوق الإشعارات يقرأ ملف الإشعارات العام من GitHub عند فتح رِواق وكل 15 دقيقة، بدون أي بيانات عنك. تقدر توقفه من نافذة الإشعارات.
 - استيراد Stremio باتجاه واحد إلى رِواق.
 - اختبارات المنصات استخدمت المحاكاة، ولم تُجرَّب الشيدرات على كرت شاشة حقيقي ولا الواجهة الإنجليزية ولا محرك التورنت المدمج على ويندوز حقيقي بعد. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
 
@@ -117,29 +107,18 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.43.1-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.43.1-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.44.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.44.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.43.1
+### What's new in 0.44.0
 
-**New foundation under review:** a separate [Riwaq Admin](docs/ADMIN.md) app for source experiments with isolated data and manually composed, previewed announcements. Desktop/web viewers gain an inbox, read state and opt-out. Not yet released to viewers.
-
-**Under review after this release:** recover controls after a HUD reload/freeze, fix separate-window Escape and torrent shutdown. The patch adds F8 to restore controls inside Riwaq from the same position, converting HDR to SDR for this viewing only without changing saved preferences. Not released yet; [details and validation](docs/REVIEW-2026-10-13-PLAYER.md).
-
-- **True HDR, with Riwaq's controls over it:** with **"True HDR"** in **Settings → Video quality**, HDR and Dolby Vision sources open in MPV's own window. Riwaq's controls now sit over it instead of MPV's, and if they cannot, MPV's come back as a fallback. Not yet tried on a real HDR display.
-
-#### From 0.43.0
-
-- **Torrents without Stremio Service:** an optional built-in torrent engine, with nothing to install.
-  - Turn it on in **Settings → Sources & library → P2P engine**, or from the guide that opens the first time you play a torrent source.
-  - It fetches only the pieces you watch and deletes them when you finish, or keeps a 2, 5 or 10 GB cache.
-  - You choose its speed (calm, balanced, fast) and how much it shares while you watch.
-  - It never opens router ports or announces itself on your network. Like any torrent app, your IP address is visible to the peers.
-- **Or the official Stremio Service, step by step:** the guide links to its official page, and Riwaq checks every three seconds and resumes the same source as soon as it answers.
-- **Why not bundle Stremio's own server?** Stremio's team says its `server.js` contains proprietary code and is not meant to be distributed outside their apps ([stremio-shell#435](https://github.com/Stremio/stremio-shell/issues/435)). The built-in engine is built on WebTorrent (MIT) instead.
+- **Riwaq notifications:** a bell in the top bar with Riwaq news and team notices in Arabic and English, and an unread count. Turn reception off in the same window with **"Receive Riwaq news"**.
+- **Steadier controls:** they come back after a reload or a freeze, MPV's controls stand in until they do, and a viewing no longer starts with the picture jumping.
+- **F8 restores the controls:** inside Riwaq it reloads them while the viewing goes on. With "True HDR" it continues the viewing inside Riwaq from the same moment, in SDR for that viewing only, and your settings stay as they are.
+- **Fixes:** Esc always closes the "True HDR" window, the torrent engine no longer hangs when it shuts down, and the full diagnostic now checks the player controls.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
@@ -173,6 +152,7 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 ### Privacy and limits
 
 - Keys and accounts are stored encrypted on your machine. Riwaq never asks for platform passwords. It sends your viewing history only to platforms where you turn tracking on.
+- The notification inbox reads Riwaq's public notice file from GitHub when Riwaq opens and every 15 minutes, sending nothing about you. You can turn it off in the notifications window.
 - Stremio import is one-way, into Riwaq.
 - Platform tests used mocks; shaders have not yet been tried on a real GPU, nor the English interface or the built-in torrent engine on a real Windows machine. See [what was and was not tested](VERIFICATION.md).
 
