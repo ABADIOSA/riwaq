@@ -573,7 +573,12 @@ const ALL_GROUPS = [
         MousePointerClick,
       ],
       ["filters", "مرشحات البث", "مرشح جودة 4K HDR أتموس حجم مشاركين", Filter],
-      ["p2p", "محرك P2P", "تورنت اتصالات سرعة تخزين مؤقت cache", Share2],
+      [
+        "p2p",
+        "محرك P2P",
+        "تورنت اتصالات سرعة تخزين مؤقت cache المحرك المدمج WebTorrent Stremio Service رفع مشاركة",
+        Share2,
+      ],
       [
         "server",
         "خادم البث",
@@ -979,7 +984,9 @@ export default function SettingsStudio({
               {id === "homeServers" && (
                 <HomeServersPage state={state} update={update} />
               )}
-              {id === "p2p" && <P2PPage notice={notice} />}
+              {id === "p2p" && (
+                <P2PPage notice={notice} state={state} update={update} />
+              )}
               {id === "prayer" && <PrayerPage state={state} update={update} />}
               {id === "library" && (
                 <LibraryPage state={state} update={update} />

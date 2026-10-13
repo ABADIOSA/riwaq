@@ -67,6 +67,8 @@ import TasteDiscovery from "./components/TasteDiscovery.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
 import DiscoverSections from "./components/DiscoverSections.jsx";
 import WhatsNew from "./components/WhatsNew.jsx";
+import TorrentSetup from "./components/TorrentSetup.jsx";
+import { NEEDS_ENGINE } from "../core/torrent-engine.mjs";
 import ShortcutsHelp from "./components/ShortcutsHelp.jsx";
 import { lastSeen, shouldShowWhatsNew } from "../core/whats-new.mjs";
 import TraktSuggestions from "./components/Suggestions.jsx";
@@ -160,6 +162,8 @@ export default function App() {
     // "What's new" after an update, and the keyboard shortcuts ("?").
     [whatsNew, setWhatsNew] = useState(null),
     [shortcutsOpen, setShortcutsOpen] = useState(false),
+    // A torrent with no engine to play it: the guide, and the play to retry.
+    [torrentSetup, setTorrentSetup] = useState(null),
     [account, setAccount] = useState(false),
     [toast, setToast] = useState(""),
     [player, setPlayer] = useState({ active: false }),
@@ -250,12 +254,19 @@ export default function App() {
         notice("اختر مصدراً للمتابعة؛ بقي العنوان في الطابور");
         return;
       }
-      await call("play", {
+      const playArgs = {
         key: stream.key,
         meta: details,
         videoId: targetId,
         profileId,
-      });
+      };
+      try {
+        await call("play", playArgs);
+      } catch (e) {
+        if (e.message !== NEEDS_ENGINE) throw e;
+        setTorrentSetup({ args: playArgs });
+        return;
+      }
       setSelected(null);
     } catch (e) {
       notice(e.message);
@@ -278,7 +289,11 @@ export default function App() {
     try {
       return await call(method, args);
     } catch (e) {
-      notice(e.message);
+      // A torrent nothing can play yet opens the setup guide, which plays
+      // the same source again once an engine is ready.
+      if (method === "play" && e.message === NEEDS_ENGINE)
+        setTorrentSetup({ args });
+      else notice(e.message);
       return null;
     }
   };
@@ -1574,6 +1589,17 @@ export default function App() {
             onClose={() => {
               setWhatsNew(null);
               update("settings", { seenVersion: runningVersion });
+            }}
+          />
+        )}
+        {torrentSetup && (
+          <TorrentSetup
+            update={update}
+            onClose={() => setTorrentSetup(null)}
+            onRetry={() => act("play", torrentSetup.args)}
+            onSettings={() => {
+              setTorrentSetup(null);
+              latest.current.settings("p2p");
             }}
           />
         )}

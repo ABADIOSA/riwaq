@@ -86,6 +86,7 @@ export async function runDiagnostics(deps) {
     player,
     errors,
     rendererErrors = [],
+    torrentEngine = null,
     fetcher = fetch,
     run = runProgram,
     userData = app.getPath("userData"),
@@ -303,6 +304,7 @@ export async function runDiagnostics(deps) {
     };
   });
 
+  const engineChoice = client.state.settings.torrentEngine || "ask";
   await add("server", "Stremio Service (للتورنت)", async () => {
     const base = client.state.settings.serverUrl;
     try {
@@ -311,11 +313,31 @@ export async function runDiagnostics(deps) {
         ? { detail: `يستجيب (${r.ms} ms)` }
         : { status: "warn", detail: `ردّ برمز ${r.status}` };
     } catch {
-      return {
-        status: "warn",
-        detail: "لا يعمل. لازم فقط لمصادر التورنت؛ شغّل Stremio Service",
-      };
+      // With the built-in engine always chosen, a missing service is fine.
+      return engineChoice === "builtin"
+        ? { detail: "لا يعمل، والمحرك المدمج مختار للتورنت" }
+        : {
+            status: "warn",
+            detail: "لا يعمل. لازم فقط لمصادر التورنت؛ شغّل Stremio Service",
+          };
     }
+  });
+
+  // The built-in engine: its choice and counts, never an address.
+  await add("torrent-engine", "المحرك المدمج للتورنت", async () => {
+    const stats = (await torrentEngine?.stats?.()) || { running: false };
+    const choice =
+      {
+        ask: "يُسأل عنه أول مرة",
+        auto: "إذا ما رد Stremio Service",
+        builtin: "دائماً",
+      }[engineChoice] || "يُسأل عنه أول مرة";
+    return {
+      detail: stats.running
+        ? `يعمل · ${stats.torrents} عمل · ${stats.peers} مشارك · ${choice}`
+        : `متوقف · ${choice}`,
+      data: { choice: engineChoice, running: !!stats.running },
+    };
   });
 
   const services = [

@@ -1,5 +1,29 @@
 # Verification — Riwaq
 
+## 2026-10-13 — 0.43.0: a built-in torrent engine and guided Stremio Service setup
+
+- **Option 1 (bundling Stremio's server.js) was rejected on its licence, not tried.** Stremio's lead developer wrote in Stremio/stremio-shell#435 (May 2025) that server.js "includes proprietary code and is not meant to be used / distributed outside of an official Stremio app". The MIT re-implementations found (stremio-server-go, stremio-native/stream-server) are early and listen on every interface without authentication by default. Riwaq neither bundles nor downloads server.js.
+- **743 Node tests pass** (731 + 12). Prettier, the desktop and web Vite builds, and `node scripts/test-web.mjs` (the Chromium web smoke, with the account service) pass.
+- `tests/torrent-engine.test.mjs` (12 tests):
+  - The pure rules: engine choice, options (whole bytes per second, as WebTorrent requires), trackers and magnets, file choice, byte ranges, cache pruning (empty folders first, then the oldest, never one in use) and public stats.
+  - A real local swarm with no internet: a WebTorrent seeder and the engine on the same machine, DHT and trackers off, the peer added directly. The engine serves byte ranges, HEAD, a 416 for an impossible range and the whole file, and the bytes match the seeded file.
+  - The HTTP server refuses a foreign Host header (403), other methods (405), a wrong token or unknown hash (404), and metadata that never arrives (504).
+  - A release deletes a title's pieces after the grace period with the "viewing" cache; a size cache keeps them, and "clear" empties it.
+  - `TorrentHost` with the real host module behind a fake `parentPort` and a local bittorrent-tracker: start, play, stats, release, and a crashed process started again on the next play.
+  - Wiring: uTP, LSD, UPnP and NAT-PMP off, 127.0.0.1 only, the `ask`/`auto`/`builtin` choice, `NEEDS_ENGINE` thrown by main and the web bridge and caught by App (play and autoplay), the utility-process fork, release when the viewing ends, the replay guard (a replay of the same torrent keeps it), seek previews counting the engine as remote, stop on quit, the fixed Stremio Service download page, settings applied live, `serviceUp` refusing redirects, the preload allowlist and the default `ask`.
+- Electron on Linux (xvfb, Electron's own Linux build): `utilityProcess` started `electron/torrent-host.mjs`, WebTorrent and its native modules loaded, and the first 1 MiB range of a locally seeded file arrived correct in 1.2 s. The cache folder was empty after stop. With uTP on, the same check took 42 s (each connection stalled about 40 s before TCP took over), which is why uTP is off.
+- Throughput on the local swarm: about 6.9 MB/s with the balanced profile; the calm profile held at its 1.6 MB/s cap.
+- Headless Chromium against the built interface with a mock bridge, Arabic and English:
+  - The torrent guide: "use the built-in engine" saves `auto` and plays the same source again; Stremio Service found by the 3-second check plays it again; on the web only the Stremio Service option is offered.
+  - The P2P engine settings card in both languages.
+  - No page errors and no horizontal overflow.
+- Windows packaging dry run from Linux (`electron-builder --dir --win` with the repository config, minus `electronDist`): the native `.node` files land in `app.asar.unpacked` and only `win32-x64` prebuilds remain. `app.asar` grows from 38 to 61 MB and `app.asar.unpacked` from 2 to 12 MB (`node_datachannel.node` is 9 MB); compressed with 7-Zip, the app files grow from 2.3 to 7.1 MB.
+- Not run here:
+  - No Windows run: the engine in a packaged Windows build, its native modules (node-datachannel, utp-native, bufferutil, utf-8-validate) loading on Windows, Windows Firewall's first-run prompt, and MPV playing from the engine.
+  - No public swarm or real addon torrent: DHT and public trackers were never contacted, so start-up time and speed on real torrents are unmeasured.
+  - No real Stremio Service: its download page is blocked from this environment, and the guide's detection ran against a mock.
+  - The installer itself was not built (`electronDist` is not available here), so the 7-Zip figure is an estimate of the download, not the installer's size.
+
 ## 2026-10-12 — 0.42.0: English interface and issue #74
 
 - **731 Node tests pass** (706 + 25). Prettier, the desktop and web Vite builds, and `node scripts/test-web.mjs` (the Chromium web smoke, with the account service) pass.

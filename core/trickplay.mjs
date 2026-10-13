@@ -42,7 +42,8 @@ export function isHomeHost(hostname) {
  * Whether a preview may be taken of this source. `source` is what main holds
  * for the current viewing (never sent to the interface): its address,
  * whether it is a local file, whether it is live. `serverUrl` is the torrent
- * streaming server, whose streams count as remote.
+ * streaming server (or a list: Stremio Service and the built-in engine),
+ * whose streams count as remote.
  */
 export function thumbnailsAllowed(source, mode, serverUrl = "") {
   if (!source || source.live || !THUMB_MODES.includes(mode) || mode === "off")
@@ -56,10 +57,12 @@ export function thumbnailsAllowed(source, mode, serverUrl = "") {
   }
   if (!["http:", "https:"].includes(url.protocol)) return false;
   if (mode === "all") return true;
-  try {
-    if (serverUrl && new URL(serverUrl).origin === url.origin) return false;
-  } catch {
-    /* A malformed server address cannot match. */
+  for (const server of [serverUrl].flat()) {
+    try {
+      if (server && new URL(server).origin === url.origin) return false;
+    } catch {
+      /* A malformed server address cannot match. */
+    }
   }
   return isHomeHost(url.hostname);
 }

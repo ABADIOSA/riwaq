@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   CheckCircle2,
+  Download,
   ExternalLink,
   Loader2,
   Plus,
@@ -436,8 +437,193 @@ function useServerInfo() {
   return [info, setInfo, refresh];
 }
 
+const ENGINE_CHOICES = [
+  [
+    "ask",
+    "اسألني أول مرة",
+    "Stremio Service إذا كان شغّال، وإلا يطلع دليل يعرض الطريقتين.",
+  ],
+  [
+    "auto",
+    "Stremio Service، وإلا المحرك المدمج",
+    "خدمتك إذا كانت شغّالة، والمحرك المدمج إذا ما كانت.",
+  ],
+  ["builtin", "المحرك المدمج دائماً", "حتى لو كان Stremio Service شغّال."],
+];
+const ENGINE_UPLOADS = [
+  ["normal", "بلا حد"],
+  ["low", "منخفض (256 ك.ب/ث)"],
+  ["minimal", "أدنى حد (32 ك.ب/ث)"],
+];
+const ENGINE_CACHE_CHOICES = [
+  ["viewing", "تنحذف بعد المشاهدة"],
+  ["2", "2 غيغابايت"],
+  ["5", "5 غيغابايت"],
+  ["10", "10 غيغابايت"],
+];
+const PEERS = {
+  zero: "لا مشاركين",
+  one: "مشارك واحد",
+  two: "مشاركان",
+  few: "{n} مشاركين",
+  many: "{n} مشاركاً",
+  other: "{n} مشارك",
+};
+const TORRENTS = {
+  zero: "لا أعمال",
+  one: "عمل واحد",
+  two: "عملان",
+  few: "{n} أعمال",
+  many: "{n} عملاً",
+  other: "{n} عمل",
+};
+const speed = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} م.ب/ث`;
+const size = (bytes) =>
+  bytes >= 1024 ** 3
+    ? `${(bytes / 1024 ** 3).toFixed(1)} غيغابايت`
+    : `${Math.round(bytes / 1024 / 1024)} م.ب`;
+
+/**
+ * Which engine plays torrents (core/torrent-engine.mjs), and the built-in
+ * engine's options and live counts. The engine itself never shows an
+ * address: only counts, speeds and the size of its pieces on disk.
+ */
+function TorrentEngineCard({ state, update, notice }) {
+  const s = state.settings;
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      call("torrentEngineStats")
+        .then((value) => live && setStats(value))
+        .catch(() => live && setStats({ available: false }));
+    load();
+    const timer = setInterval(load, 3000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, []);
+  const available = stats?.available !== false;
+  const engine = s.torrentEngine || "ask";
+  const choice = (key, value, current, label) => (
+    <button
+      key={value}
+      role="radio"
+      aria-checked={current === value}
+      className={current === value ? "selected" : ""}
+      onClick={() => update("settings", { [key]: value })}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <section className="settings-card torrent-engine-card">
+      <h2>محرك التورنت</h2>
+      <p>
+        مصادر التورنت تحتاج محركاً يجمع أجزاءها من المشاركين: Stremio Service
+        الرسمي على جهازك، أو المحرك المدمج في رِواق (WebTorrent).
+      </p>
+      <div
+        className="frame-options p2p-options"
+        role="radiogroup"
+        aria-label="محرك التورنت"
+      >
+        {ENGINE_CHOICES.map(([id, title, text]) => (
+          <button
+            key={id}
+            role="radio"
+            aria-checked={engine === id}
+            className={`p2p-option ${engine === id ? "selected" : ""}`}
+            disabled={!available && id !== "ask"}
+            onClick={() => update("settings", { torrentEngine: id })}
+          >
+            <b>{title}</b>
+            <p>{text}</p>
+          </button>
+        ))}
+      </div>
+      {!available ? (
+        <p className="subtle">المحرك المدمج يحتاج نسخة رِواق لسطح المكتب.</p>
+      ) : (
+        <>
+          <p className="subtle">
+            مثل أي برنامج تورنت، المحرك المدمج يشارك الأجزاء اللي نزلت مع غيرك
+            أثناء المشاهدة، فعنوان IP حقك يظهر للمشاركين. ما يفتح منافذ في
+            الراوتر، ويوقف المشاركة بعد نهاية المشاهدة بدقائق.
+          </p>
+          <h3>أسلوب التنزيل</h3>
+          <div className="choice-row" role="radiogroup">
+            {PROFILES.map(([id, title]) =>
+              choice(
+                "torrentProfile",
+                id,
+                s.torrentProfile || "balanced",
+                title,
+              ),
+            )}
+          </div>
+          <h3>الرفع أثناء المشاهدة</h3>
+          <div className="choice-row" role="radiogroup">
+            {ENGINE_UPLOADS.map(([id, label]) =>
+              choice("torrentUpload", id, s.torrentUpload || "normal", label),
+            )}
+          </div>
+          <h3>الأجزاء على جهازك</h3>
+          <div className="choice-row" role="radiogroup">
+            {ENGINE_CACHE_CHOICES.map(([id, label]) =>
+              choice("torrentCache", id, s.torrentCache || "viewing", label),
+            )}
+          </div>
+          <div className="server-probe">
+            {stats?.running ? (
+              <span className="service-status ok">
+                <span>يعمل</span> ·{" "}
+                <span>{arabicCount(stats.torrents, TORRENTS)}</span> ·{" "}
+                <span>{arabicCount(stats.peers, PEERS)}</span> ·{" "}
+                <span dir="ltr">↓ {speed(stats.down)}</span> ·{" "}
+                <span dir="ltr">↑ {speed(stats.up)}</span>
+              </span>
+            ) : (
+              <span className="service-status">
+                متوقف؛ يبدأ مع أول مصدر تورنت يشغّله
+              </span>
+            )}
+            {stats?.cache > 0 && (
+              <span className="subtle">
+                على جهازك: <span>{size(stats.cache)}</span>
+              </span>
+            )}
+            <button
+              className="secondary small"
+              onClick={async () => {
+                await call("torrentEngineClear")
+                  .then(() => notice?.("مُسحت أجزاء التورنت المحفوظة"))
+                  .catch((e) => notice?.(e.message));
+              }}
+            >
+              <Trash2 size={15} /> امسح أجزاء التورنت
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 /** The torrent engine of the streaming server: profile and cache. */
-export function P2PPage({ notice }) {
+export function P2PPage({ notice, state, update }) {
+  return (
+    <>
+      {state && (
+        <TorrentEngineCard state={state} update={update} notice={notice} />
+      )}
+      <ServiceEngineCard notice={notice} />
+    </>
+  );
+}
+
+function ServiceEngineCard({ notice }) {
   const [info, setInfo, refresh] = useServerInfo();
   const [busy, setBusy] = useState(false);
   const save = async (patch) => {
@@ -452,7 +638,7 @@ export function P2PPage({ notice }) {
   };
   return (
     <section className="settings-card">
-      <h2>محرك P2P</h2>
+      <h2>Stremio Service</h2>
       <p>
         يشغّل خادم البث (Stremio Service) مصادر التورنت. هذه الإعدادات تحفظ في
         الخادم نفسه، فتسري على كل تطبيق يستخدمه.
@@ -561,6 +747,20 @@ export function ServerPage({ state, update }) {
           <RefreshCw size={15} /> فحص الاتصال
         </button>
       </div>
+      {info && !info.reachable && (
+        <div className="folder-needs">
+          <p>
+            ما عندك Stremio Service؟ نزّله من صفحة إصداراته الرسمية، أو استخدم
+            المحرك المدمج من صفحة «محرك P2P».
+          </p>
+          <button
+            className="secondary small"
+            onClick={() => call("openServiceDownload").catch(() => {})}
+          >
+            <Download size={15} /> صفحة التنزيل الرسمية
+          </button>
+        </div>
+      )}
       <button className="secondary" onClick={() => update("choosePlayer")}>
         اختيار نسخة MPV مخصصة
       </button>

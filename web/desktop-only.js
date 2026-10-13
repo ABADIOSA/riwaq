@@ -15,4 +15,5 @@ export const DESKTOP_ONLY = {
   audioDevices: `اختيار جهاز إخراج الصوت ${DESKTOP}؛ المتصفح يستخدم جهاز النظام.`,
   nuvioScan: `قراءة بيانات نوفيو من جهازك ${DESKTOP}. استخدم ملف النسخة الاحتياطية من نوفيو بدلاً منها.`,
   presenceSave: `حالة Discord تتصل بتطبيق Discord على جهازك و${DESKTOP}.`,
+  torrentEngineClear: `المحرك المدمج للتورنت يعمل داخل ${DESKTOP}؛ الموقع يستخدم Stremio Service.`,
 };

@@ -3348,3 +3348,54 @@ em.tag-custom.has-text:not(.badge-outlined) {
   color: #8fbcf0;
   background: #8fbcf014;
 }
+
+/* ---- Torrent setup guide (core/torrent-engine.mjs) ---- */
+.modal.torrent-setup {
+  width: 780px;
+}
+.torrent-setup-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+.torrent-setup-option {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line, #ffffff14);
+  border-radius: var(--radius, 14px);
+  background: #ffffff05;
+}
+.torrent-setup-option h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+}
+.torrent-setup-option ul,
+.torrent-setup-option ol {
+  margin: 0;
+  padding-inline-start: 18px;
+  line-height: 1.85;
+  font-size: 13px;
+  color: var(--muted, #b9b9b9);
+}
+.torrent-setup-option > button {
+  align-self: flex-start;
+  margin-top: auto;
+}
+.torrent-setup-foot {
+  justify-content: space-between;
+}
+.torrent-engine-card .server-probe {
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+.torrent-setup-option .button-row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-top: auto;
+}
