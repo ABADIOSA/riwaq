@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const allowed = new Set([
+  "announcementState",
+  "announcementRefresh",
+  "announcementEdit",
+  "announcementOpen",
   "musicLocalLibrary",
   "musicLocalImport",
   "musicLocalEdit",

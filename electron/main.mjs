@@ -1596,6 +1596,15 @@ const methods = {
   setHotkey: (a) => client.setHotkey(a),
   resetHotkeys: () => client.resetHotkeys(),
   notifySave: (a) => client.notifier.save(a),
+  announcementState: () => client.announcements.publicState(),
+  announcementRefresh: () => client.announcements.refresh(),
+  announcementEdit: (a) => client.announcements.edit(a),
+  announcementOpen: async ({ id }) => {
+    const item = client.announcements
+      .publicState()
+      .items.find((n) => n.id === id);
+    if (item?.link) await shell.openExternal(item.link);
+  },
   notifyTest: (a) => client.notifier.test(a.id),
   presenceSave: async ({ appId }) => {
     if (appId !== undefined) {

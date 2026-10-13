@@ -156,6 +156,7 @@ export async function startBridge({ version, store }) {
     save: store.save,
     version,
     spotifyRedirect: pageAddress(),
+    announcementPlatform: "web",
     // Set at build time for tests and development (vite.web.config.mjs).
     accountServer: import.meta.env.RIWAQ_ACCOUNT_SERVER || undefined,
   });
@@ -1178,6 +1179,15 @@ export async function startBridge({ version, store }) {
     setHotkey: (a) => client.setHotkey(a),
     resetHotkeys: () => client.resetHotkeys(),
     notifySave: (a) => client.notifier.save(a),
+    announcementState: () => client.announcements.publicState(),
+    announcementRefresh: () => client.announcements.refresh(),
+    announcementEdit: (a) => client.announcements.edit(a),
+    announcementOpen: ({ id }) => {
+      const item = client.announcements
+        .publicState()
+        .items.find((n) => n.id === id);
+      if (item?.link) window.open(item.link, "_blank", "noopener,noreferrer");
+    },
     notifyTest: (a) => client.notifier.test(a.id),
     liveAdd: (a) => {
       client.profiles.gate("live");

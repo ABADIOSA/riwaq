@@ -1,0 +1,22 @@
+name: Build Riwaq Admin
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/announcements.test.mjs
+      - run: npm run package:admin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Riwaq-Admin-Windows
+          path: release-admin/Riwaq-Admin-*-win-x64.exe
+          if-no-files-found: error

@@ -72,6 +72,7 @@ import { AccountHub } from "./account.mjs";
 import { LiveHub } from "./live-hub.mjs";
 import { Profiles } from "./profiles.mjs";
 import { Notifier } from "./notify.mjs";
+import { Announcements } from "./announcements.mjs";
 import { Updates } from "./updates.mjs";
 import { cleanMedia, editQueue, isCompleted } from "./library.mjs";
 import {
@@ -230,6 +231,8 @@ export class Client {
     spotifyRedirect,
     accountServer,
     accountRequest,
+    announcementRequest,
+    announcementPlatform = "desktop",
     version = "",
   }) {
     this.version = version;
@@ -276,6 +279,10 @@ export class Client {
     });
     this.profiles = new Profiles(this);
     this.notifier = new Notifier(this);
+    this.announcements = new Announcements(this, {
+      platform: announcementPlatform,
+      ...(announcementRequest ? { request: announcementRequest } : {}),
+    });
     this.updates = new Updates(this);
     // The active profile owns favorites, progress, lists and settings, so the
     // client state has to point at its bucket before anything reads them.
@@ -345,6 +352,7 @@ export class Client {
       live: this.live.publicState(),
       profiles: this.profiles.publicState(),
       notify: this.notifier.publicState(),
+      announcements: this.announcements.publicState(),
       hotkeys: publicHotkeys(this.state.hotkeys),
       update: this.updates.publicState(this.version),
       connectedLists: this.state.connectedLists || [],

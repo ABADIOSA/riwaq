@@ -1,5 +1,19 @@
 # سجل رِواق — Riwaq changelog
 
+## أساس قيد المراجعة بعد 0.43.1 — رِواق أدمن والإشعارات
+
+- تطبيق أدمن مستقل: مسودات ومعاينة ثم نشر يدوي بصلاحية مالك GitHub، دون حفظ الرمز في الملفات أو إرساله للمشاهدين.
+- مختبر مصدر: اختيار المستودع، عرض الفرع والإصدار والتعديلات، بناء وفحص وتشغيل ببيانات تجربة معزولة، وروابط GitHub والإصدارات.
+- صندوق إشعارات للمشاهد على ويندوز والويب: جرس وعدّاد قراءة، قراءة الكل، رسائل عربية وإنجليزية، وإيقاف الاستقبال على الجهاز. الجمهور والإصدار ومدة الظهور تحددها عند المعاينة.
+- لا يرسل هذا التغيير رسالة فعلية، ولا يغيّر تحديثات رِواق الموقعة أو ينشر إصدارًا جديدًا تلقائيًا. [الدليل والحدود](ADMIN.md).
+
+### English
+
+- Separate Admin foundation with local drafts, manual preview/confirmation and owner-only GitHub publication; the token stays in main-process memory.
+- Source lab for checkout/version/branch status, fixed build/test commands and an isolated-data preview, plus GitHub/release links.
+- Desktop/web viewer inbox with unread state, mark-as-read, bilingual messages and device opt-out; notices can target a platform and version range and expire.
+- No real broadcast, automatic release or change to signed viewer updates. [Setup and limits](ADMIN.md).
+
 ## قيد المراجعة بعد 0.43.1 — استقرار التحكم في الفيديو
 
 - استعادة حالة المشغل عند إعادة تحميل أدوات رِواق، مع تأكيد دوري لعملها وعودة أدوات MPV الاحتياطية عند تعليقها.

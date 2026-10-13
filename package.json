@@ -13,9 +13,11 @@
     "build:web": "vite build --config vite.web.config.mjs",
     "dev:web": "vite --config vite.web.config.mjs",
     "start": "electron .",
+    "admin": "electron admin/main.mjs",
     "test": "node --test tests/*.test.mjs",
-    "format": "prettier --write src core electron tests scripts web server",
-    "check": "prettier --check src core electron tests scripts web server",
+    "format": "prettier --write src core electron tests scripts web server admin announcements",
+    "check": "prettier --check src core electron tests scripts web server admin announcements",
+    "package:admin": "electron-builder --config admin/electron-builder.json --win portable --x64 --publish never",
     "package": "npm run build && node node_modules/electron/install.js && electron-builder --win nsis portable --x64 --publish never",
     "release:sign": "node scripts/sign-release.mjs"
   },

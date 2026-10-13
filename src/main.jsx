@@ -18,6 +18,7 @@ import "./taste.css";
 import "./music.css";
 import "./local-music.css";
 import "./ltr.css";
+import "./notifications.css";
 import { watchErrors } from "./lib/diagnostics.js";
 
 // Recent interface errors for the diagnostic report (Settings → النظام).

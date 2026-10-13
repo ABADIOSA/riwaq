@@ -70,6 +70,7 @@ import WhatsNew from "./components/WhatsNew.jsx";
 import TorrentSetup from "./components/TorrentSetup.jsx";
 import { NEEDS_ENGINE } from "../core/torrent-engine.mjs";
 import ShortcutsHelp from "./components/ShortcutsHelp.jsx";
+import NotificationCenter from "./components/NotificationCenter.jsx";
 import { lastSeen, shouldShowWhatsNew } from "../core/whats-new.mjs";
 import TraktSuggestions from "./components/Suggestions.jsx";
 import {
@@ -1053,6 +1054,7 @@ export default function App() {
                 navigate("settings");
               }}
             />
+            <NotificationCenter />
             <IconButton
               title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
               onClick={() => act("localVideo")}

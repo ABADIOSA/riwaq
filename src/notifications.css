@@ -1,0 +1,80 @@
+.notification-trigger {
+  position: relative;
+  flex-shrink: 0;
+}
+.notification-count {
+  position: absolute;
+  inset-block-start: -3px;
+  inset-inline-end: -3px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 20px;
+  font-size: 10px;
+  min-width: 17px;
+  padding: 2px;
+}
+.notification-center {
+  width: min(660px, calc(100vw - 32px));
+}
+.notification-center .modal-inner {
+  padding: 30px;
+}
+.notification-center > p,
+.notification-center small {
+  color: var(--muted);
+}
+.notification-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-block: 12px;
+}
+.notification-toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.notification-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-block: 18px;
+}
+.notification-opt input {
+  width: auto;
+}
+.notification-list {
+  display: grid;
+  gap: 12px;
+  margin-block: 18px;
+}
+.notification-list article {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  background: var(--panel);
+}
+.notification-list article.unread {
+  border-inline-start: 3px solid var(--accent);
+}
+.notification-list header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+}
+.notification-list h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 17px;
+}
+.notification-list p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+.notification-list time {
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--muted);
+}
