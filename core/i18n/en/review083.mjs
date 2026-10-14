@@ -1,4 +1,9 @@
 export default {
+  "جارٍ حذف تنزيلات هذا الملف الشخصي؛ انتظر انتهاء العملية":
+    "This profile's downloads are being deleted; wait until it finishes",
+  "تعذر حذف بعض التنزيلات؛ أغلق البرامج التي تستخدم الملفات ثم حاول حذف الملف الشخصي مجددًا":
+    "Some downloads could not be deleted; close programs using the files and retry deleting the profile",
+  "معرّف الفيديو: {1}": "Video ID: {1}",
   "ترتيب مخصص من الإعدادات المتقدمة": "Custom order from advanced settings",
   التشخيص: "Diagnostics",
   "نسخة الويب تستخدم Stremio Service للتورنت؛ المحرك المدمج متاح على ويندوز.":

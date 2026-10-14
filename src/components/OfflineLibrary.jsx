@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "./UI.jsx";
 import { call, isWeb } from "../lib/api.js";
+import { offlineEpisode } from "../../core/offline-media.mjs";
+import { episodeLabel } from "../../core/episodes.mjs";
 const LABELS = {
   downloading: "جارٍ التنزيل",
   ready: "جاهز دون إنترنت",
@@ -52,48 +54,68 @@ export default function OfflineLibrary({ state, onClose, notice }) {
       ) : !items.length ? (
         <p>لا توجد تنزيلات بعد.</p>
       ) : (
-        items.map((x) => (
-          <article key={x.id}>
-            <header>
-              <b dir="auto">{x.meta.name}</b>
-              <small>{LABELS[x.status]}</small>
-            </header>
-            <p>
-              {(x.bytes / 1024 ** 2).toFixed(1)} MB
-              {x.total ? ` / ${(x.total / 1024 ** 2).toFixed(1)} MB` : ""}
-            </p>
-            {x.status === "downloading" && (
-              <progress value={x.bytes} max={x.total || undefined} />
-            )}
-            <div className="button-row">
-              {x.status === "ready" && (
-                <button
-                  className="primary small"
-                  disabled={busy}
-                  onClick={() => act("offlinePlay", x.id)}
-                >
-                  تشغيل التنزيل
-                </button>
+        items.map((x) => {
+          const episode = offlineEpisode(x.meta, x.videoId, x.episode);
+          return (
+            <article key={x.id}>
+              <header>
+                <b dir="auto">{x.meta.name}</b>
+                <small>{LABELS[x.status]}</small>
+              </header>
+              {episode && (
+                <div className="offline-episode">
+                  {episode.episode !== undefined && (
+                    <small>{episodeLabel(episode)}</small>
+                  )}
+                  {episode.title && <p dir="auto">{episode.title}</p>}
+                </div>
               )}
+              {!episode &&
+                typeof x.videoId === "string" &&
+                x.videoId &&
+                x.videoId !== x.meta.id && (
+                  <p
+                    className="offline-id"
+                    dir="auto"
+                  >{`معرّف الفيديو: ${x.videoId}`}</p>
+                )}
+              <p className="offline-size" dir="ltr">
+                {(x.bytes / 1024 ** 2).toFixed(1)} MB
+                {x.total ? ` / ${(x.total / 1024 ** 2).toFixed(1)} MB` : ""}
+              </p>
               {x.status === "downloading" && (
+                <progress value={x.bytes} max={x.total || undefined} />
+              )}
+              <div className="button-row">
+                {x.status === "ready" && (
+                  <button
+                    className="primary small"
+                    disabled={busy}
+                    onClick={() => act("offlinePlay", x.id)}
+                  >
+                    تشغيل التنزيل
+                  </button>
+                )}
+                {x.status === "downloading" && (
+                  <button
+                    className="secondary small"
+                    disabled={busy}
+                    onClick={() => act("offlineCancel", x.id)}
+                  >
+                    إيقاف التنزيل
+                  </button>
+                )}
                 <button
                   className="secondary small"
                   disabled={busy}
-                  onClick={() => act("offlineCancel", x.id)}
+                  onClick={() => act("offlineRemove", x.id)}
                 >
-                  إيقاف التنزيل
+                  حذف التنزيل
                 </button>
-              )}
-              <button
-                className="secondary small"
-                disabled={busy}
-                onClick={() => act("offlineRemove", x.id)}
-              >
-                حذف التنزيل
-              </button>
-            </div>
-          </article>
-        ))
+              </div>
+            </article>
+          );
+        })
       )}
     </Modal>
   );

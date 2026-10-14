@@ -2,6 +2,7 @@ import { mkdir, open, rename, rm, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { cleanMedia } from "../core/library.mjs";
+import { offlineEpisode } from "../core/offline-media.mjs";
 
 const ID = /^[a-f0-9]{32}$/;
 const MAX_BYTES = 500 * 1024 ** 3;
@@ -128,11 +129,16 @@ export async function downloadFile({
 
 /** Opaque IDs in the renderer; files and source URLs stay in main, outside sync/backups. */
 export class OfflineLibrary {
-  constructor(client, { root, resolveSource, request = fetch }) {
+  constructor(
+    client,
+    { root, resolveSource, request = fetch, deleteFile = removeFile },
+  ) {
     this.client = client;
     this.root = root;
     this.resolveSource = resolveSource;
     this.request = request;
+    this.deleteFile = deleteFile;
+    this.removing = new Set();
     this.job = null;
     this.playing = "";
     client.state.offline ||= {};
@@ -154,6 +160,7 @@ export class OfflineLibrary {
         .map((x) => ({
           ...x,
           meta: cleanMedia(x.meta),
+          episode: offlineEpisode(x.meta, x.videoId, x.episode),
           status: x.status === "ready" ? "ready" : "interrupted",
         }));
     }
@@ -162,6 +169,8 @@ export class OfflineLibrary {
     if (profileId !== this.client.profiles.store.active)
       throw Error("تغير الملف الشخصي؛ افتح التنزيلات مجددًا");
     this.client.profiles.gate("library");
+    if (this.removing.has(profileId))
+      throw Error("جارٍ حذف تنزيلات هذا الملف الشخصي؛ انتظر انتهاء العملية");
     return profileId;
   }
   bag(profile) {
@@ -182,6 +191,7 @@ export class OfflineLibrary {
         id: x.id,
         meta: x.meta,
         videoId: x.videoId,
+        episode: x.episode,
         at: x.at,
         status: x.status,
         bytes: this.job?.id === x.id ? this.job.bytes : x.bytes || 0,
@@ -199,6 +209,7 @@ export class OfflineLibrary {
       id: randomBytes(16).toString("hex"),
       meta: cleanMedia(meta),
       videoId: String(videoId).slice(0, 1000),
+      episode: offlineEpisode(meta, videoId),
       at: Date.now(),
       status: "downloading",
       bytes: 0,
@@ -305,17 +316,40 @@ export class OfflineLibrary {
    * removal's own PIN check, so it does not ask for the active profile.
    */
   async forgetProfile(profileId) {
-    const bag = this.client.state.offline?.[profileId];
-    if (this.job?.profile === profileId) {
-      this.job.abort.abort();
-      await this.job.done;
+    if (this.removing.has(profileId))
+      throw Error("جارٍ حذف تنزيلات هذا الملف الشخصي؛ انتظر انتهاء العملية");
+    this.removing.add(profileId);
+    try {
+      if (this.job?.profile === profileId) {
+        this.job.abort.abort();
+        await this.job.done;
+      }
+      const bag = this.client.state.offline?.[profileId];
+      for (const item of Array.isArray(bag) ? [...bag] : []) {
+        if (!ID.test(item?.id)) throw Error("التنزيل غير صالح");
+        if (item.id === this.playing)
+          throw Error("أوقف مشاهدة التنزيل قبل حذفه");
+        try {
+          // Delete the partial first: a locked partial must not destroy an
+          // otherwise playable complete copy or drop its owning record.
+          await this.deleteFile(this.path(item.id, true));
+          await this.deleteFile(this.path(item.id));
+        } catch {
+          throw Error(
+            "تعذر حذف بعض التنزيلات؛ أغلق البرامج التي تستخدم الملفات ثم حاول حذف الملف الشخصي مجددًا",
+          );
+        }
+        this.client.state.offline[profileId] = this.bag(profileId).filter(
+          (x) => x.id !== item.id,
+        );
+      }
+      delete this.client.state.offline?.[profileId];
+    } finally {
+      this.removing.delete(profileId);
+      // Save partial progress too: failures keep the profile and every
+      // undeleted file's record, so deletion can be retried after restart.
+      this.persist();
     }
-    for (const item of Array.isArray(bag) ? bag : []) {
-      if (!ID.test(item?.id) || item.id === this.playing) continue;
-      await removeFile(this.path(item.id)).catch(() => {});
-      await removeFile(this.path(item.id, true)).catch(() => {});
-    }
-    delete this.client.state.offline?.[profileId];
   }
   async stop() {
     this.job?.abort.abort();

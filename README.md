@@ -41,6 +41,7 @@
 إصلاحات واقتراحات من ملاحظات مستخدم على 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82))، مع مراجعة كوديكس ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
 
 - **التنزيل للمشاهدة بدون إنترنت:** من قائمة الزر الأيمن في المشغّل، والتنزيلات في زر فوق. ملفات الفيديو الكاملة والتورنت، بدون HLS/DASH أو البث المباشر، وما يكمّل تنزيل انقطع.
+  - الموسم والحلقة وعنوانها يظهرون مع التنزيل. وإذا تعذّر حذف ملف، يبقى سجله والملف الشخصي لإعادة المحاولة.
 - **قائمة الزر الأيمن في المشغّل:** إيقاف مؤقت، والترجمة والصوت، ولقطة شاشة، ونسخ رابط التورنت، والتنزيل.
 - **إعدادات أساسية أولاً:** اللغة والترجمة والجودة والتورنت في صفحة وحدة، والباقي في **«إعدادات متقدمة»**. و**«واجهة هادئة»** تخفي أزرار الحساب والملفات ودعوة ربط ستريميو.
 - **الإغلاق والإيقاف:** إغلاق رِواق أثناء المشاهدة صار سليم بدون رسالة «Object has been destroyed»، والإيقاف وقت تجهيز المصدر ما يخلّي الفيديو يشتغل بعدها.
@@ -124,6 +125,7 @@ Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/lat
 Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)), with Codex's review ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
 
 - **Offline downloads:** from the player's right-click menu, then from the Downloads button at the top. Complete video files and torrents; no HLS/DASH or live streams, and an interrupted download does not resume.
+  - Downloads show season, episode and title. If a file cannot be deleted, its record and profile stay available for retry.
 - **A right-click menu in the player:** pause, subtitles and audio, screenshot, copy the torrent link, and download.
 - **Basic settings first:** language, subtitles, quality and torrents on one page, the rest under **"Advanced settings"**. **"Quiet interface"** hides the account and profile buttons and the Stremio linking prompt.
 - **Closing and stopping:** closing Riwaq during a viewing no longer raises "Object has been destroyed", and stopping while a source is being prepared no longer lets the video start afterwards.

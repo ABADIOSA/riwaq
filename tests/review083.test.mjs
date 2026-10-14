@@ -9,7 +9,231 @@ import { OfflineLibrary, downloadFile } from "../electron/offline.mjs";
 import { collectBackup, restoreState } from "../core/backup.mjs";
 import { safeSettings } from "../core/protocol.mjs";
 import { startEngine } from "../electron/torrent-engine.mjs";
+import { offlineEpisode } from "../core/offline-media.mjs";
+import { episodeLabel } from "../core/episodes.mjs";
+import { translate } from "../core/i18n.mjs";
 const meta = { id: "tt1234567", type: "movie", name: "Fixture" };
+
+test("offline episode identity prefers metadata, supports legacy IDs and never invents opaque episode numbers", () => {
+  const series = {
+    id: "kitsu:123",
+    type: "anime",
+    videos: [
+      { id: "opaque", season: "2", episode: "3", title: "Original title" },
+    ],
+  };
+  assert.deepEqual(offlineEpisode(series, "opaque"), {
+    season: 2,
+    episode: 3,
+    title: "Original title",
+  });
+  const old = offlineEpisode({ id: "tt123", type: "series" }, "tt123:0:2");
+  assert.deepEqual(old, { season: 0, episode: 2 });
+  assert.equal(translate(episodeLabel(old), "en"), "Season 0 · Episode 2");
+  assert.deepEqual(offlineEpisode(series, "kitsu:123:1:4"), {
+    season: 1,
+    episode: 4,
+  });
+  assert.equal(offlineEpisode(series, "unknown"), undefined);
+  assert.equal(
+    offlineEpisode({ id: "tt123", type: "series" }, "other:1:2"),
+    undefined,
+  );
+  assert.equal(offlineEpisode(meta, "tt1234567:1:2"), undefined);
+  assert.equal(
+    offlineEpisode(series, "unknown", {
+      season: false,
+      episode: {},
+      title: 12,
+    }),
+    undefined,
+  );
+  assert.deepEqual(
+    offlineEpisode(series, "unknown", {
+      season: 1,
+      episode: 2,
+      title: "Safe\u0000 title",
+      url: "https://secret.invalid",
+    }),
+    { season: 1, episode: 2, title: "Safe  title" },
+  );
+});
+
+test("episode names and numbers survive download and restart without retaining the metadata's links", async () => {
+  const root = await mkdtemp(join(tmpdir(), "riwaq-episode-"));
+  const client = {
+    state: {},
+    profiles: { store: { active: "p" }, gate() {}, capture() {} },
+    saveData() {},
+  };
+  const options = {
+    root,
+    resolveSource: async () => ({ url: "http://fixture/video" }),
+    request: async () => new Response(Buffer.alloc(32)),
+  };
+  const lib = new OfflineLibrary(client, options);
+  try {
+    const m = {
+      id: "show",
+      type: "series",
+      name: "Show",
+      videos: [
+        {
+          id: "opaque",
+          season: 2,
+          episode: 4,
+          title: "Chapter four",
+          streams: [{ url: "https://secret.invalid" }],
+        },
+      ],
+    };
+    lib.start({
+      profileId: "p",
+      stream: {},
+      meta: m,
+      videoId: "opaque",
+      settings: {},
+    });
+    await lib.job.done;
+    const reloaded = new OfflineLibrary(client, options).list("p").items[0];
+    assert.deepEqual(reloaded.episode, {
+      season: 2,
+      episode: 4,
+      title: "Chapter four",
+    });
+    assert.equal(reloaded.status, "ready");
+    assert.ok(!JSON.stringify(client.state.offline).includes("secret.invalid"));
+    assert.ok(
+      !JSON.stringify(collectBackup(client.state)).includes("Chapter four"),
+    );
+  } finally {
+    await lib.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("failed profile cleanup retains undeleted records durably and retries without touching another profile", async () => {
+  const root = await mkdtemp(join(tmpdir(), "riwaq-cleanup-"));
+  let active = "one",
+    blocked = "",
+    saved;
+  const client = {
+    state: {},
+    profiles: {
+      store: {
+        get active() {
+          return active;
+        },
+      },
+      gate() {},
+      capture() {},
+    },
+    saveData(state) {
+      saved = structuredClone(state);
+    },
+  };
+  const lib = new OfflineLibrary(client, {
+    root,
+    resolveSource: async () => ({ url: "http://fixture/video" }),
+    request: async () => new Response(Buffer.alloc(32)),
+    deleteFile: async (path) => {
+      if (path === blocked)
+        throw Object.assign(Error("locked"), { code: "EPERM" });
+      await rm(path, { force: true });
+    },
+  });
+  const add = async () => {
+    lib.start({
+      profileId: active,
+      stream: {},
+      meta,
+      videoId: meta.id,
+      settings: {},
+    });
+    const id = lib.job.id;
+    await lib.job.done;
+    return id;
+  };
+  try {
+    const good = await add(),
+      locked = await add();
+    client.state.offline.one.reverse();
+    active = "two";
+    const other = await add();
+    active = "one";
+    blocked = lib.path(locked);
+    await assert.rejects(lib.forgetProfile("one"), /تعذر حذف بعض التنزيلات/);
+    await assert.rejects(stat(lib.path(good)), { code: "ENOENT" });
+    assert.equal((await stat(blocked)).size, 32);
+    assert.deepEqual(
+      client.state.offline.one.map((x) => x.id),
+      [locked],
+    );
+    assert.deepEqual(
+      saved.offline.one.map((x) => x.id),
+      [locked],
+    );
+    client.state = saved;
+    assert.equal((await lib.file("one", locked)).item.status, "ready");
+    blocked = "";
+    await lib.forgetProfile("one");
+    assert.equal(saved.offline.one, undefined);
+    assert.equal((await stat(lib.path(other))).size, 32);
+    assert.deepEqual(
+      saved.offline.two.map((x) => x.id),
+      [other],
+    );
+  } finally {
+    await lib.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("profile cleanup refuses a playing file and serializes new download operations while removing", async () => {
+  const root = await mkdtemp(join(tmpdir(), "riwaq-cleanup-busy-")),
+    id = "a".repeat(32);
+  let release,
+    calls = 0;
+  const client = {
+    state: {
+      offline: {
+        p: [{ id, meta, videoId: meta.id, status: "ready", bytes: 32 }],
+      },
+    },
+    profiles: { store: { active: "p" }, gate() {}, capture() {} },
+    saveData() {},
+  };
+  const lib = new OfflineLibrary(client, {
+    root,
+    resolveSource: async () => {},
+    deleteFile: async () => {
+      if (++calls === 1)
+        await new Promise((r) => {
+          release = r;
+        });
+    },
+  });
+  try {
+    lib.playing = id;
+    await assert.rejects(lib.forgetProfile("p"), /أوقف مشاهدة/);
+    assert.equal(client.state.offline.p.length, 1);
+    lib.playing = "";
+    const deleting = lib.forgetProfile("p");
+    assert.throws(
+      () => lib.start({ profileId: "p", meta, videoId: meta.id }),
+      /جارٍ حذف تنزيلات/,
+    );
+    await assert.rejects(lib.file("p", id), /جارٍ حذف تنزيلات/);
+    await assert.rejects(lib.forgetProfile("p"), /جارٍ حذف تنزيلات/);
+    release();
+    await deleting;
+    assert.equal(lib.removing.size, 0);
+    assert.equal(client.state.offline.p, undefined);
+  } finally {
+    await lib.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
 test("Stop and a newer request revoke pre-player work, without releasing a current torrent", () => {
   const p = new PlaybackRequest(),
     a = p.begin("a");

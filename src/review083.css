@@ -35,3 +35,10 @@
   height: 7px;
   accent-color: var(--accent);
 }
+.offline-library .offline-size {
+  text-align: var(--align-start);
+}
+.offline-library .offline-episode p,
+.offline-library .offline-id {
+  overflow-wrap: anywhere;
+}

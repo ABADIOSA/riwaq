@@ -1851,9 +1851,9 @@ const methods = {
       stopLocalMusic();
       await player.stop();
     }
-    if (client.state.localMusic) delete client.state.localMusic[a.id];
     // Its downloads go with it (electron/offline.mjs).
     await offline?.forgetProfile(a.id);
+    if (client.state.localMusic) delete client.state.localMusic[a.id];
     return client.profiles.remove(a);
   },
   profileSwitch: async (a) => {

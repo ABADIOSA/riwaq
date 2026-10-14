@@ -53,6 +53,10 @@ writeFileSync(
   `
 import {app,Menu} from "electron";import {TorrentHost} from ${JSON.stringify(pathToFileURL(resolve("electron/torrent.mjs")).href)};
 import childProcess from "node:child_process";import {syncBuiltinESMExports} from "node:module";
+import fs from "node:fs";
+const removeFile=fs.promises.rm;
+globalThis.reviewLockFile=(id)=>{fs.promises.rm=async(path,options)=>{if(String(path).endsWith(id+".media"))throw Object.assign(Error("fixture lock"),{code:"EPERM"});return removeFile(path,options);};syncBuiltinESMExports();};
+globalThis.reviewUnlockFile=()=>{fs.promises.rm=removeFile;syncBuiltinESMExports();};
 app.getVersion=()=>"0.45.0";
 const spawn=childProcess.spawn;childProcess.spawn=(file,args,opts)=>{const proc=spawn(file,args,opts);if(String(file).endsWith("mpv.exe"))globalThis.reviewMpv=proc.pid;return proc;};syncBuiltinESMExports();
 const getUrl=TorrentHost.prototype.url;TorrentHost.prototype.url=function(stream,settings){if(stream.infoHash==="a".repeat(40))return new Promise(r=>globalThis.reviewResolve=r);return getUrl.call(this,stream,settings);};
@@ -222,8 +226,95 @@ try {
       call("offlineRemove", { profileId: p, id: downloaded.id }),
     );
     await call("stop");
+    // A Windows file-sharing failure must abort profile removal and keep
+    // both its download record and its local music library for retry.
+    await call("profileCreate", { name: "Removal guard" });
+    await app.evaluate(({ dialog }, path) => {
+      globalThis.reviewOpenDialog = dialog.showOpenDialog;
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [path],
+      });
+    }, resolve(".cache/player-hud-test/audio.wav"));
+    try {
+      await call("musicLocalImport", { profileId: p });
+    } finally {
+      await app.evaluate(({ dialog }) => {
+        dialog.showOpenDialog = globalThis.reviewOpenDialog;
+        delete globalThis.reviewOpenDialog;
+      });
+    }
+    const musicBefore = await call("musicLocalLibrary", { profileId: p });
+    assert.ok(musicBefore.tracks.length > 0);
+    await app.evaluate(
+      ({}, id) => globalThis.reviewLockFile(id),
+      downloaded.id,
+    );
+    try {
+      await assert.rejects(
+        call("profileRemove", { id: p }),
+        /تعذر حذف بعض التنزيلات/,
+      );
+      assert.ok((await call("init")).profiles.list.some((x) => x.id === p));
+      assert.equal(
+        (await call("offlineList", { profileId: p })).items[0].id,
+        downloaded.id,
+      );
+      assert.deepEqual(
+        (await call("musicLocalLibrary", { profileId: p })).tracks,
+        musicBefore.tracks,
+      );
+    } finally {
+      await app.evaluate(() => globalThis.reviewUnlockFile());
+    }
     await call("offlineRemove", { profileId: p, id: downloaded.id });
     online = true;
+    const episodes = [];
+    for (const episode of [1, 2]) {
+      await call("play", {
+        key: direct.key,
+        meta: {
+          type: "series",
+          id: "fixture:series",
+          name: "Series fixture",
+          videos: [
+            {
+              id: `fixture:series:1:${episode}`,
+              season: 1,
+              episode,
+              title: `Chapter ${episode}`,
+            },
+          ],
+        },
+        videoId: `fixture:series:1:${episode}`,
+      });
+      await call("playbackMenu");
+      await app.evaluate(() => {
+        globalThis.reviewMenu.closePopup();
+        globalThis.reviewMenu.items
+          .find((x) => x.label === "تنزيل الفيديو للمشاهدة لاحقًا")
+          .click();
+      });
+      let item;
+      await wait(async () => {
+        item = (await call("offlineList", { profileId: p })).items[0];
+        return item?.status === "ready";
+      }, "episode download completes");
+      assert.equal(item.episode.episode, episode);
+      episodes.push(item.id);
+      await call("stop");
+    }
+    await page.locator('button[title="التنزيلات"]').click();
+    await page.getByText("الموسم 1 · الحلقة 1", { exact: true }).waitFor();
+    await page.getByText("الموسم 1 · الحلقة 2", { exact: true }).waitFor();
+    await page.getByText("Chapter 1", { exact: true }).waitFor();
+    await page.getByText("Chapter 2", { exact: true }).waitFor();
+    assert.equal(
+      await page.locator(".offline-size").first().getAttribute("dir"),
+      "ltr",
+    );
+    await page.screenshot({ path: join(out, "episodes-ar-1440.png") });
+    await page.keyboard.press("Escape");
     await page
       .getByRole("button", { name: "الإعدادات", exact: true })
       .first()
@@ -291,6 +382,13 @@ try {
       .click();
     await page.getByRole("radio", { name: "English", exact: true }).click();
     await page.getByText("Essentials first", { exact: true }).waitFor();
+    await page.locator('button[title="Downloads"]').click();
+    await page.getByText("Season 1 · Episode 1", { exact: true }).waitFor();
+    await page.getByText("Season 1 · Episode 2", { exact: true }).waitFor();
+    await page.screenshot({ path: join(out, "episodes-en-980.png") });
+    await page.keyboard.press("Escape");
+    for (const id of episodes)
+      await call("offlineRemove", { profileId: p, id });
     await page.evaluate(() => {
       window.scrollTo(0, 0);
       document.querySelector(".content")?.scrollTo(0, 0);
@@ -320,7 +418,7 @@ try {
     }, "MPV exits after closing main while playing");
     assert.deepEqual(errors, []);
     console.log(
-      "Windows review passed: volume drag/keys, click/hold, native menu callbacks, direct download, offline playback, basic/advanced and quiet UI in Arabic/English, closing during playback.",
+      "Windows review passed: volume drag/keys, click/hold, native menu callbacks, downloads/offline playback, profile delete failure preserves downloads and music, distinct Arabic/English episode labels, basic/advanced and quiet UI, closing during playback.",
     );
   }
 } finally {

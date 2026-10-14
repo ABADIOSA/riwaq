@@ -1,5 +1,12 @@
 # Verification — Riwaq
 
+## 2026-10-14 — final #83 download review: deletion retry and episode identity
+
+- **805 Node tests pass** (801 + 4). Profile cleanup now reports a persistent delete failure, keeps the profile and undeleted records, saves completed cleanup progress for restart/retry, refuses a playing file and serializes offline operations during deletion. Tests cover locked-file failure, recovery from saved state, another profile's files and concurrent actions.
+- Download records keep only bounded episode season/number/title; metadata links and full video lists are dropped. Tests cover a real disk download/restart, legacy IDs, opaque IDs, season 0, malformed stored fields and English season/episode formatting. Movies do not acquire episode numbers.
+- Native Electron/MPV script adds a main-IPC deletion failure with an injected EPERM syscall, preserving the downloaded video's record, its profile and an imported WAV music library. It also downloads two episodes over local HTTP and verifies distinct Arabic/English labels and original titles. Uses isolated data; no user file or public announcement touched.
+- Desktop/web builds and Prettier pass. See [the final download review](docs/REVIEW-PR-83.md). These are source changes for review on #83; no merge to main, installer or release is performed here.
+
 ## 2026-10-14 — #84 merged into #83, review findings fixed
 
 - PR #84 was merged into #83's branch (`54b487c`), then reviewed. Fixed there: the menu copies only a torrent's magnet (a direct URL may carry a debrid or home-server token); a `{cancelled: true}` play no longer closes the sources, opens the theater or advances autoplay; removing a profile stops its download and deletes its files and records (`forgetProfile`); the quiet interface switch uses the standard toggle.
