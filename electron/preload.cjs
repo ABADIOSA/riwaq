@@ -1,5 +1,10 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const allowed = new Set([
+  "playbackMenu",
+  "offlineList",
+  "offlineCancel",
+  "offlineRemove",
+  "offlinePlay",
   "ownerState",
   "ownerOpen",
   "ownerActivate",

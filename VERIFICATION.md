@@ -1,5 +1,14 @@
 # Verification — Riwaq
 
+## 2026-10-14 — follow-up audit of PR #83 (source, not released)
+
+- Baseline #83: 789 Node tests. Follow-up: **798 passed**, Prettier and desktop/web builds passed.
+- Reproduced Stop during deferred engine URL preparation against #83's exact main; the follow-up cancels the request and keeps MPV inactive. Playback tickets also cover live/offline starts, profile changes/locks and shutdown. Failed/cancelled next-source attempts return false; torrent start polling is single-flight.
+- Actual Windows Electron/MPV fixtures passed volume drag/keys, picture click and hold/release, a real native right-click menu (programmatic item selection), copy source, HTTP download, playback from disk while source returns 503, delete protection, post-stop deletion and closing during playback with MPV exiting. Basic/advanced and quiet UI passed Arabic/English at 980×680.
+- Existing native HUD integration passed embedded and separate modes, panels, seeks, reload/recovery and F8. A repeat F8 run timed out because the HTTP fixture could not seek (MPV log: stream not seekable). The fixture now answers byte ranges; this is a test-source correction, not a new F8 production fix. No actual HDR colour validation is inferred from an SDR fixture labelled HDR.
+- Chromium web smoke passed with local addon/account fixtures; current bundle-size warning remains. Arabic advanced-navigation PNG bytes match before/after enabling the new screen CSS; new basic/download screens intentionally differ. No new installer, release, announcement, public swarm or real provider account tested/published here.
+- Every user request and implementation limit is mapped in [REVIEW-PR-83.md](docs/REVIEW-PR-83.md). The earlier 0.45 section below records #83's original author's checks, before this Windows follow-up.
+
 ## 2026-10-14 — 0.45.0: issue #82 (a user's report on 0.44.1)
 
 - The report's screenshots name the crash: "A JavaScript error occurred in the main process: TypeError: Object has been destroyed at WebContents.send ← emit ← Player.onState ← Player.setOverlay ← BrowserWindow". Main's `emit` checked the window but not its contents; while the window closes, its contents go first and the owned HUD's `closed` handler reports the viewing to them. Every send now goes through `sendTo`. A static test keeps one `webContents.send(` in main. The close itself was not reproduced here (no Windows).

@@ -268,7 +268,7 @@ export function inputConf(custom = {}) {
   // The double click to fullscreen is not rebindable: it is a pointer gesture.
   lines.push("MBTN_LEFT_DBL script-message riwaq-fullscreen");
   // A right click opens the subtitle and audio panel beside the picture.
-  lines.push("MBTN_RIGHT script-message riwaq-panel");
+  lines.push("MBTN_RIGHT script-message riwaq-context");
   return lines.join("\n") + "\n";
 }
 

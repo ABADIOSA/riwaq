@@ -13,6 +13,7 @@ import {
   nativeImage,
   protocol,
   utilityProcess,
+  Menu,
 } from "electron";
 import {
   readFileSync,
@@ -30,6 +31,8 @@ import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { Client, fetchText } from "../core/client.mjs";
+import { PlaybackRequest } from "../core/playback-request.mjs";
+import { OfflineLibrary } from "./offline.mjs";
 import {
   automaticSubtitle,
   cuesAround,
@@ -82,6 +85,7 @@ import {
   SERVICE_DOWNLOAD,
   chooseEngine,
   torrentDead,
+  magnetOf,
 } from "../core/torrent-engine.mjs";
 import { ShaderStore } from "./shaders.mjs";
 import { shaderOptions } from "../core/shaders.mjs";
@@ -153,6 +157,124 @@ const nuvioReply = (stores, source) => {
 let watching = { active: false, pip: false, error: false };
 // What is playing from an addon stream: subtitle requests need its stream key.
 let nowPlaying = null;
+const playbackRequest = new PlaybackRequest();
+let offline;
+async function offlineSource(stream, settings, signal) {
+  if (stream.url)
+    return {
+      url: stream.url,
+      headers: stream.behaviorHints?.proxyHeaders?.request || {},
+    };
+  if (!stream.infoHash)
+    throw new Error("فعّل محرك P2P المدمج لتنزيل مصدر تورنت");
+  if (settings.torrentEngine === "ask") {
+    if (await serviceUp())
+      return { url: torrentUrl(stream, settings.serverUrl) };
+    throw new Error("فعّل محرك P2P المدمج لتنزيل مصدر تورنت");
+  }
+  const host = new TorrentHost({
+    fork: () =>
+      utilityProcess.fork(join(root, "electron/torrent-host.mjs"), [], {
+        serviceName: "Riwaq offline torrent",
+        stdio: "ignore",
+      }),
+    cacheDir: join(app.getPath("userData"), "offline-torrent-cache"),
+  });
+  const stop = () => host.stop();
+  signal.addEventListener("abort", stop, { once: true });
+  try {
+    if (signal.aborted) throw new Error("توقف التنزيل");
+    const url = await host.url(stream, {
+      ...settings,
+      torrentCache: "viewing",
+    });
+    if (signal.aborted) throw new Error("توقف التنزيل");
+    return {
+      url,
+      dispose: () => {
+        signal.removeEventListener("abort", stop);
+        return host.stop();
+      },
+    };
+  } catch (error) {
+    signal.removeEventListener("abort", stop);
+    await host.stop();
+    throw error;
+  }
+}
+function startOffline() {
+  const current = nowPlaying,
+    stream = client.streams.get(current?.key);
+  if (!player.state.active || !stream || !current || player.state.live)
+    throw new Error("ابدأ مشاهدة مصدر فيديو قبل تنزيله");
+  const result = offline.start({
+    profileId: client.profiles.store.active,
+    stream,
+    meta: player.meta,
+    videoId: current.id,
+    settings: { ...client.state.settings },
+  });
+  emit("notice", "بدأ التنزيل؛ افتح التنزيلات لمتابعة التقدم.");
+  return result;
+}
+function playbackMenu() {
+  if (!player?.state.active || !window || window.isDestroyed()) return false;
+  const viewing = nowPlaying,
+    videoId = player.videoId,
+    stream = client.streams.get(viewing?.key);
+  const active = () =>
+    player.state.active && player.videoId === videoId && nowPlaying === viewing;
+  const run = (fn) => () => {
+    if (active())
+      Promise.resolve()
+        .then(fn)
+        .catch((e) => emit("notice", cleanError(e)));
+  };
+  const menu = Menu.buildFromTemplate([
+    {
+      label: t(player.state.pause ? "استئناف المشاهدة" : "إيقاف مؤقت"),
+      click: run(() => player.command({ action: "pause" })),
+    },
+    {
+      label: t("الترجمة والصوت"),
+      click: run(() =>
+        player.state.overlay
+          ? emit("hudCommand", { type: "panel" })
+          : emit("playerRequest", { type: "panel" }),
+      ),
+    },
+    {
+      label: t("التقط لقطة شاشة"),
+      click: run(() => player.command({ action: "screenshot" })),
+    },
+    {
+      label: t(stream?.infoHash ? "نسخ رابط التورنت" : "نسخ رابط المصدر"),
+      enabled: !!(stream?.url || stream?.infoHash),
+      click: run(() => {
+        client.profiles.gate("library");
+        clipboard.writeText(stream.infoHash ? magnetOf(stream) : stream.url);
+      }),
+    },
+    {
+      label: t("تنزيل الفيديو للمشاهدة لاحقًا"),
+      enabled: !!stream && !player.state.live,
+      click: run(startOffline),
+    },
+    { type: "separator" },
+    {
+      label: t("إيقاف المشاهدة"),
+      click: run(() => {
+        playbackRequest.cancel();
+        player.setSleepEpisodes(0);
+        return player.stop();
+      }),
+    },
+  ]);
+  menu.popup({
+    window: hud && !hud.isDestroyed() && hud.isVisible() ? hud : window,
+  });
+  return true;
+}
 // The built-in torrent engine (core/torrent-engine.mjs), in its own process,
 // started only when the viewer chose it and a torrent plays; and the info
 // hash it is serving, released when that viewing ends.
@@ -226,11 +348,16 @@ async function tryNextSource() {
   if (!next || !player.meta) return false;
   emit("notice", "تعذّر هذا المصدر؛ نجرّب المصدر التالي تلقائياً…");
   try {
-    await play({ key: next, meta: player.meta, videoId: current.id });
+    const result = await play({
+      key: next,
+      meta: player.meta,
+      videoId: current.id,
+    });
+    return !result?.cancelled;
   } catch {
     /* The viewer can still pick a source by hand. */
+    return false;
   }
-  return true;
 }
 /**
  * While a built-in torrent starts, its peers and speed show under "Getting
@@ -242,6 +369,7 @@ function watchTorrentStart(hash) {
   clearInterval(torrentWatch);
   const viewing = nowPlaying;
   const began = Date.now();
+  let polling = false;
   const ours = () =>
     torrentWatch === watch && nowPlaying === viewing && builtinTorrent === hash;
   const watch = setInterval(async () => {
@@ -252,7 +380,14 @@ function watchTorrentStart(hash) {
       return;
     }
     if (!player.state.active || !player.state.loading) return;
-    const status = await torrentHost?.status(hash);
+    if (polling) return;
+    polling = true;
+    let status;
+    try {
+      status = await torrentHost?.status(hash);
+    } finally {
+      polling = false;
+    }
     if (!ours() || !player.state.active || !player.state.loading) return;
     player.setTorrentStatus(status);
     if (!torrentDead(status, Date.now() - began)) return;
@@ -868,6 +1003,7 @@ function mpvLogFile() {
 }
 /** A video file on this PC, chosen in a dialog or dropped on the window. */
 function playLocalFile(path) {
+  playbackRequest.cancel();
   nowPlaying = null;
   return player.start({
     executable: executable(),
@@ -1013,10 +1149,15 @@ async function diagnostics() {
   };
 }
 async function play({ key, meta, videoId, resume = true, profileId }) {
+  const request = playbackRequest.begin();
   const owner = profileId || client.profiles.store.active;
   const checkOwner = () => {
-    if (owner !== client.profiles.store.active)
+    if (owner !== client.profiles.store.active) {
+      if (playbackRequest.owns(request)) playbackRequest.cancel();
+      if (playbackRequest.mayRelease(request.resource, builtinTorrent))
+        torrentHost?.release(request.resource);
       throw new Error("تغير الملف الشخصي؛ اختر المصدر مجدداً");
+    }
   };
   checkOwner();
   const stream = client.streams.get(key);
@@ -1033,6 +1174,8 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   }
   let url = stream.url;
   let torrentHash = null;
+  request.resource =
+    typeof stream.infoHash === "string" ? stream.infoHash.toLowerCase() : "";
   if (!url && stream.infoHash) {
     // Stremio Service when it answers; the built-in engine only when the
     // viewer chose it; otherwise the interface opens the setup guide.
@@ -1041,11 +1184,17 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
       setting,
       setting === "builtin" ? false : await serviceUp(),
     );
+    if (!playbackRequest.owns(request)) return { cancelled: true };
     if (engine === "ask") throw new Error(NEEDS_ENGINE);
     if (engine === "builtin") {
       url = await torrents().url(stream, client.state.settings);
       torrentHash = stream.infoHash.toLowerCase();
     } else url = torrentUrl(stream, client.state.settings.serverUrl);
+  }
+  if (!playbackRequest.owns(request)) {
+    if (playbackRequest.mayRelease(torrentHash, builtinTorrent))
+      torrentHost?.release(torrentHash);
+    return { cancelled: true };
   }
   if (!url) throw new Error("نوع المصدر غير مدعوم في هذه النسخة");
   checkOwner();
@@ -1055,6 +1204,13 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   builtinTorrent = null;
   try {
     await player.stop();
+    if (!playbackRequest.owns(request)) {
+      if (playbackRequest.mayRelease(previousTorrent, builtinTorrent))
+        torrentHost?.release(previousTorrent);
+      if (playbackRequest.mayRelease(torrentHash, builtinTorrent))
+        torrentHost?.release(torrentHash);
+      return { cancelled: true };
+    }
     checkOwner();
   } catch (error) {
     for (const hash of new Set([previousTorrent, torrentHash]))
@@ -1117,10 +1273,12 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   return started;
 }
 async function playChannel({ key, start = 0, stop = 0 }) {
+  const request = playbackRequest.begin();
   client.profiles.gate("live");
   nowPlaying = null;
   const channel = client.live.resolve(key, { start, stop });
   await player.stop();
+  if (!playbackRequest.owns(request)) return { cancelled: true };
   return player.start({
     executable: executable(),
     settings: client.state.settings,
@@ -1683,6 +1841,7 @@ const methods = {
   profileRemove: async (a) => {
     client.profiles.check({ ...a, intent: "remove" });
     if (client.profiles.store.active === a.id) {
+      playbackRequest.cancel();
       stopLocalMusic();
       await player.stop();
     }
@@ -1693,6 +1852,7 @@ const methods = {
     // A wrong PIN must be refused before playback is touched. Then save the
     // outgoing viewer's last position before replacing their bucket.
     client.profiles.check({ ...a, intent: "switch" });
+    playbackRequest.cancel();
     stopLocalMusic();
     await player.stop();
     const result = client.profiles.switch(a);
@@ -1703,6 +1863,7 @@ const methods = {
   profilePin: (a) => client.profiles.setPin(a),
   profileUnlock: (a) => client.profiles.unlock(a?.pin),
   profileLock: () => {
+    playbackRequest.cancel();
     stopLocalMusic();
     return client.profiles.lock();
   },
@@ -1891,10 +2052,46 @@ const methods = {
   },
   trickplay,
   stop: async () => {
+    playbackRequest.cancel();
     // Stopping by hand also cancels "end after N episodes".
     player.setSleepEpisodes(0);
     await player.stop();
     return true;
+  },
+  playbackMenu: () => playbackMenu(),
+  offlineList: (a) => offline.list(a?.profileId),
+  offlineCancel: (a) => offline.cancel(a?.profileId, a?.id),
+  offlineRemove: (a) => offline.remove(a?.profileId, a?.id),
+  offlinePlay: async (a) => {
+    const request = playbackRequest.begin();
+    const profile = a?.profileId;
+    const { path, item } = await offline.file(profile, a?.id);
+    if (!playbackRequest.owns(request)) return { cancelled: true };
+    if (profile !== client.profiles.store.active)
+      throw new Error("تغير الملف الشخصي؛ افتح التنزيلات مجددًا");
+    await player.stop();
+    if (!playbackRequest.owns(request)) return { cancelled: true };
+    offline.profile(profile);
+    nowPlaying = null;
+    offline.playing = item.id;
+    const saved = client.state.progress[`${item.meta.type}:${item.videoId}`];
+    try {
+      return await player.start({
+        executable: executable(),
+        settings: client.state.settings,
+        url: path,
+        local: true,
+        meta: item.meta,
+        videoId: item.videoId,
+        start: saved && !saved.completed ? saved.position : 0,
+        inputConf: hotkeyFile(),
+        screenshotDir: screenshotDir(),
+        logFile: mpvLogFile(),
+      });
+    } catch (error) {
+      offline.playing = "";
+      throw error;
+    }
   },
   // This PC's audio outputs as MPV names them, for the Audio page.
   audioDevices: () => listAudioDevices(),
@@ -2321,6 +2518,10 @@ app
         // Tests and development point at a local account service.
         accountServer: process.env.RIWAQ_ACCOUNT_SERVER || undefined,
       });
+      offline = new OfflineLibrary(client, {
+        root: join(app.getPath("userData"), "offline"),
+        resolveSource: offlineSource,
+      });
     } catch (error) {
       dialog.showErrorBox("Riwaq", error.message);
       app.exit(1);
@@ -2460,6 +2661,7 @@ app
           if (window.isFullScreen()) window.setFullScreen(false);
         },
         onState: (s) => {
+          if (!s.active && offline) offline.playing = "";
           // A new viewing, or the mini player opening or closing, decides the
           // window's full screen state; afterwards the viewer owns it.
           const failed = s.active && s.error && !watching.error;
@@ -2527,6 +2729,15 @@ app
         // episode comes next and which source plays it.
         // With the HUD on, the panel lives there; otherwise in the theater.
         onEvent: (event) => {
+          if (event.type === "context") {
+            playbackMenu();
+            return;
+          }
+          if (event.type === "userStop") {
+            playbackRequest.cancel();
+            player.setSleepEpisodes(0);
+            return;
+          }
           if (event.type === "recoverControls") {
             emit(
               "notice",
@@ -2696,6 +2907,7 @@ app
         new URL("../dist/index.html", import.meta.url),
       );
       window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+      window.on("close", () => playbackRequest.cancel());
       window.webContents.on("will-navigate", onDropNavigate);
       session.defaultSession.setPermissionRequestHandler(
         (_contents, _permission, callback) => callback(false),
@@ -2758,6 +2970,7 @@ app.on("will-quit", () => {
   globalShortcut.unregisterAll();
 });
 app.on("before-quit", (event) => {
+  playbackRequest.cancel();
   if (closing) return;
   event.preventDefault();
   closing = true;
@@ -2767,6 +2980,7 @@ app.on("before-quit", (event) => {
   // Stopping the player sends the final scrobble; give it a moment to land so
   // a play finished just before closing is recorded rather than queued.
   Promise.resolve(player?.stop())
+    .then(() => offline?.stop())
     .then(() => torrentHost?.stop())
     .then(() => client?.integrations?.settle(3000))
     // A change still waiting for the account goes up before closing.

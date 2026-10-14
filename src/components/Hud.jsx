@@ -282,6 +282,9 @@ export default function Hud() {
     if (!hold.current.active) return;
     // The click that ends a hold must not also pause.
     hold.current = { ...hold.current, active: false, swallow: true };
+    setTimeout(() => {
+      hold.current.swallow = false;
+    }, 0);
     command("speed", hold.current.previous);
     setHolding(false);
   };
@@ -346,7 +349,7 @@ export default function Hud() {
       onDoubleClick={onStageDouble}
       onContextMenu={(e) => {
         e.preventDefault();
-        setDock(dock ? null : "subs");
+        act("playbackMenu");
         wake();
       }}
       onWheel={onWheel}

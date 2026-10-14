@@ -1,0 +1,37 @@
+.quick-settings {
+  max-width: 920px;
+  margin-inline: auto;
+}
+.quick-settings > h2 {
+  margin-block-start: 26px;
+}
+.quick-settings .setting-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.settings-mode {
+  margin-block-end: 24px;
+}
+.offline-library {
+  width: min(720px, calc(100vw - 32px));
+}
+.offline-library article {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-block: 14px;
+}
+.offline-library article header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.offline-library article b {
+  overflow-wrap: anywhere;
+}
+.offline-library progress {
+  width: 100%;
+  height: 7px;
+  accent-color: var(--accent);
+}
