@@ -42,3 +42,48 @@
 .offline-library .offline-id {
   overflow-wrap: anywhere;
 }
+/* The player's right-click menu, drawn in the HUD or the theater
+   (src/components/PlayerMenu.jsx). Placed by the pointer through inline
+   coordinates, so it reads the same in both languages. */
+.player-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 230px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: #0f1318f2;
+  border: 1px solid #ffffff26;
+  box-shadow: 0 18px 50px #000a;
+  color: #f4f4f5;
+  font-size: 14px;
+  pointer-events: auto;
+}
+.player-menu button,
+.hud-stage .player-menu button {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: var(--align-start);
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.player-menu button:hover:not(:disabled),
+.player-menu button:focus-visible {
+  background: #ffffff1f;
+}
+.player-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.player-menu hr {
+  border: 0;
+  border-block-start: 1px solid #ffffff1f;
+  margin: 4px 6px;
+}

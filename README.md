@@ -30,13 +30,17 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.45.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.45.1-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.45.1-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.45.0
+### الجديد في 0.45.1
+
+- **قائمة المشغّل ما تعلّق الأزرار:** قائمة الزر الأيمن صارت جزء من أدوات رِواق نفسها بدل قائمة ويندوز، اللي كانت ممكن تنفتح مخفية وتمسك كل النقرات فما تقدر تتحكم بشي. النقرة اللي تقفلها ما توقف الفيديو، وEsc يقفلها بدون ما يوقف المشاهدة.
+
+### ومن 0.45.0
 
 إصلاحات واقتراحات من ملاحظات مستخدم على 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82))، مع مراجعة كوديكس ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
 
@@ -114,13 +118,17 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.45.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.45.1-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.45.1-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.45.0
+### What's new in 0.45.1
+
+- **The player menu no longer freezes the controls:** the right-click menu is now part of Riwaq's own controls instead of a Windows menu, which could open out of sight and hold every click so nothing responded. The click that closes it does not pause, and Esc closes it without stopping the viewing.
+
+### And from 0.45.0
 
 Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)), with Codex's review ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
 

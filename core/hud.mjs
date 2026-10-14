@@ -136,6 +136,7 @@ export class HudHealth {
  */
 export const HUD_METHODS = new Set([
   "playbackMenu",
+  "playbackAction",
   "init",
   "playerCommand",
   "trickplay",

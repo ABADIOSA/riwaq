@@ -7,6 +7,21 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.45.1",
+    title: "قائمة المشغّل ما تعلّق الأزرار",
+    items: [
+      "قائمة الزر الأيمن في المشغّل صارت جزء من أدوات رِواق نفسها بدل قائمة ويندوز. قائمة ويندوز كانت ممكن تنفتح مخفية وتمسك كل النقرات، فتعلق الأزرار وما تقدر تتحكم بشي.",
+      "النقرة اللي تقفل القائمة ما توقف الفيديو، وEsc يقفلها بدون ما يوقف المشاهدة. والقائمة نفسها تنفتح من نقرة يمين على صورة MPV.",
+    ],
+    en: {
+      title: "The player menu no longer freezes the controls",
+      items: [
+        "The player's right-click menu is now part of Riwaq's own controls instead of a Windows menu, which could open out of sight and hold every click, so no button responded.",
+        "The click that closes the menu does not pause, and Esc closes it without stopping the viewing. A right click on MPV's own picture opens the same menu.",
+      ],
+    },
+  },
+  {
     version: "0.45.0",
     title: "تنزيلات، قائمة للمشغّل، وإصلاحات من ملاحظاتكم",
     items: [

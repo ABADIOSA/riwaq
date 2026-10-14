@@ -155,6 +155,7 @@ export default function App() {
     [failures, setFailures] = useState([]),
     [loading, setLoading] = useState(true),
     [dockRequest, setDockRequest] = useState(0),
+    [menuRequest, setMenuRequest] = useState(0),
     [loadError, setLoadError] = useState(""),
     [selected, setSelected] = useState(null),
     [explore, setExplore] = useState(null),
@@ -342,6 +343,7 @@ export default function App() {
           }),
           api.on("playerRequest", ({ type, videoId: jump }) => {
             if (type === "panel") return setDockRequest((n) => n + 1);
+            if (type === "menu") return setMenuRequest((n) => n + 1);
             if (type === "settings") return setPlayerOpen(true);
             const current = playerRef.current;
             if (!current?.active || !current.meta) return;
@@ -1700,6 +1702,7 @@ export default function App() {
             onSettings={() => setPlayerOpen(true)}
             update={update}
             dockRequest={dockRequest}
+            menuRequest={menuRequest}
             onAdvance={(direction) =>
               advance(player.meta, player.videoId, direction)
             }

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import PlayerDock from "./PlayerDock.jsx";
 import VolumeSlider from "./VolumeSlider.jsx";
+import PlayerMenu from "./PlayerMenu.jsx";
 import { api, call } from "../lib/api.js";
 import { clock } from "../lib/helpers.js";
 import { resolveAppearance } from "../../core/appearance.mjs";
@@ -81,6 +82,9 @@ export default function Hud() {
   const [player, setPlayer] = useState({ active: false });
   const [awake, setAwake] = useState(true);
   const [dock, setDock] = useState(null);
+  // The right-click menu ({x, y}), drawn here (src/components/PlayerMenu.jsx).
+  const [menu, setMenu] = useState(null);
+  const menuClosed = useRef(0);
   const [notice, setNotice] = useState("");
   const [seekHover, setSeekHover] = useState(null);
   const [thumb, setThumb] = useState(null);
@@ -143,6 +147,15 @@ export default function Hud() {
           setDock((open) => (open ? null : "subs"));
           wake();
         }
+        // MPV's own right click, or the theater asking: the menu opens in
+        // the middle of the picture.
+        if (type === "menu") {
+          setMenu({
+            x: window.innerWidth / 2 - 110,
+            y: window.innerHeight / 2 - 130,
+          });
+          wake();
+        }
       }),
     ];
     // Subscribe first, then hydrate even a paused viewing after a reload.
@@ -165,6 +178,7 @@ export default function Hud() {
   }, [notice]);
   useEffect(() => {
     setDock(null);
+    setMenu(null);
     setThumb(null);
     setSleepMenu(false);
     setShaderMenu(false);
@@ -194,6 +208,7 @@ export default function Hud() {
     awake ||
     (player.pause && settings.hudShowOnPause !== false) ||
     !!dock ||
+    !!menu ||
     sleepMenu ||
     shaderMenu ||
     player.loading;
@@ -263,9 +278,13 @@ export default function Hud() {
   // Over MPV's own true-HDR window, controls for Riwaq's window step aside.
   const shows = (id) =>
     !hidden.has(id) && !(player.separate && SEPARATE_HIDDEN.has(id));
+  const closeMenu = () => {
+    menuClosed.current = Date.now();
+    setMenu(null);
+  };
   const onStageDown = (e) => {
     if (e.button !== 0 || e.target !== e.currentTarget) return;
-    if (!holdRate || player.live || player.pause || dock) return;
+    if (!holdRate || player.live || player.pause || dock || menu) return;
     clearTimeout(hold.current.timer);
     hold.current.timer = setTimeout(() => {
       hold.current = {
@@ -290,6 +309,8 @@ export default function Hud() {
   };
   const onStageClick = (e) => {
     if (e.target !== e.currentTarget) return;
+    // The click that closed the menu does not also pause.
+    if (menu || Date.now() - menuClosed.current < 400) return;
     if (hold.current.swallow) {
       hold.current.swallow = false;
       return;
@@ -349,7 +370,7 @@ export default function Hud() {
       onDoubleClick={onStageDouble}
       onContextMenu={(e) => {
         e.preventDefault();
-        act("playbackMenu");
+        setMenu({ x: e.clientX, y: e.clientY });
         wake();
       }}
       onWheel={onWheel}
@@ -520,6 +541,16 @@ export default function Hud() {
         </div>
       )}
       {notice && <div className="hud-notice">{notice}</div>}
+      {menu && (
+        <PlayerMenu
+          at={menu}
+          onClose={closeMenu}
+          onPause={() => command("pause")}
+          onPanel={() => setDock("subs")}
+          onStop={() => act("stop")}
+          onError={setNotice}
+        />
+      )}
       {volumePopup > 0 && (
         <div
           className={`hud-volume-popup at-${settings.volumeOsdPosition || "center"}`}

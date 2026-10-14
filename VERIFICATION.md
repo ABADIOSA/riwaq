@@ -1,5 +1,33 @@
 # Verification — Riwaq
 
+## 2026-10-14 — 0.45.1: the player menu no longer holds the controls
+
+- The owner reported that, on 0.45.0, every button froze once a title played. It was not reproduced here: this environment has no Windows desktop, MPV window or HUD window.
+- 0.45.0 had added the only native OS menu over the video: an Electron `Menu.popup` owned by the non-focusable HUD, or sitting under MPV's always-on-top True HDR window, opened from every right click on the picture. A Windows menu that opens out of sight keeps every click until it closes, which matches the report.
+- Harbor, Nuvio HTPC and Stremio Community, read the same day, draw their player menus in the page over the video and never use a native menu (docs/REFERENCE-REVIEW.md).
+- 0.45.1 removes the native menu (`Menu` is no longer imported by main) and draws an HTML menu in the HUD and the theater.
+- A Chromium render of 0.44.1 and 0.45.0 (100 rows × 60 titles, four player updates a second for 6 s) found no main-window slowdown during playback (no long tasks either way), so the home page re-rendering is not the cause.
+- **806 Node tests pass** (805 + 1). The menu test now requires the magnet-only copy inside `playbackAction` and the same-viewing check. A new test requires:
+  - no native menu in main;
+  - MPV's right click turned into the HTML menu;
+  - both methods in the HUD and preload allowlists;
+  - both pages rendering `PlayerMenu` without calling the menu directly;
+  - capture-phase outside-press closing;
+  - the theater hiding the native picture while the menu is open.
+- **Chromium, mock bridge, the HUD page in Arabic and English (1280×720):**
+  - a right click opens six items at the pointer, inside the window;
+  - the screenshot item sends `playbackAction` for this video and closes the menu;
+  - a click elsewhere closes it without pausing, and a later click on the picture pauses;
+  - a control button still sends its command;
+  - `hudCommand {type: "menu"}` (MPV's own right click) opens the same menu;
+  - no page errors.
+- **Theater:**
+  - the menu shows five items with download disabled, as the options asked;
+  - the native picture is reported hidden while it is open and shown again after;
+  - Escape closes it without sending stop;
+  - `playerRequest {type: "menu"}` opens it.
+- `scripts/test-review083-native.mjs` now drives the HTML menu: a real right click, no copy item for a direct source, a closing click that does not pause, and downloading through `playbackAction`. It has not been run yet: it needs Windows.
+
 ## 2026-10-14 — final #83 download review: deletion retry and episode identity
 
 - **805 Node tests pass** (801 + 4). Profile cleanup now reports a persistent delete failure, keeps the profile and undeleted records, saves completed cleanup progress for restart/retry, refuses a playing file and serializes offline operations during deletion. Tests cover locked-file failure, recovery from saved state, another profile's files and concurrent actions.
