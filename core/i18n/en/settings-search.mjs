@@ -17,8 +17,8 @@ export default {
   onscreen:
     "on-screen controls stream quality badge sleep timer fullscreen full screen volume window pause",
   skipping: "skip skipping intro recap credits outro ending button key",
-  subtitles:
-    "language interface arabic english subtitles captions size timing tracks audio",
+  subtitles: "subtitles captions size timing tracks audio language preferred",
+  language: "language interface arabic english display",
   prayer: "prayer prayers adhan times umm al-qura pause alert ramadan",
   services: "streaming services platforms shahid subscription debrid",
   homeServers: "home servers server your copy library",

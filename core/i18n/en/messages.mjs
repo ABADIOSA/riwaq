@@ -439,4 +439,12 @@ export default {
   "(موقوف)": "(stopped)",
   "لا يوجد": "None",
   "، خطأ: {1}": ", error: {1}",
+  // Issue #82: continue watching and the Stremio banner.
+  "أزلناه من متابعة المشاهدة، وتقدّمك محفوظ.":
+    "Removed from continue watching. Your progress is kept.",
+  "إخفاء اقتراح ربط ستريميو": "Hide the Stremio linking suggestion",
+  "أزل من متابعة المشاهدة": "Remove from continue watching",
+  "تقدر تربط حساب ستريميو متى ما بغيت من الإعدادات ← الحسابات والربط.":
+    "You can link a Stremio account any time from Settings → Accounts & linking.",
+  "أزل «{1}» من متابعة المشاهدة": "Remove “{1}” from continue watching",
 };

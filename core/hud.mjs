@@ -135,6 +135,7 @@ export class HudHealth {
  * it gets less than the main window: playback, subtitles and its own panel.
  */
 export const HUD_METHODS = new Set([
+  "playbackMenu",
   "init",
   "playerCommand",
   "trickplay",

@@ -272,6 +272,17 @@ export async function startEngine({
       entry.timer.unref?.();
       return true;
     },
+    /** One torrent's start: metadata, peers, speed and bytes so far. */
+    status(hash) {
+      const torrent = entries.get(String(hash || "").toLowerCase())?.torrent;
+      if (!torrent) return null;
+      return {
+        metadata: !!torrent.ready,
+        peers: torrent.numPeers || 0,
+        down: torrent.downloadSpeed || 0,
+        bytes: torrent.downloaded || 0,
+      };
+    },
     /** For tests: a known peer, when there is no DHT or tracker. */
     addPeer(hash, address) {
       const torrent = entries.get(String(hash || "").toLowerCase())?.torrent;

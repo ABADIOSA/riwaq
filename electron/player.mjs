@@ -407,6 +407,8 @@ export class Player {
       position: start,
       duration: 0,
       pause: false,
+      // A built-in torrent's start (counts only), shown while loading.
+      torrent: null,
       volume: 100,
       tracks: [],
       chapters: [],
@@ -648,6 +650,12 @@ export class Player {
       this.cursorHidden ? "always" : "no",
     ]);
   }
+  /** How the built-in torrent is starting, under "Getting the viewing ready". */
+  setTorrentStatus(status) {
+    if (!this.state.active) return;
+    this.state.torrent = status || null;
+    this.publish();
+  }
   /** Whether the HUD draws the controls; the theater layout follows it. */
   setOverlay(on) {
     this.overlay = !!on;
@@ -701,11 +709,14 @@ export class Player {
         ? this.send(["cycle", "fullscreen"])
         : this.onFullscreen?.();
     // Escape leaves full screen before it closes anything.
-    else if (name === "riwaq-stop")
-      !this.state.separate && this.state.fullscreen && this.onEscape
-        ? this.onEscape()
-        : this.stop();
-    else if (name === "riwaq-screenshot")
+    else if (name === "riwaq-stop") {
+      if (!this.state.separate && this.state.fullscreen && this.onEscape)
+        this.onEscape();
+      else {
+        this.onEvent({ type: "userStop" });
+        this.stop();
+      }
+    } else if (name === "riwaq-screenshot")
       this.command({ action: "screenshot" });
     else if (name === "riwaq-stats") this.command({ action: "stats" });
     else if (name === "riwaq-skip") this.command({ action: "skipSegment" });
@@ -715,6 +726,7 @@ export class Player {
       this.command({ action: "repairControls" })?.catch(() => {});
     else if (name === "riwaq-mini") this.command({ action: "pip" });
     else if (name === "riwaq-panel") this.onEvent({ type: "panel" });
+    else if (name === "riwaq-context") this.onEvent({ type: "context" });
     else if (name === "riwaq-next" || name === "riwaq-prev")
       this.onEvent({ type: name === "riwaq-next" ? "next" : "previous" });
   }

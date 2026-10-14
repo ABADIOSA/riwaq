@@ -368,4 +368,12 @@ export default {
   "في الطوابير": "in queues",
   "مصادر قنوات": "Channel sources",
   "استعادة الآن": "Restore now",
+  // Issue #82: the interface language moved to Appearance.
+  "ترجمة لغة الترجمة لغة الصوت حجم توقيت مسارات صوت":
+    "subtitles subtitle language audio language size timing tracks audio",
+  "عربي لغة الواجهة English إنجليزي إنجليزية language":
+    "arabic interface language english",
+  "أسهم الصفوف": "Row arrows",
+  "بجانب «عرض الكل»": "Beside “See all”",
+  "على طرفي الصف": "Over both ends of the row",
 };

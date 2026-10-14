@@ -76,11 +76,25 @@ const subtitle = "1\n00:00:00,000 --> 00:01:00,000\nHUD subtitle fixture\n";
 let base;
 const server = createServer((req, res) => {
   if (req.url.endsWith(".mkv")) {
-    res.writeHead(200, {
+    const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || "");
+    const start = range ? Number(range[1]) : 0;
+    const end =
+      range && range[2]
+        ? Math.min(Number(range[2]), video.length - 1)
+        : video.length - 1;
+    if (start > end || start >= video.length) {
+      res.writeHead(416, { "Content-Range": `bytes */${video.length}` });
+      return res.end();
+    }
+    res.writeHead(range ? 206 : 200, {
       "Content-Type": "video/x-matroska",
-      "Content-Length": video.length,
+      "Content-Length": end - start + 1,
+      "Accept-Ranges": "bytes",
+      ...(range
+        ? { "Content-Range": `bytes ${start}-${end}/${video.length}` }
+        : {}),
     });
-    return res.end(video);
+    return res.end(video.subarray(start, end + 1));
   }
   if (req.url === "/ar.srt") {
     res.writeHead(200, { "Content-Type": "text/plain" });
@@ -305,7 +319,22 @@ try {
       await waitFor(async () => {
         const p = (await snapshot()).player;
         return p.active && !p.separate && !p.loading && p.position >= 10;
-      }, "F8's recovery command returns the viewing inside Riwaq");
+      }, "F8's recovery command returns the viewing inside Riwaq").catch(
+        async (error) => {
+          const p = (await snapshot()).player;
+          console.error(
+            JSON.stringify({
+              active: p.active,
+              separate: p.separate,
+              loading: p.loading,
+              position: p.position,
+              duration: p.duration,
+              error: p.error,
+            }),
+          );
+          throw error;
+        },
+      );
       assert.equal(
         (await call("init")).settings.hdrMode,
         "window",

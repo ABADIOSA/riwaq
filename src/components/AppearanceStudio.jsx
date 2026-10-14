@@ -360,6 +360,18 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               (posterHover) => change({ posterHover }),
             )}
           </label>
+          <label className="studio-field">
+            أسهم الصفوف
+            {pick(
+              "rowArrows",
+              [
+                ["header", "بجانب «عرض الكل»"],
+                ["edges", "على طرفي الصف"],
+              ],
+              draft.rowArrows || "header",
+              (rowArrows) => change({ rowArrows }),
+            )}
+          </label>
           <label className="studio-toggle">
             <input
               type="checkbox"

@@ -30,22 +30,25 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.44.1-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.45.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.44.1
+### الجديد في 0.45.0
 
-- **إشعارات رِواق من أجهزة المالك:** صاحب رِواق صار ينشر الإشعارات من التطبيق العام نفسه على الأجهزة اللي يختارها، بعد ما يتأكد GitHub من حسابه. ما تغيّر شي عند المشاهدين. [كيف يشتغل](docs/ADMIN.md).
+إصلاحات واقتراحات من ملاحظات مستخدم على 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82))، مع مراجعة كوديكس ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
 
-#### من 0.44.0
-
-- **إشعارات رِواق:** جرس في الشريط العلوي فيه أخبار رِواق وتنبيهات الفريق بالعربي والإنجليزي، مع عدّاد لغير المقروء. توقف الاستقبال من نفس النافذة بـ **«استقبال أخبار رِواق»**.
-- **أدوات تحكم أثبت:** ترجع لو انعاد تحميلها أو علّقت، وأدوات MPV تشتغل احتياطاً لين ترجع، والمشاهدة ما تبدأ بقفزة في الصورة.
-- **F8 يستعيد أدوات التحكم:** داخل رِواق يعيد تحميلها والمشاهدة مستمرة. ومع «HDR حقيقي» يكمل المشاهدة داخل رِواق من نفس اللحظة بألوان SDR لهذه المشاهدة بس، وإعداداتك تبقى.
-- **إصلاحات:** Esc يغلق نافذة «HDR حقيقي» دائماً، وإغلاق محرك التورنت ما يعلّق، و«تشخيص كامل» صار يفحص أدوات التحكم.
+- **التنزيل للمشاهدة بدون إنترنت:** من قائمة الزر الأيمن في المشغّل، والتنزيلات في زر فوق. ملفات الفيديو الكاملة والتورنت، بدون HLS/DASH أو البث المباشر، وما يكمّل تنزيل انقطع.
+  - الموسم والحلقة وعنوانها يظهرون مع التنزيل. وإذا تعذّر حذف ملف، يبقى سجله والملف الشخصي لإعادة المحاولة.
+- **قائمة الزر الأيمن في المشغّل:** إيقاف مؤقت، والترجمة والصوت، ولقطة شاشة، ونسخ رابط التورنت، والتنزيل.
+- **إعدادات أساسية أولاً:** اللغة والترجمة والجودة والتورنت في صفحة وحدة، والباقي في **«إعدادات متقدمة»**. و**«واجهة هادئة»** تخفي أزرار الحساب والملفات ودعوة ربط ستريميو.
+- **الإغلاق والإيقاف:** إغلاق رِواق أثناء المشاهدة صار سليم بدون رسالة «Object has been destroyed»، والإيقاف وقت تجهيز المصدر ما يخلّي الفيديو يشتغل بعدها.
+- **التورنت بالمحرك المدمج:** عدد المشاركين والسرعة تحت «جاري تجهيز المشاهدة»، والتورنت اللي ما يوصل منه شي خلال 40 ثانية ينتقل للمصدر التالي.
+- **شريط الصوت** يتحرك مع الفأرة فوراً ويمتلي عند 100%، والتعزيز فوقها بلون ثاني. ونقرة على صورة MPV توقفها مؤقتاً.
+- **«نكمل الحكاية»:** زر يشيل العمل وتقدّمك يبقى. وزر لإخفاء اقتراح ربط ستريميو، وأسهم الصفوف بجانب «عرض الكل».
+- **لغة الواجهة** أول شي في الإعدادات الأساسية، وفي المتقدمة صارت في **المظهر**. والواجهة الإنجليزية تعرض المعرض وأسماء فريق العمل بالإنجليزي.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -71,8 +74,8 @@
 
 1. افتح **حساب ستريميو** وسجّل دخولك من صفحة ستريميو الرسمية، فيستورد رِواق إضافاتك ومكتبتك ومواضع مشاهدتك. أو أضف روابط `manifest.json` بنفسك.
 2. اختر عملاً، ثم الحلقة والمصدر. الفيديو يشتغل داخل رِواق.
-3. من **الإعدادات ← مزوّدو البيانات الوصفية** أضف مفاتيحك (TMDB وغيره) لو تبغى أوصافاً عربية وصوراً أكثر.
-4. من **الإعدادات ← الحسابات والربط** اربط Trakt أو Simkl أو AniList، أو أنشئ حساب رِواق.
+3. من **الإعدادات ← إعدادات متقدمة ← مزوّدو البيانات الوصفية** أضف مفاتيحك (TMDB وغيره) لو تبغى أوصافاً عربية وصوراً أكثر.
+4. من **الإعدادات ← إعدادات متقدمة ← الحسابات والربط** اربط Trakt أو Simkl أو AniList، أو أنشئ حساب رِواق.
 5. مصادر التورنت تحتاج محركاً: **المحرك المدمج** من **الإعدادات ← محرك P2P**، أو **Stremio Service** شغّال على جهازك. الروابط المباشرة ما تحتاج شي.
 
 ### الخصوصية والحدود
@@ -80,7 +83,7 @@
 - مفاتيحك وحساباتك تنحفظ مشفّرة على جهازك. رِواق ما يطلب كلمات مرور المنصات، وما يرسل سجل مشاهدتك إلا للمنصات اللي تفعّل التسجيل فيها.
 - صندوق الإشعارات يقرأ ملف الإشعارات العام من GitHub عند فتح رِواق وكل 15 دقيقة، بدون أي بيانات عنك. تقدر توقفه من نافذة الإشعارات.
 - استيراد Stremio باتجاه واحد إلى رِواق.
-- اختبارات المنصات استخدمت المحاكاة، ولم تُجرَّب الشيدرات على كرت شاشة حقيقي ولا الواجهة الإنجليزية ولا محرك التورنت المدمج على ويندوز حقيقي بعد. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
+- اختبارات الحسابات الخارجية استخدمت المحاكاة. اختُبر MPV والواجهة العربية والإنجليزية على ويندوز بمصادر محلية، والتورنت بسرب محلي. لم يُختبر HDR الحقيقي على جهاز المستخدم أو توفر التورنت العام أو شيدرات GPU. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
 
 ### البناء من المصدر
 
@@ -111,22 +114,25 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.44.1-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.45.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.44.1
+### What's new in 0.45.0
 
-- **Riwaq notices from the owner's devices:** Riwaq's owner can now publish notices from the public app itself on the devices chosen for it, once GitHub confirms the owner's account. Nothing changes for viewers. [How it works](docs/ADMIN.md).
+Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)), with Codex's review ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
 
-#### From 0.44.0
-
-- **Riwaq notifications:** a bell in the top bar with Riwaq news and team notices in Arabic and English, and an unread count. Turn reception off in the same window with **"Receive Riwaq news"**.
-- **Steadier controls:** they come back after a reload or a freeze, MPV's controls stand in until they do, and a viewing no longer starts with the picture jumping.
-- **F8 restores the controls:** inside Riwaq it reloads them while the viewing goes on. With "True HDR" it continues the viewing inside Riwaq from the same moment, in SDR for that viewing only, and your settings stay as they are.
-- **Fixes:** Esc always closes the "True HDR" window, the torrent engine no longer hangs when it shuts down, and the full diagnostic now checks the player controls.
+- **Offline downloads:** from the player's right-click menu, then from the Downloads button at the top. Complete video files and torrents; no HLS/DASH or live streams, and an interrupted download does not resume.
+  - Downloads show season, episode and title. If a file cannot be deleted, its record and profile stay available for retry.
+- **A right-click menu in the player:** pause, subtitles and audio, screenshot, copy the torrent link, and download.
+- **Basic settings first:** language, subtitles, quality and torrents on one page, the rest under **"Advanced settings"**. **"Quiet interface"** hides the account and profile buttons and the Stremio linking prompt.
+- **Closing and stopping:** closing Riwaq during a viewing no longer raises "Object has been destroyed", and stopping while a source is being prepared no longer lets the video start afterwards.
+- **Torrents on the built-in engine:** peers and speed under "Getting the viewing ready", and a torrent that sends nothing within 40 seconds moves on to the next source.
+- **The volume slider** follows the mouse at once and is full at 100%, with any boost in another colour. A click on MPV's own picture pauses.
+- **"Continue watching":** a button removes a title and keeps your progress. Another hides the Stremio linking suggestion, and row arrows sit beside "See all".
+- **The interface language** comes first in the basic settings, and under **Appearance** in the advanced ones. The English interface shows the title gallery and the credits' names in English.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
@@ -150,11 +156,11 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
 ### Getting started
 
-1. For English, open **Settings → Language & subtitles → Interface language** and choose English.
+1. For English, open **Settings → Basic settings → Interface language** and choose English.
 2. Open **Stremio account** and sign in on Stremio's own page. Riwaq imports your addons, library and progress, or you can add `manifest.json` links yourself.
 3. Pick a title, then an episode and a source. The video plays inside Riwaq.
-4. In **Settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
-5. In **Settings → Accounts & linking**, connect Trakt, Simkl or AniList, or create a Riwaq account.
+4. In **Settings → Advanced settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
+5. In **Settings → Advanced settings → Accounts & linking**, connect Trakt, Simkl or AniList, or create a Riwaq account.
 6. Torrent sources need an engine: the **built-in engine** in **Settings → P2P engine**, or **Stremio Service** running on your PC. Direct links need neither.
 
 ### Privacy and limits
@@ -162,7 +168,7 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 - Keys and accounts are stored encrypted on your machine. Riwaq never asks for platform passwords. It sends your viewing history only to platforms where you turn tracking on.
 - The notification inbox reads Riwaq's public notice file from GitHub when Riwaq opens and every 15 minutes, sending nothing about you. You can turn it off in the notifications window.
 - Stremio import is one-way, into Riwaq.
-- Platform tests used mocks; shaders have not yet been tried on a real GPU, nor the English interface or the built-in torrent engine on a real Windows machine. See [what was and was not tested](VERIFICATION.md).
+- External-account tests use mocks. MPV and Arabic/English UI were exercised on Windows with local sources; torrents used a local swarm. Real HDR output on the reported device, public torrent availability and GPU shaders were not verified. See [what was and was not tested](VERIFICATION.md).
 
 ### Building from source
 

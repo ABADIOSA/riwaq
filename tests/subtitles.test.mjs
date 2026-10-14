@@ -476,9 +476,11 @@ test("style changes apply live and the panel opens from MPV", () => {
   assert.equal(props["sub-border-size"], 8);
   player.message("riwaq-panel");
   assert.deepEqual(events, [{ type: "panel" }]);
+  player.message("riwaq-context");
+  assert.deepEqual(events[1], { type: "context" });
   const conf = inputConf();
   assert.match(conf, /^c script-message riwaq-panel$/m);
-  assert.match(conf, /^MBTN_RIGHT script-message riwaq-panel$/m);
+  assert.match(conf, /^MBTN_RIGHT script-message riwaq-context$/m);
   assert.ok(HOTKEY_ACTIONS.some((a) => a.id === "panel"));
 });
 

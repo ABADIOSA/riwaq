@@ -159,9 +159,18 @@ test("input.conf renders every action and the pointer gesture", () => {
   assert.ok(conf.includes("Ctrl+p cycle pause"));
   assert.ok(!conf.includes("SPACE cycle pause"));
   assert.ok(conf.includes("MBTN_LEFT_DBL script-message riwaq-fullscreen"));
-  assert.ok(conf.includes("MBTN_RIGHT script-message riwaq-panel"));
-  // The header, every action, and the two pointer gestures.
-  assert.equal(conf.trim().split("\n").length, HOTKEY_ACTIONS.length + 3);
+  assert.ok(conf.includes("MBTN_RIGHT script-message riwaq-context"));
+  // A click on MPV's own picture pauses (issue #82), written before the
+  // viewer's bindings so one of theirs on the click wins.
+  const lines = conf.trim().split("\n");
+  assert.equal(lines[1], "MBTN_LEFT cycle pause");
+  const own = inputConf({ fullscreen: "MBTN_LEFT" }).trim().split("\n");
+  assert.ok(
+    own.lastIndexOf("MBTN_LEFT script-message riwaq-fullscreen") >
+      own.indexOf("MBTN_LEFT cycle pause"),
+  );
+  // The header, every action, and the three pointer gestures.
+  assert.equal(lines.length, HOTKEY_ACTIONS.length + 4);
 });
 
 test("picture profiles add MPV scaler options and nothing else", () => {

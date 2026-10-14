@@ -1,5 +1,6 @@
 import UpdatesCard from "./UpdatesCard.jsx";
 import OwnerTools from "./OwnerTools.jsx";
+import QuickSettings from "./QuickSettings.jsx";
 import AccountPage from "./settings/AccountPage.jsx";
 import { LanguageCard } from "./settings/LanguageCard.jsx";
 import DiagnosticsCard from "./DiagnosticsCard.jsx";
@@ -52,6 +53,7 @@ import {
   Link2,
   MonitorPlay,
   Subtitles,
+  Languages,
   SlidersHorizontal,
   Search,
   Check,
@@ -527,8 +529,8 @@ const ALL_GROUPS = [
       ],
       [
         "subtitles",
-        "اللغة والترجمة",
-        "عربي لغة الواجهة English إنجليزي إنجليزية language حجم توقيت مسارات صوت",
+        "الترجمة والصوت",
+        "ترجمة لغة الترجمة لغة الصوت حجم توقيت مسارات صوت",
         Subtitles,
       ],
       [
@@ -630,6 +632,14 @@ const ALL_GROUPS = [
     title: "المظهر",
     Icon: Palette,
     pages: [
+      // The interface language sits with how Riwaq looks (issue #82: it was
+      // under watching, beside subtitles, and hard to find).
+      [
+        "language",
+        "لغة الواجهة",
+        "عربي لغة الواجهة English إنجليزي إنجليزية language",
+        Languages,
+      ],
       ["theme", "السمة", "ثيم ألوان تدرج ثيمات جاهزة", SwatchBook],
       ["themes", "سماتك", "سمات محفوظة رمز مشاركة تصميم", Brush],
       ["logo", "الشعار والأيقونة", "شعار أيقونة شريط المهام صورة", Shapes],
@@ -738,6 +748,7 @@ export default function SettingsStudio({
   notice,
   initialTab = "theme",
   onNuvio,
+  onProfiles,
 }) {
   const [first] = useState(
     () => takeSettingsPage() || MOVED[initialTab] || initialTab,
@@ -771,12 +782,19 @@ export default function SettingsStudio({
     }
   };
   const s = state.settings;
+  const [advanced, setAdvanced] = useState(
+    () =>
+      s.settingsMode === "advanced" ||
+      !["theme", "appearance"].includes(initialTab),
+  );
   useEffect(() => {
     setDraft(s);
   }, [s]);
-  const visible = sections.filter((page) =>
-    search ? matchesWords(pageWords(page), search) : page[0] === tab,
-  );
+  const visible = !advanced
+    ? []
+    : sections.filter((page) =>
+        search ? matchesWords(pageWords(page), search) : page[0] === tab,
+      );
   const save = (key, value) => update("settings", { [key]: value });
   const toggle = (key, title, description) => (
     <div className="setting-row" key={key}>
@@ -846,7 +864,41 @@ export default function SettingsStudio({
           onChange={(o) => setOwnerDevice(!!(o?.owner || o?.remembered))}
         />
       )}
-      <div className="studio-layout">
+      <div className="button-row settings-mode">
+        <button
+          className={!advanced ? "primary" : "secondary"}
+          onClick={() => {
+            setAdvanced(false);
+            save("settingsMode", "simple");
+          }}
+        >
+          إعدادات أساسية
+        </button>
+        <button
+          className={advanced ? "primary" : "secondary"}
+          onClick={() => {
+            setAdvanced(true);
+            save("settingsMode", "advanced");
+          }}
+        >
+          إعدادات متقدمة
+        </button>
+      </div>
+      {!advanced && (
+        <QuickSettings
+          state={state}
+          update={update}
+          onProfiles={onProfiles}
+          onAdvanced={(id) => {
+            setTab(id);
+            setAdvanced(true);
+          }}
+        />
+      )}
+      <div
+        className="studio-layout"
+        style={{ display: advanced ? undefined : "none" }}
+      >
         {state.settings.interfaceStyle !== "classic" ? (
           <nav className="studio-index" aria-label="أقسام الإعدادات">
             <label className="settings-search">
@@ -1378,7 +1430,7 @@ export default function SettingsStudio({
                   notice={notice}
                 />
               )}
-              {id === "subtitles" && (
+              {id === "language" && (
                 <LanguageCard state={state} update={update} />
               )}
               {id === "subtitles" && (
@@ -1424,7 +1476,10 @@ export default function SettingsStudio({
                         max="80"
                         value={draft.subtitleSize}
                         onChange={(e) =>
-                          setDraft({ ...draft, subtitleSize: e.target.value })
+                          setDraft({
+                            ...draft,
+                            subtitleSize: e.target.value,
+                          })
                         }
                       />
                     </label>
@@ -1437,7 +1492,10 @@ export default function SettingsStudio({
                         step="0.1"
                         value={draft.subtitleDelay}
                         onChange={(e) =>
-                          setDraft({ ...draft, subtitleDelay: e.target.value })
+                          setDraft({
+                            ...draft,
+                            subtitleDelay: e.target.value,
+                          })
                         }
                       />
                     </label>

@@ -8,6 +8,8 @@
  * electron/torrent-engine.mjs. Browser-safe.
  */
 
+import { PEERS, arabicCount } from "./arabic.mjs";
+
 const KIB = 1024;
 const MIB = 1024 * KIB;
 const GIB = 1024 * MIB;
@@ -191,4 +193,48 @@ export function publicStats(stats) {
     up: n(stats.up),
     cache: n(stats.cache),
   };
+}
+
+/**
+ * A built-in torrent that has not started after this long, with no data at
+ * all, is dead for now: no peers answered, or none of them has the file.
+ * Reconnecting to the same swarm does not help, so the next source plays
+ * (issue #82: a dead torrent used to leave "Getting the viewing ready" on a
+ * black screen for minutes).
+ */
+export const TORRENT_DEAD_MS = 40000;
+
+/** One torrent's start, as the interface may see it: counts and speed only. */
+export function startStatus(status) {
+  if (!status || typeof status !== "object") return null;
+  const n = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0);
+  return {
+    metadata: !!status.metadata,
+    peers: Math.round(n(status.peers)),
+    down: n(status.down),
+    bytes: n(status.bytes),
+  };
+}
+
+/** Whether a torrent that is still starting should give way to the next source. */
+export function torrentDead(status, elapsed) {
+  const s = startStatus(status);
+  if (!s || !(elapsed >= TORRENT_DEAD_MS)) return false;
+  return s.bytes === 0;
+}
+
+/**
+ * The line under "Getting the viewing ready" while a built-in torrent
+ * starts, so a slow or empty swarm reads as what it is.
+ */
+export function startLine(status) {
+  const s = startStatus(status);
+  if (!s) return "";
+  const peers = arabicCount(s.peers, PEERS);
+  if (!s.metadata)
+    return s.peers
+      ? `نجلب معلومات التورنت · ${peers}`
+      : "نبحث عن مشاركين في التورنت…";
+  if (!s.down) return `${peers} · ننتظر أول البيانات…`;
+  return `${peers} · ${(s.down / MIB).toFixed(1)} م.ب/ث`;
 }

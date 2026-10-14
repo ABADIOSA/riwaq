@@ -1,5 +1,9 @@
 # Architecture
 
+Proposed PR #83 follow-up: main's PlaybackRequest owns work before MPV starts; Player retains its separate start token once a process is opening. Stop or a newer request revokes each phase at its own boundaries. The native context menu is main-owned and HUD may request it through a narrow IPC method.
+
+OfflineLibrary writes only validated private IDs under userData/offline. Records are per profile, outside publicState, backups and account payloads. Full file downloads stream to .part, then rename and persist readiness; torrent downloads own a separate utility-process host. Renderers receive metadata, byte counts and opaque IDs only. Basic settings do not mount advanced pages; quiet navigation is a validated per-profile presentation setting. See [request audit and limits](REVIEW-PR-83.md).
+
 ```
 React (sandboxed, RTL)
   -> explicit preload IPC actions

@@ -21,6 +21,7 @@ export default function RiwaqNav({
   profile,
   user,
   onProfiles,
+  quiet = false,
   onAccount,
   isLocked,
   updateAvailable,
@@ -103,14 +104,16 @@ export default function RiwaqNav({
           ))}
       </nav>
       <div className="riwaq-utilities">
-        <button
-          className="riwaq-tool profile-button"
-          onClick={onProfiles}
-          title="تبديل الملف الشخصي"
-        >
-          <Users size={17} />
-          <span>{profile?.name || "المشاهد"}</span>
-        </button>
+        {!quiet && (
+          <button
+            className="riwaq-tool profile-button"
+            onClick={onProfiles}
+            title="تبديل الملف الشخصي"
+          >
+            <Users size={17} />
+            <span>{profile?.name || "المشاهد"}</span>
+          </button>
+        )}
         <button
           className="riwaq-tool"
           onClick={() => go("settings")}
@@ -159,18 +162,20 @@ export default function RiwaqNav({
                     <small>مصادر المشاهدة</small>
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    setMore(false);
-                    onAccount();
-                  }}
-                >
-                  <LogIn />
-                  <b>{user ? "حساب ستريميو" : "ربط ستريميو"}</b>
-                  <small>
-                    {user ? "إدارة الاتصال" : "استورد إضافاتك ومكتبتك"}
-                  </small>
-                </button>
+                {!quiet && (
+                  <button
+                    onClick={() => {
+                      setMore(false);
+                      onAccount();
+                    }}
+                  >
+                    <LogIn />
+                    <b>{user ? "حساب ستريميو" : "ربط ستريميو"}</b>
+                    <small>
+                      {user ? "إدارة الاتصال" : "استورد إضافاتك ومكتبتك"}
+                    </small>
+                  </button>
+                )}
               </div>
             </div>
           )}

@@ -285,6 +285,7 @@ function cleanRecord(record, key) {
   };
   if (record.completed === true) clean.completed = true;
   if (Number.isFinite(record.markedAt)) clean.markedAt = record.markedAt;
+  if (Number.isFinite(record.hiddenAt)) clean.hiddenAt = record.hiddenAt;
   const source = cleanResumeSource(record.source);
   if (source) clean.source = source;
   return clean;

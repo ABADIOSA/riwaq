@@ -109,9 +109,10 @@ html.hud-root #root {
 .hud-buffer {
   background: #ffffff38;
 }
+/* No glow: the bar changes width four times a second, and a shadow repaints
+   with it (issue #82). */
 .hud-progress {
   background: var(--hud-accent);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--hud-accent) 60%, transparent);
 }
 .hud-marker {
   background: #7dd3fc88;
@@ -155,9 +156,9 @@ html.hud-root #root {
   background: #ffffff1a !important;
   padding: 10px !important;
 }
-.hud-volume {
-  width: 100px;
-  accent-color: var(--hud-accent);
+.hud-stage .volume-control {
+  --volume-accent: var(--hud-accent);
+  width: 104px;
 }
 .hud-group small {
   color: #d4d4d8;
@@ -191,6 +192,10 @@ html.hud-root #root {
   gap: 10px;
   pointer-events: none;
   text-shadow: 0 2px 8px #000;
+}
+.hud-torrent {
+  color: #c4c8ce;
+  font-size: 13px;
 }
 .hud-spin {
   animation: hud-spin 1s linear infinite;

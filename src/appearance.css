@@ -237,3 +237,9 @@
 .no-watched-marks .watched-mark {
   display: none;
 }
+
+/* Row arrows (issue #82): beside "See all", or over both ends of the row. */
+.rowarrows-edges .rail-arrows,
+.rowarrows-header .rail:has(.rail-arrows) .scroll-arrow {
+  display: none;
+}

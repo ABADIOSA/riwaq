@@ -627,3 +627,29 @@ test("a title opened from credits tries the other kind once", async () => {
     c.metadata({ type: "channel", id: "tt0475784", flexible: true }),
   );
 });
+
+test("names and places follow the interface's language (issue #82)", async () => {
+  // Arabic first in Arabic, English first in English, and only those.
+  assert.match(titleQuery("tt0111161"), /wikibase:language "ar,en"/);
+  assert.match(titleQuery("tt0111161", "en"), /wikibase:language "en,ar"/);
+  assert.match(castQuery("tt0111161", "xx"), /wikibase:language "ar,en"/);
+  const asked = [];
+  for (const uiLanguage of ["ar", "en"]) {
+    const credits = new Credits({
+      state: { settings: { uiLanguage }, providers: {} },
+    });
+    credits.sparql = async (query) => {
+      asked.push(/wikibase:language "([a-z,]+)"/.exec(query)?.[1]);
+      return { results: { bindings: [] } };
+    };
+    await credits.title({ type: "movie", id: "tt0111161" });
+  }
+  assert.deepEqual(asked, [
+    "ar,en",
+    "ar,en",
+    "ar,en",
+    "en,ar",
+    "en,ar",
+    "en,ar",
+  ]);
+});

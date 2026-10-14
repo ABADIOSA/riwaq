@@ -12,7 +12,7 @@ import {
 import { CACHE_SIZES } from "../../../core/streaming-server.mjs";
 import { SERVICE_LIMIT, cleanServices } from "../../../core/services.mjs";
 import { HOME_SERVER_LIMIT } from "../../../core/home-servers.mjs";
-import { arabicCount } from "../../../core/arabic.mjs";
+import { PEERS, arabicCount } from "../../../core/arabic.mjs";
 import { call } from "../../lib/api.js";
 import { loc } from "../../lib/format.js";
 
@@ -461,14 +461,6 @@ const ENGINE_CACHE_CHOICES = [
   ["5", "5 غيغابايت"],
   ["10", "10 غيغابايت"],
 ];
-const PEERS = {
-  zero: "لا مشاركين",
-  one: "مشارك واحد",
-  two: "مشاركان",
-  few: "{n} مشاركين",
-  many: "{n} مشاركاً",
-  other: "{n} مشارك",
-};
 const TORRENTS = {
   zero: "لا أعمال",
   one: "عمل واحد",

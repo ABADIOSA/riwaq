@@ -21,12 +21,14 @@ import {
   Sparkles,
 } from "lucide-react";
 import PlayerDock from "./PlayerDock.jsx";
+import VolumeSlider from "./VolumeSlider.jsx";
 import { api, call } from "../lib/api.js";
 import { clock } from "../lib/helpers.js";
 import { resolveAppearance } from "../../core/appearance.mjs";
 import { hudHidden } from "../../core/hud-layout.mjs";
 import { SEPARATE_HIDDEN } from "../../core/hud.mjs";
 import { qualityChips } from "../../core/player-tuning.mjs";
+import { startLine } from "../../core/torrent-engine.mjs";
 import { useInterfaceLanguage } from "../lib/language.js";
 import { loc } from "../lib/format.js";
 
@@ -280,6 +282,9 @@ export default function Hud() {
     if (!hold.current.active) return;
     // The click that ends a hold must not also pause.
     hold.current = { ...hold.current, active: false, swallow: true };
+    setTimeout(() => {
+      hold.current.swallow = false;
+    }, 0);
     command("speed", hold.current.previous);
     setHolding(false);
   };
@@ -344,7 +349,7 @@ export default function Hud() {
       onDoubleClick={onStageDouble}
       onContextMenu={(e) => {
         e.preventDefault();
-        setDock(dock ? null : "subs");
+        act("playbackMenu");
         wake();
       }}
       onWheel={onWheel}
@@ -486,6 +491,9 @@ export default function Hud() {
         <div className="hud-center">
           <Loader2 className="hud-spin" size={38} />
           <span>جاري تجهيز المشاهدة…</span>
+          {player.torrent && (
+            <small className="hud-torrent">{startLine(player.torrent)}</small>
+          )}
         </div>
       )}
       {!player.loading && player.cachePaused && (
@@ -757,14 +765,11 @@ export default function Hud() {
                     <Volume2 size={19} />
                   )}
                 </button>
-                <input
-                  className="hud-volume"
-                  aria-label="مستوى الصوت"
-                  type="range"
-                  min="0"
+                <VolumeSlider
+                  volume={player.volume || 0}
                   max={maxVolume}
-                  value={player.volume || 0}
-                  onChange={(e) => command("volume", Number(e.target.value))}
+                  muted={!!player.muted}
+                  onChange={(value) => command("volume", value)}
                 />
                 <small>{Math.round(player.volume || 0)}%</small>
               </>

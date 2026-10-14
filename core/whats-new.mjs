@@ -7,6 +7,29 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.45.0",
+    title: "تنزيلات، قائمة للمشغّل، وإصلاحات من ملاحظاتكم",
+    items: [
+      "نزّل الفيديو وشاهده بدون إنترنت: من قائمة الزر الأيمن في المشغّل، وتلقاه في زر التنزيلات فوق. يشتغل مع ملفات الفيديو الكاملة والتورنت.",
+      "قائمة الزر الأيمن في المشغّل: إيقاف مؤقت، والترجمة والصوت، ولقطة شاشة، ونسخ رابط التورنت، والتنزيل.",
+      "الإعدادات تبدأ بالأساسيات (اللغة والترجمة والجودة والتورنت)، والباقي في «إعدادات متقدمة». و«واجهة هادئة» تخفي أزرار الحساب والملفات من التنقل.",
+      "إغلاق رِواق أو الإيقاف وقت تجهيز المصدر صار سليم، بدون رسالة خطأ وبدون فيديو يشتغل بعد ما توقفه.",
+      "التورنت بالمحرك المدمج يعرض المشاركين والسرعة وقت التجهيز، والتورنت اللي ما يوصل منه شي خلال 40 ثانية ينتقل للمصدر التالي.",
+      "شريط الصوت يتحرك مع الفأرة ويمتلي عند 100%، وزر لإزالة عمل من «نكمل الحكاية»، وأسهم الصفوف بجانب «عرض الكل»، والواجهة الإنجليزية بدون عربي في المعرض وفريق العمل.",
+    ],
+    en: {
+      title: "Downloads, a player menu, and fixes from your feedback",
+      items: [
+        "Download a video and watch it offline: from the player's right-click menu, then from the Downloads button at the top. Complete video files and torrents work.",
+        "A right-click menu in the player: pause, subtitles and audio, screenshot, copy the torrent link, and download.",
+        "Settings start with the basics (language, subtitles, quality and torrents); the rest is under “Advanced settings”. “Quiet interface” hides the account and profile buttons from the navigation.",
+        "Closing Riwaq, or stopping while a source is being prepared, now works cleanly: no error message, and no video starting after you stopped it.",
+        "Torrents on the built-in engine show peers and speed while they start, and one that sends nothing within 40 seconds moves on to the next source.",
+        "The volume slider follows the mouse and is full at 100%, a button removes a title from “Continue watching”, row arrows sit beside “See all”, and the English interface shows no Arabic in the gallery and credits.",
+      ],
+    },
+  },
+  {
     version: "0.44.1",
     title: "إشعارات رِواق من أجهزة المالك",
     items: [

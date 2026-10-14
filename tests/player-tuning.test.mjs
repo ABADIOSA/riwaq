@@ -19,6 +19,9 @@ import {
   qualityChips,
   rtxFilters,
   videoArgs,
+  VOLUME_MAIN_SHARE,
+  volumeAt,
+  volumeRatio,
 } from "../core/player-tuning.mjs";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 import { Player, playerArgs, safeVideo } from "../electron/player.mjs";
@@ -895,4 +898,37 @@ test("frames that stop reaching the output count as a lost picture", () => {
   player.event({ event: "property-change", name: "volume", data: 80 });
   player.event({ event: "property-change", name: "volume" });
   assert.equal(player.state.volume, 80);
+});
+
+test("the volume slider reads full at 100%, with any boost after it (issue #82)", () => {
+  // The default maximum is 150: 100% now fills the slider's main part.
+  assert.equal(volumeRatio(100, 150), VOLUME_MAIN_SHARE);
+  assert.equal(volumeRatio(0, 150), 0);
+  assert.equal(volumeRatio(150, 150), 1);
+  assert.equal(volumeRatio(125, 150), VOLUME_MAIN_SHARE + 0.125);
+  assert.equal(volumeRatio(999, 150), 1);
+  assert.equal(volumeRatio(-5, 150), 0);
+  // Without a boost the whole slider is 0–100.
+  assert.equal(volumeRatio(100, 100), 1);
+  assert.equal(volumeRatio(50, 100), 0.5);
+  // A point on the slider gives the volume back, and 100% catches near misses.
+  for (const max of [100, 130, 150, 200, 600])
+    for (const v of [0, 37, 100, max])
+      assert.equal(volumeAt(volumeRatio(v, max), max), v, `${v} of ${max}`);
+  assert.equal(volumeAt(VOLUME_MAIN_SHARE + 0.003, 600), 100);
+  assert.equal(volumeAt(VOLUME_MAIN_SHARE - 0.01, 150), 100);
+  assert.equal(volumeAt(-1, 150), 0);
+  assert.equal(volumeAt(2, 150), 150);
+  // Both players use the shared slider, never a range bound to MPV's value.
+  for (const file of [
+    "src/components/Hud.jsx",
+    "src/components/PlayerView.jsx",
+  ]) {
+    const page = readFileSync(
+      fileURLToPath(new URL(`../${file}`, import.meta.url)),
+      "utf8",
+    );
+    assert.match(page, /<VolumeSlider/, file);
+    assert.doesNotMatch(page, /type="range"[\s\S]{0,80}volume/, file);
+  }
 });

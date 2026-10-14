@@ -230,6 +230,10 @@ export const DEFAULT_APPEARANCE = {
   // A check on the cards of films the viewer has finished.
   posterWatched: true,
   heroStyle: "full",
+  // A row's arrows: beside "See all" in its heading, or over both ends of
+  // its posters (issue #82 asked for the heading: less pointer travel and
+  // nothing over the pictures).
+  rowArrows: "header",
   detailBackground: "backdrop",
   navHidden: [],
   // Ambience: the viewer's own wallpaper behind the app, dimmed so text
@@ -330,6 +334,7 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
   if (typeof input.posterWatched === "boolean")
     next.posterWatched = input.posterWatched;
   next.heroStyle = choose(input.heroStyle, ["full", "compact"], next.heroStyle);
+  next.rowArrows = choose(input.rowArrows, ["header", "edges"], next.rowArrows);
   next.detailBackground = choose(
     input.detailBackground,
     ["backdrop", "blur", "solid"],
@@ -532,6 +537,7 @@ export function themeClasses(input) {
     a.posterTitles ? "" : "no-poster-titles",
     a.posterWatched ? "" : "no-watched-marks",
     `hero-${a.heroStyle}`,
+    `rowarrows-${a.rowArrows}`,
     `detailbg-${a.detailBackground}`,
     a.wallpaper ? "wall-on" : "",
     a.ambient === "artwork" ? "ambience-glow" : "",

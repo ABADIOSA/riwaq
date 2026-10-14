@@ -70,7 +70,14 @@ const year = (value) => {
   return match ? Number(match[1]) : null;
 };
 
-export const titleQuery = (imdb) => `
+/**
+ * Wikidata's label languages: names and places read in the interface's
+ * language first (issue #82: an English interface listed the makers in
+ * Arabic). Only these two fixed lists ever reach a query.
+ */
+const labels = (lang) => (lang === "en" ? "en,ar" : "ar,en");
+
+export const titleQuery = (imdb, lang = "ar") => `
 SELECT ?role ?who ?whoLabel ?whoDescription ?imdb ?tmdb ?image ?coord WHERE {
   ?item wdt:P345 "${imdb}".
   VALUES (?prop ?role) {
@@ -85,10 +92,10 @@ SELECT ?role ?who ?whoLabel ?whoDescription ?imdb ?tmdb ?image ?coord WHERE {
   OPTIONAL { ?who wdt:P18 ?image. }
   OPTIONAL { ?who wdt:P154 ?image. }
   OPTIONAL { ?who wdt:P625 ?coord. }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${labels(lang)}". }
 } LIMIT 400`;
 
-export const castQuery = (imdb) => `
+export const castQuery = (imdb, lang = "ar") => `
 SELECT ?who ?whoLabel ?imdb ?tmdb ?image ?characterLabel ?characterName ?order WHERE {
   ?item wdt:P345 "${imdb}".
   ?item p:P161 ?statement.
@@ -99,11 +106,11 @@ SELECT ?who ?whoLabel ?imdb ?tmdb ?image ?characterLabel ?characterName ?order W
   OPTIONAL { ?who wdt:P345 ?imdb. }
   OPTIONAL { ?who wdt:P4985 ?tmdb. }
   OPTIONAL { ?who wdt:P18 ?image. }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${labels(lang)}". }
 } LIMIT 120`;
 
 /** Everything one entity (person, company or place) is and has made. */
-export const entityQuery = (qid) => `
+export const entityQuery = (qid, lang = "ar") => `
 SELECT ?field ?value ?valueLabel WHERE {
   BIND(wd:${qid} AS ?entity)
   VALUES (?prop ?field) {
@@ -114,19 +121,19 @@ SELECT ?field ?value ?valueLabel WHERE {
     (wdt:P345 "imdb") (wdt:P4985 "tmdbPerson") (wdt:P166 "award")
   }
   ?entity ?prop ?value.
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${labels(lang)}". }
 } LIMIT 200`;
 
-export const nameQuery = (qid) => `
+export const nameQuery = (qid, lang = "ar") => `
 SELECT ?entityLabel ?entityDescription WHERE {
   BIND(wd:${qid} AS ?entity)
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${labels(lang)}". }
 }`;
 
 export const tmdbPersonQuery = (id) => `
 SELECT ?entity WHERE { ?entity wdt:P4985 "${id}". } LIMIT 1`;
 
-export const worksQuery = (qid) => `
+export const worksQuery = (qid, lang = "ar") => `
 SELECT ?work ?workLabel ?imdb ?date ?kind ?role WHERE {
   VALUES (?prop ?role) {
     (wdt:P161 "cast") (wdt:P57 "director") (wdt:P170 "creator") (wdt:P58 "writer")
@@ -139,7 +146,7 @@ SELECT ?work ?workLabel ?imdb ?date ?kind ?role WHERE {
   FILTER(STRSTARTS(?imdb, "tt"))
   OPTIONAL { ?work wdt:P577 ?date. }
   OPTIONAL { ?work wdt:P31 ?kind. }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${labels(lang)}". }
 } LIMIT 600`;
 
 /**
@@ -147,7 +154,7 @@ SELECT ?work ?workLabel ?imdb ?date ?kind ?role WHERE {
  * trilogy. Episodes and seasons are left out: a TV episode's series is the
  * show itself, not a franchise.
  */
-export const collectionQuery = (imdb) => `
+export const collectionQuery = (imdb, lang = "ar") => `
 SELECT ?series ?seriesLabel ?work ?workLabel ?imdb ?date ?kind ?ordinal WHERE {
   ?item wdt:P345 "${imdb}".
   ?item wdt:P179 ?series.
@@ -163,11 +170,11 @@ SELECT ?series ?seriesLabel ?work ?workLabel ?imdb ?date ?kind ?ordinal WHERE {
     ?part ps:P179 ?series.
     ?part pq:P1545 ?ordinal.
   }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${labels(lang)}". }
 } LIMIT 300`;
 
 /** Search hits narrowed to people with an IMDb name ID: film people. */
-export const peopleQuery = (qids) => `
+export const peopleQuery = (qids, lang = "ar") => `
 SELECT ?item ?itemLabel ?itemDescription ?image ?tmdb WHERE {
   VALUES ?item { ${qids.map((q) => `wd:${q}`).join(" ")} }
   ?item wdt:P31 wd:Q5.
@@ -175,7 +182,7 @@ SELECT ?item ?itemLabel ?itemDescription ?image ?tmdb WHERE {
   FILTER(STRSTARTS(?imdb, "nm"))
   OPTIONAL { ?item wdt:P18 ?image. }
   OPTIONAL { ?item wdt:P4985 ?tmdb. }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "ar,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "${labels(lang)}". }
 }`;
 
 const rows = (result) =>
@@ -640,7 +647,10 @@ export class Credits {
           order.push(hit.id);
     if (!order.length) return [];
     const ids = order.slice(0, 40);
-    return parsePeople(await this.sparql(peopleQuery(ids)), ids).slice(0, 12);
+    return parsePeople(
+      await this.sparql(peopleQuery(ids, this.labelLanguage())),
+      ids,
+    ).slice(0, 12);
   }
   tmdbKey() {
     const entry = this.client.state.providers?.tmdb;
@@ -649,17 +659,21 @@ export class Credits {
   language() {
     return this.client.state.settings.metadataLanguage || "ar-SA";
   }
+  /** Names and places follow the interface's language. */
+  labelLanguage() {
+    return this.client.state.settings.uiLanguage === "en" ? "en" : "ar";
+  }
   /** Cast, crew, companies, filming locations, countries and awards. */
   async title({ type, id }) {
     if (!IMDB.test(id)) throw new Error("لا يتوفر فريق العمل لهذا العنوان");
     let result;
     try {
       const [facts, cast, collections] = await Promise.all([
-        this.sparql(titleQuery(id)).then(parseTitle),
-        this.sparql(castQuery(id))
+        this.sparql(titleQuery(id, this.labelLanguage())).then(parseTitle),
+        this.sparql(castQuery(id, this.labelLanguage()))
           .then(parseCast)
           .catch(() => []),
-        this.sparql(collectionQuery(id))
+        this.sparql(collectionQuery(id, this.labelLanguage()))
           .then((r) => parseCollections(r, id))
           .catch(() => []),
       ]);
@@ -731,9 +745,9 @@ export class Credits {
   }
   async wikidataEntity(qid, person = null) {
     const [facts, names, works] = await Promise.all([
-      this.sparql(entityQuery(qid)),
-      this.sparql(nameQuery(qid)),
-      this.sparql(worksQuery(qid)).then(parseWorks),
+      this.sparql(entityQuery(qid, this.labelLanguage())),
+      this.sparql(nameQuery(qid, this.labelLanguage())),
+      this.sparql(worksQuery(qid, this.labelLanguage())).then(parseWorks),
     ]);
     const entity = { qid, ...parseEntity(facts, names), works };
     entity.sources = ["Wikidata"];
