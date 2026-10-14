@@ -21,6 +21,7 @@ import {
 import { IconButton } from "./UI.jsx";
 import PlayerDock from "./PlayerDock.jsx";
 import VolumeSlider from "./VolumeSlider.jsx";
+import PlayerMenu from "./PlayerMenu.jsx";
 import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
 import { seekAmount } from "../../core/hotkeys.mjs";
@@ -36,10 +37,14 @@ export default function PlayerView({
   onAdvance,
   update,
   dockRequest,
+  menuRequest,
   onEpisode,
 }) {
   const surface = useRef(),
     [dock, setDock] = useState(null),
+    // The right-click menu ({x, y}); the native picture steps aside while
+    // it is open, as it does for any HTML dialog.
+    [menu, setMenu] = useState(null),
     [still, setStill] = useState(false),
     stillTimer = useRef();
   const mini = player.pip,
@@ -67,7 +72,7 @@ export default function PlayerView({
             width: r.width,
             height: r.height,
             viewportWidth: window.innerWidth,
-            visible: !hidden,
+            visible: !hidden && !menu,
           }).catch(() => {});
       });
     };
@@ -81,7 +86,7 @@ export default function PlayerView({
       window.removeEventListener("resize", report);
       call("videoBounds", { visible: false }).catch(() => {});
     };
-  }, [mini, hidden, immersive, hudMode, !!dock]);
+  }, [mini, hidden, immersive, hudMode, !!dock, !!menu]);
   useEffect(() => {
     const onKey = (e) => {
       if (hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName))
@@ -123,15 +128,24 @@ export default function PlayerView({
   useEffect(() => {
     if (dockRequest && !mini) setDock((open) => (open ? null : "subs"));
   }, [dockRequest]);
+  // MPV's own right click when the HUD is not over the picture.
+  useEffect(() => {
+    if (menuRequest && !mini && !hidden)
+      setMenu({
+        x: window.innerWidth / 2 - 110,
+        y: window.innerHeight / 2 - 130,
+      });
+  }, [menuRequest]);
   useEffect(() => {
     if (mini) setDock(null);
   }, [mini]);
+  useEffect(() => setMenu(null), [player.videoId, mini, hidden]);
   return (
     <section
       onContextMenu={(e) => {
         e.preventDefault();
         if (window.riwaq?.platform === "web") setDock("subs");
-        else call("playbackMenu").catch(() => {});
+        else if (!mini) setMenu({ x: e.clientX, y: e.clientY });
       }}
       onMouseMove={() => {
         // Without the HUD, the page still hides the pointer when the picture
@@ -403,6 +417,20 @@ export default function PlayerView({
           </div>
         </div>
       </div>
+      {menu && (
+        <PlayerMenu
+          at={menu}
+          onClose={() => setMenu(null)}
+          onPause={() => command("pause")}
+          onPanel={() =>
+            hudMode
+              ? call("hudPanel").catch(() => {})
+              : setDock((open) => open || "subs")
+          }
+          onStop={() => act("stop")}
+          request={act}
+        />
+      )}
     </section>
   );
 }

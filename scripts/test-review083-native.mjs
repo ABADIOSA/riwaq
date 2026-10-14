@@ -1,5 +1,6 @@
 // Windows Electron/MPV integration. External services are offline fixtures.
-// A native Menu really opens; its selection is driven programmatically.
+// The player menu is HTML in the HUD (0.45.1): a real right click opens it
+// and its items are clicked like any control.
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createServer } from "node:http";
@@ -51,16 +52,15 @@ const bootstrap = join(out, "bootstrap.mjs"),
 writeFileSync(
   bootstrap,
   `
-import {app,Menu} from "electron";import {TorrentHost} from ${JSON.stringify(pathToFileURL(resolve("electron/torrent.mjs")).href)};
+import {app} from "electron";import {TorrentHost} from ${JSON.stringify(pathToFileURL(resolve("electron/torrent.mjs")).href)};
 import childProcess from "node:child_process";import {syncBuiltinESMExports} from "node:module";
 import fs from "node:fs";
 const removeFile=fs.promises.rm;
 globalThis.reviewLockFile=(id)=>{fs.promises.rm=async(path,options)=>{if(String(path).endsWith(id+".media"))throw Object.assign(Error("fixture lock"),{code:"EPERM"});return removeFile(path,options);};syncBuiltinESMExports();};
 globalThis.reviewUnlockFile=()=>{fs.promises.rm=removeFile;syncBuiltinESMExports();};
-app.getVersion=()=>"0.45.0";
+app.getVersion=()=>"0.45.1";
 const spawn=childProcess.spawn;childProcess.spawn=(file,args,opts)=>{const proc=spawn(file,args,opts);if(String(file).endsWith("mpv.exe"))globalThis.reviewMpv=proc.pid;return proc;};syncBuiltinESMExports();
 const getUrl=TorrentHost.prototype.url;TorrentHost.prototype.url=function(stream,settings){if(stream.infoHash==="a".repeat(40))return new Promise(r=>globalThis.reviewResolve=r);return getUrl.call(this,stream,settings);};
-const build=Menu.buildFromTemplate;Menu.buildFromTemplate=function(items){const menu=build.call(this,items);globalThis.reviewMenu=menu;menu.on("menu-will-show",()=>{globalThis.reviewPopup=true;});return menu;};
 const originalFetch=globalThis.fetch;globalThis.fetch=(url,opts)=>String(url).startsWith(${JSON.stringify(base)})?originalFetch(url,opts):String(url).includes("raw.githubusercontent.com")?Promise.resolve(new Response('{"schema":1,"items":[]}')):String(url).endsWith("manifest.json")?Promise.resolve(new Response(JSON.stringify({id:"offline.fixture",name:"Offline",version:"1.0.0",types:["movie"],resources:["catalog"],catalogs:[]}))):Promise.resolve(new Response('{"metas":[]}'));
 await import(${JSON.stringify(pathToFileURL(resolve("electron/main.mjs")).href)});
 `,
@@ -191,23 +191,26 @@ try {
     assert.equal((await player()).pause, false);
     await hud.mouse.click(x, y, { button: "right" });
     await wait(
-      () => app.evaluate(() => !!globalThis.reviewPopup),
-      "right-click opens native menu",
+      async () => !!(await hud.$(".player-menu [role=menuitem]")),
+      "right-click opens the HUD's HTML menu",
     );
-    await app.evaluate(() => globalThis.reviewMenu.closePopup());
     // A direct address can carry credentials (a home server's api_key, a
     // debrid key in an addon's path): only a torrent's magnet is offered.
     assert.equal(
-      await app.evaluate(() =>
-        globalThis.reviewMenu.items.some((x) => /نسخ رابط/.test(x.label)),
+      await hud.$$eval(".player-menu [role=menuitem]", (items) =>
+        items.some((x) => /نسخ رابط/.test(x.textContent)),
       ),
       false,
       "no copy item for a direct source",
     );
-    await app.evaluate(() =>
-      globalThis.reviewMenu.items
-        .find((x) => x.label === "تنزيل الفيديو للمشاهدة لاحقًا")
-        .click(),
+    // A click elsewhere closes it, and that click does not pause.
+    await hud.mouse.click(x - 40, y - 40);
+    await wait(async () => !(await hud.$(".player-menu")), "menu closes");
+    assert.equal((await player()).pause, false, "the closing click paused");
+    await hud.mouse.click(x, y, { button: "right" });
+    await wait(async () => !!(await hud.$(".player-menu")), "menu reopens");
+    await hud.click(
+      '.player-menu [role=menuitem]:has-text("تنزيل الفيديو للمشاهدة لاحقًا")',
     );
     const p = (await call("init")).profiles.active;
     let downloaded;
@@ -288,12 +291,10 @@ try {
         },
         videoId: `fixture:series:1:${episode}`,
       });
-      await call("playbackMenu");
-      await app.evaluate(() => {
-        globalThis.reviewMenu.closePopup();
-        globalThis.reviewMenu.items
-          .find((x) => x.label === "تنزيل الفيديو للمشاهدة لاحقًا")
-          .click();
+      const options = await call("playbackMenu");
+      await call("playbackAction", {
+        action: "download",
+        videoId: options.videoId,
       });
       let item;
       await wait(async () => {
@@ -418,7 +419,7 @@ try {
     }, "MPV exits after closing main while playing");
     assert.deepEqual(errors, []);
     console.log(
-      "Windows review passed: volume drag/keys, click/hold, native menu callbacks, downloads/offline playback, profile delete failure preserves downloads and music, distinct Arabic/English episode labels, basic/advanced and quiet UI, closing during playback.",
+      "Windows review passed: volume drag/keys, click/hold, the HUD's HTML menu, downloads/offline playback, profile delete failure preserves downloads and music, distinct Arabic/English episode labels, basic/advanced and quiet UI, closing during playback.",
     );
   }
 } finally {

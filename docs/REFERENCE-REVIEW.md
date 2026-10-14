@@ -98,6 +98,55 @@ The owner asked for the latest betas of four apps to be compared: the best featu
   - Nuvio HTPC: gamepad, smart lights, AI recaps and P2P engines.
   - Stremio Community: Chromecast and bundled upscaler shaders. Riwaq ships no third-party shaders.
 
+## Torrents without Stremio Service, and the players, studied 2026-10-14 (0.45.1)
+
+A tester asked for a "real Stremio Service inside Riwaq", because the built-in engine does not play every source (#82). The owner then asked how the similar apps solve this, and to study their players after every button froze during playback. Sources read (behaviour only; no code copied):
+
+| App | Commit | License |
+| --- | --- | --- |
+| Harbor | `harborstremio/harbor` `beta-branch` `fb38106` (2026-10-14) | MIT |
+| Nuvio (official) | `NuvioMedia/NuvioDesktop` `51963ee` (2026-10-13) | GPL-3.0 |
+| Nuvio HTPC, the "enhanced" Nuvio | `UmbraProjects/NuvioDesktop` `a70cc37` (2026-10-03) | GPL-3.0 |
+| Stremio Community v5 | `Zaarrg/stremio-community-v5` `3e96a6f` (2026-08-01) | GPL-3.0 |
+| Stremio Enhanced | `REVENGE977/stremio-enhanced` `0bb39a4` (2026-06-26) | MIT |
+
+**How each plays a torrent without the viewer installing Stremio Service:**
+
+- **Stremio Community v5** copies Stremio's own `server.js` and `stremio-runtime.exe` into its release (`build/deploy_windows.js`). That is what Stremio says may not be done outside its apps (stremio-shell#435), so Riwaq does not follow it.
+- **Stremio Enhanced** does not ship `server.js`: the viewer places it, or the app downloads and runs the **official Stremio Service installer** from Stremio's GitHub releases (`src/utils/StremioService.ts`), falling back to opening the download page.
+- **Harbor** has its own engine on **librqbit** (Rust, vendored with patches) and never uses Stremio's server. To reach sparse swarms it:
+  - merges a list of public trackers, including HTTPS trackers for networks that block UDP, into every magnet (`torrent_engine/trackers.rs`);
+  - runs a side DHT with seven bootstrap routers that hands the engine up to 40 peers within 3 s;
+  - keeps the DHT warm between runs (`dht.json`);
+  - uses a 4 s connect timeout and 10 s read timeout;
+  - accepts inbound peers on 16881–16931 with UPnP by default, falling back through three tiers;
+  - adds a network check (DHT nodes, UDP egress, HTTPS egress) and a self-test.
+  Its engine also answers Stremio's server routes (`/{hash}/create`, `/{hash}/{file}`, `/settings`) on an optional LAN port 11470.
+- **Nuvio** (official) ships its own native engine (`nuvio-engine`, a prebuilt library).
+- **Nuvio HTPC** builds that engine from source on **libtorrent**, with four patches measured against Stremio on the same info hashes (`composeApp/src/desktopMain/native/nuvio-engine/README.md`):
+  - DHT bootstrap routers;
+  - a 30 s re-announce to all trackers and the DHT while under 40 peers;
+  - a 10 s connect timeout with eight strikes;
+  - TCP-only outgoing connections;
+  - a read-ahead window of up to 1 GiB (256 MiB by default);
+  - a 15 s block request timeout;
+  - moving a stalled piece's blocks away from peers four times slower than the fastest.
+  It keeps **TorrServer** (YouROK, Go, GPL-3.0) as a bundled fallback process checked by SHA-256.
+
+**What this means for Riwaq** (WebTorrent 3, MIT):
+
+- Riwaq already serves on 127.0.0.1 only, runs TCP only (as Nuvio HTPC does) and has WebTorrent's own hotswap of slow peers.
+- Riwaq announces only the trackers the addon lists. It has no HTTPS fallback trackers, no warm DHT, no faster re-announce while peers are few, and no network check. Its file pick without `fileIdx` takes the largest video rather than the stream's `behaviorHints.filename`.
+- Those are the changes that do not touch Riwaq's rules.
+- Inbound connections with UPnP, a Stremio-compatible local port, running the official Stremio Service installer for the viewer, and a GPL TorrServer fallback each change a stated rule, and are the owner's decision.
+
+**Players:**
+
+- **Harbor:** MPV is a child of the window, pushed under a transparent WebView2. MPV gets `input-default-bindings=no` and `input-cursor=no`, so the page owns the pointer, and WebView2's default context menus are switched off.
+- **Nuvio HTPC:** a container window with a transparent WebView2 HUD over MPV. Its player menus (anime shaders, an "Advanced (mpv)" submenu) are HTML pages opened by `runJavaScript`, not native menus.
+- **Stremio Community:** libmpv on the window with a WebView2 controller above it.
+- None of them uses a native OS menu over the video. Riwaq 0.45.0 did: an Electron `Menu` popped up for the non-focusable HUD (or under MPV's always-on-top True HDR window). On Windows such a menu can open out of sight and hold every click until it closes. 0.45.1 replaces it with an HTML menu in the HUD and the theater (`src/components/PlayerMenu.jsx`).
+
 ## Stremio Community v5
 
 - License: GPL-3.0. Stack: C++ with WebView2 and libmpv, wrapping the official Stremio web UI.

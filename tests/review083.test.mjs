@@ -646,8 +646,10 @@ test("the player menu copies only a magnet, and a cancelled play is not a start"
     main.indexOf("// The built-in torrent engine (core/torrent-engine.mjs)"),
   );
   // A direct address can carry credentials (a home server's api_key).
-  assert.match(menu, /\.\.\.\(stream\?\.infoHash/);
+  assert.match(menu, /if \(!stream\?\.infoHash\) throw/);
   assert.match(menu, /clipboard\.writeText\(magnetOf\(stream\)\)/);
+  // An action runs only for the viewing whose menu offered it.
+  assert.match(menu, /player\.videoId !== videoId/);
   assert.doesNotMatch(menu, /stream\.url/);
   assert.doesNotMatch(menu, /نسخ رابط المصدر/);
   // Stop or another play while this one was prepared started nothing.
@@ -697,4 +699,47 @@ test("main checks its playback request after every wait before MPV starts", asyn
   }
   const quit = main.slice(main.indexOf('app.on("before-quit"'));
   assert.match(quit.slice(0, 200), /playbackRequest\.cancel\(\)/);
+});
+
+test("the player menu is HTML in the controls, never a native menu", async () => {
+  const { readFileSync } = await import("node:fs");
+  const read = (path) =>
+    readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  const main = read("electron/main.mjs");
+  // A native menu owned by the non-focusable HUD, or under MPV's on-top
+  // window, can open out of sight and hold every click in Riwaq.
+  assert.doesNotMatch(main, /Menu\.buildFromTemplate|menu\.popup\(/);
+  assert.doesNotMatch(main, /^\s+Menu,$/m);
+  // MPV's own right click opens the same HTML menu where the controls are.
+  assert.match(main, /event\.type === "context"\) event = \{ type: "menu" \}/);
+  assert.match(main, /event\.type === "panel" \|\| event\.type === "menu"/);
+  const { HUD_METHODS } = await import("../core/hud.mjs");
+  assert.ok(HUD_METHODS.has("playbackMenu"));
+  assert.ok(HUD_METHODS.has("playbackAction"));
+  assert.match(read("electron/preload.cjs"), /"playbackAction"/);
+  for (const file of [
+    "src/components/Hud.jsx",
+    "src/components/PlayerView.jsx",
+  ]) {
+    const page = read(file);
+    assert.match(page, /<PlayerMenu/, file);
+    assert.doesNotMatch(
+      page,
+      /call\("playbackMenu"\)|act\("playbackMenu"\)/,
+      file,
+    );
+  }
+  const menu = read("src/components/PlayerMenu.jsx");
+  assert.match(menu, /call\("playbackMenu"\)/);
+  assert.match(
+    menu,
+    /request\("playbackAction", \{ action, videoId: options\.videoId \}\)/,
+  );
+  // It closes on any press elsewhere, and the theater hides the native
+  // picture under it like any HTML dialog.
+  assert.match(menu, /addEventListener\("pointerdown", down, true\)/);
+  assert.match(
+    read("src/components/PlayerView.jsx"),
+    /visible: !hidden && !menu/,
+  );
 });

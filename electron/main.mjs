@@ -13,7 +13,6 @@ import {
   nativeImage,
   protocol,
   utilityProcess,
-  Menu,
 } from "electron";
 import {
   readFileSync,
@@ -217,69 +216,46 @@ function startOffline() {
   emit("notice", "بدأ التنزيل؛ افتح التنزيلات لمتابعة التقدم.");
   return result;
 }
+/**
+ * The player's right-click menu is drawn by the HUD or the theater
+ * (src/components/PlayerMenu.jsx), never as a native menu: a native menu
+ * owned by the non-focusable HUD, or under MPV's always-on-top window, can
+ * open out of sight and keep every click in Riwaq until it closes. Main only
+ * says which items apply to this viewing, and runs a chosen one after
+ * checking it is still the same viewing. Pause, the panel and stop use the
+ * controls' own commands.
+ */
 function playbackMenu() {
-  if (!player?.state.active || !window || window.isDestroyed()) return false;
-  const viewing = nowPlaying,
-    videoId = player.videoId,
-    stream = client.streams.get(viewing?.key);
-  const active = () =>
-    player.state.active && player.videoId === videoId && nowPlaying === viewing;
-  const run = (fn) => () => {
-    if (active())
-      Promise.resolve()
-        .then(fn)
-        .catch((e) => emit("notice", cleanError(e)));
+  if (!player?.state.active || !window || window.isDestroyed()) return null;
+  const stream = client.streams.get(nowPlaying?.key);
+  return {
+    videoId: player.videoId,
+    paused: !!player.state.pause,
+    torrent: !!stream?.infoHash,
+    download: !!stream && !player.state.live,
   };
-  const menu = Menu.buildFromTemplate([
-    {
-      label: t(player.state.pause ? "استئناف المشاهدة" : "إيقاف مؤقت"),
-      click: run(() => player.command({ action: "pause" })),
-    },
-    {
-      label: t("الترجمة والصوت"),
-      click: run(() =>
-        player.state.overlay
-          ? emit("hudCommand", { type: "panel" })
-          : emit("playerRequest", { type: "panel" }),
-      ),
-    },
-    {
-      label: t("التقط لقطة شاشة"),
-      click: run(() => player.command({ action: "screenshot" })),
-    },
-    // Only a torrent's magnet link is copied. A direct address can carry the
-    // viewer's credentials (a Jellyfin/Emby copy's api_key, a debrid key in
-    // an addon's path) and stays in main like every stream URL.
-    ...(stream?.infoHash
-      ? [
-          {
-            label: t("نسخ رابط التورنت"),
-            click: run(() => {
-              client.profiles.gate("library");
-              clipboard.writeText(magnetOf(stream));
-            }),
-          },
-        ]
-      : []),
-    {
-      label: t("تنزيل الفيديو للمشاهدة لاحقًا"),
-      enabled: !!stream && !player.state.live,
-      click: run(startOffline),
-    },
-    { type: "separator" },
-    {
-      label: t("إيقاف المشاهدة"),
-      click: run(() => {
-        playbackRequest.cancel();
-        player.setSleepEpisodes(0);
-        return player.stop();
-      }),
-    },
-  ]);
-  menu.popup({
-    window: hud && !hud.isDestroyed() && hud.isVisible() ? hud : window,
-  });
-  return true;
+}
+async function playbackAction({ action, videoId } = {}) {
+  if (
+    !player?.state.active ||
+    typeof videoId !== "string" ||
+    player.videoId !== videoId
+  )
+    throw new Error("انتهت هذه المشاهدة");
+  const stream = client.streams.get(nowPlaying?.key);
+  if (action === "screenshot") return player.command({ action: "screenshot" });
+  // Only a torrent's magnet link is copied. A direct address can carry the
+  // viewer's credentials (a Jellyfin/Emby copy's api_key, a debrid key in
+  // an addon's path) and stays in main like every stream URL.
+  if (action === "copyMagnet") {
+    if (!stream?.infoHash) throw new Error("هذا المصدر ليس تورنت");
+    client.profiles.gate("library");
+    clipboard.writeText(magnetOf(stream));
+    emit("notice", "نُسخ رابط التورنت");
+    return true;
+  }
+  if (action === "download") return startOffline();
+  throw new Error("أمر غير معروف");
 }
 // The built-in torrent engine (core/torrent-engine.mjs), in its own process,
 // started only when the viewer chose it and a torrent plays; and the info
@@ -2067,6 +2043,7 @@ const methods = {
     return true;
   },
   playbackMenu: () => playbackMenu(),
+  playbackAction: (a) => playbackAction(a),
   offlineList: (a) => offline.list(a?.profileId),
   offlineCancel: (a) => offline.cancel(a?.profileId, a?.id),
   offlineRemove: (a) => offline.remove(a?.profileId, a?.id),
@@ -2737,10 +2714,9 @@ app
         // episode comes next and which source plays it.
         // With the HUD on, the panel lives there; otherwise in the theater.
         onEvent: (event) => {
-          if (event.type === "context") {
-            playbackMenu();
-            return;
-          }
+          // MPV's own right click (the HUD was not over it) opens the same
+          // HTML menu as a right click on the controls.
+          if (event.type === "context") event = { type: "menu" };
           if (event.type === "userStop") {
             playbackRequest.cancel();
             player.setSleepEpisodes(0);
@@ -2759,7 +2735,9 @@ app
             emit("notice", "أعدنا تحميل أدوات التحكم، والمشاهدة مستمرة.");
             return;
           }
-          event.type === "panel" && player.state.overlay
+          // The menu opens where the controls are drawn.
+          (event.type === "panel" || event.type === "menu") &&
+          player.state.overlay
             ? emit("hudCommand", event)
             : emit("playerRequest", event);
         },

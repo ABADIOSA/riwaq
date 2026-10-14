@@ -1,4 +1,8 @@
 export default {
+  "قائمة المشغّل": "Player menu",
+  "انتهت هذه المشاهدة": "This viewing has ended",
+  "هذا المصدر ليس تورنت": "This source is not a torrent",
+  "نُسخ رابط التورنت": "Torrent link copied",
   "جارٍ حذف تنزيلات هذا الملف الشخصي؛ انتظر انتهاء العملية":
     "This profile's downloads are being deleted; wait until it finishes",
   "تعذر حذف بعض التنزيلات؛ أغلق البرامج التي تستخدم الملفات ثم حاول حذف الملف الشخصي مجددًا":
