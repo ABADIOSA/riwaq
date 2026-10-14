@@ -1,5 +1,12 @@
 # Verification — Riwaq
 
+## 2026-10-14 — #84 merged into #83, review findings fixed
+
+- PR #84 was merged into #83's branch (`54b487c`), then reviewed. Fixed there: the menu copies only a torrent's magnet (a direct URL may carry a debrid or home-server token); a `{cancelled: true}` play no longer closes the sources, opens the theater or advances autoplay; removing a profile stops its download and deletes its files and records (`forgetProfile`); the quiet interface switch uses the standard toggle.
+- **801 Node tests pass** (798 + 3 in `tests/review083.test.mjs`): `forgetProfile` with a running job (aborted, files and records gone), the magnet-only copy and the cancelled guards in Details and App, and that `play()` checks its request after every awaited step before `player.start(` and that Stop, profile switch, profile lock and quit cancel it. `tests/performance.test.mjs` now expects the cancelled guard before the sources close.
+- `npm run check`, desktop and web builds and the Chromium web smoke (local addon and account fixtures) pass on this run.
+- Not run again after these fixes: Codex's Windows fixtures (`scripts/test-review083-native.mjs` now expects no copy item for a direct source and clicks the toggle by role). No installer, release or public swarm.
+
 ## 2026-10-14 — follow-up audit of PR #83 (source, not released)
 
 - Baseline #83: 789 Node tests. Follow-up: **798 passed**, Prettier and desktop/web builds passed.

@@ -514,8 +514,11 @@ export default function Details({
       profileId: state.profiles?.active,
     });
     setPlaying("");
-    if (ok) setSourcesOpen(false);
-    if (ok && !ok.external) {
+    // Stop, or another source, while this one was being prepared: nothing
+    // started, so the sources stay and no subtitles are asked for.
+    if (!ok || ok.cancelled) return;
+    setSourcesOpen(false);
+    if (!ok.external) {
       notice("بدأ التشغيل في مشغل رِواق المدمج");
       setSubLoading(true);
       call("subtitles", { type: meta.type, id: videoId, streamKey: stream.key })

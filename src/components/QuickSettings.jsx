@@ -70,20 +70,24 @@ export default function QuickSettings({
             المصدر والمشاركين.
           </p>
         )}
-        <label className="setting-row">
-          <span>
+        <div className="setting-row">
+          <div>
             <b>واجهة هادئة</b>
             <p>
               إخفاء دعوات الربط وزر الحساب والملفات من التنقل. يمكنك فتح ملفاتك
               من هنا.
             </p>
-          </span>
-          <input
-            type="checkbox"
-            checked={!!s.quietInterface}
-            onChange={(e) => save("quietInterface", e.target.checked)}
-          />
-        </label>
+          </div>
+          {/* The same switch as every other settings page. */}
+          <button
+            className={`toggle ${s.quietInterface ? "on" : ""}`}
+            aria-label="واجهة هادئة"
+            aria-pressed={!!s.quietInterface}
+            onClick={() => save("quietInterface", !s.quietInterface)}
+          >
+            <span />
+          </button>
+        </div>
         <div className="button-row">
           <button className="secondary" onClick={onProfiles}>
             عرض الملفات الشخصية

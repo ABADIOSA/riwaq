@@ -191,14 +191,14 @@ try {
       "right-click opens native menu",
     );
     await app.evaluate(() => globalThis.reviewMenu.closePopup());
-    await app.evaluate(() =>
-      globalThis.reviewMenu.items
-        .find((x) => x.label === "نسخ رابط المصدر")
-        .click(),
-    );
+    // A direct address can carry credentials (a home server's api_key, a
+    // debrid key in an addon's path): only a torrent's magnet is offered.
     assert.equal(
-      await app.evaluate(({ clipboard }) => clipboard.readText()),
-      base + "/video.mkv",
+      await app.evaluate(() =>
+        globalThis.reviewMenu.items.some((x) => /نسخ رابط/.test(x.label)),
+      ),
+      false,
+      "no copy item for a direct source",
     );
     await app.evaluate(() =>
       globalThis.reviewMenu.items
@@ -229,8 +229,13 @@ try {
       .first()
       .click();
     await page.getByText("الأساسيات أولًا", { exact: true }).waitFor();
-    await page.getByLabel("واجهة هادئة", { exact: false }).check();
-    assert.equal((await call("init")).settings.quietInterface, true);
+    await page
+      .getByRole("button", { name: "واجهة هادئة", exact: true })
+      .click();
+    await wait(
+      async () => (await call("init")).settings.quietInterface === true,
+      "quiet interface saved",
+    );
     assert.equal(await page.locator(".profile-button").count(), 0);
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()

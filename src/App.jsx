@@ -265,7 +265,8 @@ export default function App() {
         profileId,
       };
       try {
-        await call("play", playArgs);
+        // A play overtaken by Stop or another play started nothing.
+        if ((await call("play", playArgs))?.cancelled) return;
       } catch (e) {
         if (e.message !== NEEDS_ENGINE) throw e;
         setTorrentSetup({ args: playArgs });

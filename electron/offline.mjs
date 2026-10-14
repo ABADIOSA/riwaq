@@ -299,6 +299,24 @@ export class OfflineLibrary {
     this.persist();
     return this.list(profileId);
   }
+  /**
+   * A removed profile's downloads go with it: its download stops and its
+   * files and records are deleted (they can be gigabytes). Called after the
+   * removal's own PIN check, so it does not ask for the active profile.
+   */
+  async forgetProfile(profileId) {
+    const bag = this.client.state.offline?.[profileId];
+    if (this.job?.profile === profileId) {
+      this.job.abort.abort();
+      await this.job.done;
+    }
+    for (const item of Array.isArray(bag) ? bag : []) {
+      if (!ID.test(item?.id) || item.id === this.playing) continue;
+      await removeFile(this.path(item.id)).catch(() => {});
+      await removeFile(this.path(item.id, true)).catch(() => {});
+    }
+    delete this.client.state.offline?.[profileId];
+  }
   async stop() {
     this.job?.abort.abort();
     await this.job?.done;

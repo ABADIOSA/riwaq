@@ -30,29 +30,24 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.44.1-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.45.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في المصدر 0.45.0 — قيد المراجعة
+### الجديد في 0.45.0
 
-آخر إصدار منشور هو **0.44.1**. إصلاحات [PR #83](https://github.com/ABADIOSA/riwaq/pull/83) وهذه [المراجعة المكملة](docs/REVIEW-PR-83.md) لم تصدر في مثبت بعد.
+إصلاحات واقتراحات من ملاحظات مستخدم على 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82))، مع مراجعة كوديكس ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
 
-إصلاحات واقتراحات من ملاحظات مستخدم على 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)):
-
-- **إغلاق رِواق أثناء المشاهدة** صار يقفل التطبيق صح، بدون رسالة «Object has been destroyed» وبدون ما تبقى نافذة MPV سودا.
-- **التورنت بالمحرك المدمج:** عدد المشاركين والسرعة تحت «جاري تجهيز المشاهدة»، والتورنت اللي ما يوصل منه شي خلال 40 ثانية ينتقل للمصدر التالي بدل الشاشة السودا.
-- **شريط الصوت** يتحرك مع الفأرة فوراً، ويمتلي عند 100%، والتعزيز فوقها جزء ثاني بلون مختلف. ونقرة على صورة MPV توقفها مؤقتاً.
-- **«نكمل الحكاية»:** زر لإزالة عمل وتقدّمك يبقى. وزر لإخفاء اقتراح ربط ستريميو.
-- **أسهم الصفوف** بجانب «عرض الكل» بدل ما تكون فوق البوسترات. ترجع للطريقة القديمة من **الإعدادات ← المصادر والمكتبة ← بطاقات الملصقات**.
-- **لغة الواجهة** صارت في **الإعدادات ← المظهر ← لغة الواجهة**، والواجهة الإنجليزية تعرض المعرض وأسماء فريق العمل بالإنجليزي.
-
-- **الإيقاف أثناء تجهيز المصدر** يلغي الطلب المتأخر؛ ما يبدأ الفيديو بعد الضغط على إيقاف.
-- **قائمة الزر الأيمن** للفيديو: الترجمة والصوت، لقطة شاشة، نسخ المصدر، والتنزيل.
-- **التنزيلات على ويندوز:** ملفات الفيديو الكاملة والتورنت للمشاهدة دون إنترنت من زر التنزيلات. لا تدعم HLS/DASH أو البث المباشر، ولا تستكمل التنزيل المنقطع.
-- **إعدادات أساسية أولًا** مع زر للمتقدمة؛ وخيار «واجهة هادئة» لإخفاء أزرار الحساب والملفات من التنقل ودعوة ربط Stremio.
+- **التنزيل للمشاهدة بدون إنترنت:** من قائمة الزر الأيمن في المشغّل، والتنزيلات في زر فوق. ملفات الفيديو الكاملة والتورنت، بدون HLS/DASH أو البث المباشر، وما يكمّل تنزيل انقطع.
+- **قائمة الزر الأيمن في المشغّل:** إيقاف مؤقت، والترجمة والصوت، ولقطة شاشة، ونسخ رابط التورنت، والتنزيل.
+- **إعدادات أساسية أولاً:** اللغة والترجمة والجودة والتورنت في صفحة وحدة، والباقي في **«إعدادات متقدمة»**. و**«واجهة هادئة»** تخفي أزرار الحساب والملفات ودعوة ربط ستريميو.
+- **الإغلاق والإيقاف:** إغلاق رِواق أثناء المشاهدة صار سليم بدون رسالة «Object has been destroyed»، والإيقاف وقت تجهيز المصدر ما يخلّي الفيديو يشتغل بعدها.
+- **التورنت بالمحرك المدمج:** عدد المشاركين والسرعة تحت «جاري تجهيز المشاهدة»، والتورنت اللي ما يوصل منه شي خلال 40 ثانية ينتقل للمصدر التالي.
+- **شريط الصوت** يتحرك مع الفأرة فوراً ويمتلي عند 100%، والتعزيز فوقها بلون ثاني. ونقرة على صورة MPV توقفها مؤقتاً.
+- **«نكمل الحكاية»:** زر يشيل العمل وتقدّمك يبقى. وزر لإخفاء اقتراح ربط ستريميو، وأسهم الصفوف بجانب «عرض الكل».
+- **لغة الواجهة** أول شي في الإعدادات الأساسية، وفي المتقدمة صارت في **المظهر**. والواجهة الإنجليزية تعرض المعرض وأسماء فريق العمل بالإنجليزي.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -118,29 +113,24 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.44.1-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.45.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### Source 0.45.0 — under review
+### What's new in 0.45.0
 
-The latest published release is **0.44.1**. [PR #83](https://github.com/ABADIOSA/riwaq/pull/83) and this [follow-up review](docs/REVIEW-PR-83.md) are not a published installer yet.
+Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)), with Codex's review ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
 
-Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)):
-
-- **Closing Riwaq during a viewing** now closes the app properly, with no "Object has been destroyed" message and no black MPV window left behind.
-- **Torrents on the built-in engine:** peers and speed under "Getting the viewing ready", and a torrent that sends nothing within 40 seconds moves on to the next source instead of a black screen.
-- **The volume slider** follows the mouse at once and is full at 100%, with any boost after it in another colour. A click on MPV's own picture pauses.
-- **"Continue watching":** a button removes a title and keeps your progress. Another hides the Stremio linking suggestion.
-- **Row arrows** sit beside "See all" instead of over the posters. The old style is in **Settings → Sources & library → Poster cards**.
-- **The interface language** is now in **Settings → Appearance → Interface language**, and the English interface shows the title gallery and the names in the credits in English.
-
-- **Stop during source preparation** cancels late playback before MPV starts.
-- **Right-click video menu:** subtitles/audio, screenshot, copy source and download.
-- **Windows downloads:** complete video files and torrents, playable offline from Downloads. HLS/DASH/live and interrupted-download resume are unsupported.
-- **Basic settings first** with advanced pages one click away; a **Quiet interface** hides navigation account/profile controls and the Stremio home linking prompt.
+- **Offline downloads:** from the player's right-click menu, then from the Downloads button at the top. Complete video files and torrents; no HLS/DASH or live streams, and an interrupted download does not resume.
+- **A right-click menu in the player:** pause, subtitles and audio, screenshot, copy the torrent link, and download.
+- **Basic settings first:** language, subtitles, quality and torrents on one page, the rest under **"Advanced settings"**. **"Quiet interface"** hides the account and profile buttons and the Stremio linking prompt.
+- **Closing and stopping:** closing Riwaq during a viewing no longer raises "Object has been destroyed", and stopping while a source is being prepared no longer lets the video start afterwards.
+- **Torrents on the built-in engine:** peers and speed under "Getting the viewing ready", and a torrent that sends nothing within 40 seconds moves on to the next source.
+- **The volume slider** follows the mouse at once and is full at 100%, with any boost in another colour. A click on MPV's own picture pauses.
+- **"Continue watching":** a button removes a title and keeps your progress. Another hides the Stremio linking suggestion, and row arrows sit beside "See all".
+- **The interface language** comes first in the basic settings, and under **Appearance** in the advanced ones. The English interface shows the title gallery and the credits' names in English.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 

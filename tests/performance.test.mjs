@@ -90,12 +90,15 @@ test("sources open in a window by default, and the viewer can keep them on the p
     "utf8",
   );
   // Showing sources on opening keeps them on the page; a started stream
-  // closes the window.
+  // closes the window, and a cancelled one (Stop, a newer play) does not.
   assert.match(
     details,
     /sourcesPopup !== false &&\s*state\.settings\.sourcesOnOpen !== true/,
   );
-  assert.match(details, /if \(ok\) setSourcesOpen\(false\)/);
+  assert.match(
+    details,
+    /if \(!ok \|\| ok\.cancelled\) return;\s*setSourcesOpen\(false\)/,
+  );
   assert.match(details, /className="sources-modal"/);
 });
 

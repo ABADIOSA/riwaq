@@ -247,14 +247,20 @@ function playbackMenu() {
       label: t("التقط لقطة شاشة"),
       click: run(() => player.command({ action: "screenshot" })),
     },
-    {
-      label: t(stream?.infoHash ? "نسخ رابط التورنت" : "نسخ رابط المصدر"),
-      enabled: !!(stream?.url || stream?.infoHash),
-      click: run(() => {
-        client.profiles.gate("library");
-        clipboard.writeText(stream.infoHash ? magnetOf(stream) : stream.url);
-      }),
-    },
+    // Only a torrent's magnet link is copied. A direct address can carry the
+    // viewer's credentials (a Jellyfin/Emby copy's api_key, a debrid key in
+    // an addon's path) and stays in main like every stream URL.
+    ...(stream?.infoHash
+      ? [
+          {
+            label: t("نسخ رابط التورنت"),
+            click: run(() => {
+              client.profiles.gate("library");
+              clipboard.writeText(magnetOf(stream));
+            }),
+          },
+        ]
+      : []),
     {
       label: t("تنزيل الفيديو للمشاهدة لاحقًا"),
       enabled: !!stream && !player.state.live,
@@ -1846,6 +1852,8 @@ const methods = {
       await player.stop();
     }
     if (client.state.localMusic) delete client.state.localMusic[a.id];
+    // Its downloads go with it (electron/offline.mjs).
+    await offline?.forgetProfile(a.id);
     return client.profiles.remove(a);
   },
   profileSwitch: async (a) => {

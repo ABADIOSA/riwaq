@@ -342,3 +342,135 @@ test("a real offline torrent swarm downloads all video bytes to a persistent off
     await rm(root, { recursive: true, force: true });
   }
 });
+test("a removed profile's downloads are deleted with it, others stay", async () => {
+  const root = await temp();
+  let active = "one";
+  const bytes = Buffer.alloc(4096, 7);
+  const client = {
+    state: {},
+    profiles: {
+      store: {
+        get active() {
+          return active;
+        },
+      },
+      gate() {},
+      capture() {},
+    },
+    saveData() {},
+  };
+  const lib = new OfflineLibrary(client, {
+    root,
+    resolveSource: async () => ({ url: "http://fixture/video" }),
+    request: async () =>
+      new Response(bytes, {
+        headers: {
+          "content-length": bytes.length,
+          "content-type": "video/mp4",
+        },
+      }),
+  });
+  const args = (profileId) => ({
+    profileId,
+    stream: {},
+    meta,
+    videoId: meta.id,
+    settings: {},
+  });
+  try {
+    const mine = lib.start(args("one")).items[0];
+    await lib.job.done;
+    active = "two";
+    const theirs = lib.start(args("two")).items[0];
+    await lib.job.done;
+    await stat(lib.path(mine.id));
+    await lib.forgetProfile("one");
+    await assert.rejects(stat(lib.path(mine.id)), { code: "ENOENT" });
+    assert.equal(client.state.offline.one, undefined);
+    // Another profile's download is untouched.
+    assert.equal((await stat(lib.path(theirs.id))).size, bytes.length);
+    assert.equal(lib.list("two").items.length, 1);
+    // A download still preparing for the removed profile stops first (the
+    // real source rejects when its engine stops, as this one does).
+    const slow = new OfflineLibrary(client, {
+      root,
+      resolveSource: (_stream, _settings, signal) =>
+        new Promise((_resolve, reject) => {
+          if (signal.aborted) return reject(Error("stopped"));
+          signal.addEventListener("abort", () => reject(Error("stopped")));
+        }),
+      request: async () => new Response(bytes),
+    });
+    slow.start(args("two"));
+    assert.ok(slow.job);
+    await slow.forgetProfile("two");
+    assert.equal(slow.job, null);
+    assert.equal(client.state.offline.two, undefined);
+  } finally {
+    await lib.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the player menu copies only a magnet, and a cancelled play is not a start", async () => {
+  const { readFileSync } = await import("node:fs");
+  const read = (path) =>
+    readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  const main = read("electron/main.mjs");
+  const menu = main.slice(
+    main.indexOf("function playbackMenu("),
+    main.indexOf("// The built-in torrent engine (core/torrent-engine.mjs)"),
+  );
+  // A direct address can carry credentials (a home server's api_key).
+  assert.match(menu, /\.\.\.\(stream\?\.infoHash/);
+  assert.match(menu, /clipboard\.writeText\(magnetOf\(stream\)\)/);
+  assert.doesNotMatch(menu, /stream\.url/);
+  assert.doesNotMatch(menu, /نسخ رابط المصدر/);
+  // Stop or another play while this one was prepared started nothing.
+  assert.match(
+    read("src/components/Details.jsx"),
+    /if \(!ok \|\| ok\.cancelled\) return;/,
+  );
+  assert.match(
+    read("src/App.jsx"),
+    /if \(\(await call\("play", playArgs\)\)\?\.cancelled\) return;/,
+  );
+});
+
+test("main checks its playback request after every wait before MPV starts", async () => {
+  const { readFileSync } = await import("node:fs");
+  const main = readFileSync(
+    new URL("../electron/main.mjs", import.meta.url),
+    "utf8",
+  );
+  const play = main.slice(
+    main.indexOf("async function play({"),
+    main.indexOf("async function playChannel("),
+  );
+  const at = (text) => {
+    const i = play.indexOf(text);
+    assert.ok(i >= 0, text);
+    return i;
+  };
+  const owns = [...play.matchAll(/playbackRequest\.owns\(request\)/g)].map(
+    (m) => m.index,
+  );
+  // After the service probe, after the engine's address, after Stop.
+  for (const wait of [
+    "await serviceUp()",
+    "await torrents().url(",
+    "await player.stop()",
+  ])
+    assert.ok(
+      owns.some((i) => i > at(wait)),
+      `ownership checked after ${wait}`,
+    );
+  assert.ok(owns.at(-1) < at("player.start("), "all before MPV starts");
+  // Everything that ends a viewing or changes who watches revokes it.
+  for (const name of ["stop:", "profileSwitch:", "profileLock:"]) {
+    const body = main.slice(main.indexOf(`  ${name}`));
+    assert.match(body.slice(0, 400), /playbackRequest\.cancel\(\)/, name);
+  }
+  const quit = main.slice(main.indexOf('app.on("before-quit"'));
+  assert.match(quit.slice(0, 200), /playbackRequest\.cancel\(\)/);
+});

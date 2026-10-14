@@ -67,7 +67,6 @@ export default {
   "استئناف المشاهدة": "Resume playback",
   "التقط لقطة شاشة": "Take a screenshot",
   "نسخ رابط التورنت": "Copy torrent link",
-  "نسخ رابط المصدر": "Copy source link",
   "تنزيل الفيديو للمشاهدة لاحقًا": "Download video to watch later",
   "قائمة المشغل الإضافية متاحة في تطبيق ويندوز؛ استخدم أدوات المشغل الظاهرة هنا.":
     "The extra player menu is available in the Windows app; use the player controls shown here.",
