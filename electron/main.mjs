@@ -81,6 +81,7 @@ import {
   NEEDS_ENGINE,
   SERVICE_DOWNLOAD,
   chooseEngine,
+  torrentDead,
 } from "../core/torrent-engine.mjs";
 import { ShaderStore } from "./shaders.mjs";
 import { shaderOptions } from "../core/shaders.mjs";
@@ -213,7 +214,7 @@ let failover = { id: null, tried: new Set() };
  * At most three attempts per title, and only for addon streams.
  */
 async function tryNextSource() {
-  if (client.state.settings.autoFailover === false || !nowPlaying) return;
+  if (client.state.settings.autoFailover === false || !nowPlaying) return false;
   const current = nowPlaying;
   if (failover.id !== current.id)
     failover = { id: current.id, tried: new Set() };
@@ -222,13 +223,60 @@ async function tryNextSource() {
     ranked.get(`${current.type}:${current.id}`),
     failover.tried,
   );
-  if (!next || !player.meta) return;
+  if (!next || !player.meta) return false;
   emit("notice", "تعذّر هذا المصدر؛ نجرّب المصدر التالي تلقائياً…");
   try {
     await play({ key: next, meta: player.meta, videoId: current.id });
   } catch {
     /* The viewer can still pick a source by hand. */
   }
+  return true;
+}
+/**
+ * While a built-in torrent starts, its peers and speed show under "Getting
+ * the viewing ready", and a swarm that sends nothing gives way to the next
+ * source instead of a black screen (issue #82, core/torrent-engine.mjs).
+ */
+let torrentWatch = null;
+function watchTorrentStart(hash) {
+  clearInterval(torrentWatch);
+  const viewing = nowPlaying;
+  const began = Date.now();
+  const ours = () =>
+    torrentWatch === watch && nowPlaying === viewing && builtinTorrent === hash;
+  const watch = setInterval(async () => {
+    // Another viewing, or this one ended (its torrent was released).
+    if (!ours()) {
+      clearInterval(watch);
+      if (torrentWatch === watch) torrentWatch = null;
+      return;
+    }
+    if (!player.state.active || !player.state.loading) return;
+    const status = await torrentHost?.status(hash);
+    if (!ours() || !player.state.active || !player.state.loading) return;
+    player.setTorrentStatus(status);
+    if (!torrentDead(status, Date.now() - began)) return;
+    clearInterval(watch);
+    torrentWatch = null;
+    logError(
+      "torrent",
+      status?.metadata
+        ? "التورنت ما أرسل أي بيانات خلال 40 ثانية"
+        : "ما وصلت بيانات التورنت خلال 40 ثانية",
+    );
+    if (await tryNextSource()) return;
+    if (nowPlaying !== viewing) return;
+    await player.stop();
+    emit(
+      "notice",
+      status?.peers
+        ? "المشاركون في هذا التورنت ما عندهم الملف حالياً. جرّب مصدراً آخر."
+        : "ما فيه مشاركين لهذا التورنت حالياً. جرّب مصدراً آخر.",
+    );
+  }, 1500);
+  watch.unref?.();
+  torrentWatch = watch;
+  return watch;
 }
 // Media keys control playback only while something plays.
 let mediaKeys = false;
@@ -264,11 +312,23 @@ const cursorGate = new CursorGate((visible) => {
   if (process.platform === "win32") showSystemCursor(visible);
 });
 const HUD_EVENTS = new Set(["player", "state", "notice", "hudCommand"]);
+/**
+ * A page can be gone before its window: while the main window closes, its
+ * contents are destroyed first and the HUD it owns closes in between, and
+ * that close reports the viewing's state (issue #82: "Object has been
+ * destroyed" left Riwaq half closed with MPV still on screen).
+ */
+function sendTo(win, name, data) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  try {
+    win.webContents.send("riwaq:" + name, data);
+  } catch (error) {
+    logError("ipc", error);
+  }
+}
 const emit = (name, data) => {
-  if (window && !window.isDestroyed() && name !== "hudCommand")
-    window.webContents.send("riwaq:" + name, data);
-  if (hud && !hud.isDestroyed() && hudReady && HUD_EVENTS.has(name))
-    hud.webContents.send("riwaq:" + name, data);
+  if (name !== "hudCommand") sendTo(window, name, data);
+  if (hudReady && HUD_EVENTS.has(name)) sendTo(hud, name, data);
 };
 /**
  * During a viewing: a heads-up five minutes before a prayer and a notice at
@@ -467,7 +527,9 @@ function placeHud() {
 let appliedZoom = 1;
 /** The viewer's interface scale, never shrinking the layout below 980×680. */
 function applyZoom() {
-  if (!window || window.isDestroyed() || !client) return;
+  if (!window || window.isDestroyed() || window.webContents.isDestroyed())
+    return;
+  if (!client) return;
   const [width, height] = window.getContentSize();
   const zoom = effectiveZoom(
     resolveAppearance(client.state.settings).uiScale,
@@ -1028,7 +1090,7 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
       "notice",
       "HDR حقيقي في نافذة MPV، وأدوات رِواق فوقها. Esc يرجعك إلى رِواق.",
     );
-  return player.start({
+  const started = player.start({
     separate,
     tags: sourceTags(parsed),
     bufferMiB: bufferMiB(client.state.settings, totalmem()),
@@ -1043,6 +1105,16 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     screenshotDir: screenshotDir(),
     logFile: mpvLogFile(),
   });
+  if (torrentHash) {
+    const watch = watchTorrentStart(torrentHash);
+    // A start that fails ends its watch at once.
+    started.catch(() => {
+      if (torrentWatch !== watch) return;
+      clearInterval(watch);
+      torrentWatch = null;
+    });
+  }
+  return started;
 }
 async function playChannel({ key, start = 0, stop = 0 }) {
   client.profiles.gate("live");

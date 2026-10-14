@@ -20,9 +20,11 @@ import {
 } from "lucide-react";
 import { IconButton } from "./UI.jsx";
 import PlayerDock from "./PlayerDock.jsx";
+import VolumeSlider from "./VolumeSlider.jsx";
 import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
 import { seekAmount } from "../../core/hotkeys.mjs";
+import { startLine } from "../../core/torrent-engine.mjs";
 import { loc } from "../lib/format.js";
 
 export default function PlayerView({
@@ -155,7 +157,10 @@ export default function PlayerView({
       </header>
       <div className="video-surface" ref={surface}>
         {player.loading && (
-          <span className="video-loading">جاري تجهيز المشاهدة…</span>
+          <span className="video-loading">
+            جاري تجهيز المشاهدة…
+            {player.torrent && <small>{startLine(player.torrent)}</small>}
+          </span>
         )}
         {player.error && <p>{player.error}</p>}
         {player.skip && !player.skip.hidden && !hidden && (
@@ -316,14 +321,11 @@ export default function PlayerView({
                   <RotateCw size={20} />
                 </IconButton>
                 <Volume2 size={19} />
-                <input
-                  className="volume-slider"
-                  aria-label="مستوى الصوت المدمج"
-                  type="range"
-                  min="0"
+                <VolumeSlider
+                  volume={player.volume || 0}
                   max={player.volumeMax || 150}
-                  value={player.volume || 0}
-                  onChange={(e) => command("volume", Number(e.target.value))}
+                  muted={!!player.muted}
+                  onChange={(value) => command("volume", value)}
                 />
                 <small>{Math.round(player.volume || 0)}%</small>
               </>

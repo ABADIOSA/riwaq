@@ -30,22 +30,22 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.44.1-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.45.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.44.1
+### الجديد في 0.45.0
 
-- **إشعارات رِواق من أجهزة المالك:** صاحب رِواق صار ينشر الإشعارات من التطبيق العام نفسه على الأجهزة اللي يختارها، بعد ما يتأكد GitHub من حسابه. ما تغيّر شي عند المشاهدين. [كيف يشتغل](docs/ADMIN.md).
+إصلاحات واقتراحات من ملاحظات مستخدم على 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)):
 
-#### من 0.44.0
-
-- **إشعارات رِواق:** جرس في الشريط العلوي فيه أخبار رِواق وتنبيهات الفريق بالعربي والإنجليزي، مع عدّاد لغير المقروء. توقف الاستقبال من نفس النافذة بـ **«استقبال أخبار رِواق»**.
-- **أدوات تحكم أثبت:** ترجع لو انعاد تحميلها أو علّقت، وأدوات MPV تشتغل احتياطاً لين ترجع، والمشاهدة ما تبدأ بقفزة في الصورة.
-- **F8 يستعيد أدوات التحكم:** داخل رِواق يعيد تحميلها والمشاهدة مستمرة. ومع «HDR حقيقي» يكمل المشاهدة داخل رِواق من نفس اللحظة بألوان SDR لهذه المشاهدة بس، وإعداداتك تبقى.
-- **إصلاحات:** Esc يغلق نافذة «HDR حقيقي» دائماً، وإغلاق محرك التورنت ما يعلّق، و«تشخيص كامل» صار يفحص أدوات التحكم.
+- **إغلاق رِواق أثناء المشاهدة** صار يقفل التطبيق صح، بدون رسالة «Object has been destroyed» وبدون ما تبقى نافذة MPV سودا.
+- **التورنت بالمحرك المدمج:** عدد المشاركين والسرعة تحت «جاري تجهيز المشاهدة»، والتورنت اللي ما يوصل منه شي خلال 40 ثانية ينتقل للمصدر التالي بدل الشاشة السودا.
+- **شريط الصوت** يتحرك مع الفأرة فوراً، ويمتلي عند 100%، والتعزيز فوقها جزء ثاني بلون مختلف. ونقرة على صورة MPV توقفها مؤقتاً.
+- **«نكمل الحكاية»:** زر لإزالة عمل وتقدّمك يبقى. وزر لإخفاء اقتراح ربط ستريميو.
+- **أسهم الصفوف** بجانب «عرض الكل» بدل ما تكون فوق البوسترات. ترجع للطريقة القديمة من **الإعدادات ← المصادر والمكتبة ← بطاقات الملصقات**.
+- **لغة الواجهة** صارت في **الإعدادات ← المظهر ← لغة الواجهة**، والواجهة الإنجليزية تعرض المعرض وأسماء فريق العمل بالإنجليزي.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -111,22 +111,22 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.44.1-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.45.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.44.1
+### What's new in 0.45.0
 
-- **Riwaq notices from the owner's devices:** Riwaq's owner can now publish notices from the public app itself on the devices chosen for it, once GitHub confirms the owner's account. Nothing changes for viewers. [How it works](docs/ADMIN.md).
+Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)):
 
-#### From 0.44.0
-
-- **Riwaq notifications:** a bell in the top bar with Riwaq news and team notices in Arabic and English, and an unread count. Turn reception off in the same window with **"Receive Riwaq news"**.
-- **Steadier controls:** they come back after a reload or a freeze, MPV's controls stand in until they do, and a viewing no longer starts with the picture jumping.
-- **F8 restores the controls:** inside Riwaq it reloads them while the viewing goes on. With "True HDR" it continues the viewing inside Riwaq from the same moment, in SDR for that viewing only, and your settings stay as they are.
-- **Fixes:** Esc always closes the "True HDR" window, the torrent engine no longer hangs when it shuts down, and the full diagnostic now checks the player controls.
+- **Closing Riwaq during a viewing** now closes the app properly, with no "Object has been destroyed" message and no black MPV window left behind.
+- **Torrents on the built-in engine:** peers and speed under "Getting the viewing ready", and a torrent that sends nothing within 40 seconds moves on to the next source instead of a black screen.
+- **The volume slider** follows the mouse at once and is full at 100%, with any boost after it in another colour. A click on MPV's own picture pauses.
+- **"Continue watching":** a button removes a title and keeps your progress. Another hides the Stremio linking suggestion.
+- **Row arrows** sit beside "See all" instead of over the posters. The old style is in **Settings → Sources & library → Poster cards**.
+- **The interface language** is now in **Settings → Appearance → Interface language**, and the English interface shows the title gallery and the names in the credits in English.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
@@ -150,7 +150,7 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
 ### Getting started
 
-1. For English, open **Settings → Language & subtitles → Interface language** and choose English.
+1. For English, open **Settings → Appearance → Interface language** and choose English.
 2. Open **Stremio account** and sign in on Stremio's own page. Riwaq imports your addons, library and progress, or you can add `manifest.json` links yourself.
 3. Pick a title, then an episode and a source. The video plays inside Riwaq.
 4. In **Settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.

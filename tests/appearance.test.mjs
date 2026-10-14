@@ -122,6 +122,7 @@ test("root classes never reuse an element class from the stylesheets", () => {
     ...["compact", "comfortable", "spacious"].map((d) => ({ density: d })),
     ...["off", "lift", "glow", "shine"].map((h) => ({ posterHover: h })),
     ...["full", "compact"].map((h) => ({ heroStyle: h })),
+    ...["header", "edges"].map((r) => ({ rowArrows: r })),
     ...["backdrop", "blur", "solid"].map((d) => ({ detailBackground: d })),
     { posterTitles: false },
   ].flatMap((input) => themeClasses(input).split(" "));

@@ -407,6 +407,8 @@ export class Player {
       position: start,
       duration: 0,
       pause: false,
+      // A built-in torrent's start (counts only), shown while loading.
+      torrent: null,
       volume: 100,
       tracks: [],
       chapters: [],
@@ -647,6 +649,12 @@ export class Player {
       "cursor-autohide",
       this.cursorHidden ? "always" : "no",
     ]);
+  }
+  /** How the built-in torrent is starting, under "Getting the viewing ready". */
+  setTorrentStatus(status) {
+    if (!this.state.active) return;
+    this.state.torrent = status || null;
+    this.publish();
   }
   /** Whether the HUD draws the controls; the theater layout follows it. */
   setOverlay(on) {

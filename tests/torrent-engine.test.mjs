@@ -22,6 +22,10 @@ import {
   parseRange,
   pickFile,
   publicStats,
+  startLine,
+  startStatus,
+  TORRENT_DEAD_MS,
+  torrentDead,
   trackersOf,
 } from "../core/torrent-engine.mjs";
 import { startEngine } from "../electron/torrent-engine.mjs";
@@ -278,6 +282,47 @@ test("the interface sees counts and speeds, never addresses", () => {
   );
 });
 
+test("a torrent that sends nothing gives way, and its start reads plainly", () => {
+  assert.equal(startStatus(null), null);
+  assert.deepEqual(
+    startStatus({
+      metadata: 1,
+      peers: 2.4,
+      down: -3,
+      bytes: "x",
+      origin: "http://127.0.0.1:1",
+    }),
+    { metadata: true, peers: 2, down: 0, bytes: 0 },
+  );
+  // Nothing at all after 40 seconds: the next source plays.
+  const empty = { metadata: false, peers: 0, down: 0, bytes: 0 };
+  assert.equal(torrentDead(empty, TORRENT_DEAD_MS - 1), false);
+  assert.equal(torrentDead(empty, TORRENT_DEAD_MS), true);
+  // Peers with the details but none with the file count the same.
+  assert.equal(
+    torrentDead({ metadata: true, peers: 6, bytes: 0 }, TORRENT_DEAD_MS),
+    true,
+  );
+  // Any data at all is a slow torrent, not a dead one.
+  assert.equal(torrentDead({ metadata: true, bytes: 1 }, 10 * 60000), false);
+  assert.equal(torrentDead(null, 10 * 60000), false);
+
+  assert.equal(startLine(null), "");
+  assert.equal(startLine(empty), "نبحث عن مشاركين في التورنت…");
+  assert.equal(
+    startLine({ metadata: false, peers: 3 }),
+    "نجلب معلومات التورنت · 3 مشاركين",
+  );
+  assert.equal(
+    startLine({ metadata: true, peers: 2, down: 0 }),
+    "مشاركان · ننتظر أول البيانات…",
+  );
+  assert.equal(
+    startLine({ metadata: true, peers: 12, down: 1.5 * 1024 * 1024 }),
+    "12 مشاركاً · 1.5 م.ب/ث",
+  );
+});
+
 // A real swarm of two on this machine: a seeder, and the engine.
 async function seedFile(bytes, name = "Clip.mkv") {
   const dir = mkdtempSync(join(tmpdir(), "riwaq-seed-"));
@@ -325,6 +370,11 @@ test("the engine streams a torrent to MPV with byte ranges", async () => {
       url,
       new RegExp(`^${engine.origin}/[a-f0-9]{32}/${torrent.infoHash}/-1$`),
     );
+    // Before any peer: no details and no data yet (issue #82's start line).
+    const before = engine.status(torrent.infoHash);
+    assert.equal(before.metadata, false);
+    assert.equal(before.bytes, 0);
+    assert.equal(engine.status("f".repeat(40)), null);
     engine.addPeer(torrent.infoHash, address);
 
     const head = await get(url, {}, "HEAD");
@@ -350,6 +400,11 @@ test("the engine streams a torrent to MPV with byte ranges", async () => {
 
     const bad = await get(url, { Range: `bytes=${bytes.length}-` });
     assert.equal(bad.status, 416);
+
+    const after = startStatus(engine.status(torrent.infoHash.toUpperCase()));
+    assert.equal(after.metadata, true);
+    assert.ok(after.bytes >= bytes.length, "the bytes read were counted");
+    assert.equal(torrentDead(after, TORRENT_DEAD_MS * 2), false);
 
     const stats = await engine.stats();
     assert.equal(stats.running, true);
@@ -528,6 +583,15 @@ test("main's handle runs the engine in its own process and plays through it", as
       Object.keys(stats).sort().join(),
       "cache,down,peers,running,torrents,up",
     );
+    // The start line's counts cross the process boundary, nothing else.
+    const status = await host.status(torrent.infoHash);
+    assert.equal(
+      Object.keys(status).sort().join(),
+      "bytes,down,metadata,peers",
+    );
+    assert.equal(status.metadata, true);
+    assert.ok(status.bytes > 0);
+    assert.equal(await host.status("x"), null);
     assert.equal(await host.configure({ torrentUpload: "low" }), true);
     assert.equal(await host.release(torrent.infoHash), true);
     await assert.rejects(host.url({ infoHash: "x" }, {}), /غير صالح/);
@@ -669,4 +733,35 @@ test("main, the web bridge and the interface route torrents through the rules", 
     thumbnailsAllowed(source, "local", "http://127.0.0.1:11470"),
     true,
   );
+});
+
+test("main watches a built-in torrent's start and moves on from a dead swarm (issue #82)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const main = readFileSync(
+    fileURLToPath(new URL("../electron/main.mjs", import.meta.url)),
+    "utf8",
+  );
+  // Only built-in torrents are watched, from the moment MPV is started.
+  assert.match(
+    main,
+    /if \(torrentHash\) \{\s*const watch = watchTorrentStart\(torrentHash\);/,
+  );
+  // A start that fails ends its watch.
+  assert.match(
+    main,
+    /started\.catch\(\(\) => \{\s*if \(torrentWatch !== watch\) return;/,
+  );
+  const watch = main.slice(main.indexOf("function watchTorrentStart("));
+  const body = watch.slice(0, watch.indexOf("\n}\n"));
+  // It belongs to one viewing and one torrent, and ends with either.
+  assert.match(body, /nowPlaying === viewing && builtinTorrent === hash/);
+  assert.match(body, /player\.setTorrentStatus\(status\)/);
+  assert.match(body, /torrentDead\(status, Date\.now\(\) - began\)/);
+  // A dead swarm tries the next source; with none, the viewing ends with a
+  // sentence instead of a black screen.
+  assert.match(body, /if \(await tryNextSource\(\)\) return;/);
+  assert.match(body, /await player\.stop\(\);/);
+  const next = main.slice(main.indexOf("async function tryNextSource("));
+  assert.match(next.slice(0, next.indexOf("\n}\n")), /return true;/);
 });

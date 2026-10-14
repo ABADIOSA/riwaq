@@ -52,6 +52,7 @@ import {
   Link2,
   MonitorPlay,
   Subtitles,
+  Languages,
   SlidersHorizontal,
   Search,
   Check,
@@ -527,8 +528,8 @@ const ALL_GROUPS = [
       ],
       [
         "subtitles",
-        "اللغة والترجمة",
-        "عربي لغة الواجهة English إنجليزي إنجليزية language حجم توقيت مسارات صوت",
+        "الترجمة والصوت",
+        "ترجمة لغة الترجمة لغة الصوت حجم توقيت مسارات صوت",
         Subtitles,
       ],
       [
@@ -630,6 +631,14 @@ const ALL_GROUPS = [
     title: "المظهر",
     Icon: Palette,
     pages: [
+      // The interface language sits with how Riwaq looks (issue #82: it was
+      // under watching, beside subtitles, and hard to find).
+      [
+        "language",
+        "لغة الواجهة",
+        "عربي لغة الواجهة English إنجليزي إنجليزية language",
+        Languages,
+      ],
       ["theme", "السمة", "ثيم ألوان تدرج ثيمات جاهزة", SwatchBook],
       ["themes", "سماتك", "سمات محفوظة رمز مشاركة تصميم", Brush],
       ["logo", "الشعار والأيقونة", "شعار أيقونة شريط المهام صورة", Shapes],
@@ -1378,7 +1387,7 @@ export default function SettingsStudio({
                   notice={notice}
                 />
               )}
-              {id === "subtitles" && (
+              {id === "language" && (
                 <LanguageCard state={state} update={update} />
               )}
               {id === "subtitles" && (

@@ -1,7 +1,8 @@
 /**
  * React's JSX runtime with the interface language applied (core/i18n.mjs).
  * Every host element (a <div>, a <button>, never a component) has its text
- * children and its readable labels translated as it renders, so constants,
+ * children and its readable labels translated as it renders, and so does a
+ * fragment's text, which lands in its parent element; so constants,
  * labels from core/ and notices from main read in the viewer's language
  * without each string being wrapped by hand.
  */
@@ -28,7 +29,15 @@ function translated(children) {
 }
 
 export function localize(type, props) {
-  if (typeof type !== "string" || !props || language() === "ar") return props;
+  if (!props || language() === "ar") return props;
+  // A fragment's text lands in its parent element, so it is translated too
+  // (issue #82: a sentence inside <>…</> stayed Arabic in English). It has
+  // no labels and no translate="no".
+  if (type === Fragment) {
+    const children = translated(props.children);
+    return children === props.children ? props : { ...props, children };
+  }
+  if (typeof type !== "string") return props;
   // translate="no" keeps an element as written (a language's own name).
   if (props.translate === "no") return props;
   let next = props;

@@ -170,3 +170,29 @@ test("marking the episode in progress keeps its place and completes the title", 
   assert.equal(c.state.progress["series:tt1:1:5"].updated, 2000);
   assert.deepEqual(continueWatching(c.state.progress), []);
 });
+test("a title taken off continue watching keeps its progress and comes back when watched (issue #82)", async () => {
+  const { collectBackup, restoreState } = await import("../core/backup.mjs");
+  const c = fixture().client;
+  c.recordProgress(series, "tt2:1:1", 30, 100);
+  c.recordProgress(series, "tt2:1:2", 40, 100);
+  c.recordProgress(movie, movie.id, 50, 100);
+  assert.equal(continueWatching(c.state.progress).length, 2);
+  // Every record of the series is stamped; the film stays.
+  c.historyEdit({ action: "dismiss", meta: series });
+  const left = continueWatching(c.state.progress);
+  assert.deepEqual(
+    left.map((p) => p.meta.id),
+    [movie.id],
+  );
+  assert.equal(c.state.progress[`series:tt2:1:2`].position, 40, "kept");
+  // A backup (and so an account) carries the mark.
+  c.profiles.capture();
+  const { payload } = collectBackup(c.state, { includeSecrets: false });
+  const restored = restoreState(fixture().client.state, payload);
+  const bucket = restored.profiles.data[restored.profiles.active];
+  assert.equal(continueWatching(bucket.progress).length, 1);
+  // The next viewing brings it back.
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  c.recordProgress(series, "tt2:1:2", 45, 100);
+  assert.equal(continueWatching(c.state.progress).length, 2);
+});

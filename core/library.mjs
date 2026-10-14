@@ -33,8 +33,13 @@ export const withoutWatched = (metas, watched) =>
   watched?.size
     ? (metas || []).filter((m) => !watched.has(`${m?.type}:${m?.id}`))
     : metas || [];
+/** A title taken off continue watching stays off until it is watched again. */
+export const dismissed = (p) =>
+  Number.isFinite(p?.hiddenAt) && p.hiddenAt >= (p.updated || 0);
 export const continueWatching = (progress) =>
-  latestProgress(progress).filter((p) => !isCompleted(p) && p.position > 10);
+  latestProgress(progress).filter(
+    (p) => !isCompleted(p) && p.position > 10 && !dismissed(p),
+  );
 // Library and Live TV search must agree on what counts as the same word.
 export const normalizeSearch = foldArabic;
 export function filterLibrary(

@@ -20,7 +20,7 @@ import {
   jsxText,
   stringsOf,
 } from "../scripts/i18n-strings.mjs";
-import { localize } from "../src/lib/jsx-runtime.js";
+import { Fragment, localize } from "../src/lib/jsx-runtime.js";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 
 const read = (path) =>
@@ -256,6 +256,13 @@ test("the JSX runtime translates host elements only, and not translate=no", () =
     assert.deepEqual(list.children, ["Settings", 3, " Settings"]);
     const Component = () => null;
     assert.equal(localize(Component, props), props);
+    // A fragment's text lands in its parent element (issue #82).
+    const fragment = localize(Fragment, {
+      children: ["الإعدادات", " ", 7],
+    });
+    assert.deepEqual(fragment.children, ["Settings", " ", 7]);
+    const kept = { children: ["Riwaq", 1] };
+    assert.equal(localize(Fragment, kept), kept);
     const own = { children: "العربية", translate: "no" };
     assert.equal(localize("button", own), own);
     const plain = { children: "Riwaq" };

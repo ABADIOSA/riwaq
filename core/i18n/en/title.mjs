@@ -17,8 +17,18 @@ export default {
   "أعمال المعجبين تأتي من Fanart.tv بمفتاحك المجاني.":
     "Fan art comes from Fanart.tv with your free key.",
   "لا صور هنا بعد.": "No images here yet.",
-  "لمعرض أكبر أضف مفتاح": "For a bigger gallery, add a key for",
-  "المجاني.": "(free).",
+  "لمعرض أكبر أضف مفتاح {1} المجاني.":
+    "For a bigger gallery, add your free {1} key.",
+  "لمعرض أكبر أضف مفتاحي {1} المجانيين.":
+    "For a bigger gallery, add your free {1} keys.",
+  "{1} من {2}. الصور ملك أصحابها.":
+    "{1} from {2}. Images belong to their owners.",
+  "إضافة العمل": "the title's addon",
+  // Issue #82: the gallery's counts, one per tab, joined with « · ».
+  "الخلفيات {n}": "Backdrops {n}",
+  "البوسترات {n}": "Posters {n}",
+  "الشعارات {n}": "Logos {n}",
+  "أعمال المعجبين {n}": "Fan art {n}",
   "مزوّدو البيانات": "Metadata providers",
   "تعذّر الوصول إلى {1} الآن.": "Couldn't reach {1} right now.",
   "عارض الصور": "Image viewer",

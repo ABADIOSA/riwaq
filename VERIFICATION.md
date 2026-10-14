@@ -1,5 +1,29 @@
 # Verification — Riwaq
 
+## 2026-10-14 — 0.45.0: issue #82 (a user's report on 0.44.1)
+
+- The report's screenshots name the crash: "A JavaScript error occurred in the main process: TypeError: Object has been destroyed at WebContents.send ← emit ← Player.onState ← Player.setOverlay ← BrowserWindow". Main's `emit` checked the window but not its contents; while the window closes, its contents go first and the owned HUD's `closed` handler reports the viewing to them. Every send now goes through `sendTo`. A static test keeps one `webContents.send(` in main. The close itself was not reproduced here (no Windows).
+- **789 Node tests pass** (782 + 7). New or extended:
+  - The real offline local swarm reports a torrent's start: before a peer, no metadata and no bytes; after the reads, metadata and every byte counted. Through the engine's own process (`TorrentHost.status`), only `bytes,down,metadata,peers` cross.
+  - `torrentDead`: nothing at 40 s gives way; peers with the details but no data count the same; any data is slow, not dead. `startLine` in both languages.
+  - Main watches only built-in torrents, ends the watch with the viewing or the torrent, tries the next source, and stops with a sentence when there is none.
+  - The Player publishes a torrent status only during a viewing.
+  - Volume mapping: 100% fills the main part, round trips for maxima 100–600, and the near miss at 100%. Both players use the shared slider.
+  - input.conf: `MBTN_LEFT cycle pause` is the first binding, so a viewer's own click binding wins.
+  - The JSX runtime translates a fragment's text, and keeps unchanged props.
+  - Credits ask Wikidata for `ar,en` labels in Arabic and `en,ar` in English, and nothing else.
+  - Continue watching: `dismiss` stamps every record of the title, keeps the progress, survives a backup restore, and the next viewing brings the title back.
+  - The root-class test covers `rowarrows-*`.
+- **Chromium, mock bridge, Arabic and English, 980×680 and 1440×900:**
+  - HUD: the torrent line under the loading text ("12 مشاركاً · 1.5 م.ب/ث", "12 peers · 1.5 MB/s").
+  - The volume slider: 100% fills 75% of the track. Dragging from 20% to 50% shows 67 at once, sends 4 commands, and never pauses. The right arrow adds 5.
+  - Home: a shelf's arrows sit side by side beside its heading, in the right direction for each language, scroll the row, and no arrow sits over the posters.
+  - The continue card's ✕ sends `dismiss` and the card goes. The banner's ✕ hides it.
+  - The interface language opens from Appearance.
+  - The title gallery reads fully in English: "Backdrops 2 · Posters 2 · Logos 1 · Fan art 0", "For a bigger gallery, add your free TMDB and Fanart.tv keys.", "5 images from the title's addon and Metahub."
+  - No page errors and no horizontal overflow.
+- Not done: Windows (closing during a viewing, a real dead torrent, the slider in the real HUD window, MPV's click), a public swarm, and an Arabic pixel comparison: the row arrows, volume bar and timeline change the Arabic screens on purpose. Downloads for offline viewing, a right-click menu in the player, simpler settings and a standalone mode are not in this release. Stremio's server.js still may not be bundled.
+
 ## 2026-10-13 — 0.44.1: owner devices (the public app as the notice tool on chosen devices)
 
 - The owner asked how to turn the public app into the admin app, choosing which devices may. 0.44.0 had no way, so owner devices were built: `electron/owner.mjs`, `src/components/OwnerTools.jsx`, and the publisher moved from `admin/github.mjs` to `core/notice-publisher.mjs` (Admin extends it with its releases list).

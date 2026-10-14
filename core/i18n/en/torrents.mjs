@@ -82,4 +82,16 @@ export default {
     "The built-in torrent engine runs inside {1}; the website uses Stremio Service.",
   متوقف: "Stopped",
   يعمل: "Working",
+  // Issue #82: a built-in torrent's start, and a swarm that sends nothing.
+  "نجلب معلومات التورنت": "Fetching the torrent's details",
+  "نبحث عن مشاركين في التورنت…": "Looking for peers in the torrent…",
+  "ننتظر أول البيانات…": "Waiting for the first data…",
+  "التورنت ما أرسل أي بيانات خلال 40 ثانية":
+    "The torrent sent no data within 40 seconds",
+  "ما وصلت بيانات التورنت خلال 40 ثانية":
+    "The torrent's details did not arrive within 40 seconds",
+  "المشاركون في هذا التورنت ما عندهم الملف حالياً. جرّب مصدراً آخر.":
+    "The peers in this torrent don't have the file right now. Try another source.",
+  "ما فيه مشاركين لهذا التورنت حالياً. جرّب مصدراً آخر.":
+    "This torrent has no peers right now. Try another source.",
 };

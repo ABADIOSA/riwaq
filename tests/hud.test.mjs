@@ -295,3 +295,36 @@ test("with the HUD drawing controls, MPV's own controller stays hidden", () => {
   player.setOverlay(true);
   assert.equal(player.overlay, true);
 });
+
+test("main never sends to a page that is already gone (issue #82)", () => {
+  // Closing the window during a viewing destroyed its contents first; the
+  // HUD it owns then closed and reported the viewing to them, and the
+  // uncaught "Object has been destroyed" left Riwaq half closed.
+  const main = readFileSync(
+    new URL("../electron/main.mjs", import.meta.url),
+    "utf8",
+  );
+  const sendTo = main.slice(main.indexOf("function sendTo("));
+  assert.match(
+    sendTo.slice(0, 300),
+    /win\.isDestroyed\(\) \|\| win\.webContents\.isDestroyed\(\)/,
+  );
+  assert.match(sendTo.slice(0, 400), /try \{[\s\S]*?catch/);
+  // Every send goes through it.
+  assert.equal(main.match(/webContents\.send\(/g).length, 1);
+  const emit = main.slice(main.indexOf("const emit = "));
+  assert.match(emit.slice(0, 200), /sendTo\(window, name, data\)/);
+  assert.match(emit.slice(0, 200), /sendTo\(hud, name, data\)/);
+});
+
+test("a built-in torrent's start reaches both pages only during its viewing", () => {
+  const states = [];
+  const player = new Player({ onState: (s) => states.push({ ...s }) });
+  player.setTorrentStatus({ metadata: false, peers: 0, down: 0, bytes: 0 });
+  assert.equal(states.length, 0, "no viewing, nothing reported");
+  player.state = { active: true, loading: true, torrent: null };
+  player.setTorrentStatus({ metadata: true, peers: 4, down: 10, bytes: 1 });
+  assert.equal(states.at(-1).torrent.peers, 4);
+  player.setTorrentStatus(null);
+  assert.equal(states.at(-1).torrent, null);
+});

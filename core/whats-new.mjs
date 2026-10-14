@@ -7,6 +7,27 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.45.0",
+    title: "إصلاحات من ملاحظاتكم",
+    items: [
+      "إغلاق رِواق أثناء المشاهدة صار يقفل التطبيق صح، بدون رسالة «Object has been destroyed» وبدون ما تبقى نافذة MPV.",
+      "التورنت بالمحرك المدمج: تشوف عدد المشاركين والسرعة تحت «جاري تجهيز المشاهدة»، والتورنت اللي ما يوصل منه شي خلال 40 ثانية ينتقل للمصدر التالي.",
+      "شريط الصوت يتحرك مع الفأرة فوراً، ويمتلي عند 100%، والتعزيز فوقها بلون ثاني.",
+      "زر لإزالة عمل من «نكمل الحكاية» وتقدّمك يبقى، وزر لإخفاء اقتراح ربط ستريميو، وأسهم الصفوف بجانب «عرض الكل».",
+      "لغة الواجهة صارت في الإعدادات ← المظهر، والواجهة الإنجليزية تعرض معرض العمل وأسماء فريق العمل بالإنجليزي.",
+    ],
+    en: {
+      title: "Fixes from your feedback",
+      items: [
+        "Closing Riwaq during a viewing now closes the app properly, with no “Object has been destroyed” message and no MPV window left behind.",
+        "Torrents on the built-in engine: peers and speed show under “Getting the viewing ready”, and a torrent that sends nothing within 40 seconds moves on to the next source.",
+        "The volume slider follows the mouse at once and is full at 100%, with any boost shown after it in another colour.",
+        "A button to remove a title from “Continue watching” (your progress stays), a button to hide the Stremio linking suggestion, and row arrows beside “See all”.",
+        "The interface language is now in Settings → Appearance, and the English interface shows the title gallery and the names in the credits in English.",
+      ],
+    },
+  },
+  {
     version: "0.44.1",
     title: "إشعارات رِواق من أجهزة المالك",
     items: [

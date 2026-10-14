@@ -1127,6 +1127,17 @@ export class Client {
       this.persist();
       return this.publicState();
     }
+    if (action === "dismiss") {
+      // Off continue watching, progress kept (issue #82): every record of
+      // the title is stamped, and the next viewing (a newer `updated`)
+      // brings it back.
+      const at = Date.now();
+      for (const record of Object.values(this.state.progress))
+        if (record?.meta?.type === media.type && record.meta.id === media.id)
+          record.hiddenAt = at;
+      this.persist();
+      return this.publicState();
+    }
     if (!validId(videoId)) throw new Error("معرّف المشاهدة غير صالح");
     const key = `${media.type}:${videoId}`;
     if (action === "remove") delete this.state.progress[key];

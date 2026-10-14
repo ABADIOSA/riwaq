@@ -5,7 +5,15 @@
  */
 import { startEngine } from "./torrent-engine.mjs";
 
-const METHODS = ["url", "release", "configure", "stats", "clear", "close"];
+const METHODS = [
+  "url",
+  "release",
+  "status",
+  "configure",
+  "stats",
+  "clear",
+  "close",
+];
 const port = process.parentPort;
 let engine = null;
 

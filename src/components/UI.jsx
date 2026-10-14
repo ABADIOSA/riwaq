@@ -137,18 +137,11 @@ export const Poster = memo(function Poster({ meta, onOpen, progress }) {
   );
 });
 /**
- * A horizontal row moved with arrows instead of a scrollbar. Each arrow
- * moves most of a screen; an arrow hides at its end of the row, and both
- * hide when everything fits. Wheel, touchpad and keyboard focus still
- * scroll it. The page is right-to-left, so "next" moves toward the left.
+ * A row's scrolling: where it stands (which ends it can move toward) and a
+ * move of most of a screen. ScrollRow draws it as arrows over the row's
+ * ends; a rail can draw the same in its heading instead.
  */
-export function ScrollRow({
-  as: Tag = "div",
-  className = "",
-  children,
-  onNearEnd,
-  ...rest
-}) {
+export function useScrollRow(onNearEnd) {
   const ref = useRef(null);
   const nearEnd = useRef(onNearEnd);
   nearEnd.current = onNearEnd;
@@ -197,6 +190,53 @@ export function ScrollRow({
       behavior: document.querySelector(".reduced-motion") ? "auto" : "smooth",
     });
   };
+  return { ref, edges, move };
+}
+
+/** A row's two arrows, beside its "See all" (appearance rowArrows: header). */
+function RowArrows({ row }) {
+  if (row.edges.start && row.edges.end) return null;
+  return (
+    <div className="rail-arrows">
+      <button
+        type="button"
+        aria-label="السابق"
+        title="السابق"
+        disabled={row.edges.start}
+        onClick={() => row.move(false)}
+      >
+        <ChevronRight size={17} />
+      </button>
+      <button
+        type="button"
+        aria-label="التالي"
+        title="التالي"
+        disabled={row.edges.end}
+        onClick={() => row.move(true)}
+      >
+        <ChevronLeft size={17} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * A horizontal row moved with arrows instead of a scrollbar. Each arrow
+ * moves most of a screen; an arrow hides at its end of the row, and both
+ * hide when everything fits. Wheel, touchpad and keyboard focus still
+ * scroll it. The page is right-to-left, so "next" moves toward the left.
+ * A rail passes its own `row` (useScrollRow) to share it with its heading.
+ */
+export function ScrollRow({
+  as: Tag = "div",
+  className = "",
+  children,
+  onNearEnd,
+  row: shared,
+  ...rest
+}) {
+  const own = useScrollRow(shared ? undefined : onNearEnd);
+  const { ref, edges, move } = shared || own;
   return (
     <div
       className={`scroll-row-wrap ${edges.start ? "" : "can-back"} ${edges.end ? "" : "can-forward"}`}
@@ -243,40 +283,62 @@ export const Rail = memo(function Rail({
   progressMap,
   header,
   className = "",
+  onRemove,
 }) {
   const total = Math.min(metas.length, RAIL_LIMIT);
   const [count, setCount] = useState(RAIL_FIRST);
+  const row = useScrollRow(
+    count < total
+      ? () => setCount((c) => Math.min(total, c + RAIL_STEP))
+      : undefined,
+  );
+  // A rail's own heading may take its arrows: header(arrows).
+  const arrows = <RowArrows row={row} />;
+  const custom = typeof header === "function" ? header(arrows) : header;
   return (
     <section className={`rail ${className}`}>
-      {header || (
+      {custom || (
         <div className="section-heading">
           <div>
             <h2>{title}</h2>
             {subtitle && <span>{subtitle}</span>}
           </div>
-          {onMore && (
-            <button className="text-button" onClick={onMore}>
-              عرض الكل <ChevronLeft size={16} />
-            </button>
-          )}
+          <div className="rail-tools">
+            {arrows}
+            {onMore && (
+              <button className="text-button" onClick={onMore}>
+                عرض الكل <ChevronLeft size={16} />
+              </button>
+            )}
+          </div>
         </div>
       )}
-      <ScrollRow
-        className="poster-row"
-        onNearEnd={
-          count < total
-            ? () => setCount((c) => Math.min(total, c + RAIL_STEP))
-            : undefined
-        }
-      >
-        {metas.slice(0, Math.min(count, total)).map((m, i) => (
-          <Poster
-            key={`${m.type}:${m.id}:${i}`}
-            meta={m}
-            onOpen={onOpen}
-            progress={progressMap?.[titleKey(m)]}
-          />
-        ))}
+      <ScrollRow className="poster-row" row={row}>
+        {metas.slice(0, Math.min(count, total)).map((m, i) => {
+          const card = (
+            <Poster
+              key={`${m.type}:${m.id}:${i}`}
+              meta={m}
+              onOpen={onOpen}
+              progress={progressMap?.[titleKey(m)]}
+            />
+          );
+          if (!onRemove) return card;
+          // A card is a button, so its remove button sits beside it.
+          return (
+            <div className="poster-removable" key={`${m.type}:${m.id}:${i}`}>
+              {card}
+              <button
+                className="poster-remove"
+                title="أزل من متابعة المشاهدة"
+                aria-label={`أزل «${m.name}» من متابعة المشاهدة`}
+                onClick={() => onRemove(m)}
+              >
+                <X size={15} strokeWidth={2.5} />
+              </button>
+            </div>
+          );
+        })}
       </ScrollRow>
     </section>
   );

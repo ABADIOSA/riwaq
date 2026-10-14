@@ -38,7 +38,7 @@ export function LanguageCard({ state, update }) {
             className={current === id ? "selected" : ""}
             onClick={() => {
               if (id === current) return;
-              reopenSettingsPage("subtitles");
+              reopenSettingsPage("language");
               update("settings", { uiLanguage: id });
             }}
           >

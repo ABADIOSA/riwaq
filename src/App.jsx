@@ -589,6 +589,13 @@ export default function App() {
     openTitle({ meta, videoId: record.videoId, resume: true });
   };
   const resumeStable = useCallback((meta) => latest.current.resume(meta), []);
+  // Off continue watching; the progress stays, and the next viewing brings
+  // the title back (issue #82).
+  latest.current.dismiss = async (meta) => {
+    if (await update("historyEdit", { action: "dismiss", meta }))
+      notice("أزلناه من متابعة المشاهدة، وتقدّمك محفوظ.");
+  };
+  const dismissStable = useCallback((meta) => latest.current.dismiss(meta), []);
   const moreStable = useCallback((row) => latest.current.more(row), []);
   const noticeStable = useCallback((m) => latest.current.notice(m), []);
   const settingsStable = useCallback((tab) => latest.current.settings(tab), []);
@@ -1110,26 +1117,46 @@ export default function App() {
                   notice={notice}
                 />
               )}
-              {view === "home" && !state.user && !loading && (
-                <div className="connect-banner">
-                  <span className="banner-icon">
-                    <Puzzle size={23} />
-                  </span>
-                  <div>
-                    <b>كل إضافاتك، في مكانها.</b>
-                    <p>
-                      اربط حساب ستريميو لاستيراد إضافاتك ومكتبتك بإعداداتها
-                      الحالية.
-                    </p>
+              {view === "home" &&
+                !state.user &&
+                !loading &&
+                !state.settings.stremioBannerHidden && (
+                  <div className="connect-banner">
+                    <span className="banner-icon">
+                      <Puzzle size={23} />
+                    </span>
+                    <div>
+                      <b>كل إضافاتك، في مكانها.</b>
+                      <p>
+                        اربط حساب ستريميو لاستيراد إضافاتك ومكتبتك بإعداداتها
+                        الحالية.
+                      </p>
+                    </div>
+                    <button
+                      className="text-button"
+                      onClick={() => setAccount(true)}
+                    >
+                      ربط الحساب <ArrowLeftIcon />
+                    </button>
+                    <button
+                      className="connect-banner-close"
+                      title="إخفاء"
+                      aria-label="إخفاء اقتراح ربط ستريميو"
+                      onClick={async () => {
+                        if (
+                          await update("settings", {
+                            stremioBannerHidden: true,
+                          })
+                        )
+                          notice(
+                            "تقدر تربط حساب ستريميو متى ما بغيت من الإعدادات ← الحسابات والربط.",
+                          );
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
-                  <button
-                    className="text-button"
-                    onClick={() => setAccount(true)}
-                  >
-                    ربط الحساب <ArrowLeftIcon />
-                  </button>
-                </div>
-              )}
+                )}
               <div className="page-body">
                 {view !== "home" && (
                   <div className="page-heading">
@@ -1263,6 +1290,7 @@ export default function App() {
                                 metas={continueRail.metas}
                                 progressMap={continueRail.progressMap}
                                 onOpen={resumeStable}
+                                onRemove={dismissStable}
                               />
                             )}
                             {id === "taste" && ready && (

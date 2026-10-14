@@ -62,6 +62,14 @@ export const EPISODES = {
   many: "{n} حلقة",
   other: "{n} حلقة",
 };
+export const PEERS = {
+  zero: "لا مشاركين",
+  one: "مشارك واحد",
+  two: "مشاركان",
+  few: "{n} مشاركين",
+  many: "{n} مشاركاً",
+  other: "{n} مشارك",
+};
 export const SOURCES = {
   zero: "لا مصادر",
   one: "مصدر واحد",

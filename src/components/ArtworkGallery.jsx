@@ -10,8 +10,17 @@ import {
 } from "lucide-react";
 import { resolveAppearance } from "../../core/appearance.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
+import { language, translate } from "../../core/i18n.mjs";
 import { call } from "../lib/api.js";
 
+// Where the images came from, as a sentence names them.
+const SOURCE_LABELS = { الإضافة: "إضافة العمل" };
+const keyName = (need) => (need === "tmdb" ? "TMDB" : "Fanart.tv");
+/** "A, B and C" in the interface's own language. */
+const listOf = (items) =>
+  new Intl.ListFormat(language() === "en" ? "en" : "ar", {
+    type: "conjunction",
+  }).format(items);
 const TABS = [
   ["backdrops", "الخلفيات"],
   ["posters", "البوسترات"],
@@ -172,23 +181,25 @@ export default function ArtworkGallery({
       )}
       {data && (data.needs?.length > 0 || data.failed?.length > 0) && (
         <p className="subtle gallery-note">
+          {/* Each sentence is one text, so it translates whole (issue #82). */}
           {data.needs?.length > 0 && (
-            <>
-              لمعرض أكبر أضف مفتاح{" "}
-              {data.needs
-                .map((n) => (n === "tmdb" ? "TMDB" : "Fanart.tv"))
-                .join(" و")}{" "}
-              المجاني.{" "}
-              <button
-                className="text-button"
-                onClick={() => onSettings?.("data")}
-              >
-                مزوّدو البيانات
-              </button>
-            </>
+            <span>
+              {data.needs.length > 1
+                ? `لمعرض أكبر أضف مفتاحي ${listOf(data.needs.map(keyName))} المجانيين.`
+                : `لمعرض أكبر أضف مفتاح ${keyName(data.needs[0])} المجاني.`}
+            </span>
           )}
-          {data.failed?.length > 0 &&
-            ` تعذّر الوصول إلى ${data.failed.join("، ")} الآن.`}
+          {data.needs?.length > 0 && (
+            <button
+              className="text-button"
+              onClick={() => onSettings?.("data")}
+            >
+              مزوّدو البيانات
+            </button>
+          )}
+          {data.failed?.length > 0 && (
+            <span>{`تعذّر الوصول إلى ${listOf(data.failed)} الآن.`}</span>
+          )}
         </p>
       )}
       {current && (
@@ -285,17 +296,16 @@ export default function ArtworkGallery({
       )}
       {data && (
         <p className="subtle gallery-credit">
-          {arabicCount(
+          {`${arabicCount(
             TABS.reduce((n, [id]) => n + (data[id]?.length || 0), 0),
             IMAGES,
-          )}{" "}
-          من{" "}
-          {[
-            ...new Set(
-              TABS.flatMap(([id]) => (data[id] || []).map((i) => i.source)),
-            ),
-          ].join(" و")}
-          . الصور ملك أصحابها.
+          )} من ${listOf(
+            [
+              ...new Set(
+                TABS.flatMap(([id]) => (data[id] || []).map((i) => i.source)),
+              ),
+            ].map((source) => translate(SOURCE_LABELS[source] || source)),
+          )}. الصور ملك أصحابها.`}
         </p>
       )}
     </section>

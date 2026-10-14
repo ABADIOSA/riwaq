@@ -8,6 +8,7 @@
 import {
   engineOptions,
   publicStats,
+  startStatus,
   validHash,
 } from "../core/torrent-engine.mjs";
 
@@ -142,6 +143,14 @@ export class TorrentHost {
   release(hash) {
     if (!this.running || !validHash(hash)) return Promise.resolve(false);
     return this.call("release", hash).catch(() => false);
+  }
+
+  /** How a torrent's start is going (counts only), or null. */
+  status(hash) {
+    if (!this.running || !validHash(hash)) return Promise.resolve(null);
+    return this.call("status", hash)
+      .then(startStatus)
+      .catch(() => null);
   }
 
   configure(settings) {

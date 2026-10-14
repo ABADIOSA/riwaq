@@ -152,6 +152,35 @@ export const volumeMax = (settings = {}) =>
     : 150;
 
 /**
+ * Where a volume sits on the player's slider (0–1). Up to 100% fills the
+ * slider's main part; a boost above it (volumeMax over 100) gets its own,
+ * shorter part after it, so 100% always reads as full (issue #82: at 100%
+ * of 150 the slider looked a third empty, and viewers kept raising it).
+ */
+export const VOLUME_MAIN_SHARE = 0.75;
+export function volumeRatio(volume, max = 150) {
+  const top = Math.max(1, Number(max) || 100);
+  const v = Math.max(0, Math.min(top, Number(volume) || 0));
+  if (top <= 100) return v / top;
+  if (v <= 100) return (v / 100) * VOLUME_MAIN_SHARE;
+  return (
+    VOLUME_MAIN_SHARE + ((v - 100) / (top - 100)) * (1 - VOLUME_MAIN_SHARE)
+  );
+}
+/** The volume at a point of the slider (0–1); 100% catches a near miss. */
+export function volumeAt(ratio, max = 150) {
+  const top = Math.max(1, Number(max) || 100);
+  const r = Math.max(0, Math.min(1, Number(ratio) || 0));
+  if (top <= 100) return Math.round(r * top);
+  // A few pixels either side of the boost's start are 100%.
+  if (Math.abs(r - VOLUME_MAIN_SHARE) <= 0.025) return 100;
+  if (r < VOLUME_MAIN_SHARE) return Math.round((r / VOLUME_MAIN_SHARE) * 100);
+  return Math.round(
+    100 + ((r - VOLUME_MAIN_SHARE) / (1 - VOLUME_MAIN_SHARE)) * (top - 100),
+  );
+}
+
+/**
  * An audio output as MPV names it ("wasapi/{…}", "openal/…"), or "" for
  * Windows' default. Printable, at most 240 characters, no quotes.
  */

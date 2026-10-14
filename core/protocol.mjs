@@ -152,6 +152,8 @@ export const DEFAULT_SETTINGS = {
   torrentCache: "viewing",
   // The theme song explained itself once (issue #74).
   themeSongHinted: false,
+  // The home banner offering to link Stremio, closed by the viewer (issue #82).
+  stremioBannerHidden: false,
   shaderPreset: "",
   shaderScope: "auto",
   shaderDir: "",
@@ -437,6 +439,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "rememberSeries",
     "resumeSameSource",
     "themeSongHinted",
+    "stremioBannerHidden",
     "skipOnline",
     "simpleColor",
     "rtxUpscale",

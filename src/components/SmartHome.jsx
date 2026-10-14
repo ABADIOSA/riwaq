@@ -35,7 +35,7 @@ const SmartShelf = memo(function SmartShelf({ group, onOpen, onMore }) {
     names.indexOf(names[i]) !== names.lastIndexOf(names[i])
       ? `${names[i]} · ${r.provider}`
       : names[i];
-  const header = (
+  const header = (arrows) => (
     <div className="smart-head">
       <div className="section-heading">
         <div>
@@ -46,14 +46,17 @@ const SmartShelf = memo(function SmartShelf({ group, onOpen, onMore }) {
               : `${rowLabel(group.rows[0])} · ${group.rows[0].provider}`}
           </span>
         </div>
-        {(row || group.rows.length === 1) && (
-          <button
-            className="text-button"
-            onClick={() => onMore(row || group.rows[0])}
-          >
-            عرض الكل <ChevronLeft size={16} />
-          </button>
-        )}
+        <div className="rail-tools">
+          {arrows}
+          {(row || group.rows.length === 1) && (
+            <button
+              className="text-button"
+              onClick={() => onMore(row || group.rows[0])}
+            >
+              عرض الكل <ChevronLeft size={16} />
+            </button>
+          )}
+        </div>
       </div>
       {group.rows.length > 1 && (
         <ScrollRow
