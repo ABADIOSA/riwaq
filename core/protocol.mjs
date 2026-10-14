@@ -122,6 +122,8 @@ export const DEFAULT_SETTINGS = {
   audioNormalize: false,
   audioDownmix: false,
   volumeMax: 150,
+  settingsMode: "simple",
+  quietInterface: false,
   audioDevice: "auto",
   // A connection speed cap in Mbps (0 for none); heavier streams rank lower.
   bandwidthCap: 0,
@@ -440,6 +442,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "resumeSameSource",
     "themeSongHinted",
     "stremioBannerHidden",
+    "quietInterface",
     "skipOnline",
     "simpleColor",
     "rtxUpscale",
@@ -488,6 +491,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
   for (const [key, values] of Object.entries({
     layout: ["cinematic", "sidebar", "topbar"],
     interfaceStyle: ["riwaq", "classic"],
+    settingsMode: ["simple", "advanced"],
     sessionBudget: [30, 60, 90, 120, 180],
     sessionMood: ["any", "light", "thrill", "wonder", "depth"],
     streamSafety: ["strict", "balanced", "off"],

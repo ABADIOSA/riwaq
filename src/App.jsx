@@ -28,6 +28,7 @@ import {
   RefreshCw,
   LogIn,
   FolderOpen,
+  Download,
   Star,
   Heart,
   Wifi,
@@ -71,6 +72,7 @@ import TorrentSetup from "./components/TorrentSetup.jsx";
 import { NEEDS_ENGINE } from "../core/torrent-engine.mjs";
 import ShortcutsHelp from "./components/ShortcutsHelp.jsx";
 import NotificationCenter from "./components/NotificationCenter.jsx";
+import OfflineLibrary from "./components/OfflineLibrary.jsx";
 import { lastSeen, shouldShowWhatsNew } from "../core/whats-new.mjs";
 import TraktSuggestions from "./components/Suggestions.jsx";
 import {
@@ -163,6 +165,7 @@ export default function App() {
     // "What's new" after an update, and the keyboard shortcuts ("?").
     [whatsNew, setWhatsNew] = useState(null),
     [shortcutsOpen, setShortcutsOpen] = useState(false),
+    [offlineOpen, setOfflineOpen] = useState(false),
     // A torrent with no engine to play it: the guide, and the play to retry.
     [torrentSetup, setTorrentSetup] = useState(null),
     [account, setAccount] = useState(false),
@@ -866,6 +869,7 @@ export default function App() {
             profile={activeProfile}
             user={state.user}
             onProfiles={() => setProfilesOpen(true)}
+            quiet={!!state.settings.quietInterface}
             onAccount={() => setAccount(true)}
             isLocked={isLocked}
             updateAvailable={state.update?.available}
@@ -949,40 +953,44 @@ export default function App() {
                   </small>
                 )}
               </button>
-              <button
-                className="profile-button"
-                onClick={() => setProfilesOpen(true)}
-                title="تبديل الملف الشخصي"
-              >
-                <Users size={17} />
-                <span>{activeProfile?.name || "المشاهد"}</span>
-                {state.profiles?.list?.length > 1 && (
-                  <small>{state.profiles.list.length}</small>
-                )}
-              </button>
-              <button
-                className="account-button"
-                onClick={() => setAccount(true)}
-              >
-                <span className="avatar">
-                  {state.user ? (
-                    (state.user.name ||
-                      state.user.email ||
-                      "R")[0].toUpperCase()
-                  ) : (
-                    <LogIn size={19} />
+              {!state.settings.quietInterface && (
+                <button
+                  className="profile-button"
+                  onClick={() => setProfilesOpen(true)}
+                  title="تبديل الملف الشخصي"
+                >
+                  <Users size={17} />
+                  <span>{activeProfile?.name || "المشاهد"}</span>
+                  {state.profiles?.list?.length > 1 && (
+                    <small>{state.profiles.list.length}</small>
                   )}
-                </span>
-                <span>
-                  <b>{state.user?.name || "حساب ستريميو"}</b>
-                  <small>
-                    {state.user
-                      ? "متصل • الإضافات مستوردة"
-                      : "اربط حسابك وانقل إضافاتك"}
-                  </small>
-                </span>
-                <ChevronLeft size={16} />
-              </button>
+                </button>
+              )}
+              {!state.settings.quietInterface && (
+                <button
+                  className="account-button"
+                  onClick={() => setAccount(true)}
+                >
+                  <span className="avatar">
+                    {state.user ? (
+                      (state.user.name ||
+                        state.user.email ||
+                        "R")[0].toUpperCase()
+                    ) : (
+                      <LogIn size={19} />
+                    )}
+                  </span>
+                  <span>
+                    <b>{state.user?.name || "حساب ستريميو"}</b>
+                    <small>
+                      {state.user
+                        ? "متصل • الإضافات مستوردة"
+                        : "اربط حسابك وانقل إضافاتك"}
+                    </small>
+                  </span>
+                  <ChevronLeft size={16} />
+                </button>
+              )}
             </div>
           </aside>
         )}
@@ -1062,6 +1070,9 @@ export default function App() {
               }}
             />
             <NotificationCenter />
+            <IconButton title="التنزيلات" onClick={() => setOfflineOpen(true)}>
+              <Download size={20} />
+            </IconButton>
             <IconButton
               title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
               onClick={() => act("localVideo")}
@@ -1120,7 +1131,8 @@ export default function App() {
               {view === "home" &&
                 !state.user &&
                 !loading &&
-                !state.settings.stremioBannerHidden && (
+                !state.settings.stremioBannerHidden &&
+                !state.settings.quietInterface && (
                   <div className="connect-banner">
                     <span className="banner-icon">
                       <Puzzle size={23} />
@@ -1497,6 +1509,7 @@ export default function App() {
                   navigate("folder");
                 }}
                 onNuvio={() => setNuvioOpen(true)}
+                onProfiles={() => setProfilesOpen(true)}
                 onSettings={(tab) => {
                   setSettingsTab(tab);
                   navigate("settings");
@@ -1620,6 +1633,14 @@ export default function App() {
               setWhatsNew(null);
               update("settings", { seenVersion: runningVersion });
             }}
+          />
+        )}
+        {offlineOpen && (
+          <OfflineLibrary
+            key={state.profiles?.active}
+            state={state}
+            notice={notice}
+            onClose={() => setOfflineOpen(false)}
           />
         )}
         {torrentSetup && (

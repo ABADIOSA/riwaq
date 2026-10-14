@@ -128,6 +128,11 @@ export default function PlayerView({
   }, [mini]);
   return (
     <section
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if (window.riwaq?.platform === "web") setDock("subs");
+        else call("playbackMenu").catch(() => {});
+      }}
       onMouseMove={() => {
         // Without the HUD, the page still hides the pointer when the picture
         // is the thing under it and the pointer has been still.

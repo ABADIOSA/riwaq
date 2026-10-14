@@ -159,7 +159,7 @@ test("input.conf renders every action and the pointer gesture", () => {
   assert.ok(conf.includes("Ctrl+p cycle pause"));
   assert.ok(!conf.includes("SPACE cycle pause"));
   assert.ok(conf.includes("MBTN_LEFT_DBL script-message riwaq-fullscreen"));
-  assert.ok(conf.includes("MBTN_RIGHT script-message riwaq-panel"));
+  assert.ok(conf.includes("MBTN_RIGHT script-message riwaq-context"));
   // A click on MPV's own picture pauses (issue #82), written before the
   // viewer's bindings so one of theirs on the click wins.
   const lines = conf.trim().split("\n");

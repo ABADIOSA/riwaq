@@ -763,5 +763,12 @@ test("main watches a built-in torrent's start and moves on from a dead swarm (is
   assert.match(body, /if \(await tryNextSource\(\)\) return;/);
   assert.match(body, /await player\.stop\(\);/);
   const next = main.slice(main.indexOf("async function tryNextSource("));
-  assert.match(next.slice(0, next.indexOf("\n}\n")), /return true;/);
+  assert.match(
+    next.slice(0, next.indexOf("\n}\n")),
+    /return !result\?\.cancelled;/,
+  );
+  assert.match(
+    next.slice(0, next.indexOf("\n}\n")),
+    /catch \{[\s\S]*return false;/,
+  );
 });

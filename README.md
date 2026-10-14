@@ -30,13 +30,15 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.45.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.44.1-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.45.0
+### الجديد في المصدر 0.45.0 — قيد المراجعة
+
+آخر إصدار منشور هو **0.44.1**. إصلاحات [PR #83](https://github.com/ABADIOSA/riwaq/pull/83) وهذه [المراجعة المكملة](docs/REVIEW-PR-83.md) لم تصدر في مثبت بعد.
 
 إصلاحات واقتراحات من ملاحظات مستخدم على 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)):
 
@@ -46,6 +48,11 @@
 - **«نكمل الحكاية»:** زر لإزالة عمل وتقدّمك يبقى. وزر لإخفاء اقتراح ربط ستريميو.
 - **أسهم الصفوف** بجانب «عرض الكل» بدل ما تكون فوق البوسترات. ترجع للطريقة القديمة من **الإعدادات ← المصادر والمكتبة ← بطاقات الملصقات**.
 - **لغة الواجهة** صارت في **الإعدادات ← المظهر ← لغة الواجهة**، والواجهة الإنجليزية تعرض المعرض وأسماء فريق العمل بالإنجليزي.
+
+- **الإيقاف أثناء تجهيز المصدر** يلغي الطلب المتأخر؛ ما يبدأ الفيديو بعد الضغط على إيقاف.
+- **قائمة الزر الأيمن** للفيديو: الترجمة والصوت، لقطة شاشة، نسخ المصدر، والتنزيل.
+- **التنزيلات على ويندوز:** ملفات الفيديو الكاملة والتورنت للمشاهدة دون إنترنت من زر التنزيلات. لا تدعم HLS/DASH أو البث المباشر، ولا تستكمل التنزيل المنقطع.
+- **إعدادات أساسية أولًا** مع زر للمتقدمة؛ وخيار «واجهة هادئة» لإخفاء أزرار الحساب والملفات من التنقل ودعوة ربط Stremio.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -71,8 +78,8 @@
 
 1. افتح **حساب ستريميو** وسجّل دخولك من صفحة ستريميو الرسمية، فيستورد رِواق إضافاتك ومكتبتك ومواضع مشاهدتك. أو أضف روابط `manifest.json` بنفسك.
 2. اختر عملاً، ثم الحلقة والمصدر. الفيديو يشتغل داخل رِواق.
-3. من **الإعدادات ← مزوّدو البيانات الوصفية** أضف مفاتيحك (TMDB وغيره) لو تبغى أوصافاً عربية وصوراً أكثر.
-4. من **الإعدادات ← الحسابات والربط** اربط Trakt أو Simkl أو AniList، أو أنشئ حساب رِواق.
+3. من **الإعدادات ← إعدادات متقدمة ← مزوّدو البيانات الوصفية** أضف مفاتيحك (TMDB وغيره) لو تبغى أوصافاً عربية وصوراً أكثر.
+4. من **الإعدادات ← إعدادات متقدمة ← الحسابات والربط** اربط Trakt أو Simkl أو AniList، أو أنشئ حساب رِواق.
 5. مصادر التورنت تحتاج محركاً: **المحرك المدمج** من **الإعدادات ← محرك P2P**، أو **Stremio Service** شغّال على جهازك. الروابط المباشرة ما تحتاج شي.
 
 ### الخصوصية والحدود
@@ -80,7 +87,7 @@
 - مفاتيحك وحساباتك تنحفظ مشفّرة على جهازك. رِواق ما يطلب كلمات مرور المنصات، وما يرسل سجل مشاهدتك إلا للمنصات اللي تفعّل التسجيل فيها.
 - صندوق الإشعارات يقرأ ملف الإشعارات العام من GitHub عند فتح رِواق وكل 15 دقيقة، بدون أي بيانات عنك. تقدر توقفه من نافذة الإشعارات.
 - استيراد Stremio باتجاه واحد إلى رِواق.
-- اختبارات المنصات استخدمت المحاكاة، ولم تُجرَّب الشيدرات على كرت شاشة حقيقي ولا الواجهة الإنجليزية ولا محرك التورنت المدمج على ويندوز حقيقي بعد. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
+- اختبارات الحسابات الخارجية استخدمت المحاكاة. اختُبر MPV والواجهة العربية والإنجليزية على ويندوز بمصادر محلية، والتورنت بسرب محلي. لم يُختبر HDR الحقيقي على جهاز المستخدم أو توفر التورنت العام أو شيدرات GPU. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
 
 ### البناء من المصدر
 
@@ -111,13 +118,15 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.45.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.45.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.44.1-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.44.1-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.45.0
+### Source 0.45.0 — under review
+
+The latest published release is **0.44.1**. [PR #83](https://github.com/ABADIOSA/riwaq/pull/83) and this [follow-up review](docs/REVIEW-PR-83.md) are not a published installer yet.
 
 Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)):
 
@@ -127,6 +136,11 @@ Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/A
 - **"Continue watching":** a button removes a title and keeps your progress. Another hides the Stremio linking suggestion.
 - **Row arrows** sit beside "See all" instead of over the posters. The old style is in **Settings → Sources & library → Poster cards**.
 - **The interface language** is now in **Settings → Appearance → Interface language**, and the English interface shows the title gallery and the names in the credits in English.
+
+- **Stop during source preparation** cancels late playback before MPV starts.
+- **Right-click video menu:** subtitles/audio, screenshot, copy source and download.
+- **Windows downloads:** complete video files and torrents, playable offline from Downloads. HLS/DASH/live and interrupted-download resume are unsupported.
+- **Basic settings first** with advanced pages one click away; a **Quiet interface** hides navigation account/profile controls and the Stremio home linking prompt.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
@@ -150,11 +164,11 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
 ### Getting started
 
-1. For English, open **Settings → Appearance → Interface language** and choose English.
+1. For English, open **Settings → Basic settings → Interface language** and choose English.
 2. Open **Stremio account** and sign in on Stremio's own page. Riwaq imports your addons, library and progress, or you can add `manifest.json` links yourself.
 3. Pick a title, then an episode and a source. The video plays inside Riwaq.
-4. In **Settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
-5. In **Settings → Accounts & linking**, connect Trakt, Simkl or AniList, or create a Riwaq account.
+4. In **Settings → Advanced settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
+5. In **Settings → Advanced settings → Accounts & linking**, connect Trakt, Simkl or AniList, or create a Riwaq account.
 6. Torrent sources need an engine: the **built-in engine** in **Settings → P2P engine**, or **Stremio Service** running on your PC. Direct links need neither.
 
 ### Privacy and limits
@@ -162,7 +176,7 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 - Keys and accounts are stored encrypted on your machine. Riwaq never asks for platform passwords. It sends your viewing history only to platforms where you turn tracking on.
 - The notification inbox reads Riwaq's public notice file from GitHub when Riwaq opens and every 15 minutes, sending nothing about you. You can turn it off in the notifications window.
 - Stremio import is one-way, into Riwaq.
-- Platform tests used mocks; shaders have not yet been tried on a real GPU, nor the English interface or the built-in torrent engine on a real Windows machine. See [what was and was not tested](VERIFICATION.md).
+- External-account tests use mocks. MPV and Arabic/English UI were exercised on Windows with local sources; torrents used a local swarm. Real HDR output on the reported device, public torrent availability and GPU shaders were not verified. See [what was and was not tested](VERIFICATION.md).
 
 ### Building from source
 
