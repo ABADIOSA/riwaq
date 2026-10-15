@@ -680,7 +680,7 @@ test("main, the web bridge and the interface route torrents through the rules", 
   // runs with nothing marked as playing.
   assert.match(
     main,
-    /const previousTorrent = builtinTorrent;\s*builtinTorrent = null;\s*try \{\s*await player\.stop\(\);/,
+    /const previousTorrent = builtinTorrent;\s*builtinTorrent = null;[\s\S]{0,200}?const previousFallback = fallbackTorrent;\s*fallbackTorrent = null;\s*try \{\s*await player\.stop\(\);/,
   );
   assert.match(
     main,
@@ -688,7 +688,7 @@ test("main, the web bridge and the interface route torrents through the rules", 
   );
   assert.match(
     main,
-    /serverUrl: \[client\.state\.settings\.serverUrl, torrentHost\?\.origin\]/,
+    /serverUrl: \[\s*client\.state\.settings\.serverUrl,\s*torrentHost\?\.origin,\s*torrServer\?\.origin,\s*\]/,
   );
   assert.match(main, /\.then\(\(\) => torrentHost\?\.stop\(\)\)/);
   assert.match(main, /shell\.openExternal\(SERVICE_DOWNLOAD\)/);
@@ -750,10 +750,11 @@ test("main watches a built-in torrent's start and moves on from a dead swarm (is
     fileURLToPath(new URL("../electron/main.mjs", import.meta.url)),
     "utf8",
   );
-  // Only built-in torrents are watched, from the moment MPV is started.
+  // Built-in torrents (and TorrServer's after them) are watched, from the
+  // moment MPV is started.
   assert.match(
     main,
-    /if \(torrentHash\) \{\s*const watch = watchTorrentStart\(torrentHash\);/,
+    /const watched = torrentHash\s*\? \[torrentHash, "builtin"\]\s*: fallbackHash\s*\? \[fallbackHash, "torrserver"\]\s*: null;\s*if \(watched\) \{\s*const watch = watchTorrentStart\(\.\.\.watched\);/,
   );
   // A start that fails ends its watch.
   assert.match(
@@ -763,7 +764,10 @@ test("main watches a built-in torrent's start and moves on from a dead swarm (is
   const watch = main.slice(main.indexOf("function watchTorrentStart("));
   const body = watch.slice(0, watch.indexOf("\n}\n"));
   // It belongs to one viewing and one torrent, and ends with either.
-  assert.match(body, /nowPlaying === viewing && builtinTorrent === hash/);
+  assert.match(
+    body,
+    /nowPlaying === viewing &&\s*\(fallback \? fallbackTorrent : builtinTorrent\) === hash/,
+  );
   assert.match(body, /player\.setTorrentStatus\(status\)/);
   assert.match(body, /torrentDead\(status, Date\.now\(\) - began\)/);
   // A dead swarm tries the next source; with none, the viewing ends with a

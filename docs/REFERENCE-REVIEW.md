@@ -140,6 +140,14 @@ A tester asked for a "real Stremio Service inside Riwaq", because the built-in e
 - Those are the changes that do not touch Riwaq's rules.
 - Inbound connections with UPnP, a Stremio-compatible local port, running the official Stremio Service installer for the viewer, and a GPL TorrServer fallback each change a stated rule, and are the owner's decision.
 
+### What 0.46 took (the owner chose UPnP and TorrServer, 2026-10-15)
+
+- From Harbor: public trackers including HTTPS ones (`PUBLIC_TRACKERS`), DHT bootstrap routers (`DHT_BOOTSTRAP`) and nodes saved between runs, inbound peers through UPnP/NAT-PMP (`torrentIncoming`, on by default as in Harbor; the HTTP server stays on loopback), and a network check (`netcheck`).
+- From Nuvio HTPC: asking trackers and the DHT again every 30 s while a torrent has fewer than 40 peers, and TorrServer as the fallback engine. Riwaq downloads TorrServer only on the viewer's click from its pinned upstream release and runs it as a separate program; it is never bundled.
+- From both: the file a pack plays is the one the addon names (`behaviorHints.filename`).
+- TorrServer, read at MatriX.145.1 (`server/web/auth/auth.go`, `server/web/api/route.go`, `server/web/api/stream.go`, `server/settings/btsets.go`, `server/torr/torrent.go`): `-a` puts the API behind Basic auth from `accs.db`, but `/stream` and `/play` serve a torrent it already holds without it; it advertises itself over Bonjour and runs LAN peer discovery by default, so Riwaq writes its settings file before each start; it numbers files after sorting them by path, so an addon's file index is mapped by name.
+- Not taken: a Stremio-compatible LAN port (Harbor's 11470) and running Stremio Service's installer for the viewer.
+
 **Players:**
 
 - **Harbor:** MPV is a child of the window, pushed under a transparent WebView2. MPV gets `input-default-bindings=no` and `input-cursor=no`, so the page owns the pointer, and WebView2's default context menus are switched off.

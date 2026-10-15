@@ -36,23 +36,13 @@
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.45.1
+### الجديد في 0.46.0
 
-- **قائمة المشغّل ما تعلّق الأزرار:** قائمة الزر الأيمن صارت جزء من أدوات رِواق نفسها بدل قائمة ويندوز، اللي كانت ممكن تنفتح مخفية وتمسك كل النقرات فما تقدر تتحكم بشي. النقرة اللي تقفلها ما توقف الفيديو، وEsc يقفلها بدون ما يوقف المشاهدة.
-
-### ومن 0.45.0
-
-إصلاحات واقتراحات من ملاحظات مستخدم على 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82))، مع مراجعة كوديكس ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
-
-- **التنزيل للمشاهدة بدون إنترنت:** من قائمة الزر الأيمن في المشغّل، والتنزيلات في زر فوق. ملفات الفيديو الكاملة والتورنت، بدون HLS/DASH أو البث المباشر، وما يكمّل تنزيل انقطع.
-  - الموسم والحلقة وعنوانها يظهرون مع التنزيل. وإذا تعذّر حذف ملف، يبقى سجله والملف الشخصي لإعادة المحاولة.
-- **قائمة الزر الأيمن في المشغّل:** إيقاف مؤقت، والترجمة والصوت، ولقطة شاشة، ونسخ رابط التورنت، والتنزيل.
-- **إعدادات أساسية أولاً:** اللغة والترجمة والجودة والتورنت في صفحة وحدة، والباقي في **«إعدادات متقدمة»**. و**«واجهة هادئة»** تخفي أزرار الحساب والملفات ودعوة ربط ستريميو.
-- **الإغلاق والإيقاف:** إغلاق رِواق أثناء المشاهدة صار سليم بدون رسالة «Object has been destroyed»، والإيقاف وقت تجهيز المصدر ما يخلّي الفيديو يشتغل بعدها.
-- **التورنت بالمحرك المدمج:** عدد المشاركين والسرعة تحت «جاري تجهيز المشاهدة»، والتورنت اللي ما يوصل منه شي خلال 40 ثانية ينتقل للمصدر التالي.
-- **شريط الصوت** يتحرك مع الفأرة فوراً ويمتلي عند 100%، والتعزيز فوقها بلون ثاني. ونقرة على صورة MPV توقفها مؤقتاً.
-- **«نكمل الحكاية»:** زر يشيل العمل وتقدّمك يبقى. وزر لإخفاء اقتراح ربط ستريميو، وأسهم الصفوف بجانب «عرض الكل».
-- **لغة الواجهة** أول شي في الإعدادات الأساسية، وفي المتقدمة صارت في **المظهر**. والواجهة الإنجليزية تعرض المعرض وأسماء فريق العمل بالإنجليزي.
+- **التورنت يلقى مشاركين أكثر:** المحرك المدمج صار يسأل متتبعات عامة إضافية (منها HTTPS للشبكات اللي تحجب UDP)، ويبدأ شبكة DHT من آخر تشغيل، ويعيد السؤال كل 30 ثانية لما يكون المشاركين قليلين، مثل Harbor وNuvio HTPC.
+- **«اسمح للمشاركين يتصلون فيك»** (مفعّل من البداية) يطلب من الراوتر يفتح منفذ المحرك (UPnP وNAT-PMP)، و**«افحص الشبكة»** يقول لك وش اللي توصله شبكتك. في الإعدادات ← **محرك P2P**.
+- **حزم المواسم:** المحرك يشغّل الحلقة اللي سمّتها الإضافة بدل أكبر ملف في الحزمة.
+- **TorrServer احتياطياً:** برنامج تورنت مفتوح المصدر (GPL-3.0) تنزّله بضغطة من صفحة **محرك P2P**. لما المحرك المدمج ما يلقى بيانات خلال 40 ثانية، يجرّب رِواق نفس التورنت فيه قبل المصدر التالي. رِواق ما يحمله معه، ويتأكد من بصمته قبل ما يحفظه وقبل أول تشغيل.
+- **التثبيت لكل المستخدمين:** المثبّت يسمح مرة ثانية بخيار «Anyone who uses this computer»، بموافقة المسؤول ([#86](https://github.com/ABADIOSA/riwaq/issues/86)).
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -124,23 +114,13 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.45.1
+### What's new in 0.46.0
 
-- **The player menu no longer freezes the controls:** the right-click menu is now part of Riwaq's own controls instead of a Windows menu, which could open out of sight and hold every click so nothing responded. The click that closes it does not pause, and Esc closes it without stopping the viewing.
-
-### And from 0.45.0
-
-Fixes and suggestions from a user's report on 0.44.1 ([#82](https://github.com/ABADIOSA/riwaq/issues/82)), with Codex's review ([#84](https://github.com/ABADIOSA/riwaq/pull/84)):
-
-- **Offline downloads:** from the player's right-click menu, then from the Downloads button at the top. Complete video files and torrents; no HLS/DASH or live streams, and an interrupted download does not resume.
-  - Downloads show season, episode and title. If a file cannot be deleted, its record and profile stay available for retry.
-- **A right-click menu in the player:** pause, subtitles and audio, screenshot, copy the torrent link, and download.
-- **Basic settings first:** language, subtitles, quality and torrents on one page, the rest under **"Advanced settings"**. **"Quiet interface"** hides the account and profile buttons and the Stremio linking prompt.
-- **Closing and stopping:** closing Riwaq during a viewing no longer raises "Object has been destroyed", and stopping while a source is being prepared no longer lets the video start afterwards.
-- **Torrents on the built-in engine:** peers and speed under "Getting the viewing ready", and a torrent that sends nothing within 40 seconds moves on to the next source.
-- **The volume slider** follows the mouse at once and is full at 100%, with any boost in another colour. A click on MPV's own picture pauses.
-- **"Continue watching":** a button removes a title and keeps your progress. Another hides the Stremio linking suggestion, and row arrows sit beside "See all".
-- **The interface language** comes first in the basic settings, and under **Appearance** in the advanced ones. The English interface shows the title gallery and the credits' names in English.
+- **Torrents find more peers:** the built-in engine now also asks public trackers (HTTPS ones included, for networks that block UDP), starts the DHT from the last run, and asks again every 30 seconds while there are few peers, as Harbor and Nuvio HTPC do.
+- **"Let peers connect to you"** (on from the start) asks your router to open the engine's port (UPnP and NAT-PMP), and **"Check the network"** tells you what your network reaches. Settings → **P2P engine**.
+- **Season packs:** the engine plays the episode the addon names instead of the pack's largest file.
+- **TorrServer as a fallback:** an open-source torrent program (GPL-3.0) you download with one click on the **P2P engine** page. When the built-in engine gets no data within 40 seconds, Riwaq tries the same torrent there before the next source. Riwaq does not ship it, and checks its fingerprint before saving it and before it first runs.
+- **Installing for every user:** the installer offers "Anyone who uses this computer" again, with administrator approval ([#86](https://github.com/ABADIOSA/riwaq/issues/86)).
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 

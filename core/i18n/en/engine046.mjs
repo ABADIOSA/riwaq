@@ -8,7 +8,7 @@ export default {
     "Asks your router (UPnP and NAT-PMP) to open the engine's port, so more peers reach you, especially on sparse torrents. The streaming server itself stays on your PC only. Windows Firewall may ask the first time. The change applies from the next viewing.",
   "جاري فحص الشبكة…": "Checking the network…",
   "افحص الشبكة": "Check the network",
-  "شبكة DHT: {n} عقدة": "DHT: {n} nodes",
+  "{n} عقدة في شبكة DHT": "{n} DHT nodes",
   "شبكة DHT ما ردّت؛ غالباً شبكتك تحجب UDP":
     "The DHT did not answer; your network probably blocks UDP",
   "المتتبعات عبر UDP توصل": "UDP trackers are reachable",
@@ -20,4 +20,40 @@ export default {
     "Asked the router to open a port for peers",
   "استقبال المشاركين مطفأ": "Incoming peers are off",
   "التغيير يسري من المشاهدة الجاية": "The change applies from the next viewing",
+  "TorrServer احتياطياً": "TorrServer as a fallback",
+  "لما المحرك المدمج ما يلقى بيانات للتورنت خلال 40 ثانية، يجرّب رِواق نفس التورنت في TorrServer قبل ما ينتقل للمصدر التالي. TorrServer برنامج تورنت مفتوح المصدر (GPL‑3.0) من مطوّر مستقل، ويوصل لمشاركين عبر uTP ما يوصلهم المحرك المدمج.":
+    "When the built-in engine gets no data for a torrent within 40 seconds, Riwaq tries the same torrent in TorrServer before moving to the next source. TorrServer is an open-source torrent program (GPL‑3.0) by an independent developer, and it reaches peers over uTP that the built-in engine does not.",
+  "رِواق ما يحمله معه: ينزل من صفحة إصداراته على GitHub لما تضغط الزر، ويتأكد رِواق من بصمته قبل ما يحفظه وقبل أول تشغيل. يشتغل على جهازك بس بكلمة سر عشوائية، وبدون إعلان في الشبكة المحلية. وهو بنفسه يسأل icanhazip.com عن عنوانك العام ويجلب قوائم متتبعات من GitHub، وقد يسألك جدار حماية ويندوز أول مرة.":
+    "Riwaq does not ship it: it is downloaded from its GitHub releases page when you press the button, and Riwaq checks its fingerprint before saving it and before it first runs. It runs on your PC only, with a random password, and never announces itself on the local network. On its own it asks icanhazip.com for your public address and fetches tracker lists from GitHub, and Windows Firewall may ask the first time.",
+  "جرّبه لما المحرك المدمج ما يلقى بيانات":
+    "Try it when the built-in engine gets no data",
+  مثبّت: "Installed",
+  "يعمل الآن": "Running now",
+  "يبدأ عند الحاجة": "Starts when needed",
+  "حُذف TorrServer": "TorrServer removed",
+  "احذف TorrServer": "Remove TorrServer",
+  "نزل TorrServer وتحقق رِواق منه": "TorrServer downloaded and checked",
+  "جاري التنزيل… {n}%": "Downloading… {n}%",
+  "نزّل TorrServer": "Download TorrServer",
+  "مجلد TorrServer غير محدد": "TorrServer's folder is not set",
+  "نزّل TorrServer أولاً": "Download TorrServer first",
+  "ملف TorrServer تغيّر بعد تنزيله، فحُذف. نزّله من جديد.":
+    "TorrServer's file changed after it was downloaded, so it was deleted. Download it again.",
+  "TorrServer متوقف": "TorrServer is stopped",
+  "ويندوز منع تشغيل TorrServer؛ تحقق من برنامج الحماية":
+    "Windows blocked TorrServer; check your security software",
+  "تعذّر تشغيل TorrServer": "Could not start TorrServer",
+  "TorrServer ما اشتغل": "TorrServer did not start",
+  "TorrServer ما أخذ إعدادات رِواق": "TorrServer did not take Riwaq's settings",
+  "ما وصلت بيانات التورنت إلى TorrServer":
+    "The torrent's metadata did not reach TorrServer",
+  "ما عرفنا أي ملف في التورنت يشغّله TorrServer":
+    "Could not tell which file in the torrent TorrServer should play",
+  "المحرك المدمج ما لقى بيانات؛ نجرّب TorrServer…":
+    "The built-in engine got no data; trying TorrServer…",
+  "أوقف المشاهدة أولاً": "Stop the viewing first",
+  "فحص شبكة المحرك المدمج في نسخة رِواق لسطح المكتب فقط؛ الموقع يستخدم Stremio Service.":
+    "The built-in engine's network check is in Riwaq for desktop only; the site uses Stremio Service.",
+  "TorrServer يعمل مع نسخة رِواق لسطح المكتب فقط؛ الموقع يستخدم Stremio Service.":
+    "TorrServer works with Riwaq for desktop only; the site uses Stremio Service.",
 };

@@ -33,6 +33,16 @@ Riwaq is an independent implementation of a desktop client for the Stremio HTTP 
   - SHA-256: a49811c0752c108b8260636f9c6f6fcb97406641c98b30f1e7b500dfb20177de
   - Earlier builds came from shinchiro/mpv-winbuild-cmake daily releases (20260610, then 20261007), which that project removes after a few weeks.
 
+## Downloaded on the viewer's request
+
+Not part of the Riwaq package or its installer. Riwaq downloads these unmodified from their upstream releases only when the viewer presses a button, checks each file's size and SHA-256 against a pin, and keeps them in the viewer's own Riwaq data folder.
+
+- TorrServer MatriX.145.1 (GPL-3.0): https://github.com/YouROK/TorrServer — a separate torrent streaming program that Riwaq starts as its own process and talks to over HTTP on 127.0.0.1, as the fallback for a built-in torrent that sends nothing (core/torrserver.mjs, electron/torrserver.mjs). Riwaq does not modify, link or redistribute it.
+  - Source of the exact build: https://github.com/YouROK/TorrServer/tree/MatriX.145.1 (commit 5b294b0b5386ba790347738ac3f80121688f5feb, which the binary's Go build information names)
+  - File: TorrServer-windows-amd64.exe from https://github.com/YouROK/TorrServer/releases/tag/MatriX.145.1, 63,547,904 bytes
+  - SHA-256: d8bf93aba0521f2450436d4ede02c3b6e44a37b52c386aa9e6206daa8e5551ed
+- GLSL shader packs (Anime4K, FSRCNNX): listed under "Design and behavior references" above.
+
 ## Web edition only
 
 Bundled into the web edition (`npm run build:web`, docs/WEB.md); none of these ship in the Windows app.

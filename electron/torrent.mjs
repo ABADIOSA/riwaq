@@ -163,6 +163,20 @@ export class TorrentHost {
     };
   }
 
+  /**
+   * A torrent's files in its own order, once known (paths and sizes only,
+   * at most 5000), for TorrServer's fallback; null otherwise.
+   */
+  async files(hash) {
+    if (!this.running || !validHash(hash)) return null;
+    const list = await this.call("files", hash).catch(() => null);
+    if (!Array.isArray(list)) return null;
+    return list.slice(0, 5000).map((file) => ({
+      path: typeof file?.path === "string" ? file.path.slice(0, 1024) : "",
+      length: Number.isFinite(file?.length) ? file.length : 0,
+    }));
+  }
+
   release(hash) {
     if (!this.running || !validHash(hash)) return Promise.resolve(false);
     return this.call("release", hash).catch(() => false);

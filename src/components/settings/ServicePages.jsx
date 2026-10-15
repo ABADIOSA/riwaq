@@ -640,7 +640,7 @@ function TorrentEngineCard({ state, update, notice }) {
             <ul className="net-check">
               <li className={net.dhtNodes > 0 ? "ok" : "bad"}>
                 {net.dhtNodes > 0
-                  ? `شبكة DHT: ${net.dhtNodes} عقدة`
+                  ? `${net.dhtNodes} عقدة في شبكة DHT`
                   : "شبكة DHT ما ردّت؛ غالباً شبكتك تحجب UDP"}
               </li>
               <li className={net.udp ? "ok" : "bad"}>
@@ -674,12 +674,125 @@ function TorrentEngineCard({ state, update, notice }) {
   );
 }
 
+/**
+ * TorrServer, the fallback for a built-in torrent that sends nothing
+ * (core/torrserver.mjs). Riwaq never ships it: the pinned release is
+ * downloaded on this card's button, and only flags and progress come back.
+ */
+function TorrServerCard({ state, update, notice }) {
+  const [info, setInfo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const on = state.settings.torrServerFallback !== false;
+  const installing = !!info?.installing;
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      call("torrServerState")
+        .then((value) => live && setInfo(value))
+        .catch(() => live && setInfo(false));
+    load();
+    const timer = setInterval(load, installing ? 700 : 4000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [installing]);
+  // The web edition has no TorrServer (web/desktop-only.js).
+  if (!info) return null;
+  const run = async (method, done) => {
+    setBusy(true);
+    try {
+      setInfo(await call(method));
+      if (done) notice?.(done);
+    } catch (e) {
+      notice?.(e.message);
+      call("torrServerState").then(setInfo, () => {});
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="settings-card torrserver-card">
+      <h2>TorrServer احتياطياً</h2>
+      <p>
+        لما المحرك المدمج ما يلقى بيانات للتورنت خلال 40 ثانية، يجرّب رِواق نفس
+        التورنت في TorrServer قبل ما ينتقل للمصدر التالي. TorrServer برنامج
+        تورنت مفتوح المصدر (GPL‑3.0) من مطوّر مستقل، ويوصل لمشاركين عبر uTP ما
+        يوصلهم المحرك المدمج.
+      </p>
+      <p className="subtle">
+        رِواق ما يحمله معه: ينزل من صفحة إصداراته على GitHub لما تضغط الزر،
+        ويتأكد رِواق من بصمته قبل ما يحفظه وقبل أول تشغيل. يشتغل على جهازك بس
+        بكلمة سر عشوائية، وبدون إعلان في الشبكة المحلية. وهو بنفسه يسأل
+        icanhazip.com عن عنوانك العام ويجلب قوائم متتبعات من GitHub، وقد يسألك
+        جدار حماية ويندوز أول مرة.
+      </p>
+      {info.installed ? (
+        <>
+          <div className="setting-row">
+            <div>
+              <b>جرّبه لما المحرك المدمج ما يلقى بيانات</b>
+              <p>
+                <span>مثبّت</span> ·{" "}
+                <span dir="ltr" translate="no">
+                  {info.version}
+                </span>{" "}
+                · <span>{info.running ? "يعمل الآن" : "يبدأ عند الحاجة"}</span>
+              </p>
+            </div>
+            <button
+              className={`toggle ${on ? "on" : ""}`}
+              aria-label="جرّبه لما المحرك المدمج ما يلقى بيانات"
+              aria-pressed={on}
+              onClick={() => update("settings", { torrServerFallback: !on })}
+            >
+              <span />
+            </button>
+          </div>
+          <div className="server-probe">
+            <button
+              className="secondary small"
+              disabled={busy}
+              onClick={() => run("torrServerRemove", "حُذف TorrServer")}
+            >
+              <Trash2 size={15} /> احذف TorrServer
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="server-probe">
+          <button
+            className="primary small"
+            disabled={busy || installing}
+            onClick={() =>
+              run("torrServerInstall", "نزل TorrServer وتحقق رِواق منه")
+            }
+          >
+            {installing ? (
+              <Loader2 size={15} className="spin" />
+            ) : (
+              <Download size={15} />
+            )}{" "}
+            {installing
+              ? `جاري التنزيل… ${Math.round((info.progress || 0) * 100)}%`
+              : "نزّل TorrServer"}
+          </button>
+          <span className="subtle">{size(info.size)}</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** The torrent engine of the streaming server: profile and cache. */
 export function P2PPage({ notice, state, update }) {
   return (
     <>
       {state && (
         <TorrentEngineCard state={state} update={update} notice={notice} />
+      )}
+      {state && (
+        <TorrServerCard state={state} update={update} notice={notice} />
       )}
       <ServiceEngineCard notice={notice} />
     </>

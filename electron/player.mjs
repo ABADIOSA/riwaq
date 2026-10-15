@@ -651,9 +651,15 @@ export class Player {
     ]);
   }
   /** How the built-in torrent is starting, under "Getting the viewing ready". */
-  setTorrentStatus(status) {
+  setTorrentStatus(status, retrying = false) {
     if (!this.state.active) return;
     this.state.torrent = status || null;
+    // TorrServer is trying the same torrent (main's fallback): the built-in
+    // address failing meanwhile is not this viewing's failure.
+    if (retrying) {
+      this.state.error = "";
+      this.state.loading = true;
+    }
     this.publish();
   }
   /** Whether the HUD draws the controls; the theater layout follows it. */

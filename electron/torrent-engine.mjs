@@ -394,6 +394,18 @@ export async function startEngine({
         bytes: torrent.downloaded || 0,
       };
     },
+    /**
+     * A torrent's files in its own order (paths and sizes), once its
+     * metadata came: TorrServer's fallback finds the addon's file by it.
+     */
+    files(hash) {
+      const torrent = entries.get(String(hash || "").toLowerCase())?.torrent;
+      if (!torrent?.ready || !Array.isArray(torrent.files)) return null;
+      return torrent.files.map((file) => ({
+        path: String(file.path || file.name || ""),
+        length: Number(file.length) || 0,
+      }));
+    },
     /** For tests: a known peer, when there is no DHT or tracker. */
     addPeer(hash, address) {
       const torrent = entries.get(String(hash || "").toLowerCase())?.torrent;
