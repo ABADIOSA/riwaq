@@ -65,6 +65,72 @@ export function chooseEngine(setting, serviceUp) {
   return choice === "auto" ? "builtin" : "ask";
 }
 
+/**
+ * Public trackers every built-in torrent announces to besides the addon's,
+ * as Harbor and Nuvio HTPC do (docs/REFERENCE-REVIEW.md). The HTTPS ones
+ * still find peers on a network that blocks UDP, and with it the DHT and
+ * the UDP trackers.
+ */
+export const PUBLIC_TRACKERS = [
+  "udp://tracker.opentrackr.org:1337/announce",
+  "udp://open.demonii.com:1337/announce",
+  "udp://open.stealth.si:80/announce",
+  "udp://tracker.torrent.eu.org:451/announce",
+  "udp://exodus.desync.com:6969/announce",
+  "udp://explodie.org:6969/announce",
+  "udp://tracker.dler.org:6969/announce",
+  "udp://tracker.qu.ax:6969/announce",
+  "http://tracker.opentrackr.org:1337/announce",
+  "http://tracker.bt4g.com:2095/announce",
+  "https://tracker.zhuqiy.com:443/announce",
+  "https://tracker.yemekyedim.com:443/announce",
+  "https://tracker.pmman.tech:443/announce",
+  "https://tracker.gcrenwp.top:443/announce",
+  "https://tr.nyacat.pw:443/announce",
+  "https://tracker.leechshield.link:443/announce",
+];
+
+/** DHT routers to join through; bittorrent-dht itself knows three. */
+export const DHT_BOOTSTRAP = [
+  "router.bittorrent.com:6881",
+  "router.utorrent.com:6881",
+  "dht.transmissionbt.com:6881",
+  "dht.libtorrent.org:25401",
+  "dht.aelitis.com:6881",
+  "router.bitcomet.com:6881",
+];
+
+/**
+ * While a torrent has fewer peers than FEW_PEERS, the engine asks its
+ * trackers and the DHT again every REANNOUNCE_MS (Nuvio HTPC measured that
+ * sparse swarms otherwise die before they are asked again).
+ */
+export const FEW_PEERS = 40;
+export const REANNOUNCE_MS = 30 * 1000;
+
+const IPV4 =
+  /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+/**
+ * DHT nodes saved from the last run, so the next one starts warm: IPv4
+ * addresses and ports only, no duplicates, at most 200.
+ */
+export function cleanDhtNodes(list) {
+  const out = [];
+  const seen = new Set();
+  for (const node of Array.isArray(list) ? list : []) {
+    const host = typeof node?.host === "string" ? node.host : "";
+    const port = Number(node?.port);
+    if (!IPV4.test(host) || !Number.isInteger(port) || port < 1 || port > 65535)
+      continue;
+    const key = `${host}:${port}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ host, port });
+    if (out.length >= 200) break;
+  }
+  return out;
+}
+
 /** The engine's options from the viewer's settings. */
 export function engineOptions(settings = {}) {
   const profile =
@@ -76,6 +142,8 @@ export function engineOptions(settings = {}) {
     downloadLimit: Math.round(profile.downloadLimit),
     uploadLimit: Math.round(upload),
     cacheBytes: cacheBytes(settings.torrentCache),
+    // Peers may connect in through a port the router opens (UPnP/NAT-PMP).
+    incoming: settings.torrentIncoming !== false,
   };
 }
 
@@ -113,11 +181,20 @@ export function magnetOf(stream) {
 
 const VIDEO = /\.(mkv|mp4|m4v|avi|mov|wmv|webm|ts|m2ts|mpg|mpeg|flv|ogv)$/i;
 
+/** A file's own name from an addon's behaviorHints.filename, or "". */
+export function cleanFilename(name) {
+  if (typeof name !== "string") return "";
+  const base = name.split(/[\\/]/).pop().trim();
+  return base.length <= 255 && !/[\u0000-\u001f\u007f]/.test(base) ? base : "";
+}
+
 /**
  * The file to play: the addon's file index when it is one of the torrent's
- * files, otherwise the largest video, otherwise the largest file.
+ * files; otherwise the file the addon names (behaviorHints.filename, so a
+ * season pack plays the right episode); otherwise the largest video,
+ * otherwise the largest file.
  */
-export function pickFile(files = [], fileIdx) {
+export function pickFile(files = [], fileIdx, filename = "") {
   if (
     Number.isInteger(fileIdx) &&
     fileIdx >= 0 &&
@@ -125,6 +202,14 @@ export function pickFile(files = [], fileIdx) {
     files[fileIdx]
   )
     return fileIdx;
+  const wanted = cleanFilename(filename).toLowerCase();
+  if (wanted) {
+    const named = files.findIndex(
+      (file) =>
+        cleanFilename(file?.name || file?.path || "").toLowerCase() === wanted,
+    );
+    if (named >= 0) return named;
+  }
   let best = -1;
   for (const pass of [true, false]) {
     files.forEach((file, i) => {

@@ -18,6 +18,7 @@ import title from "./en/title.mjs";
 import announcements from "./en/announcements.mjs";
 import review083 from "./en/review083.mjs";
 import owner from "./en/owner.mjs";
+import engine046 from "./en/engine046.mjs";
 
 export default {
   ...core,
@@ -35,5 +36,6 @@ export default {
   ...announcements,
   ...review083,
   ...owner,
+  ...engine046,
   الإعدادات: "Settings",
 };

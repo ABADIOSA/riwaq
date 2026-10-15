@@ -152,6 +152,8 @@ export const DEFAULT_SETTINGS = {
   torrentProfile: "balanced",
   torrentUpload: "normal",
   torrentCache: "viewing",
+  // Peers may reach the built-in engine through a router port (UPnP).
+  torrentIncoming: true,
   // The theme song explained itself once (issue #74).
   themeSongHinted: false,
   // The home banner offering to link Stremio, closed by the viewer (issue #82).
@@ -455,6 +457,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "hudSleep",
     "volumeOsd",
     "keepFullscreen",
+    "torrentIncoming",
   ])
     if (typeof input[k] === "boolean") next[k] = input[k];
   if (

@@ -30,8 +30,9 @@ import {
 } from "../core/torrent-engine.mjs";
 import { startEngine } from "../electron/torrent-engine.mjs";
 
-// No DHT, trackers or uTP: the swarm is two clients on this machine.
-const OFFLINE = { dht: false, tracker: false, utp: false };
+// No DHT, trackers, uTP or router ports: the swarm is two clients on this
+// machine.
+const OFFLINE = { dht: false, tracker: false, utp: false, natUpnp: false };
 
 test("closing the engine disconnects a reader waiting for unavailable pieces", async () => {
   const started = Promise.withResolvers();
@@ -174,7 +175,9 @@ test("engine options follow the settings", () => {
     downloadLimit: -1,
     uploadLimit: -1,
     cacheBytes: 0,
+    incoming: true,
   });
+  assert.equal(engineOptions({ torrentIncoming: false }).incoming, false);
   const gentle = engineOptions({
     torrentProfile: "gentle",
     torrentUpload: "minimal",
@@ -553,7 +556,7 @@ test("main's handle runs the engine in its own process and plays through it", as
       return child;
     },
     cacheDir,
-    network: { dht: false, utp: false },
+    network: { dht: false, utp: false, natUpnp: false, publicTrackers: false },
   });
   try {
     assert.equal((await host.stats()).running, false);
@@ -654,8 +657,13 @@ test("main, the web bridge and the interface route torrents through the rules", 
   const engine = read("electron/torrent-engine.mjs");
   // TCP only: uTP stalled each connection about 40 s in measurements.
   assert.match(engine, /utp: network\.utp \?\? false/);
-  for (const off of ["lsd: false", "natUpnp: false", "natPmp: false"])
-    assert.ok(engine.includes(off), off);
+  // Never announced on the LAN; a router port only with incoming peers on.
+  assert.ok(engine.includes("lsd: false"));
+  assert.match(
+    engine,
+    /const incoming = network\.natUpnp \?\? options\.incoming === true;/,
+  );
+  assert.match(engine, /natUpnp: incoming,\s*natPmp: incoming,/);
   assert.match(engine, /server\.listen\(0, "127\.0\.0\.1"/);
   const main = read("electron/main.mjs");
   assert.match(main, /chooseEngine\(\s*setting,/);
@@ -771,4 +779,307 @@ test("main watches a built-in torrent's start and moves on from a dead swarm (is
     next.slice(0, next.indexOf("\n}\n")),
     /catch \{[\s\S]*return false;/,
   );
+});
+
+test("more peers: public trackers, DHT routers and saved nodes are clean", async () => {
+  const {
+    PUBLIC_TRACKERS,
+    DHT_BOOTSTRAP,
+    FEW_PEERS,
+    REANNOUNCE_MS,
+    cleanDhtNodes,
+  } = await import("../core/torrent-engine.mjs");
+  // HTTPS trackers reach peers on networks that block UDP (Harbor's list).
+  assert.ok(PUBLIC_TRACKERS.some((t) => t.startsWith("https://")));
+  assert.ok(PUBLIC_TRACKERS.some((t) => t.startsWith("udp://")));
+  for (const tracker of PUBLIC_TRACKERS)
+    assert.match(tracker, /^(udp|https?):\/\/[a-z0-9.-]+:\d+\/announce$/);
+  assert.equal(new Set(PUBLIC_TRACKERS).size, PUBLIC_TRACKERS.length);
+  for (const router of DHT_BOOTSTRAP) assert.match(router, /^[a-z0-9.-]+:\d+$/);
+  assert.equal(FEW_PEERS, 40);
+  assert.equal(REANNOUNCE_MS, 30000);
+  assert.deepEqual(
+    cleanDhtNodes([
+      { host: "1.2.3.4", port: 6881 },
+      { host: "1.2.3.4", port: 6881 },
+      { host: "256.1.1.1", port: 1 },
+      { host: "example.com", port: 6881 },
+      { host: "::1", port: 6881 },
+      { host: "5.6.7.8", port: 0 },
+      { host: "5.6.7.8", port: 70000 },
+      { host: "5.6.7.8", port: "6882" },
+      null,
+    ]),
+    [
+      { host: "1.2.3.4", port: 6881 },
+      { host: "5.6.7.8", port: 6882 },
+    ],
+  );
+  assert.deepEqual(cleanDhtNodes("nope"), []);
+  const many = Array.from({ length: 300 }, (_, i) => ({
+    host: `10.0.${i >> 8}.${i & 255}`,
+    port: 6881,
+  }));
+  assert.equal(cleanDhtNodes(many).length, 200);
+});
+
+test("a season pack plays the file the addon names", async () => {
+  const { cleanFilename } = await import("../core/torrent-engine.mjs");
+  assert.equal(
+    cleanFilename("Show/Season 1/Show.S01E02.mkv"),
+    "Show.S01E02.mkv",
+  );
+  assert.equal(cleanFilename("C:\\Pack\\Ep 3.mkv"), "Ep 3.mkv");
+  assert.equal(cleanFilename("bad\u0000name.mkv"), "");
+  assert.equal(cleanFilename("x".repeat(256)), "");
+  assert.equal(cleanFilename(42), "");
+  const files = [
+    { name: "Show.S01E01.mkv", length: 900 },
+    { name: "Show.S01E02.mkv", length: 800 },
+    { name: "sample.mkv", length: 100 },
+  ];
+  // The index wins, then the name (any case, any folder), then the largest.
+  assert.equal(pickFile(files, 2, "Show.S01E02.mkv"), 2);
+  assert.equal(pickFile(files, undefined, "show.s01e02.MKV"), 1);
+  assert.equal(pickFile(files, undefined, "Pack/Show.S01E02.mkv"), 1);
+  assert.equal(pickFile(files, undefined, "missing.mkv"), 0);
+  assert.equal(pickFile(files, undefined), 0);
+  // A real swarm: two episodes in one torrent, no index, the second named.
+  const dir = mkdtempSync(join(tmpdir(), "riwaq-pack-"));
+  const first = randomBytes(400 * 1024);
+  const second = randomBytes(200 * 1024);
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(join(dir, "Pack"));
+  writeFileSync(join(dir, "Pack", "Ep01.mkv"), first);
+  writeFileSync(join(dir, "Pack", "Ep02.mkv"), second);
+  const seeder = new WebTorrent({ ...OFFLINE, lsd: false, natPmp: false });
+  const torrent = await new Promise((resolve) =>
+    seeder.seed(join(dir, "Pack"), { announce: [] }, resolve),
+  );
+  const cacheDir = mkdtempSync(join(tmpdir(), "riwaq-cache-"));
+  const engine = await startEngine({ cacheDir, network: OFFLINE, WebTorrent });
+  try {
+    const url = engine.url({
+      infoHash: torrent.infoHash,
+      filename: "Season/Ep02.mkv",
+    });
+    assert.match(url, /\/-1\?f=Ep02\.mkv$/);
+    engine.addPeer(torrent.infoHash, `127.0.0.1:${seeder.address().port}`);
+    assert.ok((await get(url)).body.equals(second));
+    // Without a name, the largest video plays.
+    const plain = engine.url({ infoHash: torrent.infoHash });
+    assert.doesNotMatch(plain, /\?f=/);
+    assert.ok((await get(plain)).body.equals(first));
+  } finally {
+    await engine.close();
+    await new Promise((resolve) => seeder.destroy(resolve));
+  }
+});
+
+// A WebTorrent stand-in that records what the engine asks of it.
+function recordingClient() {
+  const seen = { options: null, adds: [], updates: 0, lookups: 0 };
+  class Recording extends EventEmitter {
+    constructor(options) {
+      super();
+      seen.options = options;
+      this.dht = options.dht
+        ? {
+            toJSON: () => ({
+              nodes: [
+                { host: "9.9.9.9", port: 6881 },
+                { host: "bad", port: 1 },
+              ],
+            }),
+            lookup: () => seen.lookups++,
+          }
+        : undefined;
+    }
+    add(magnet, options) {
+      seen.adds.push({ magnet, options });
+      const torrent = new EventEmitter();
+      torrent.infoHash = magnet.match(/btih:([a-f0-9]{40})/i)[1];
+      torrent.numPeers = seen.peers ?? 0;
+      torrent.discovery = { tracker: { update: () => seen.updates++ } };
+      torrent.files = [];
+      torrent.destroy = (_options, done) => done();
+      return torrent;
+    }
+    destroy(done) {
+      done();
+    }
+  }
+  return { Recording, seen };
+}
+
+test("every torrent asks public trackers and the DHT again while peers are few", async () => {
+  const { PUBLIC_TRACKERS, DHT_BOOTSTRAP } =
+    await import("../core/torrent-engine.mjs");
+  const cacheDir = mkdtempSync(join(tmpdir(), "riwaq-cache-"));
+  // Nodes saved by the last run start the DHT warm, before the routers.
+  writeFileSync(
+    join(cacheDir, ".dht-nodes.json"),
+    JSON.stringify([
+      { host: "8.8.4.4", port: 6881 },
+      { host: "x", port: 1 },
+    ]),
+  );
+  const { Recording, seen } = recordingClient();
+  const engine = await startEngine({
+    cacheDir,
+    options: { incoming: true },
+    WebTorrent: Recording,
+    reannounceMs: 20,
+  });
+  try {
+    assert.deepEqual(seen.options.dht.bootstrap, [
+      "8.8.4.4:6881",
+      ...DHT_BOOTSTRAP,
+    ]);
+    assert.equal(seen.options.tracker, true);
+    assert.equal(seen.options.natUpnp, true);
+    assert.equal(seen.options.natPmp, true);
+    assert.equal(seen.options.lsd, false);
+    assert.equal(seen.options.utp, false);
+    const own = PUBLIC_TRACKERS[0];
+    engine.url({ infoHash: "e".repeat(40), sources: [`tracker:${own}`] });
+    const { options } = seen.adds[0];
+    assert.equal(options.deselect, true);
+    assert.equal(options.strategy, "sequential");
+    // The addon's own trackers stay in the magnet; the rest are added once.
+    assert.ok(seen.adds[0].magnet.includes(encodeURIComponent(own)));
+    assert.equal(options.announce.includes(own), false);
+    assert.equal(options.announce.length, PUBLIC_TRACKERS.length - 1);
+    await new Promise((resolve) => setTimeout(resolve, 90));
+    assert.ok(seen.updates >= 2, "trackers asked again");
+    assert.ok(seen.lookups >= 2, "the DHT asked again");
+  } finally {
+    await engine.close();
+  }
+  const updates = seen.updates;
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(seen.updates, updates, "a closed engine asks no more");
+  // The DHT's nodes are kept for the next run, cleaned.
+  const { readFileSync } = await import("node:fs");
+  assert.deepEqual(
+    JSON.parse(readFileSync(join(cacheDir, ".dht-nodes.json"), "utf8")),
+    [{ host: "9.9.9.9", port: 6881 }],
+  );
+});
+
+test("a swarm with enough peers is left alone, and offline tests ask nobody", async () => {
+  const { FEW_PEERS } = await import("../core/torrent-engine.mjs");
+  const { Recording, seen } = recordingClient();
+  seen.peers = FEW_PEERS;
+  const busy = await startEngine({
+    cacheDir: mkdtempSync(join(tmpdir(), "riwaq-cache-")),
+    WebTorrent: Recording,
+    reannounceMs: 10,
+  });
+  try {
+    busy.url({ infoHash: "f".repeat(40) });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.equal(seen.updates, 0);
+    // Incoming peers stay off unless the settings ask for them.
+    assert.equal(seen.options.natUpnp, false);
+  } finally {
+    await busy.close();
+  }
+  const quiet = recordingClient();
+  const offline = await startEngine({
+    cacheDir: mkdtempSync(join(tmpdir(), "riwaq-cache-")),
+    network: OFFLINE,
+    options: { incoming: true },
+    WebTorrent: quiet.Recording,
+  });
+  try {
+    offline.url({ infoHash: "a".repeat(40) });
+    assert.equal(quiet.seen.options.dht, false);
+    assert.equal(quiet.seen.options.natUpnp, false, "the test forces it off");
+    assert.equal("announce" in quiet.seen.adds[0].options, false);
+    // Without trackers the check sends nothing and says so.
+    assert.deepEqual(await offline.netcheck(), {
+      dhtNodes: 0,
+      udp: false,
+      https: false,
+      incoming: false,
+    });
+  } finally {
+    await offline.close();
+  }
+});
+
+test("the engine process restarts when incoming peers change, and gets the file name", async () => {
+  const children = [];
+  const calls = [];
+  const host = new TorrentHost({
+    fork: () => {
+      const child = new EventEmitter();
+      child.postMessage = ({ id, method, args }) => {
+        calls.push({ child: children.indexOf(child), method, params: args[0] });
+        setImmediate(() =>
+          child.emit("message", {
+            id,
+            result:
+              method === "start"
+                ? { origin: "http://127.0.0.1:9" }
+                : method === "netcheck"
+                  ? { dhtNodes: 12.4, udp: true, https: "yes", extra: "x" }
+                  : "http://127.0.0.1:9/t",
+          }),
+        );
+      };
+      child.kill = () => setImmediate(() => child.emit("exit"));
+      children.push(child);
+      return child;
+    },
+    cacheDir: "/unused",
+  });
+  const stream = {
+    infoHash: "d".repeat(40),
+    behaviorHints: { filename: "Pack/Show.S01E04.mkv" },
+  };
+  try {
+    await host.url(stream, { torrentIncoming: false });
+    const start = calls.find((c) => c.method === "start");
+    assert.equal(start.params.options.incoming, false);
+    const url = calls.find((c) => c.method === "url");
+    assert.equal(url.params.filename, "Show.S01E04.mkv");
+    await host.url(stream, { torrentIncoming: false });
+    assert.equal(children.length, 1, "same setting, same process");
+    await host.url(stream, {});
+    assert.equal(children.length, 2, "a changed setting starts it again");
+    assert.equal(
+      calls.filter((c) => c.method === "start")[1].params.options.incoming,
+      true,
+    );
+    // Only clean counts and flags come back from the check.
+    assert.deepEqual(await host.netcheck({}), {
+      dhtNodes: 12,
+      udp: true,
+      https: false,
+      incoming: false,
+    });
+  } finally {
+    await host.stop();
+  }
+});
+
+test("incoming peers are a kept setting, and the network check is desktop-only", async () => {
+  const { safeSettings, DEFAULT_SETTINGS } =
+    await import("../core/protocol.mjs");
+  assert.equal(DEFAULT_SETTINGS.torrentIncoming, true);
+  assert.equal(safeSettings({ torrentIncoming: false }).torrentIncoming, false);
+  assert.equal(safeSettings({ torrentIncoming: "no" }).torrentIncoming, true);
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const read = (p) =>
+    readFileSync(fileURLToPath(new URL(`../${p}`, import.meta.url)), "utf8");
+  assert.match(read("electron/preload.cjs"), /"torrentNetworkCheck"/);
+  assert.match(
+    read("electron/main.mjs"),
+    /torrentNetworkCheck: \(\) => torrents\(\)\.netcheck\(client\.state\.settings\)/,
+  );
+  assert.match(read("web/desktop-only.js"), /torrentNetworkCheck:/);
+  assert.match(read("electron/torrent-host.mjs"), /"netcheck"/);
 });

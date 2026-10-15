@@ -430,6 +430,18 @@ const cursorGate = new CursorGate((visible) => {
 });
 const HUD_EVENTS = new Set(["player", "state", "notice", "hudCommand"]);
 /**
+ * An installation for every user of the PC lives under Program Files (the
+ * installer's "all users" choice, issue #86); a per-user one under the
+ * viewer's own AppData.
+ */
+function perMachineInstall(directory) {
+  const roots = [process.env.ProgramW6432, process.env.ProgramFiles]
+    .filter((root) => typeof root === "string" && root)
+    .map((root) => root.replace(/[\\/]+$/, "").toLowerCase() + "\\");
+  const dir = String(directory || "").toLowerCase() + "\\";
+  return roots.some((root) => dir.startsWith(root));
+}
+/**
  * A page can be gone before its window: while the main window closes, its
  * contents are destroyed first and the HUD it owns closes in between, and
  * that close reports the viewing's state (issue #82: "Object has been
@@ -1688,6 +1700,8 @@ const methods = {
     available: true,
     ...(await (torrentHost ? torrentHost.stats() : { running: false })),
   }),
+  // What the network lets the built-in engine reach (counts and flags only).
+  torrentNetworkCheck: () => torrents().netcheck(client.state.settings),
   torrentEngineClear: async () => {
     if (torrentHost?.running) await torrentHost.clear();
     else
@@ -2557,6 +2571,7 @@ app
           !process.env.PORTABLE_EXECUTABLE_FILE &&
           existsSync(join(dirname(process.execPath), "Uninstall Riwaq.exe")),
         installDirectory: dirname(process.execPath),
+        perMachine: perMachineInstall(dirname(process.execPath)),
         onChange: broadcast,
       });
       await client.updates.restore();

@@ -27,6 +27,7 @@ export const DESKTOP_ONLY = {
   nuvioScan: `قراءة بيانات نوفيو من جهازك ${DESKTOP}. استخدم ملف النسخة الاحتياطية من نوفيو بدلاً منها.`,
   presenceSave: `حالة Discord تتصل بتطبيق Discord على جهازك و${DESKTOP}.`,
   torrentEngineClear: `المحرك المدمج للتورنت يعمل داخل ${DESKTOP}؛ الموقع يستخدم Stremio Service.`,
+  torrentNetworkCheck: `المحرك المدمج للتورنت يعمل داخل ${DESKTOP}؛ الموقع يستخدم Stremio Service.`,
   ownerState: OWNER,
   ownerOpen: OWNER,
   ownerActivate: OWNER,

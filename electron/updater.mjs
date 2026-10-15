@@ -51,6 +51,7 @@ export class DesktopUpdates extends Updates {
       directory,
       publicKey,
       installed = false,
+      perMachine = false,
       onChange = () => {},
       fetcher = fetch,
       launch = launchInstaller,
@@ -63,6 +64,7 @@ export class DesktopUpdates extends Updates {
       directory,
       publicKey,
       installed,
+      perMachine,
       onChange,
       fetcher,
       launch,
@@ -88,6 +90,9 @@ export class DesktopUpdates extends Updates {
       ...super.publicState(current),
       ...this.runtime,
       installed: this.installed,
+      // Installed for every user of the PC (issue #86): NSIS asks Windows for
+      // the administrator's approval when it installs each update.
+      perMachine: this.installed && this.perMachine === true,
       autoDownload: this.store.autoDownload !== false,
       installOnExit: this.store.installOnExit !== false,
       channel: this.store.channel === "stable" ? "stable" : "beta",

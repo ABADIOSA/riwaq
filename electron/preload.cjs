@@ -45,6 +45,7 @@ const allowed = new Set([
   "streamServerSave",
   "torrentEngineStats",
   "torrentEngineClear",
+  "torrentNetworkCheck",
   "openServiceDownload",
   "aiSave",
   "badgePackFetch",

@@ -483,6 +483,9 @@ const size = (bytes) =>
 function TorrentEngineCard({ state, update, notice }) {
   const s = state.settings;
   const [stats, setStats] = useState(null);
+  // What the network lets the engine reach, after the viewer asks.
+  const [net, setNet] = useState(null);
+  const incoming = s.torrentIncoming !== false;
   useEffect(() => {
     let live = true;
     const load = () =>
@@ -541,9 +544,29 @@ function TorrentEngineCard({ state, update, notice }) {
         <>
           <p className="subtle">
             مثل أي برنامج تورنت، المحرك المدمج يشارك الأجزاء اللي نزلت مع غيرك
-            أثناء المشاهدة، فعنوان IP حقك يظهر للمشاركين. ما يفتح منافذ في
-            الراوتر، ويوقف المشاركة بعد نهاية المشاهدة بدقائق.
+            أثناء المشاهدة، فعنوان IP حقك يظهر للمشاركين، ويوقف المشاركة بعد
+            نهاية المشاهدة بدقائق. ويسأل متتبعات عامة إضافية وشبكة DHT عن
+            مشاركين، ويعيد السؤال كل 30 ثانية لما يكونون قليلين.
           </p>
+          <div className="setting-row">
+            <div>
+              <b>اسمح للمشاركين يتصلون فيك</b>
+              <p>
+                يطلب من الراوتر (UPnP وNAT-PMP) يفتح منفذ المحرك، فيوصلك مشاركين
+                أكثر، خصوصاً في التورنتات القليلة. خادم المشاهدة نفسه يبقى على
+                جهازك بس. قد يسألك جدار حماية ويندوز أول مرة. التغيير يسري من
+                المشاهدة الجاية.
+              </p>
+            </div>
+            <button
+              className={`toggle ${incoming ? "on" : ""}`}
+              aria-label="اسمح للمشاركين يتصلون فيك"
+              aria-pressed={incoming}
+              onClick={() => update("settings", { torrentIncoming: !incoming })}
+            >
+              <span />
+            </button>
+          </div>
           <h3>أسلوب التنزيل</h3>
           <div className="choice-row" role="radiogroup">
             {PROFILES.map(([id, title]) =>
@@ -588,6 +611,22 @@ function TorrentEngineCard({ state, update, notice }) {
             )}
             <button
               className="secondary small"
+              disabled={net === "checking"}
+              onClick={async () => {
+                setNet("checking");
+                setNet(
+                  await call("torrentNetworkCheck").catch((e) => {
+                    notice?.(e.message);
+                    return null;
+                  }),
+                );
+              }}
+            >
+              <RefreshCw size={15} />{" "}
+              {net === "checking" ? "جاري فحص الشبكة…" : "افحص الشبكة"}
+            </button>
+            <button
+              className="secondary small"
               onClick={async () => {
                 await call("torrentEngineClear")
                   .then(() => notice?.("مُسحت أجزاء التورنت المحفوظة"))
@@ -597,6 +636,38 @@ function TorrentEngineCard({ state, update, notice }) {
               <Trash2 size={15} /> امسح أجزاء التورنت
             </button>
           </div>
+          {net && net !== "checking" && (
+            <ul className="net-check">
+              <li className={net.dhtNodes > 0 ? "ok" : "bad"}>
+                {net.dhtNodes > 0
+                  ? `شبكة DHT: ${net.dhtNodes} عقدة`
+                  : "شبكة DHT ما ردّت؛ غالباً شبكتك تحجب UDP"}
+              </li>
+              <li className={net.udp ? "ok" : "bad"}>
+                {net.udp
+                  ? "المتتبعات عبر UDP توصل"
+                  : "المتتبعات عبر UDP ما توصل"}
+              </li>
+              <li className={net.https ? "ok" : "bad"}>
+                {net.https
+                  ? "المتتبعات عبر HTTPS توصل"
+                  : "المتتبعات عبر HTTPS ما توصل؛ تحقق من الإنترنت أو الجدار الناري"}
+              </li>
+              <li className={net.incoming ? "ok" : ""}>
+                {net.incoming
+                  ? "طلبنا من الراوتر يفتح منفذ للمشاركين"
+                  : "استقبال المشاركين مطفأ"}
+                {net.incoming !== incoming && (
+                  <>
+                    {" · "}
+                    <span className="subtle">
+                      التغيير يسري من المشاهدة الجاية
+                    </span>
+                  </>
+                )}
+              </li>
+            </ul>
+          )}
         </>
       )}
     </section>

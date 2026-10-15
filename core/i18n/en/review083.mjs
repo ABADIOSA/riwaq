@@ -1,4 +1,6 @@
 export default {
+  "رِواق مثبّت لكل مستخدمي هذا الجهاز، فويندوز يطلب موافقة المسؤول عند تثبيت كل تحديث.":
+    "Riwaq is installed for every user of this PC, so Windows asks for an administrator's approval when each update installs.",
   "قائمة المشغّل": "Player menu",
   "انتهت هذه المشاهدة": "This viewing has ended",
   "هذا المصدر ليس تورنت": "This source is not a torrent",
