@@ -228,6 +228,58 @@ export function validBinding(value) {
   return NAMED_KEY.test(key) || /^[\x21-\x7e]$/.test(key);
 }
 
+// The HUD may forward a single keyboard key to MPV's existing input map,
+// never a mouse binding, command, or a sequence of keys.
+export const keyboardBinding = (value) =>
+  validBinding(value) && !/(?:MBTN_|WHEEL_)/.test(value);
+
+/** A DOM keyboard event as an MPV binding; native controls keep their keys. */
+export function hudKey(event, bindings) {
+  if (event.defaultPrevented || event.isComposing) return null;
+  const tag = event.target?.tagName;
+  if (
+    /^(INPUT|TEXTAREA|SELECT)$/.test(tag || "") ||
+    event.target?.isContentEditable ||
+    event.target?.closest?.('[role="slider"], [role="tablist"]') ||
+    (event.target?.closest?.("button") && [" ", "Enter"].includes(event.key))
+  )
+    return null;
+  const named = {
+    " ": "SPACE",
+    Escape: "ESC",
+    Enter: "ENTER",
+    Backspace: "BS",
+    Delete: "DEL",
+    Insert: "INS",
+    Home: "HOME",
+    End: "END",
+    PageUp: "PGUP",
+    PageDown: "PGDWN",
+    ArrowUp: "UP",
+    ArrowDown: "DOWN",
+    ArrowLeft: "LEFT",
+    ArrowRight: "RIGHT",
+  };
+  // Tab belongs to focus navigation in this interactive window. The skip
+  // button still works, and a viewer can bind skip to another key.
+  if (event.key === "Tab") return null;
+  let key = named[event.key] || event.key;
+  if (typeof key !== "string") return null;
+  const letter = /^[A-Z]$/i.test(key);
+  if (letter) key = key.toLowerCase();
+  const modifiers = [
+    event.ctrlKey && "Ctrl",
+    event.altKey && "Alt",
+    event.shiftKey && (letter || key.length > 1) && "Shift",
+    event.metaKey && "Meta",
+  ].filter(Boolean);
+  const binding = [...modifiers, key].join("+");
+  return keyboardBinding(binding) &&
+    bindings?.some((b) => b.binding === binding)
+    ? binding
+    : null;
+}
+
 /** Bindings a viewer has changed, merged over the defaults and validated. */
 export function resolveBindings(custom = {}) {
   const bindings = {};

@@ -1,5 +1,13 @@
 # Verification — Riwaq
 
+## 2026-10-15 — player input after published 0.46.0
+
+- Reviewed published v0.46.0, main `dc0b7e3`. The owner reports tooltips working while every control click is ignored. This exact persistent failure was not reproduced on the clean local profile; the earlier CDP-only checks did not test Windows activation.
+- Made the HUD focusable, transfer focus only from our main/owned MPV window, forward the viewer's keyboard map through a keyboard-only IPC method, and keep F8 recovery in main ahead of a frozen renderer. Diagnostics now include HUD focusability/focus. Losing focus also releases hold-to-speed-up.
+- Windows x64 Electron/MPV integration passes real SendInput clicks on subtitle/audio tabs, timeline, volume, Pause and Stop; actual keyboard volume arrows, Space, C and Escape; paused reload; embedded fullscreen and MPV's separate HDR window path. Native F8 while the HUD renderer is deliberately suspended resumes inside Riwaq at the saved position and keeps the HDR preference. The fixture contains SDR pixels: this does not certify HDR output or the owner's GPU.
+- **842 Node tests pass** (839 baseline + 3 keyboard regressions). Native evidence: `.cache/hud-native-final.log`; the script records DOM down/up/click delivery for Windows input. The test raises only its own HUD above the remote host browser, verifies the HWND before each press and restores the cursor. No user profile or public stream is used.
+- Source fix for review, not a new published installer. See [implementation, regression details and limits](docs/PLAYER-INPUT-2026-10-15.md).
+
 ## 2026-10-15 — PR #87 Windows and user-report audit
 
 - **838 Node tests pass** (831 baseline + 7 regressions). Fixed late TorrServer launches after Stop, cancellable metadata/API waits and lease cleanup, stale fallback ownership after Stop/new picks, and ambiguous episode filenames. Both engines preserve path hints and refuse ambiguous or missing explicit names. See [the full report and user-issue matrix](docs/REVIEW-PR-87.md).

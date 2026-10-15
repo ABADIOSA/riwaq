@@ -1267,6 +1267,8 @@ export async function startBridge({ version, store }) {
     // The web edition has no separate HUD window: the theater draws the
     // controls, so these keep the same answers with nothing to forward to.
     hudPanel: () => true,
+    // Desktop HUD keyboard forwarding; the web theater owns browser keys.
+    playerKey: () => false,
     hudIdle: () => true,
     hudSnapshot: () => ({ state: client.publicState(), player: player.state }),
     hudRequest: (a) => {

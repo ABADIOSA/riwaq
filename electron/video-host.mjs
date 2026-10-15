@@ -63,6 +63,7 @@ const threadOf = user32.func(
 );
 const isWindow = user32.func("bool __stdcall IsWindow(void *h)");
 const isIconic = user32.func("bool __stdcall IsIconic(void *h)");
+const foreground = user32.func("void * __stdcall GetForegroundWindow()");
 const ownedBy = (h, pid) => {
   const out = [0];
   threadOf(h, out);
@@ -102,6 +103,7 @@ export function processWindow(pid) {
     height: size.bottom || 0,
     visible: !!isVisible(mpvWindow),
     minimized: !!isIconic(mpvWindow),
+    focused: foreground() === mpvWindow,
   };
 }
 

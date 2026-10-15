@@ -2,8 +2,8 @@
  * Hiding the pointer over the picture.
  *
  * Neither MPV's cursor-autohide inside the embedded surface nor CSS
- * `cursor: none` in the HUD hides the pointer reliably on Windows: the HUD
- * never takes focus, and Windows applies a new cursor only on the next mouse
+ * `cursor: none` in the HUD hides the pointer reliably on Windows: Windows
+ * applies a new cursor only on the next mouse
  * message, which is the movement that should wake it anyway. Main therefore
  * hides it with Win32 ShowCursor on the thread that owns both windows, the
  * way native players do, and decides when from the pointer position.
@@ -26,7 +26,7 @@ const inside = (point, rect) =>
  * - `stillFor`: how long the pointer has not moved.
  * - `hud`: whether the HUD draws the controls; then `hudIdle` (the HUD's own
  *   controls are asleep: not paused, no panel, pointer not over a control)
- *   decides, and focus does not matter because the HUD never takes it.
+ *   decides, whether focus is in the HUD or in the video window.
  * - otherwise the main window must be focused and the viewing not paused.
  */
 export function cursorHidden({
