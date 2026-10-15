@@ -136,3 +136,50 @@ test("a new user source preparation supersedes the old torrent fallback even whi
   assert.equal(f.context.playbackRequest.current, latest);
   assert.ok(f.viewing.request.signal.aborted);
 });
+
+test("a name that matches nothing still plays a torrent's only video, never a pack's guess", async () => {
+  const { pickFile, soleVideo } = await import("../core/torrent-engine.mjs");
+  const { torrServerFile } = await import("../core/torrserver.mjs");
+  // Some addons send the release name without its extension: 0.45 played
+  // the film, and refusing it would stop a source that works.
+  const film = [
+    { name: "Film.2020.1080p.BluRay-GRP.mkv", length: 8e9 },
+    { name: "Film.2020.1080p.BluRay-GRP.nfo", length: 4e3 },
+    { name: "Film.2020.1080p.BluRay-GRP.srt", length: 9e4 },
+  ];
+  assert.equal(soleVideo(film), 0);
+  assert.equal(pickFile(film, undefined, "Film.2020.1080p.BluRay-GRP"), 0);
+  assert.equal(pickFile(film, undefined, "Another name.mkv"), 0);
+  // Several videos: still refused, never the largest or the first.
+  const pack = [
+    { name: "Show.E01.mkv", length: 900 },
+    { name: "Show.E02.mkv", length: 800 },
+  ];
+  assert.equal(soleVideo(pack), -1);
+  assert.equal(pickFile(pack, undefined, "Show"), -1);
+  assert.equal(pickFile(pack, undefined, "Show.E02.mkv"), 1);
+  // TorrServer's ids follow the same rule.
+  const stats = (paths) => ({
+    file_stats: paths.map(([path, length], i) => ({ id: i + 1, path, length })),
+  });
+  assert.equal(
+    torrServerFile(
+      stats([
+        ["Film/Film.2020.1080p.BluRay-GRP.mkv", 8e9],
+        ["Film/Film.2020.1080p.BluRay-GRP.nfo", 4e3],
+      ]),
+      { filename: "Film.2020.1080p.BluRay-GRP" },
+    ),
+    1,
+  );
+  assert.equal(
+    torrServerFile(
+      stats([
+        ["Show/Show.E01.mkv", 900],
+        ["Show/Show.E02.mkv", 800],
+      ]),
+      { filename: "Show" },
+    ),
+    0,
+  );
+});

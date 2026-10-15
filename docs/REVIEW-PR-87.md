@@ -31,3 +31,7 @@ Read all current user issues, including all eight #82 comments and both #74 comm
 - Chromium web smoke passes with local addon/account fixtures. No external user was contacted, no public notification was sent, and no merge to main, release publication, system-wide install or signing-key change was made.
 
 Remaining user confirmation: test the final published build on the owner's previously freezing setup, and confirm #86's install/UAC flow on a machine where a machine-wide install is intended. Do not describe all public torrents or all user hardware as verified.
+
+## Review of this follow-up (Claude, same day)
+
+The changes above were read in full and rerun here (838 tests, formatting, both builds, the Chromium web smoke and `scripts/test-torrserver.mjs` with the Linux MatriX.145.1 build, Codex's duplicate-name cases included). One regression was fixed: refusing a filename hint that matches nothing also refused single-video torrents, so a film whose addon sends the release name without its extension stopped playing (0.45 played it). Both engines now play the torrent's only video in that case (`soleVideo`, `tests/pr87-review.test.mjs`); an ambiguous name, or a name that matches nothing among several videos, is still refused. 839 tests pass.

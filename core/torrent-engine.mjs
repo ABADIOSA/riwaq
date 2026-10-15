@@ -216,10 +216,24 @@ export function namedFile(files, filename) {
 }
 
 /**
+ * The torrent's only video file, or -1. A name that matches nothing cannot
+ * choose between a pack's episodes, but a film with an .nfo or a subtitle
+ * beside it has nothing to choose: 0.45 played it whatever the addon called
+ * it (some addons send the release name without its extension).
+ */
+export function soleVideo(files = []) {
+  const videos = files.flatMap((file, i) =>
+    VIDEO.test(file?.name || file?.path || "") ? [i] : [],
+  );
+  return videos.length === 1 ? videos[0] : -1;
+}
+
+/**
  * The file to play: the addon's file index when it is one of the torrent's
- * files; otherwise the file the addon names (behaviorHints.filename, so a
- * season pack plays the right episode); otherwise the largest video,
- * otherwise the largest file.
+ * files; otherwise the one file the addon names (behaviorHints.filename, a
+ * path or a name, so a season pack plays the right episode), or the only
+ * video when that name matches nothing, never a guess between episodes;
+ * without a name, the largest video, otherwise the largest file.
  */
 export function pickFile(files = [], fileIdx, filename = "") {
   if (
@@ -231,7 +245,8 @@ export function pickFile(files = [], fileIdx, filename = "") {
     return fileIdx;
   const wanted = cleanTorrentPath(filename);
   if (wanted) {
-    return namedFile(files, wanted);
+    const named = namedFile(files, wanted);
+    return named >= 0 ? named : soleVideo(files);
   }
   let best = -1;
   for (const pass of [true, false]) {

@@ -16,6 +16,7 @@ import {
   engineOptions,
   pickFile,
   namedFile,
+  soleVideo,
 } from "./torrent-engine.mjs";
 
 /** The one TorrServer release Riwaq downloads (checked against its tag). */
@@ -156,7 +157,10 @@ export function torrServerFile(stats, { fileIdx, filename, files } = {}) {
   const wanted = base(filename);
   if (wanted) {
     const named = namedFile(list, filename);
-    return named >= 0 ? list[named].id : 0;
+    // As the built-in engine: a name that matches nothing plays the only
+    // video, and never picks between a pack's episodes.
+    const at = named >= 0 ? named : soleVideo(list);
+    return at >= 0 ? list[at].id : 0;
   }
   if (index !== undefined) return 0;
   const at = pickFile(
