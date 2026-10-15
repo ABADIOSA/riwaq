@@ -10,21 +10,43 @@
  *   GET and HEAD only.
  * - Only the pieces being watched are fetched (the torrent starts with
  *   nothing selected and each reader selects its range).
- * - UPnP, NAT-PMP and local peer discovery stay off: Riwaq never opens
- *   router ports or announces itself on the network.
+ * - With "incoming peers" on (the default since 0.46, as in Harbor), the
+ *   router opens the engine's peer port through UPnP or NAT-PMP, so peers
+ *   behind their own routers can reach it; the HTTP server stays on
+ *   127.0.0.1. Local peer discovery stays off: Riwaq never announces itself
+ *   on the LAN.
+ * - Every torrent also announces to public trackers (HTTPS ones too, for
+ *   networks that block UDP), joins the DHT through six routers and the
+ *   nodes saved from the last run, and asks again every 30 s while it has
+ *   few peers (core/torrent-engine.mjs).
  * - Peers connect over TCP; uTP is off (see below).
  * - A released title is kept a few minutes (a replay or a failover back
  *   finds it), then destroyed; its pieces stay only within the cache size.
  */
 import { createServer } from "node:http";
+import { createSocket } from "node:dgram";
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import {
+  DHT_BOOTSTRAP,
+  FEW_PEERS,
+  PUBLIC_TRACKERS,
+  REANNOUNCE_MS,
   cachePrune,
+  cleanDhtNodes,
+  cleanTorrentPath,
   magnetOf,
   parseRange,
   pickFile,
+  trackersOf,
   validHash,
 } from "../core/torrent-engine.mjs";
 
@@ -58,6 +80,45 @@ async function folderBytes(path) {
   return total;
 }
 
+/** A UDP tracker answers BEP 15's connect request: UDP leaves this network. */
+function udpReachable(host, port, ms = 5000) {
+  return new Promise((resolve) => {
+    const socket = createSocket("udp4");
+    const done = (ok) => {
+      clearTimeout(timer);
+      try {
+        socket.close();
+      } catch {}
+      resolve(ok);
+    };
+    const timer = setTimeout(() => done(false), ms);
+    const request = Buffer.alloc(16);
+    request.writeBigUInt64BE(0x41727101980n, 0);
+    request.writeUInt32BE(0, 8);
+    const id = randomBytes(4);
+    id.copy(request, 12);
+    socket.on("message", (reply) =>
+      done(reply.length >= 16 && reply.subarray(4, 8).equals(id)),
+    );
+    socket.on("error", () => done(false));
+    socket.send(request, port, host, (error) => error && done(false));
+  });
+}
+
+/** Any HTTPS tracker answers at all (a status of any kind counts). */
+async function httpsReachable(urls, ms = 6000) {
+  for (const url of urls) {
+    try {
+      await fetch(url, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(ms),
+      });
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
 function timeout(promise, ms) {
   let timer;
   return Promise.race([
@@ -79,24 +140,54 @@ export async function startEngine({
   WebTorrent,
   graceMs = GRACE_MS,
   readyMs = READY_MS,
+  reannounceMs = REANNOUNCE_MS,
   log = () => {},
 } = {}) {
   if (!cacheDir) throw new Error("مجلد ذاكرة التورنت غير محدد");
   WebTorrent ||= (await import("webtorrent")).default;
   await mkdir(cacheDir, { recursive: true });
+  // The DHT starts warm from the nodes it knew when the engine last closed.
+  const nodesFile = join(cacheDir, ".dht-nodes.json");
+  const saved = cleanDhtNodes(
+    await readFile(nodesFile, "utf8")
+      .then((text) => (text.length <= 65536 ? JSON.parse(text) : []))
+      .catch(() => []),
+  );
+  const useDht = network.dht ?? true;
+  const useTrackers = network.tracker ?? true;
+  // Tests keep a local tracker without asking the public ones.
+  const extraTrackers = useTrackers && (network.publicTrackers ?? true);
+  // Incoming peers through a port the router opens; tests pass no options.
+  const incoming = network.natUpnp ?? options.incoming === true;
   const client = new WebTorrent({
     maxConns: options.maxConns || 55,
     downloadLimit: options.downloadLimit ?? -1,
     uploadLimit: options.uploadLimit ?? -1,
-    dht: network.dht ?? true,
-    tracker: network.tracker ?? true,
+    dht: useDht
+      ? {
+          bootstrap: [
+            ...saved.slice(0, 100).map(({ host, port }) => `${host}:${port}`),
+            ...DHT_BOOTSTRAP,
+          ],
+        }
+      : false,
+    tracker: useTrackers,
     // uTP (utp-native) stalled every connection about 40 s before TCP took
-    // over in Riwaq's measurements; TCP alone streams at full speed.
+    // over in Riwaq's measurements; TCP alone streams at full speed. Nuvio
+    // HTPC measured the same and keeps outgoing connections on TCP too.
     utp: network.utp ?? false,
     lsd: false,
-    natUpnp: false,
-    natPmp: false,
+    natUpnp: incoming,
+    natPmp: incoming,
   });
+  async function saveNodes() {
+    const nodes = cleanDhtNodes(client.dht?.toJSON?.().nodes);
+    if (nodes.length)
+      await writeFile(nodesFile, JSON.stringify(nodes)).catch(() => {});
+  }
+  // A crash keeps the nodes of the last ten minutes too.
+  const nodesTimer = setInterval(() => void saveNodes(), 10 * 60 * 1000);
+  nodesTimer.unref?.();
   client.on("error", (error) => log(error));
   let cap = Math.max(0, Number(options.cacheBytes) || 0);
   const token = randomBytes(16).toString("hex");
@@ -137,10 +228,14 @@ export async function startEngine({
       entry.used = Date.now();
       return entry;
     }
+    const own = trackersOf(stream);
     const torrent = client.add(magnetOf(stream), {
       path: join(cacheDir, hash),
       deselect: true,
       strategy: "sequential",
+      ...(extraTrackers
+        ? { announce: PUBLIC_TRACKERS.filter((t) => !own.includes(t)) }
+        : {}),
     });
     const ready = new Promise((resolve, reject) => {
       torrent.once("ready", resolve);
@@ -148,7 +243,19 @@ export async function startEngine({
     });
     ready.catch(() => {});
     torrent.on("error", (error) => log(error));
-    entry = { hash, torrent, ready, used: Date.now(), timer: null };
+    // A sparse swarm is asked again every 30 s until it has enough peers.
+    const boost = setInterval(() => {
+      if (torrent.destroyed || torrent.done) return;
+      if ((torrent.numPeers || 0) >= FEW_PEERS) return;
+      try {
+        torrent.discovery?.tracker?.update?.();
+      } catch {}
+      try {
+        if (client.dht && torrent.infoHash) client.dht.lookup(torrent.infoHash);
+      } catch {}
+    }, reannounceMs);
+    boost.unref?.();
+    entry = { hash, torrent, ready, used: Date.now(), timer: null, boost };
     entries.set(hash, entry);
     return entry;
   }
@@ -158,6 +265,7 @@ export async function startEngine({
     if (!entry) return;
     entries.delete(hash);
     clearTimeout(entry.timer);
+    clearInterval(entry.boost);
     // A destroy that never calls back must not keep its pieces on disk.
     await timeout(
       new Promise((resolve) =>
@@ -179,11 +287,11 @@ export async function startEngine({
     // its own host name at 127.0.0.1 is refused.
     if (req.headers.host !== `127.0.0.1:${port}`) return refuse(res, 403);
     if (req.method !== "GET" && req.method !== "HEAD") return refuse(res, 405);
-    let parts;
+    let parts, named;
     try {
-      parts = new URL(req.url, "http://127.0.0.1").pathname
-        .split("/")
-        .filter(Boolean);
+      const address = new URL(req.url, "http://127.0.0.1");
+      parts = address.pathname.split("/").filter(Boolean);
+      named = cleanTorrentPath(address.searchParams.get("f") || "");
     } catch {
       return refuse(res, 400);
     }
@@ -199,6 +307,7 @@ export async function startEngine({
     const at = pickFile(
       entry.torrent.files,
       Number.isInteger(index) && index >= 0 ? index : undefined,
+      named,
     );
     const file = entry.torrent.files[at];
     if (!file) return refuse(res, 404);
@@ -262,7 +371,9 @@ export async function startEngine({
         Number.isInteger(stream.fileIdx) && stream.fileIdx >= 0
           ? stream.fileIdx
           : -1;
-      return `${origin}/${token}/${entry.hash}/${index}`;
+      // Without an index, the addon's file name picks the file (a pack).
+      const named = index < 0 ? cleanTorrentPath(stream.filename) : "";
+      return `${origin}/${token}/${entry.hash}/${index}${named ? `?f=${encodeURIComponent(named)}` : ""}`;
     },
     /** The viewing ended: kept a few minutes, then destroyed. */
     release(hash) {
@@ -283,6 +394,18 @@ export async function startEngine({
         bytes: torrent.downloaded || 0,
       };
     },
+    /**
+     * A torrent's files in its own order (paths and sizes), once its
+     * metadata came: TorrServer's fallback finds the addon's file by it.
+     */
+    files(hash) {
+      const torrent = entries.get(String(hash || "").toLowerCase())?.torrent;
+      if (!torrent?.ready || !Array.isArray(torrent.files)) return null;
+      return torrent.files.map((file) => ({
+        path: String(file.path || file.name || ""),
+        length: Number(file.length) || 0,
+      }));
+    },
     /** For tests: a known peer, when there is no DHT or tracker. */
     addPeer(hash, address) {
       const torrent = entries.get(String(hash || "").toLowerCase())?.torrent;
@@ -302,6 +425,26 @@ export async function startEngine({
         return prune().then(() => true);
       }
       return true;
+    },
+    /**
+     * What the network lets through, for the P2P page: DHT nodes, UDP to a
+     * tracker, HTTPS to a tracker, and whether incoming peers are on.
+     */
+    async netcheck() {
+      const [udp, https] = await Promise.all([
+        extraTrackers ? udpReachable("tracker.opentrackr.org", 1337) : false,
+        extraTrackers
+          ? httpsReachable(
+              PUBLIC_TRACKERS.filter((t) => t.startsWith("https:")).slice(0, 3),
+            )
+          : false,
+      ]);
+      return {
+        dhtNodes: client.dht ? client.dht.toJSON().nodes.length : 0,
+        udp,
+        https,
+        incoming,
+      };
     },
     async stats() {
       let peers = 0;
@@ -329,7 +472,12 @@ export async function startEngine({
     async close() {
       if (closed) return true;
       closed = true;
-      for (const entry of entries.values()) clearTimeout(entry.timer);
+      clearInterval(nodesTimer);
+      for (const entry of entries.values()) {
+        clearTimeout(entry.timer);
+        clearInterval(entry.boost);
+      }
+      await saveNodes();
       const closing = new Promise((resolve) => server.close(() => resolve()));
       server.closeAllConnections?.();
       await closing;

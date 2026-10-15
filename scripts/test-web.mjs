@@ -490,6 +490,9 @@ try {
   await phone.tab.getByLabel("كلمة المرور", { exact: true }).fill(password);
   await phone.tab.getByRole("button", { name: "ادخل" }).click();
   await phone.tab.getByText("حسابك:").waitFor({ timeout: 60000 });
+  // "حسابك:" shows as soon as the session begins, while the sign-in sync
+  // still pulls; the library is here once that sync has finished.
+  await phone.tab.getByText("آخر مزامنة:").waitFor({ timeout: 60000 });
   await phone.tab.screenshot({ path: join(output, "account-signed-in.png") });
   const arrived = await phone.call("init");
   assert.ok(arrived.favorites.some((f) => f.name === "الساعة الزرقاء"));

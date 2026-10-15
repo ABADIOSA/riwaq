@@ -3,9 +3,10 @@
  * The engine runs in its own process, started the first time a torrent is
  * played with it and stopped when Riwaq quits; a crashed process is started
  * again on the next play. Only what MPV needs (the stream's info hash, file
- * index and trackers) crosses into it, and only counts come back.
+ * index, file name and trackers) crosses into it, and only counts come back.
  */
 import {
+  cleanTorrentPath,
   engineOptions,
   publicStats,
   startStatus,
@@ -101,9 +102,13 @@ export class TorrentHost {
         this.settle(new Error("توقف محرك التورنت المدمج"));
       });
       try {
+        const options = engineOptions(settings);
+        // The router's port is opened when the engine starts; a change of
+        // the setting starts it again on the next play (url below).
+        this.incoming = options.incoming;
         const { origin } = await this.call("start", {
           cacheDir: this.cacheDir,
-          options: engineOptions(settings),
+          options,
           ...(this.network ? { network: this.network } : {}),
         });
         if (this.child !== child || this.epoch !== epoch)
@@ -132,12 +137,44 @@ export class TorrentHost {
   /** The address MPV plays for a torrent stream. */
   async url(stream, settings) {
     if (!validHash(stream?.infoHash)) throw new Error("معرّف التورنت غير صالح");
+    if (this.running && this.incoming !== engineOptions(settings).incoming)
+      await this.stop();
     await this.start(settings);
     return this.call("url", {
       infoHash: stream.infoHash,
       fileIdx: stream.fileIdx,
+      filename: cleanTorrentPath(stream.behaviorHints?.filename),
       sources: Array.isArray(stream.sources) ? stream.sources : [],
     });
+  }
+
+  /**
+   * What the network lets through (DHT nodes, UDP, HTTPS, incoming peers),
+   * for the P2P page. It starts the engine when it is not running.
+   */
+  async netcheck(settings) {
+    await this.start(settings);
+    const found = await this.call("netcheck").catch(() => null);
+    return {
+      dhtNodes: Math.max(0, Math.round(Number(found?.dhtNodes) || 0)),
+      udp: found?.udp === true,
+      https: found?.https === true,
+      incoming: found?.incoming === true,
+    };
+  }
+
+  /**
+   * A torrent's files in its own order, once known (paths and sizes only,
+   * at most 5000), for TorrServer's fallback; null otherwise.
+   */
+  async files(hash) {
+    if (!this.running || !validHash(hash)) return null;
+    const list = await this.call("files", hash).catch(() => null);
+    if (!Array.isArray(list)) return null;
+    return list.slice(0, 5000).map((file) => ({
+      path: typeof file?.path === "string" ? file.path.slice(0, 1024) : "",
+      length: Number.isFinite(file?.length) ? file.length : 0,
+    }));
   }
 
   release(hash) {

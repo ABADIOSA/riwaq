@@ -331,7 +331,7 @@ test("main applies late subtitle replies only to the viewing that asked", () => 
   // Each viewing is a new object, so identity tells them apart.
   assert.match(
     main,
-    /nowPlaying = \{ key, type: meta\.type, id: videoId, series \}/,
+    /nowPlaying = \{ key, type: meta\.type, id: videoId, series, request \}/,
   );
 });
 

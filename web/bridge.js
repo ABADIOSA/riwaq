@@ -203,6 +203,8 @@ export async function startBridge({ version, store }) {
     ranked.set(`${type}:${id}`, keys);
   };
   let failover = { id: null, tried: new Set() };
+  // When a viewing's saved position last went to the page (onProgress).
+  let progressShown = 0;
   const player = new WebPlayer({
     settingsNow: () => client.state.settings,
     skipPrefs: () => skipPreferences(client.state.settings, nowPlaying?.series),
@@ -225,17 +227,27 @@ export async function startBridge({ version, store }) {
         !client.state.settings.keepFullscreen
       )
         document.exitFullscreen?.().catch(() => {});
+      // Positions saved during the viewing reach the store and the page now.
+      const ended = !s.active && watching.active;
       watching = { active: !!s.active, error: !!s.error };
       client.account.playbackChanged(!!s.active);
       mediaSession(s);
       if (failed) tryNextSource();
       emit("player", s);
       client.integrations.observePlayback(s);
+      if (ended) {
+        client.flushProgress();
+        broadcast();
+      }
     },
     onProgress: (...args) => {
       client.recordProgress(...args);
       client.integrations.queueHistory(...args);
-      broadcast();
+      // As in main: the whole state at most every 30 s while a title plays.
+      if (!player.state.active || Date.now() - progressShown >= 30000) {
+        progressShown = Date.now();
+        broadcast();
+      }
     },
     onEnded: (data) => {
       emit("ended", data);

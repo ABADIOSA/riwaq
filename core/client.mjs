@@ -140,6 +140,9 @@ function boundedSet(map, key, value, limit) {
   while (map.size > limit) map.delete(map.keys().next().value);
 }
 /** What makes two offers the same source, across addons. */
+// A position alone reaches the encrypted file at most this often (see
+// persistProgress); anything else is written at once.
+export const PROGRESS_SAVE_MS = 20000;
 const streamIdentity = (stream) =>
   JSON.stringify([
     stream.url,
@@ -289,9 +292,33 @@ export class Client {
     this.profiles.ensure();
   }
   persist() {
+    clearTimeout(this.progressTimer);
+    this.progressTimer = null;
+    this.progressSaved = Date.now();
     this.profiles.capture();
     this.saveData(this.state);
     this.account?.touch();
+  }
+  /**
+   * A viewing records its position every 5 s. Writing the whole encrypted
+   * state each time (megabytes for a large library) stalls main, and with
+   * it the player controls, so a position alone is written at most every
+   * PROGRESS_SAVE_MS; any other change, the end of a viewing and quitting
+   * write it at once (persist).
+   */
+  persistProgress() {
+    const since = Date.now() - (this.progressSaved || 0);
+    if (since >= PROGRESS_SAVE_MS) return this.persist();
+    if (this.progressTimer) return;
+    this.progressTimer = setTimeout(() => {
+      this.progressTimer = null;
+      this.persist();
+    }, PROGRESS_SAVE_MS - since);
+    this.progressTimer.unref?.();
+  }
+  /** Writes a position still waiting (a viewing ended, the app closes). */
+  flushProgress() {
+    if (this.progressTimer) this.persist();
   }
   async init() {
     if (!this.state.addons.length) {
@@ -636,7 +663,7 @@ export class Client {
       updated: Date.now(),
       ...(source ? { source } : {}),
     };
-    this.persist();
+    this.persistProgress();
   }
   collectionsEdit(input) {
     this.profiles.gate("library");

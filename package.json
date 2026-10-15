@@ -1,6 +1,6 @@
 {
   "name": "riwaq",
-  "version": "0.45.1",
+  "version": "0.46.0",
   "private": true,
   "type": "module",
   "description": "Riwaq — an Arabic-first desktop client for the Stremio addon ecosystem",
@@ -88,7 +88,7 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowElevation": false,
+      "allowElevation": true,
       "allowToChangeInstallationDirectory": false,
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,

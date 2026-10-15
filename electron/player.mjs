@@ -84,6 +84,16 @@ export function playerArgs({
     "--ytdl=no",
     "--input-terminal=no",
     "--terminal=no",
+    // MPV never moves its own window. With dragging on (its default), a press
+    // on the picture that moves 3 px starts Windows' move loop on MPV's
+    // window (w32_common.c begin_dragging: ReleaseCapture, then
+    // WM_NCLBUTTONDOWN/HTCAPTION). That window is a child of Riwaq's, so
+    // their input is shared: until the loop ends every click in Riwaq,
+    // controls included, goes nowhere, and a loop that starts after the
+    // button is already up waits for another click. The switch also stops
+    // 0.41's built-in dragging (input.c), and old builds a viewer may pick
+    // know it too.
+    "--window-dragging=no",
     `--input-ipc-server=${pipe}`,
     "--force-window=yes",
     "--keep-open=no",
@@ -267,7 +277,18 @@ const PROPERTIES = [
 // Properties whose absence is itself the news: an unavailable value is
 // recorded as null instead of keeping the last one seen.
 const NULLABLE = new Set(["video-out-params/w", "estimated-vf-fps"]);
-const THROTTLED = new Set(["time-pos", "estimated-vf-fps"]);
+// Properties that change many times a second during a viewing: the position
+// and frame rate every frame, and the network cache several times a second
+// while it fills (MPV reports it every 0.25 s and on each buffering step).
+// Each is published at most every POSITION_MS with the rest of the state, so
+// the controls are not redrawn and re-placed for every report.
+const THROTTLED = new Set([
+  "time-pos",
+  "estimated-vf-fps",
+  "demuxer-cache-time",
+  "cache-buffering-state",
+  "video-bitrate",
+]);
 
 export class Player {
   constructor({
@@ -651,9 +672,15 @@ export class Player {
     ]);
   }
   /** How the built-in torrent is starting, under "Getting the viewing ready". */
-  setTorrentStatus(status) {
+  setTorrentStatus(status, retrying = false) {
     if (!this.state.active) return;
     this.state.torrent = status || null;
+    // TorrServer is trying the same torrent (main's fallback): the built-in
+    // address failing meanwhile is not this viewing's failure.
+    if (retrying) {
+      this.state.error = "";
+      this.state.loading = true;
+    }
     this.publish();
   }
   /** Whether the HUD draws the controls; the theater layout follows it. */
@@ -809,7 +836,7 @@ export class Player {
       if (event.name === "vo-configured" && event.data) this.syncSurface();
       if (event.name === "core-idle" || event.name === "pause")
         this.state.loading = !!this.coreIdle && !this.state.pause;
-      // The position and the frame rate change every frame: throttled.
+      // Fast-changing properties (THROTTLED) are coalesced.
       this.publish(THROTTLED.has(event.name));
     }
     if (event.event === "file-loaded") {

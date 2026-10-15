@@ -65,11 +65,17 @@ import {
   HUD_METHODS,
   HUD_REQUESTS,
   HudHealth,
+  hudState,
   hudRect,
+  sameRect,
   hudVisible,
   separateRect,
 } from "../core/hud.mjs";
-import { DiscordPresence, buildActivity } from "../core/presence.mjs";
+import {
+  DiscordPresence,
+  buildActivity,
+  samePresence,
+} from "../core/presence.mjs";
 import {
   direction,
   language,
@@ -79,6 +85,7 @@ import {
 } from "../core/i18n.mjs";
 import { Player } from "./player.mjs";
 import { TorrentHost } from "./torrent.mjs";
+import { TorrServerHost } from "./torrserver.mjs";
 import {
   NEEDS_ENGINE,
   SERVICE_DOWNLOAD,
@@ -274,11 +281,25 @@ function torrents() {
   });
   return torrentHost;
 }
+// TorrServer (core/torrserver.mjs), the fallback for a built-in torrent
+// that sends nothing, once the viewer downloaded it; and the info hash it is
+// serving.
+let torrServer = null;
+let fallbackTorrent = null;
+function torrServers() {
+  torrServer ||= new TorrServerHost({
+    dir: join(app.getPath("userData"), "torrserver"),
+    memory: totalmem(),
+    log: (error) => logError("torrserver", error),
+  });
+  return torrServer;
+}
 /** The viewing ended: its torrent is kept a few minutes, then let go. */
 function releaseTorrent() {
-  if (!builtinTorrent) return;
-  torrentHost?.release(builtinTorrent);
+  if (builtinTorrent) torrentHost?.release(builtinTorrent);
+  if (fallbackTorrent) torrServer?.release(fallbackTorrent);
   builtinTorrent = null;
+  fallbackTorrent = null;
 }
 /** Whether the viewer's Stremio Service answers. */
 async function serviceUp() {
@@ -320,6 +341,8 @@ let failover = { id: null, tried: new Set() };
 async function tryNextSource() {
   if (client.state.settings.autoFailover === false || !nowPlaying) return false;
   const current = nowPlaying;
+  if (!player.state.active || !playbackRequest.owns(current.request))
+    return false;
   if (failover.id !== current.id)
     failover = { id: current.id, tried: new Set() };
   failover.tried.add(current.key);
@@ -329,31 +352,90 @@ async function tryNextSource() {
   );
   if (!next || !player.meta) return false;
   emit("notice", "تعذّر هذا المصدر؛ نجرّب المصدر التالي تلقائياً…");
+  let attempt;
   try {
-    const result = await play({
+    const pending = play({
       key: next,
       meta: player.meta,
       videoId: current.id,
     });
+    attempt = playbackRequest.current;
+    const result = await pending;
     return !result?.cancelled;
   } catch {
+    if (nowPlaying === current && playbackRequest.owns(attempt))
+      current.request = attempt;
     /* The viewer can still pick a source by hand. */
     return false;
   }
 }
+// The viewing TorrServer is being tried for: the built-in address failing
+// meanwhile (its metadata wait ends in a 504) must not start the next source.
+let torrServerTrying = null;
 /**
- * While a built-in torrent starts, its peers and speed show under "Getting
- * the viewing ready", and a swarm that sends nothing gives way to the next
- * source instead of a black screen (issue #82, core/torrent-engine.mjs).
+ * The built-in engine found nothing for this torrent: the same torrent in
+ * TorrServer, when the viewer downloaded it and kept it as the fallback,
+ * from the same position. TorrServer finds the addon's file through the
+ * torrent's own file list when the built-in engine read it. True when it
+ * started, or Stop or another pick took over meanwhile (nothing more to do);
+ * false when the next source should be tried.
+ */
+async function tryTorrServer(viewing, hash) {
+  const current = () =>
+    nowPlaying === viewing &&
+    player.state.active &&
+    playbackRequest.owns(viewing.request);
+  if (!current()) return true;
+  if (client.state.settings.torrServerFallback === false) return false;
+  if (nowPlaying !== viewing || !player.meta) return false;
+  const host = torrServers();
+  if (!host.installed()) return false;
+  const files = await torrentHost?.files(hash).catch(() => null);
+  if (!current()) return true;
+  emit("notice", "المحرك المدمج ما لقى بيانات؛ نجرّب TorrServer…");
+  torrServerTrying = viewing;
+  let attempt;
+  try {
+    const pending = play(
+      { key: viewing.key, meta: player.meta, videoId: viewing.id },
+      { engine: "torrserver", files: files || undefined },
+    );
+    attempt = playbackRequest.current;
+    await pending;
+    return true;
+  } catch (error) {
+    if (
+      !playbackRequest.owns(attempt) ||
+      nowPlaying !== viewing ||
+      !player.state.active
+    )
+      return true;
+    // A failed fallback still owns this chain; a newer user pick never does.
+    viewing.request = attempt;
+    logError("torrserver", error);
+    return false;
+  } finally {
+    if (torrServerTrying === viewing) torrServerTrying = null;
+  }
+}
+/**
+ * While a torrent starts (built-in, or TorrServer after it), its peers and
+ * speed show under "Getting the viewing ready", and a swarm that sends
+ * nothing gives way to TorrServer, then to the next source, instead of a
+ * black screen (issue #82, core/torrent-engine.mjs).
  */
 let torrentWatch = null;
-function watchTorrentStart(hash) {
+function watchTorrentStart(hash, engine = "builtin") {
   clearInterval(torrentWatch);
   const viewing = nowPlaying;
   const began = Date.now();
   let polling = false;
+  const fallback = engine === "torrserver";
   const ours = () =>
-    torrentWatch === watch && nowPlaying === viewing && builtinTorrent === hash;
+    playbackRequest.owns(viewing.request) &&
+    torrentWatch === watch &&
+    nowPlaying === viewing &&
+    (fallback ? fallbackTorrent : builtinTorrent) === hash;
   const watch = setInterval(async () => {
     // Another viewing, or this one ended (its torrent was released).
     if (!ours()) {
@@ -366,7 +448,7 @@ function watchTorrentStart(hash) {
     polling = true;
     let status;
     try {
-      status = await torrentHost?.status(hash);
+      status = await (fallback ? torrServer : torrentHost)?.status(hash);
     } finally {
       polling = false;
     }
@@ -376,13 +458,17 @@ function watchTorrentStart(hash) {
     clearInterval(watch);
     torrentWatch = null;
     logError(
-      "torrent",
+      fallback ? "torrserver" : "torrent",
       status?.metadata
         ? "التورنت ما أرسل أي بيانات خلال 40 ثانية"
         : "ما وصلت بيانات التورنت خلال 40 ثانية",
     );
+    if (!fallback && (await tryTorrServer(viewing, hash))) return;
+    // Stopped, or another viewing, while TorrServer was tried.
+    if (nowPlaying !== viewing || !player.state.active) return;
     if (await tryNextSource()) return;
-    if (nowPlaying !== viewing) return;
+    if (nowPlaying !== viewing || !playbackRequest.owns(viewing.request))
+      return;
     await player.stop();
     emit(
       "notice",
@@ -395,6 +481,8 @@ function watchTorrentStart(hash) {
   torrentWatch = watch;
   return watch;
 }
+// When a viewing's saved position last went to the windows (onProgress).
+let progressShown = 0;
 // Media keys control playback only while something plays.
 let mediaKeys = false;
 function setMediaKeys(on) {
@@ -430,6 +518,18 @@ const cursorGate = new CursorGate((visible) => {
 });
 const HUD_EVENTS = new Set(["player", "state", "notice", "hudCommand"]);
 /**
+ * An installation for every user of the PC lives under Program Files (the
+ * installer's "all users" choice, issue #86); a per-user one under the
+ * viewer's own AppData.
+ */
+function perMachineInstall(directory) {
+  const roots = [process.env.ProgramW6432, process.env.ProgramFiles]
+    .filter((root) => typeof root === "string" && root)
+    .map((root) => root.replace(/[\\/]+$/, "").toLowerCase() + "\\");
+  const dir = String(directory || "").toLowerCase() + "\\";
+  return roots.some((root) => dir.startsWith(root));
+}
+/**
  * A page can be gone before its window: while the main window closes, its
  * contents are destroyed first and the HUD it owns closes in between, and
  * that close reports the viewing's state (issue #82: "Object has been
@@ -445,7 +545,8 @@ function sendTo(win, name, data) {
 }
 const emit = (name, data) => {
   if (name !== "hudCommand") sendTo(window, name, data);
-  if (hudReady && HUD_EVENTS.has(name)) sendTo(hud, name, data);
+  if (hudReady && HUD_EVENTS.has(name))
+    sendTo(hud, name, name === "state" ? hudState(data) : data);
 };
 /**
  * During a viewing: a heads-up five minutes before a prayer and a notice at
@@ -629,7 +730,9 @@ function placeHud() {
   try {
     if (hud.isAlwaysOnTop() !== separate)
       hud.setAlwaysOnTop(separate, "screen-saver");
-    hud.setBounds(rect);
+    // Placement runs on every player update; Windows is asked to move the
+    // window only when its rectangle changed.
+    if (!sameRect(hud.getBounds(), rect)) hud.setBounds(rect);
     if (!hud.isVisible()) hud.showInactive();
     // MPV's window is on top as well and can come forward when it changes.
     if (separate) hud.moveTop();
@@ -928,14 +1031,16 @@ function shaderLibraryView() {
 }
 /**
  * Rich Presence mirrors whatever the player is doing. It is rebuilt on every
- * player state change, which is cheap, and skipped entirely when the viewer
- * has not opted in.
+ * player state change, which is cheap, sent only when it changed, and
+ * skipped entirely when the viewer has not opted in.
  */
+let lastActivity;
 function updatePresence() {
   const settings = client?.state.settings || {};
   if (!presence?.ready) return;
   if (!settings.discordPresence || settings.presenceDetail === "off") {
     presence.set(null);
+    lastActivity = undefined;
     return;
   }
   const state = player?.state || {};
@@ -947,24 +1052,25 @@ function updatePresence() {
       state.mediaType === "series" ? String(state.videoId || "") : "",
     ) || [];
   const video = (meta.videos || []).find((v) => v.id === state.videoId);
-  presence.set(
-    buildActivity({
-      playing: !!state.active,
-      paused: !!state.pause,
-      live: !!state.live,
-      title: state.name || "",
-      year:
-        /\d{4}/.exec(String(meta.year || meta.releaseInfo || ""))?.[0] || "",
-      poster: meta.poster || "",
-      imdb: meta.imdb_id || meta.id || "",
-      season,
-      number,
-      episodeTitle: video?.title || video?.name || "",
-      position: Number(state.position) || 0,
-      duration: Number(state.duration) || 0,
-      detail: settings.presenceDetail || "title",
-    }),
-  );
+  const activity = buildActivity({
+    playing: !!state.active,
+    paused: !!state.pause,
+    live: !!state.live,
+    title: state.name || "",
+    year: /\d{4}/.exec(String(meta.year || meta.releaseInfo || ""))?.[0] || "",
+    poster: meta.poster || "",
+    imdb: meta.imdb_id || meta.id || "",
+    season,
+    number,
+    episodeTitle: video?.title || video?.name || "",
+    position: Number(state.position) || 0,
+    duration: Number(state.duration) || 0,
+    detail: settings.presenceDetail || "title",
+  });
+  // Called on every player update: Discord hears only what changed (a
+  // pause, a seek, another title), not the same activity many times a second.
+  if (samePresence(activity, lastActivity)) return;
+  if (presence.set(activity)) lastActivity = activity;
 }
 async function applyPresence() {
   const settings = client.state.settings;
@@ -974,6 +1080,7 @@ async function applyPresence() {
     return false;
   }
   await presence.enable(client.state.discordAppId || "");
+  lastActivity = undefined;
   updatePresence();
   return true;
 }
@@ -1039,9 +1146,11 @@ async function trickplay(a) {
     executable: executable(),
     mode: client.state.settings.seekThumbnails || "local",
     // Torrents from either engine are remote, however local their address.
-    serverUrl: [client.state.settings.serverUrl, torrentHost?.origin].filter(
-      Boolean,
-    ),
+    serverUrl: [
+      client.state.settings.serverUrl,
+      torrentHost?.origin,
+      torrServer?.origin,
+    ].filter(Boolean),
   });
 }
 function executable() {
@@ -1130,14 +1239,27 @@ async function diagnostics() {
     controls: controlsState(),
   };
 }
-async function play({ key, meta, videoId, resume = true, profileId }) {
+// `engine: "torrserver"` (with the torrent's own `files`) is main's own
+// fallback (tryTorrServer); the interface's play passes one argument only.
+async function play(
+  { key, meta, videoId, resume = true, profileId },
+  { engine: forced, files } = {},
+) {
   const request = playbackRequest.begin();
   const owner = profileId || client.profiles.store.active;
+  // TorrServer counts each start of a torrent; every way out of this play
+  // that does not start the viewing gives its start back, once.
+  let fallbackHash = null;
+  const dropFallback = () => {
+    if (fallbackHash) torrServer?.release(fallbackHash);
+    fallbackHash = null;
+  };
   const checkOwner = () => {
     if (owner !== client.profiles.store.active) {
       if (playbackRequest.owns(request)) playbackRequest.cancel();
       if (playbackRequest.mayRelease(request.resource, builtinTorrent))
         torrentHost?.release(request.resource);
+      dropFallback();
       throw new Error("تغير الملف الشخصي؛ اختر المصدر مجدداً");
     }
   };
@@ -1158,7 +1280,17 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   let torrentHash = null;
   request.resource =
     typeof stream.infoHash === "string" ? stream.infoHash.toLowerCase() : "";
-  if (!url && stream.infoHash) {
+  if (!url && stream.infoHash && forced === "torrserver") {
+    url = await torrServers().url(stream, client.state.settings, {
+      files,
+      signal: request.signal,
+      onStatus: (status) => {
+        if (playbackRequest.owns(request) && player.state.active)
+          player.setTorrentStatus(status, true);
+      },
+    });
+    fallbackHash = stream.infoHash.toLowerCase();
+  } else if (!url && stream.infoHash) {
     // Stremio Service when it answers; the built-in engine only when the
     // viewer chose it; otherwise the interface opens the setup guide.
     const setting = client.state.settings.torrentEngine;
@@ -1176,6 +1308,7 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   if (!playbackRequest.owns(request)) {
     if (playbackRequest.mayRelease(torrentHash, builtinTorrent))
       torrentHost?.release(torrentHash);
+    dropFallback();
     return { cancelled: true };
   }
   if (!url) throw new Error("نوع المصدر غير مدعوم في هذه النسخة");
@@ -1184,6 +1317,9 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
   // that is about to play again (a resume, a file of the same pack).
   const previousTorrent = builtinTorrent;
   builtinTorrent = null;
+  // TorrServer counts viewings, so the last one's is always given back.
+  const previousFallback = fallbackTorrent;
+  fallbackTorrent = null;
   try {
     await player.stop();
     if (!playbackRequest.owns(request)) {
@@ -1191,17 +1327,23 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
         torrentHost?.release(previousTorrent);
       if (playbackRequest.mayRelease(torrentHash, builtinTorrent))
         torrentHost?.release(torrentHash);
+      if (previousFallback) torrServer?.release(previousFallback);
+      dropFallback();
       return { cancelled: true };
     }
     checkOwner();
   } catch (error) {
     for (const hash of new Set([previousTorrent, torrentHash]))
       if (hash) torrentHost?.release(hash);
+    if (previousFallback) torrServer?.release(previousFallback);
+    dropFallback();
     throw error;
   }
   if (previousTorrent && previousTorrent !== torrentHash)
     torrentHost?.release(previousTorrent);
+  if (previousFallback) torrServer?.release(previousFallback);
   if (torrentHash) builtinTorrent = torrentHash;
+  if (fallbackHash) fallbackTorrent = fallbackHash;
   const progress = client.state.progress[`${meta.type}:${videoId}`];
   const start =
     resume &&
@@ -1212,7 +1354,7 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
       : 0;
   // A new object per viewing: late replies compare it by identity.
   const series = seriesOf(meta);
-  nowPlaying = { key, type: meta.type, id: videoId, series };
+  nowPlaying = { key, type: meta.type, id: videoId, series, request };
   if (series && stream.memory)
     client.rememberSeries(series, { source: stream.memory });
   // Continue watching plays this source again (core/resume.mjs).
@@ -1243,8 +1385,14 @@ async function play({ key, meta, videoId, resume = true, profileId }) {
     screenshotDir: screenshotDir(),
     logFile: mpvLogFile(),
   });
-  if (torrentHash) {
-    const watch = watchTorrentStart(torrentHash);
+  // Built-in torrents are watched, and TorrServer's after them.
+  const watched = torrentHash
+    ? [torrentHash, "builtin"]
+    : fallbackHash
+      ? [fallbackHash, "torrserver"]
+      : null;
+  if (watched) {
+    const watch = watchTorrentStart(...watched);
     // A start that fails ends its watch at once.
     started.catch(() => {
       if (torrentWatch !== watch) return;
@@ -1688,6 +1836,21 @@ const methods = {
     available: true,
     ...(await (torrentHost ? torrentHost.stats() : { running: false })),
   }),
+  // What the network lets the built-in engine reach (counts and flags only).
+  torrentNetworkCheck: () => torrents().netcheck(client.state.settings),
+  // TorrServer, the fallback: flags and progress only. Installing (the
+  // pinned release, on this click) and removing sit behind the Settings
+  // room lock.
+  torrServerState: () => torrServers().state(),
+  torrServerInstall: async () => {
+    client.profiles.gate("settings");
+    return torrServers().install();
+  },
+  torrServerRemove: async () => {
+    client.profiles.gate("settings");
+    if (fallbackTorrent) throw new Error("أوقف المشاهدة أولاً");
+    return torrServers().remove();
+  },
   torrentEngineClear: async () => {
     if (torrentHost?.running) await torrentHost.clear();
     else
@@ -2008,7 +2171,10 @@ const methods = {
     return true;
   },
   // The HUD reports when its controls fall asleep or wake.
-  hudSnapshot: () => ({ state: client.publicState(), player: player.state }),
+  hudSnapshot: () => ({
+    state: hudState(client.publicState()),
+    player: player.state,
+  }),
   hudIdle: (a) => {
     hudHealth.report(player?.state, a);
     hudIdle = a?.idle === true;
@@ -2557,6 +2723,7 @@ app
           !process.env.PORTABLE_EXECUTABLE_FILE &&
           existsSync(join(dirname(process.execPath), "Uninstall Riwaq.exe")),
         installDirectory: dirname(process.execPath),
+        perMachine: perMachineInstall(dirname(process.execPath)),
         onChange: broadcast,
       });
       await client.updates.restore();
@@ -2652,6 +2819,7 @@ app
           const failed = s.active && s.error && !watching.error;
           if (failed) logError("player", s.error);
           const starting = s.active && !watching.active;
+          const ended = !s.active && watching.active;
           if (starting) {
             hudHealth.reset();
             ensureHud();
@@ -2663,7 +2831,8 @@ app
           // A viewing saves its position often; its uploads are spaced out.
           client.account.playbackChanged(!!s.active);
           setMediaKeys(!!s.active);
-          if (failed) tryNextSource();
+          if (failed && !(torrServerTrying && torrServerTrying === nowPlaying))
+            tryNextSource();
           emit("player", s);
           placeHud();
           updatePresence();
@@ -2672,6 +2841,12 @@ app
           // (scrobbling, presence) still runs, the window calls do not.
           if (!window || window.isDestroyed()) return;
           if (!s.active) releaseTorrent();
+          // Positions saved during the viewing reach the disk and the
+          // interface now.
+          if (!s.active && ended) {
+            client.flushProgress();
+            broadcast();
+          }
           if (!s.active) {
             try {
               videoHost.hide();
@@ -2695,7 +2870,13 @@ app
         onProgress: (...args) => {
           client.recordProgress(...args);
           client.integrations.queueHistory(...args);
-          broadcast();
+          // The position is saved every 5 s, but the whole state (which can
+          // run to megabytes) goes to the windows at most every 30 s while
+          // a title plays, and once more when the viewing ends.
+          if (!player.state.active || Date.now() - progressShown >= 30000) {
+            progressShown = Date.now();
+            broadcast();
+          }
         },
         onEnded: (data) => {
           emit("ended", data);
@@ -2785,9 +2966,10 @@ app
       cursorCheck = checkCursor;
       setInterval(checkCursor, 150);
       // MPV's own true-HDR window moves and resizes by itself (its full
-      // screen key, another monitor): the HUD follows it.
+      // screen key, another monitor): the HUD follows it. Inside Riwaq's
+      // window every change of the surface already places it.
       setInterval(() => {
-        if (player.state.active) placeHud();
+        if (player.state.active && player.state.separate) placeHud();
       }, 400);
       // Sound without a picture: start again once in the compatibility
       // mode, and say so; a second failure points at the diagnostic.
@@ -2968,6 +3150,7 @@ app.on("before-quit", (event) => {
   Promise.resolve(player?.stop())
     .then(() => offline?.stop())
     .then(() => torrentHost?.stop())
+    .then(() => torrServer?.stop())
     .then(() => client?.integrations?.settle(3000))
     // A change still waiting for the account goes up before closing.
     .then(() =>

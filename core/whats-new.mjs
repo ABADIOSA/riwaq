@@ -7,6 +7,29 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.46.0",
+    title: "تورنت يلقى مشاركين أكثر، وTorrServer احتياطياً",
+    items: [
+      "المحرك المدمج صار يسأل متتبعات عامة إضافية، منها متتبعات HTTPS للشبكات اللي تحجب UDP، ويبدأ شبكة DHT من آخر تشغيل، ويعيد السؤال كل 30 ثانية لما يكون المشاركين قليلين.",
+      "«اسمح للمشاركين يتصلون فيك» (مفعّل من البداية) يطلب من الراوتر يفتح منفذ للمحرك، و«افحص الشبكة» يقول لك وش اللي توصله شبكتك. تلقاهم في صفحة محرك P2P.",
+      "حزمة موسم كاملة؟ المحرك يشغّل الحلقة اللي سمّتها الإضافة بدل أكبر ملف.",
+      "TorrServer احتياطياً: نزّله من صفحة محرك P2P، ولما المحرك المدمج ما يلقى بيانات خلال 40 ثانية يجرّب رِواق نفس التورنت فيه قبل المصدر التالي.",
+      "المثبّت يسمح مرة ثانية بالتثبيت لكل مستخدمي الجهاز، بموافقة المسؤول.",
+      "أدوات المشغّل ما تعلق: MPV كان يبدأ سحب نافذته لما تضغط على الصورة وتحرك الفأرة شوي، فتنمسك كل النقرات في رِواق. وصار رِواق يشتغل أخف وقت المشاهدة.",
+    ],
+    en: {
+      title: "Torrents that find more peers, and TorrServer as a fallback",
+      items: [
+        "The built-in engine now also asks public trackers, HTTPS ones included for networks that block UDP, starts the DHT from the last run, and asks again every 30 seconds while there are few peers.",
+        "“Let peers connect to you” (on from the start) asks your router to open a port for the engine, and “Check the network” tells you what your network reaches. Both are on the P2P engine page.",
+        "A whole season pack? The engine plays the episode the addon names instead of the largest file.",
+        "TorrServer as a fallback: download it from the P2P engine page, and when the built-in engine gets no data within 40 seconds, Riwaq tries the same torrent there before the next source.",
+        "The installer can install for every user of the PC again, with administrator approval.",
+        "The player controls no longer freeze: MPV started dragging its own window when you pressed on the picture and moved the mouse a little, which held every click in Riwaq. Riwaq also does less work while a title plays.",
+      ],
+    },
+  },
+  {
     version: "0.45.1",
     title: "قائمة المشغّل ما تعلّق الأزرار",
     items: [

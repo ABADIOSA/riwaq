@@ -670,7 +670,7 @@ test("main checks its playback request after every wait before MPV starts", asyn
     "utf8",
   );
   const play = main.slice(
-    main.indexOf("async function play({"),
+    main.indexOf("async function play("),
     main.indexOf("async function playChannel("),
   );
   const at = (text) => {
@@ -685,6 +685,7 @@ test("main checks its playback request after every wait before MPV starts", asyn
   for (const wait of [
     "await serviceUp()",
     "await torrents().url(",
+    "await torrServers().url(",
     "await player.stop()",
   ])
     assert.ok(

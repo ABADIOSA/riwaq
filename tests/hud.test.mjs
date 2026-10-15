@@ -314,7 +314,11 @@ test("main never sends to a page that is already gone (issue #82)", () => {
   assert.equal(main.match(/webContents\.send\(/g).length, 1);
   const emit = main.slice(main.indexOf("const emit = "));
   assert.match(emit.slice(0, 200), /sendTo\(window, name, data\)/);
-  assert.match(emit.slice(0, 200), /sendTo\(hud, name, data\)/);
+  // The HUD gets the same events, with the slim state it reads.
+  assert.match(
+    emit.slice(0, 260),
+    /sendTo\(hud, name, name === "state" \? hudState\(data\) : data\)/,
+  );
 });
 
 test("a built-in torrent's start reaches both pages only during its viewing", () => {

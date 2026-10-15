@@ -87,3 +87,32 @@
   border-block-start: 1px solid #ffffff1f;
   margin: 4px 6px;
 }
+/* The P2P page's network check (counts and flags from the engine). */
+.net-check {
+  list-style: none;
+  padding: 0;
+  margin-block: 12px 0;
+  display: grid;
+  gap: 6px;
+}
+.net-check li {
+  padding-inline-start: 18px;
+  position: relative;
+  color: var(--muted);
+}
+.net-check li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0.55em;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.net-check li.ok::before {
+  background: #34d399;
+}
+.net-check li.bad::before {
+  background: #f87171;
+}

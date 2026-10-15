@@ -483,6 +483,9 @@ const size = (bytes) =>
 function TorrentEngineCard({ state, update, notice }) {
   const s = state.settings;
   const [stats, setStats] = useState(null);
+  // What the network lets the engine reach, after the viewer asks.
+  const [net, setNet] = useState(null);
+  const incoming = s.torrentIncoming !== false;
   useEffect(() => {
     let live = true;
     const load = () =>
@@ -541,9 +544,29 @@ function TorrentEngineCard({ state, update, notice }) {
         <>
           <p className="subtle">
             مثل أي برنامج تورنت، المحرك المدمج يشارك الأجزاء اللي نزلت مع غيرك
-            أثناء المشاهدة، فعنوان IP حقك يظهر للمشاركين. ما يفتح منافذ في
-            الراوتر، ويوقف المشاركة بعد نهاية المشاهدة بدقائق.
+            أثناء المشاهدة، فعنوان IP حقك يظهر للمشاركين، ويوقف المشاركة بعد
+            نهاية المشاهدة بدقائق. ويسأل متتبعات عامة إضافية وشبكة DHT عن
+            مشاركين، ويعيد السؤال كل 30 ثانية لما يكونون قليلين.
           </p>
+          <div className="setting-row">
+            <div>
+              <b>اسمح للمشاركين يتصلون فيك</b>
+              <p>
+                يطلب من الراوتر (UPnP وNAT-PMP) يفتح منفذ المحرك، فيوصلك مشاركين
+                أكثر، خصوصاً في التورنتات القليلة. خادم المشاهدة نفسه يبقى على
+                جهازك بس. قد يسألك جدار حماية ويندوز أول مرة. التغيير يسري من
+                المشاهدة الجاية.
+              </p>
+            </div>
+            <button
+              className={`toggle ${incoming ? "on" : ""}`}
+              aria-label="اسمح للمشاركين يتصلون فيك"
+              aria-pressed={incoming}
+              onClick={() => update("settings", { torrentIncoming: !incoming })}
+            >
+              <span />
+            </button>
+          </div>
           <h3>أسلوب التنزيل</h3>
           <div className="choice-row" role="radiogroup">
             {PROFILES.map(([id, title]) =>
@@ -588,6 +611,22 @@ function TorrentEngineCard({ state, update, notice }) {
             )}
             <button
               className="secondary small"
+              disabled={net === "checking"}
+              onClick={async () => {
+                setNet("checking");
+                setNet(
+                  await call("torrentNetworkCheck").catch((e) => {
+                    notice?.(e.message);
+                    return null;
+                  }),
+                );
+              }}
+            >
+              <RefreshCw size={15} />{" "}
+              {net === "checking" ? "جاري فحص الشبكة…" : "افحص الشبكة"}
+            </button>
+            <button
+              className="secondary small"
               onClick={async () => {
                 await call("torrentEngineClear")
                   .then(() => notice?.("مُسحت أجزاء التورنت المحفوظة"))
@@ -597,7 +636,149 @@ function TorrentEngineCard({ state, update, notice }) {
               <Trash2 size={15} /> امسح أجزاء التورنت
             </button>
           </div>
+          {net && net !== "checking" && (
+            <ul className="net-check">
+              <li className={net.dhtNodes > 0 ? "ok" : "bad"}>
+                {net.dhtNodes > 0
+                  ? `${net.dhtNodes} عقدة في شبكة DHT`
+                  : "شبكة DHT ما ردّت؛ غالباً شبكتك تحجب UDP"}
+              </li>
+              <li className={net.udp ? "ok" : "bad"}>
+                {net.udp
+                  ? "المتتبعات عبر UDP توصل"
+                  : "المتتبعات عبر UDP ما توصل"}
+              </li>
+              <li className={net.https ? "ok" : "bad"}>
+                {net.https
+                  ? "المتتبعات عبر HTTPS توصل"
+                  : "المتتبعات عبر HTTPS ما توصل؛ تحقق من الإنترنت أو الجدار الناري"}
+              </li>
+              <li className={net.incoming ? "ok" : ""}>
+                {net.incoming
+                  ? "طلبنا من الراوتر يفتح منفذ للمشاركين"
+                  : "استقبال المشاركين مطفأ"}
+                {net.incoming !== incoming && (
+                  <>
+                    {" · "}
+                    <span className="subtle">
+                      التغيير يسري من المشاهدة الجاية
+                    </span>
+                  </>
+                )}
+              </li>
+            </ul>
+          )}
         </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * TorrServer, the fallback for a built-in torrent that sends nothing
+ * (core/torrserver.mjs). Riwaq never ships it: the pinned release is
+ * downloaded on this card's button, and only flags and progress come back.
+ */
+function TorrServerCard({ state, update, notice }) {
+  const [info, setInfo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const on = state.settings.torrServerFallback !== false;
+  const installing = !!info?.installing;
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      call("torrServerState")
+        .then((value) => live && setInfo(value))
+        .catch(() => live && setInfo(false));
+    load();
+    const timer = setInterval(load, installing ? 700 : 4000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [installing]);
+  // The web edition has no TorrServer (web/desktop-only.js).
+  if (!info) return null;
+  const run = async (method, done) => {
+    setBusy(true);
+    try {
+      setInfo(await call(method));
+      if (done) notice?.(done);
+    } catch (e) {
+      notice?.(e.message);
+      call("torrServerState").then(setInfo, () => {});
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="settings-card torrserver-card">
+      <h2>TorrServer احتياطياً</h2>
+      <p>
+        لما المحرك المدمج ما يلقى بيانات للتورنت خلال 40 ثانية، يجرّب رِواق نفس
+        التورنت في TorrServer قبل ما ينتقل للمصدر التالي. TorrServer برنامج
+        تورنت مفتوح المصدر (GPL‑3.0) من مطوّر مستقل، ويوصل لمشاركين عبر uTP ما
+        يوصلهم المحرك المدمج.
+      </p>
+      <p className="subtle">
+        رِواق ما يحمله معه: ينزل من صفحة إصداراته على GitHub لما تضغط الزر،
+        ويتأكد رِواق من بصمته قبل ما يحفظه وقبل أول تشغيل. يشتغل على جهازك بس
+        بكلمة سر عشوائية، وبدون إعلان في الشبكة المحلية. وهو بنفسه يسأل
+        icanhazip.com عن عنوانك العام ويجلب قوائم متتبعات من GitHub، وقد يسألك
+        جدار حماية ويندوز أول مرة.
+      </p>
+      {info.installed ? (
+        <>
+          <div className="setting-row">
+            <div>
+              <b>جرّبه لما المحرك المدمج ما يلقى بيانات</b>
+              <p>
+                <span>مثبّت</span> ·{" "}
+                <span dir="ltr" translate="no">
+                  {info.version}
+                </span>{" "}
+                · <span>{info.running ? "يعمل الآن" : "يبدأ عند الحاجة"}</span>
+              </p>
+            </div>
+            <button
+              className={`toggle ${on ? "on" : ""}`}
+              aria-label="جرّبه لما المحرك المدمج ما يلقى بيانات"
+              aria-pressed={on}
+              onClick={() => update("settings", { torrServerFallback: !on })}
+            >
+              <span />
+            </button>
+          </div>
+          <div className="server-probe">
+            <button
+              className="secondary small"
+              disabled={busy}
+              onClick={() => run("torrServerRemove", "حُذف TorrServer")}
+            >
+              <Trash2 size={15} /> احذف TorrServer
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="server-probe">
+          <button
+            className="primary small"
+            disabled={busy || installing}
+            onClick={() =>
+              run("torrServerInstall", "نزل TorrServer وتحقق رِواق منه")
+            }
+          >
+            {installing ? (
+              <Loader2 size={15} className="spin" />
+            ) : (
+              <Download size={15} />
+            )}{" "}
+            {installing
+              ? `جاري التنزيل… ${Math.round((info.progress || 0) * 100)}%`
+              : "نزّل TorrServer"}
+          </button>
+          <span className="subtle">{size(info.size)}</span>
+        </div>
       )}
     </section>
   );
@@ -609,6 +790,9 @@ export function P2PPage({ notice, state, update }) {
     <>
       {state && (
         <TorrentEngineCard state={state} update={update} notice={notice} />
+      )}
+      {state && (
+        <TorrServerCard state={state} update={update} notice={notice} />
       )}
       <ServiceEngineCard notice={notice} />
     </>

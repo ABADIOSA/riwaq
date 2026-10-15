@@ -55,10 +55,14 @@ writeFileSync(
 import {app} from "electron";import {TorrentHost} from ${JSON.stringify(pathToFileURL(resolve("electron/torrent.mjs")).href)};
 import childProcess from "node:child_process";import {syncBuiltinESMExports} from "node:module";
 import fs from "node:fs";
+import koffi from "koffi";
+const u32=koffi.load("user32.dll"),findChild=u32.func("void * __stdcall FindWindowExW(void *parent, void *after, str16 cls, str16 title)"),getPid=u32.func("uint32 __stdcall GetWindowThreadProcessId(void *h, _Out_ uint32 *pid)"),post=u32.func("bool __stdcall PostMessageW(void *h, uint32 msg, uintptr_t wp, intptr_t lp)");
+const ownedChild=(parent,pid,depth=0)=>{if(depth>8)return null;for(let h=findChild(parent,null,null,null),i=0;h&&i<128;h=findChild(parent,h,null,null),i++){const p=[0];getPid(h,p);if(p[0]===pid)return h;const child=ownedChild(h,pid,depth+1);if(child)return child;}return null;};
+globalThis.reviewDragNative=(parent,pid)=>{const h=ownedChild(parent,pid);if(!h)return false;const at=(x,y)=>(y<<16)|x;post(h,0x200,0,at(80,80));post(h,0x201,1,at(80,80));post(h,0x200,1,at(86,84));post(h,0x202,0,at(86,84));return true;};
 const removeFile=fs.promises.rm;
 globalThis.reviewLockFile=(id)=>{fs.promises.rm=async(path,options)=>{if(String(path).endsWith(id+".media"))throw Object.assign(Error("fixture lock"),{code:"EPERM"});return removeFile(path,options);};syncBuiltinESMExports();};
 globalThis.reviewUnlockFile=()=>{fs.promises.rm=removeFile;syncBuiltinESMExports();};
-app.getVersion=()=>"0.45.1";
+app.getVersion=()=>"0.46.0";
 const spawn=childProcess.spawn;childProcess.spawn=(file,args,opts)=>{const proc=spawn(file,args,opts);if(String(file).endsWith("mpv.exe"))globalThis.reviewMpv=proc.pid;return proc;};syncBuiltinESMExports();
 const getUrl=TorrentHost.prototype.url;TorrentHost.prototype.url=function(stream,settings){if(stream.infoHash==="a".repeat(40))return new Promise(r=>globalThis.reviewResolve=r);return getUrl.call(this,stream,settings);};
 const originalFetch=globalThis.fetch;globalThis.fetch=(url,opts)=>String(url).startsWith(${JSON.stringify(base)})?originalFetch(url,opts):String(url).includes("raw.githubusercontent.com")?Promise.resolve(new Response('{"schema":1,"items":[]}')):String(url).endsWith("manifest.json")?Promise.resolve(new Response(JSON.stringify({id:"offline.fixture",name:"Offline",version:"1.0.0",types:["movie"],resources:["catalog"],catalogs:[]}))):Promise.resolve(new Response('{"metas":[]}'));
@@ -138,6 +142,38 @@ try {
       const p = await player();
       return p.active && !p.loading && p.duration > 0;
     }, "real fixture playback");
+    // Exercise MPV's real child-window input while the HUD is absent.
+    // Posting ordinary mouse messages never asks Windows to move a window;
+    // MPV's own built-in dragging used to turn this gesture into a move loop.
+    await call("settings", { playerOverlay: false });
+    const nativePid = await app.evaluate(() => globalThis.reviewMpv);
+    const dragged = await app.evaluate(({ BrowserWindow }) => {
+      const w = BrowserWindow.getAllWindows().find(
+        (w) => !w.webContents.getURL().endsWith("#hud"),
+      );
+      const handle = w.getNativeWindowHandle();
+      return globalThis.reviewDragNative(
+        handle.length === 8
+          ? handle.readBigUInt64LE()
+          : BigInt(handle.readUInt32LE()),
+        globalThis.reviewMpv,
+      );
+    });
+    assert.ok(
+      dragged,
+      "the mouse gesture reached this MPV's actual child HWND",
+    );
+    console.log(
+      "Native MPV press/move/release with HUD off: controls remain responsive.",
+    );
+    try {
+      await call("settings", { playerOverlay: true });
+    } catch (error) {
+      try {
+        process.kill(nativePid);
+      } catch {}
+      throw error;
+    }
     let hud;
     await wait(async () => {
       hud = app.windows().find((p) => p.url().endsWith("#hud"));

@@ -87,7 +87,9 @@ const config = {
   nsis: {
     oneClick: false,
     perMachine: false,
-    allowElevation: false,
+    // As the real installer (issue #86): the all-users choice may ask for
+    // elevation; a silent per-user upgrade never does.
+    allowElevation: true,
     allowToChangeInstallationDirectory: false,
     createDesktopShortcut: false,
     createStartMenuShortcut: false,

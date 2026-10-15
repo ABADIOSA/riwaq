@@ -380,3 +380,33 @@ test("cancelled downloads discard partial bytes and can be retried", async () =>
   await r.updater.download();
   assert.equal(r.updater.publicState().status, "ready");
 });
+
+test("the installer offers every user of the PC, and such a copy says updates need approval (issue #86)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const pkg = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  // An assisted installer with its install-mode page: "only for me" stays
+  // the default, and the all-users choice may ask Windows for elevation
+  // instead of being greyed out "(must run as admin)".
+  assert.equal(pkg.build.nsis.oneClick, false);
+  assert.equal(pkg.build.nsis.perMachine, false);
+  assert.equal(pkg.build.nsis.allowElevation, true);
+  const machine = await rig({ options: { perMachine: true } });
+  assert.equal(machine.updater.publicState().perMachine, true);
+  const user = await rig();
+  assert.equal(user.updater.publicState().perMachine, false);
+  // A portable or development copy is never "installed for everyone".
+  const portable = await rig({
+    options: { installed: false, perMachine: true },
+  });
+  assert.equal(portable.updater.publicState().perMachine, false);
+  const main = readFileSync(
+    new URL("../electron/main.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    main,
+    /perMachine: perMachineInstall\(dirname\(process\.execPath\)\)/,
+  );
+});

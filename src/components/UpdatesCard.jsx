@@ -108,6 +108,12 @@ export default function UpdatesCard({ state, update, act }) {
           واحدة، ثم ستصل التحديثات من هنا مع الاحتفاظ بمكتبتك وإعداداتك.
         </p>
       )}
+      {info.installed && info.perMachine && (
+        <p className="muted">
+          رِواق مثبّت لكل مستخدمي هذا الجهاز، فويندوز يطلب موافقة المسؤول عند
+          تثبيت كل تحديث.
+        </p>
+      )}
       {info.error && (
         <div role="alert" className="inline-warning update-error">
           <p>{info.error}</p>

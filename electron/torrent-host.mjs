@@ -9,6 +9,8 @@ const METHODS = [
   "url",
   "release",
   "status",
+  "files",
+  "netcheck",
   "configure",
   "stats",
   "clear",

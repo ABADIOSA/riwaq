@@ -658,7 +658,12 @@ test("main lays the HUD over MPV's own window, on top, and follows it", () => {
     main,
     /player\?\.setCovered\(!!\(separate && hud\.isVisible\(\)\)\)/,
   );
-  assert.match(main, /if \(player\.state\.active\) placeHud\(\)/);
+  // MPV's own window is followed every 400 ms; inside Riwaq's window every
+  // surface change already places the HUD.
+  assert.match(
+    main,
+    /if \(player\.state\.active && player\.state\.separate\) placeHud\(\)/,
+  );
   assert.doesNotMatch(main, /MPV hides the pointer in its own HDR window\./);
   const host = read("../electron/video-host.mjs");
   assert.match(host, /FindWindowExW/);
