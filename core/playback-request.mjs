@@ -4,12 +4,15 @@ export class PlaybackRequest {
     this.current = null;
   }
   begin(resource = "") {
-    return (this.current = { resource });
+    this.cancel();
+    const controller = new AbortController();
+    return (this.current = { resource, controller, signal: controller.signal });
   }
   owns(request) {
     return this.current === request;
   }
   cancel() {
+    this.current?.controller.abort();
     this.current = null;
   }
   mayRelease(resource, playing = "") {

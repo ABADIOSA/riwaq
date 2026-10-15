@@ -54,6 +54,9 @@ const second = Buffer.alloc(2 * 1024 * 1024, 2);
 for (let i = 0; i < second.length; i += 4096) second[i] = i % 251;
 writeFileSync(join(pack, "Show.S01E01.mkv"), first);
 writeFileSync(join(pack, "Show.S01E02.mkv"), second);
+for (const season of ["Season1", "Season2"]) mkdirSync(join(pack, season));
+writeFileSync(join(pack, "Season1", "Episode1.mkv"), first);
+writeFileSync(join(pack, "Season2", "Episode1.mkv"), second);
 
 const tracker = new Server({ udp: false, ws: false, stats: false });
 await new Promise((done) => tracker.listen(0, "127.0.0.1", done));
@@ -79,10 +82,22 @@ const host = new TorrServerHost({
   log: (e) => console.log("log:", e.message),
 });
 const stream = (extra) => ({
+  // Keep the script's discovery on its local tracker.
   infoHash: torrent.infoHash,
   sources: [`tracker:${announce}`],
   ...extra,
 });
+const launch = host.launch.bind(host);
+host.launch = (config, epoch) => {
+  const settings = JSON.parse(config);
+  Object.assign(settings.BitTorr, {
+    DisableUPNP: true,
+    DisableDHT: true,
+    RetrackersMode: 0,
+    DefaultTrackers: announce,
+  });
+  return launch(JSON.stringify(settings), epoch);
+};
 try {
   const began = Date.now();
   const second2 = order.findIndex((f) => f.path.endsWith("E02.mkv"));
@@ -113,6 +128,19 @@ try {
     {},
   );
   assert.ok((await get(byName)).body.equals(first));
+  const byPath = await host.url(
+    stream({ behaviorHints: { filename: "Season2/Episode1.mkv" } }),
+    {},
+  );
+  assert.ok(
+    (await get(byPath)).body.equals(second),
+    "a duplicate basename selects the explicitly named season",
+  );
+  await assert.rejects(
+    host.url(stream({ behaviorHints: { filename: "Episode1.mkv" } }), {}),
+    /أي ملف/,
+  );
+  await host.release(torrent.infoHash);
   // An index with neither the torrent's list nor a name is not guessed.
   await assert.rejects(host.url(stream({ fileIdx: 0 }), {}), /أي ملف/);
   const status = await host.status(torrent.infoHash);
@@ -141,6 +169,22 @@ try {
   assert.equal((await get(byIndex)).status, 200, "the other viewing keeps it");
   await host.release(torrent.infoHash);
   assert.equal((await get(byIndex)).status, 401);
+  const cancel = new AbortController();
+  await assert.rejects(
+    host.url(
+      { infoHash: "d".repeat(40), sources: [`tracker:${announce}`] },
+      {},
+      {
+        signal: cancel.signal,
+        onStatus: (s) => {
+          if (s && !s.metadata) cancel.abort();
+        },
+      },
+    ),
+    { code: "ABORT_ERR" },
+  );
+  assert.equal(host.active.size, 0);
+  assert.equal(host.pending.size, 0);
   console.log("TorrServer local swarm: OK");
 } finally {
   await host.stop();

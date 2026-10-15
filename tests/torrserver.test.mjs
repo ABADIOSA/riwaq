@@ -281,6 +281,78 @@ function installed(extra = {}) {
   return { dir, release, ...extra };
 }
 
+test("Stop during the echo handshake cannot relaunch an obsolete server", async () => {
+  const fake = fakeTorrServer();
+  let resume,
+    intercepted = false;
+  const host = new TorrServerHost({
+    ...installed(),
+    spawn: fake.spawn,
+    fetch: async (url, options) => {
+      if (!intercepted && String(url).endsWith("/echo")) {
+        intercepted = true;
+        await new Promise((r) => {
+          resume = r;
+        });
+      }
+      return fetch(url, options);
+    },
+  });
+  const starting = host.start();
+  const rejected = assert.rejects(starting, { code: "ABORT_ERR" });
+  try {
+    while (!resume) await new Promise((r) => setTimeout(r, 5));
+    await host.stop();
+    resume();
+    await rejected;
+    assert.equal(fake.runs.length, 1);
+    assert.equal(host.running, false);
+    await host.start();
+    assert.equal(host.running, true);
+    assert.equal(fake.runs.length, 2);
+  } finally {
+    resume?.();
+    await host.stop();
+  }
+});
+
+test("cancelling a TorrServer metadata wait promptly drops its lease and permits idle shutdown", async () => {
+  const fake = fakeTorrServer(),
+    abort = new AbortController();
+  let ready;
+  const firstPoll = new Promise((r) => {
+    ready = r;
+  });
+  const host = new TorrServerHost({
+    ...installed(),
+    spawn: fake.spawn,
+    pollMs: 30000,
+    idleMs: 10,
+  });
+  const pending = host.url(
+    { infoHash: HASH, behaviorHints: { filename: "E02.mkv" } },
+    {},
+    {
+      signal: abort.signal,
+      onStatus: (s) => {
+        if (s && !s.metadata) ready();
+      },
+    },
+  );
+  const rejected = assert.rejects(pending, { code: "ABORT_ERR" });
+  try {
+    await firstPoll;
+    abort.abort();
+    await rejected;
+    assert.equal(host.active.size, 0);
+    assert.equal(host.pending.size, 0);
+    assert.equal(fake.runs[0].torrents.has(HASH), false);
+    assert.ok(host.idle);
+  } finally {
+    await host.stop();
+  }
+});
+
 test("TorrServer runs on loopback with a password, Riwaq's settings and a clean environment", async () => {
   const fake = fakeTorrServer();
   const { dir, release } = installed();
@@ -504,7 +576,10 @@ test("main falls back to TorrServer only for a dead built-in torrent, and never 
   assert.match(body, /torrentHost\?\.files\(hash\)/);
   assert.match(body, /\{ engine: "torrserver", files: files \|\| undefined \}/);
   // A cancelled attempt (Stop, another pick) ends the fallback there.
-  assert.match(body, /files: files \|\| undefined \},\s*\);\s*return true;/);
+  assert.match(
+    body,
+    /attempt = playbackRequest\.current;\s*await pending;\s*return true;/,
+  );
   const watch = main.slice(main.indexOf("function watchTorrentStart("));
   const watchBody = watch.slice(0, watch.indexOf("\n}\n"));
   assert.match(

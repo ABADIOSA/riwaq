@@ -1,5 +1,13 @@
 # Verification — Riwaq
 
+## 2026-10-15 — PR #87 Windows and user-report audit
+
+- **838 Node tests pass** (831 baseline + 7 regressions). Fixed late TorrServer launches after Stop, cancellable metadata/API waits and lease cleanup, stale fallback ownership after Stop/new picks, and ambiguous episode filenames. Both engines preserve path hints and refuse ambiguous or missing explicit names. See [the full report and user-issue matrix](docs/REVIEW-PR-87.md).
+- Real Windows TorrServer (production-pinned SHA-256) passes full/range bytes, index/name/path mapping with duplicate episode basenames, authentication, reference counts, unavailable-torrent cancellation and shutdown. Its script uses local discovery and disables router port mapping.
+- Actual Windows MPV child HWND received press/move/release messages with the HUD off; subsequent HUD volume/click/hold/menu/stop and final close remain responsive. Current source native download/profile/musical-library guards and Arabic/English checks pass. Existing embedded/separate HUD, tracks, seek, reload/freeze recovery and F8 script also passes. No real HDR colour certification or reproduction of the owner's exact hardware freeze is implied.
+- Built the Windows x64 NSIS installer. Its actual all-users radio button is enabled (#86), verified by class/type and IsWindowEnabled. The automated test cancels before Install; it neither chooses all-users nor approves UAC. Machine-wide install/update remains untested here.
+- Prettier, both production builds and Chromium web smoke pass. No installer was published or installed. #87 is updated for review; no issue closure, merge to main or notification delivery is inferred from these tests.
+
 ## 2026-10-15 — 0.46.0: the player controls freeze (after 0.45.1)
 
 - The owner reported that the controls still freeze during playback on 0.45.1. It was not reproduced here: no Windows desktop, MPV window or HUD window in this environment.

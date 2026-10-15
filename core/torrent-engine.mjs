@@ -187,6 +187,33 @@ export function cleanFilename(name) {
   const base = name.split(/[\\/]/).pop().trim();
   return base.length <= 255 && !/[\u0000-\u001f\u007f]/.test(base) ? base : "";
 }
+/** A matching hint only, never a filesystem path to open or write. */
+export function cleanTorrentPath(name) {
+  if (
+    typeof name !== "string" ||
+    name.length > 2048 ||
+    /[\u0000-\u001f\u007f]/.test(name)
+  )
+    return "";
+  return name.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+}
+/** One unambiguous path/name match, or -1. Never pick the first duplicate. */
+export function namedFile(files, filename) {
+  const wanted = cleanTorrentPath(filename).toLowerCase();
+  if (!wanted) return -1;
+  const paths = files.map((file) =>
+    cleanTorrentPath(file?.path || file?.name).toLowerCase(),
+  );
+  const exact = paths
+    .map((path, i) => (path === wanted || path.endsWith("/" + wanted) ? i : -1))
+    .filter((i) => i >= 0);
+  if (exact.length) return exact.length === 1 ? exact[0] : -1;
+  const base = cleanFilename(wanted).toLowerCase();
+  const same = paths
+    .map((path, i) => (cleanFilename(path).toLowerCase() === base ? i : -1))
+    .filter((i) => i >= 0);
+  return same.length === 1 ? same[0] : -1;
+}
 
 /**
  * The file to play: the addon's file index when it is one of the torrent's
@@ -202,13 +229,9 @@ export function pickFile(files = [], fileIdx, filename = "") {
     files[fileIdx]
   )
     return fileIdx;
-  const wanted = cleanFilename(filename).toLowerCase();
+  const wanted = cleanTorrentPath(filename);
   if (wanted) {
-    const named = files.findIndex(
-      (file) =>
-        cleanFilename(file?.name || file?.path || "").toLowerCase() === wanted,
-    );
-    if (named >= 0) return named;
+    return namedFile(files, wanted);
   }
   let best = -1;
   for (const pass of [true, false]) {

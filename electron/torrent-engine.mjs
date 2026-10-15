@@ -42,7 +42,7 @@ import {
   REANNOUNCE_MS,
   cachePrune,
   cleanDhtNodes,
-  cleanFilename,
+  cleanTorrentPath,
   magnetOf,
   parseRange,
   pickFile,
@@ -291,7 +291,7 @@ export async function startEngine({
     try {
       const address = new URL(req.url, "http://127.0.0.1");
       parts = address.pathname.split("/").filter(Boolean);
-      named = cleanFilename(address.searchParams.get("f") || "");
+      named = cleanTorrentPath(address.searchParams.get("f") || "");
     } catch {
       return refuse(res, 400);
     }
@@ -372,7 +372,7 @@ export async function startEngine({
           ? stream.fileIdx
           : -1;
       // Without an index, the addon's file name picks the file (a pack).
-      const named = index < 0 ? cleanFilename(stream.filename) : "";
+      const named = index < 0 ? cleanTorrentPath(stream.filename) : "";
       return `${origin}/${token}/${entry.hash}/${index}${named ? `?f=${encodeURIComponent(named)}` : ""}`;
     },
     /** The viewing ended: kept a few minutes, then destroyed. */

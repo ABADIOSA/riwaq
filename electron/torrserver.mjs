@@ -59,7 +59,32 @@ const ENV_KEYS = [
   "HOMEPATH",
   "HOME",
 ];
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const stopped = () =>
+  Object.assign(new Error("TorrServer متوقف"), { code: "ABORT_ERR" });
+const cancellable = (promise, signal) =>
+  new Promise((resolve, reject) => {
+    const abort = () => reject(stopped());
+    if (signal.aborted) {
+      promise.catch(() => {});
+      return abort();
+    }
+    signal.addEventListener("abort", abort, { once: true });
+    promise
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener("abort", abort));
+  });
+const wait = (ms, signal) =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(stopped());
+    const finish = (error) => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
+      error ? reject(error) : resolve();
+    };
+    const abort = () => finish(stopped());
+    const timer = setTimeout(() => finish(), ms);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 
 /** A port nothing on 127.0.0.1 is listening on right now. */
 function freePort() {
@@ -124,6 +149,8 @@ export class TorrServerHost {
     // only when the last one ends.
     this.active = new Map();
     this.idle = null;
+    this.epoch = 0;
+    this.pending = new Set();
   }
 
   get running() {
@@ -204,7 +231,7 @@ export class TorrServerHost {
   }
 
   /** One authenticated API call; JSON back, or null for an empty body. */
-  async api(path, body, ms = 10000) {
+  async api(path, body, ms = 10000, signal) {
     if (!this.origin) throw new Error("TorrServer متوقف");
     const response = await this.fetch(this.origin + path, {
       method: body === undefined ? "GET" : "POST",
@@ -214,7 +241,9 @@ export class TorrServerHost {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       redirect: "error",
-      signal: AbortSignal.timeout(ms),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(ms)])
+        : AbortSignal.timeout(ms),
     });
     if (!response.ok) throw new Error(`TorrServer HTTP ${response.status}`);
     const text = await response.text();
@@ -223,20 +252,33 @@ export class TorrServerHost {
 
   /** Starts the program once; settings apply at the next start. */
   start(settings = {}) {
-    if (this.stopping) return this.stopping.then(() => this.start(settings));
+    const epoch = this.epoch;
+    const check = () => {
+      if (this.epoch !== epoch) throw stopped();
+    };
+    if (this.stopping)
+      return this.stopping.then(() => {
+        check();
+        return this.start(settings);
+      });
     const config = JSON.stringify(torrServerSettings(settings, this.memory));
     if (this.running && (this.config === config || this.active.size))
       return Promise.resolve(this.origin);
     if (this.starting) return this.starting;
     const starting = (async () => {
-      if (this.running) await this.stop();
+      if (this.running) await this.retireChild(this.child);
+      check();
       await this.verify();
+      check();
       let lastError;
       // A port taken between the check and TorrServer's start: once more.
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          return await this.launch(config);
+          const origin = await this.launch(config, epoch);
+          check();
+          return origin;
         } catch (error) {
+          check();
           lastError = error;
           this.log(error);
         }
@@ -253,7 +295,11 @@ export class TorrServerHost {
     return starting;
   }
 
-  async launch(config) {
+  async launch(config, epoch = this.epoch) {
+    const check = () => {
+      if (this.epoch !== epoch) throw stopped();
+    };
+    check();
     mkdirSync(this.data, { recursive: true });
     const password = randomBytes(24).toString("hex");
     writeFileSync(
@@ -263,6 +309,7 @@ export class TorrServerHost {
     );
     writeFileSync(join(this.data, "settings.json"), config);
     const port = await freePort();
+    check();
     const env = {};
     for (const key of ENV_KEYS)
       if (typeof process.env[key] === "string") env[key] = process.env[key];
@@ -289,7 +336,7 @@ export class TorrServerHost {
     const auth = "Basic " + Buffer.from(`riwaq:${password}`).toString("base64");
     const until = Date.now() + this.echoMs;
     let up = false;
-    while (Date.now() < until && !exited && !failure) {
+    while (Date.now() < until && !exited && !failure && this.epoch === epoch) {
       try {
         const response = await this.fetch(origin + "/echo", {
           redirect: "error",
@@ -309,6 +356,7 @@ export class TorrServerHost {
       } catch {}
       throw failure || new Error("TorrServer ما اشتغل");
     }
+    check();
     this.origin = origin;
     this.auth = auth;
     // It must refuse a request without the password, and have read the
@@ -319,9 +367,11 @@ export class TorrServerHost {
       redirect: "error",
       signal: AbortSignal.timeout(5000),
     }).catch(() => null);
+    check();
     const sets = await this.api("/settings", { action: "get" }).catch(
       () => null,
     );
+    check();
     if (
       open?.status !== 401 ||
       !sets ||
@@ -329,9 +379,10 @@ export class TorrServerHost {
       sets.EnableLPD !== false ||
       sets.EnableDLNA !== false
     ) {
-      await this.stop();
+      await this.retireChild(child);
       throw new Error("TorrServer ما أخذ إعدادات رِواق");
     }
+    check();
     this.config = config;
     return origin;
   }
@@ -341,41 +392,78 @@ export class TorrServerHost {
    * and knows which file to play (`files` is the torrent's own file list,
    * when the built-in engine read it). `onStatus` sees each poll.
    */
-  async url(stream, settings, { files, onStatus } = {}) {
+  async url(stream, settings, { files, onStatus, signal } = {}) {
     if (!validHash(stream?.infoHash)) throw new Error("معرّف التورنت غير صالح");
     clearTimeout(this.idle);
-    const origin = await this.start(settings);
+    const epoch = this.epoch;
+    const abort = new AbortController();
+    const cancel = () => {
+      abort.abort();
+      // No other viewing/start needs this process: revoke a pending launch
+      // as well as this URL, so Stop during hashing cannot start it later.
+      if (
+        !this.active.size &&
+        this.pending.size === 1 &&
+        this.pending.has(abort)
+      )
+        this.stop().catch(this.log);
+    };
+    signal?.addEventListener("abort", cancel, { once: true });
+    if (signal?.aborted) cancel();
+    this.pending.add(abort);
+    const check = () => {
+      if (abort.signal.aborted || this.epoch !== epoch) throw stopped();
+    };
     const hash = stream.infoHash.toLowerCase();
-    this.active.set(hash, (this.active.get(hash) || 0) + 1);
+    let held = false;
     try {
-      await this.api("/torrents", {
-        action: "add",
-        link: magnetOf(stream),
-        save_to_db: false,
-      });
+      check();
+      const origin = await cancellable(this.start(settings), abort.signal);
+      check();
+      this.active.set(hash, (this.active.get(hash) || 0) + 1);
+      held = true;
+      await this.api(
+        "/torrents",
+        {
+          action: "add",
+          link: magnetOf(stream),
+          save_to_db: false,
+        },
+        10000,
+        abort.signal,
+      );
+      check();
       const until = Date.now() + this.readyMs;
       let stats = null;
       for (;;) {
-        stats = await this.api("/torrents", { action: "get", hash }).catch(
-          () => null,
-        );
+        stats = await this.api(
+          "/torrents",
+          { action: "get", hash },
+          10000,
+          abort.signal,
+        ).catch(() => null);
+        check();
         onStatus?.(torrServerStatus(stats));
         if (torrServerFiles(stats).length || Date.now() >= until) break;
-        await wait(this.pollMs);
+        await wait(this.pollMs, abort.signal);
       }
       if (!torrServerFiles(stats).length)
         throw new Error("ما وصلت بيانات التورنت إلى TorrServer");
       const id = torrServerFile(stats, {
         fileIdx: stream.fileIdx,
-        filename: cleanFilename(stream.behaviorHints?.filename),
+        filename: stream.behaviorHints?.filename,
         files,
       });
       if (!id) throw new Error("ما عرفنا أي ملف في التورنت يشغّله TorrServer");
       const file = torrServerFiles(stats).find((f) => f.id === id);
       return torrServerStreamUrl(origin, hash, file);
     } catch (error) {
-      await this.release(hash);
+      if (held && this.epoch === epoch) await this.release(hash);
       throw error;
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      this.pending.delete(abort);
+      this.scheduleIdle();
     }
   }
 
@@ -406,38 +494,56 @@ export class TorrServerHost {
       await this.api("/torrents", { action: "drop", hash: key }).catch(
         () => {},
       );
-    if (!this.active.size && this.running) {
+    this.scheduleIdle();
+    return true;
+  }
+  scheduleIdle() {
+    if (!this.active.size && !this.pending.size && this.running) {
       clearTimeout(this.idle);
+      const epoch = this.epoch;
       this.idle = setTimeout(() => {
-        if (!this.active.size) this.stop();
+        if (this.epoch === epoch && !this.active.size && !this.pending.size)
+          this.stop();
       }, this.idleMs);
       this.idle.unref?.();
     }
-    return true;
   }
 
   /** Stops the program: its own shutdown first, then the process. */
   stop() {
+    this.epoch++;
+    for (const abort of this.pending) abort.abort();
+    this.starting = null;
     if (this.stopping) return this.stopping;
     clearTimeout(this.idle);
     const child = this.child;
-    if (!child) return Promise.resolve();
-    const stopping = (async () => {
-      const exited = new Promise((resolve) => child.once("exit", resolve));
-      if (this.origin)
-        await this.api("/shutdown", undefined, 1000).catch(() => {});
-      await Promise.race([exited, wait(1500)]);
-      try {
-        child.kill();
-      } catch {}
-      if (this.child === child) this.child = null;
+    if (!child) {
       this.origin = "";
       this.auth = "";
       this.active.clear();
-    })().finally(() => {
-      this.stopping = null;
+      return Promise.resolve();
+    }
+    const stopping = this.retireChild(child).finally(() => {
+      if (this.stopping === stopping) this.stopping = null;
     });
     this.stopping = stopping;
     return stopping;
+  }
+  /** Retire one owned process without revoking a settings-driven restart. */
+  async retireChild(child) {
+    if (!child || this.child !== child) return;
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    if (this.origin)
+      await this.api("/shutdown", undefined, 1000).catch(() => {});
+    await Promise.race([exited, wait(1500)]);
+    try {
+      child.kill();
+    } catch {}
+    if (this.child === child || !this.child) {
+      this.child = null;
+      this.origin = "";
+      this.auth = "";
+      this.active.clear();
+    }
   }
 }

@@ -6,7 +6,7 @@
  * index, file name and trackers) crosses into it, and only counts come back.
  */
 import {
-  cleanFilename,
+  cleanTorrentPath,
   engineOptions,
   publicStats,
   startStatus,
@@ -143,7 +143,7 @@ export class TorrentHost {
     return this.call("url", {
       infoHash: stream.infoHash,
       fileIdx: stream.fileIdx,
-      filename: cleanFilename(stream.behaviorHints?.filename),
+      filename: cleanTorrentPath(stream.behaviorHints?.filename),
       sources: Array.isArray(stream.sources) ? stream.sources : [],
     });
   }

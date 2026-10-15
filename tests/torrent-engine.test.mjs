@@ -846,7 +846,7 @@ test("a season pack plays the file the addon names", async () => {
   assert.equal(pickFile(files, 2, "Show.S01E02.mkv"), 2);
   assert.equal(pickFile(files, undefined, "show.s01e02.MKV"), 1);
   assert.equal(pickFile(files, undefined, "Pack/Show.S01E02.mkv"), 1);
-  assert.equal(pickFile(files, undefined, "missing.mkv"), 0);
+  assert.equal(pickFile(files, undefined, "missing.mkv"), -1);
   assert.equal(pickFile(files, undefined), 0);
   // A real swarm: two episodes in one torrent, no index, the second named.
   const dir = mkdtempSync(join(tmpdir(), "riwaq-pack-"));
@@ -856,6 +856,9 @@ test("a season pack plays the file the addon names", async () => {
   mkdirSync(join(dir, "Pack"));
   writeFileSync(join(dir, "Pack", "Ep01.mkv"), first);
   writeFileSync(join(dir, "Pack", "Ep02.mkv"), second);
+  for (const season of ["S01", "S02"]) mkdirSync(join(dir, "Pack", season));
+  writeFileSync(join(dir, "Pack", "S01", "Same.mkv"), first);
+  writeFileSync(join(dir, "Pack", "S02", "Same.mkv"), second);
   const seeder = new WebTorrent({ ...OFFLINE, lsd: false, natPmp: false });
   const torrent = await new Promise((resolve) =>
     seeder.seed(join(dir, "Pack"), { announce: [] }, resolve),
@@ -867,9 +870,19 @@ test("a season pack plays the file the addon names", async () => {
       infoHash: torrent.infoHash,
       filename: "Season/Ep02.mkv",
     });
-    assert.match(url, /\/-1\?f=Ep02\.mkv$/);
+    assert.match(url, /\/-1\?f=Season%2FEp02\.mkv$/);
     engine.addPeer(torrent.infoHash, `127.0.0.1:${seeder.address().port}`);
     assert.ok((await get(url)).body.equals(second));
+    const specific = engine.url({
+      infoHash: torrent.infoHash,
+      filename: "S02/Same.mkv",
+    });
+    assert.ok((await get(specific)).body.equals(second));
+    const ambiguous = engine.url({
+      infoHash: torrent.infoHash,
+      filename: "Same.mkv",
+    });
+    assert.equal((await get(ambiguous)).status, 404);
     // Without a name, the largest video plays.
     const plain = engine.url({ infoHash: torrent.infoHash });
     assert.doesNotMatch(plain, /\?f=/);
@@ -1048,7 +1061,7 @@ test("the engine process restarts when incoming peers change, and gets the file 
     const start = calls.find((c) => c.method === "start");
     assert.equal(start.params.options.incoming, false);
     const url = calls.find((c) => c.method === "url");
-    assert.equal(url.params.filename, "Show.S01E04.mkv");
+    assert.equal(url.params.filename, "Pack/Show.S01E04.mkv");
     await host.url(stream, { torrentIncoming: false });
     assert.equal(children.length, 1, "same setting, same process");
     await host.url(stream, {});

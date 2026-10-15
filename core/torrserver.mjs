@@ -15,6 +15,7 @@ import {
   cleanFilename,
   engineOptions,
   pickFile,
+  namedFile,
 } from "./torrent-engine.mjs";
 
 /** The one TorrServer release Riwaq downloads (checked against its tag). */
@@ -149,17 +150,13 @@ export function torrServerFile(stats, { fileIdx, filename, files } = {}) {
       (file) => base(file.path) === name && file.length === original.length,
     );
     if (same.length === 1) return same[0].id;
-    const tail = String(original.path || "")
-      .split(/[\\/]/)
-      .slice(1)
-      .join("/");
-    const exact = same.find((file) => tail && file.path.endsWith(tail));
-    if (exact) return exact.id;
+    const exact = namedFile(same, original.path || original.name);
+    if (exact >= 0) return same[exact].id;
   }
   const wanted = base(filename);
   if (wanted) {
-    const named = list.find((file) => base(file.path) === wanted);
-    if (named) return named.id;
+    const named = namedFile(list, filename);
+    return named >= 0 ? list[named].id : 0;
   }
   if (index !== undefined) return 0;
   const at = pickFile(

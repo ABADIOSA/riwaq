@@ -341,6 +341,8 @@ let failover = { id: null, tried: new Set() };
 async function tryNextSource() {
   if (client.state.settings.autoFailover === false || !nowPlaying) return false;
   const current = nowPlaying;
+  if (!player.state.active || !playbackRequest.owns(current.request))
+    return false;
   if (failover.id !== current.id)
     failover = { id: current.id, tried: new Set() };
   failover.tried.add(current.key);
@@ -350,14 +352,19 @@ async function tryNextSource() {
   );
   if (!next || !player.meta) return false;
   emit("notice", "تعذّر هذا المصدر؛ نجرّب المصدر التالي تلقائياً…");
+  let attempt;
   try {
-    const result = await play({
+    const pending = play({
       key: next,
       meta: player.meta,
       videoId: current.id,
     });
+    attempt = playbackRequest.current;
+    const result = await pending;
     return !result?.cancelled;
   } catch {
+    if (nowPlaying === current && playbackRequest.owns(attempt))
+      current.request = attempt;
     /* The viewer can still pick a source by hand. */
     return false;
   }
@@ -374,21 +381,37 @@ let torrServerTrying = null;
  * false when the next source should be tried.
  */
 async function tryTorrServer(viewing, hash) {
+  const current = () =>
+    nowPlaying === viewing &&
+    player.state.active &&
+    playbackRequest.owns(viewing.request);
+  if (!current()) return true;
   if (client.state.settings.torrServerFallback === false) return false;
   if (nowPlaying !== viewing || !player.meta) return false;
   const host = torrServers();
   if (!host.installed()) return false;
   const files = await torrentHost?.files(hash).catch(() => null);
-  if (nowPlaying !== viewing) return false;
+  if (!current()) return true;
   emit("notice", "المحرك المدمج ما لقى بيانات؛ نجرّب TorrServer…");
   torrServerTrying = viewing;
+  let attempt;
   try {
-    await play(
+    const pending = play(
       { key: viewing.key, meta: player.meta, videoId: viewing.id },
       { engine: "torrserver", files: files || undefined },
     );
+    attempt = playbackRequest.current;
+    await pending;
     return true;
   } catch (error) {
+    if (
+      !playbackRequest.owns(attempt) ||
+      nowPlaying !== viewing ||
+      !player.state.active
+    )
+      return true;
+    // A failed fallback still owns this chain; a newer user pick never does.
+    viewing.request = attempt;
     logError("torrserver", error);
     return false;
   } finally {
@@ -409,6 +432,7 @@ function watchTorrentStart(hash, engine = "builtin") {
   let polling = false;
   const fallback = engine === "torrserver";
   const ours = () =>
+    playbackRequest.owns(viewing.request) &&
     torrentWatch === watch &&
     nowPlaying === viewing &&
     (fallback ? fallbackTorrent : builtinTorrent) === hash;
@@ -443,7 +467,8 @@ function watchTorrentStart(hash, engine = "builtin") {
     // Stopped, or another viewing, while TorrServer was tried.
     if (nowPlaying !== viewing || !player.state.active) return;
     if (await tryNextSource()) return;
-    if (nowPlaying !== viewing) return;
+    if (nowPlaying !== viewing || !playbackRequest.owns(viewing.request))
+      return;
     await player.stop();
     emit(
       "notice",
@@ -1258,6 +1283,7 @@ async function play(
   if (!url && stream.infoHash && forced === "torrserver") {
     url = await torrServers().url(stream, client.state.settings, {
       files,
+      signal: request.signal,
       onStatus: (status) => {
         if (playbackRequest.owns(request) && player.state.active)
           player.setTorrentStatus(status, true);
@@ -1328,7 +1354,7 @@ async function play(
       : 0;
   // A new object per viewing: late replies compare it by identity.
   const series = seriesOf(meta);
-  nowPlaying = { key, type: meta.type, id: videoId, series };
+  nowPlaying = { key, type: meta.type, id: videoId, series, request };
   if (series && stream.memory)
     client.rememberSeries(series, { source: stream.memory });
   // Continue watching plays this source again (core/resume.mjs).
