@@ -233,6 +233,18 @@ export function validBinding(value) {
 export const keyboardBinding = (value) =>
   validBinding(value) && !/(?:MBTN_|WHEEL_)/.test(value);
 
+// The keys a slider or a tab list moves with.
+const NAVIGATION = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
 /** A DOM keyboard event as an MPV binding; native controls keep their keys. */
 export function hudKey(event, bindings) {
   if (event.defaultPrevented || event.isComposing) return null;
@@ -240,7 +252,12 @@ export function hudKey(event, bindings) {
   if (
     /^(INPUT|TEXTAREA|SELECT)$/.test(tag || "") ||
     event.target?.isContentEditable ||
-    event.target?.closest?.('[role="slider"], [role="tablist"]') ||
+    // A slider or tab list keeps only the keys it moves with: after the
+    // volume is touched, Space, Esc, F or M still reach the player.
+    (NAVIGATION.has(event.key) &&
+      event.target?.closest?.('[role="slider"], [role="tablist"]')) ||
+    // A button keeps Space and Enter only while the keyboard focused it
+    // (Tab); one a pointer pressed gives its focus back (pointerFocus).
     (event.target?.closest?.("button") && [" ", "Enter"].includes(event.key))
   )
     return null;
@@ -278,6 +295,16 @@ export function hudKey(event, bindings) {
     bindings?.some((b) => b.binding === binding)
     ? binding
     : null;
+}
+
+/**
+ * The button a pointer press left focused, or null. Chromium focuses a
+ * clicked button, and Space or Enter would then press it again (skip, next
+ * episode, the panel) instead of pausing; the HUD blurs it after the press.
+ * A slider keeps its focus for its arrows, and Tab still focuses a button.
+ */
+export function pointerFocus(active) {
+  return active?.tagName === "BUTTON" ? active : null;
 }
 
 /** Bindings a viewer has changed, merged over the defaults and validated. */

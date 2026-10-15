@@ -30,7 +30,7 @@ import { hudHidden } from "../../core/hud-layout.mjs";
 import { SEPARATE_HIDDEN } from "../../core/hud.mjs";
 import { qualityChips } from "../../core/player-tuning.mjs";
 import { startLine } from "../../core/torrent-engine.mjs";
-import { hudKey } from "../../core/hotkeys.mjs";
+import { hudKey, pointerFocus } from "../../core/hotkeys.mjs";
 import { useInterfaceLanguage } from "../lib/language.js";
 import { loc } from "../lib/format.js";
 
@@ -150,8 +150,13 @@ export default function Hud() {
       setHolding(false);
     };
     window.addEventListener("blur", release);
+    // A clicked button gives its focus back once the press ends, so Space
+    // pauses instead of pressing it again; the click still reaches it.
+    const unfocus = () => pointerFocus(document.activeElement)?.blur();
+    window.addEventListener("pointerup", unfocus, true);
     return () => {
       window.removeEventListener("blur", release);
+      window.removeEventListener("pointerup", unfocus, true);
       clearTimeout(hold.current.timer);
     };
   }, []);

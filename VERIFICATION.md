@@ -1,5 +1,12 @@
 # Verification — Riwaq
 
+## 2026-10-15 — PR #88 review: HUD keyboard after a mouse press
+
+- Reproduced in a real Chromium (Linux, the built `#hud` page over a stub bridge, `scripts/test-hud-keys.mjs`) on PR #88's head `3a5ae47`: after a mouse press on the volume slider, Space, F, M and Esc reached nothing (`hudKey` returned null for every key inside a slider or tab list); after a click on the panel button, Space pressed that button again and closed the panel instead of reaching the player.
+- Fixed: a slider or tab list keeps only the keys it moves with, and the HUD blurs a button a pointer pressed (`pointerFocus`), so Space reaches the player; a button reached with Tab keeps Space and Enter. The same script fails on `3a5ae47` ("Space after volume") and passes on the fix, including that the clicked button still works.
+- Root cause of the owner's report, read in source (not run on Windows here): Chromium's `HWNDMessageHandler::OnMouseActivate` returns `MA_NOACTIVATEANDEAT` for a window widget that cannot activate, and Electron's `focusable: false` calls `SetCanActivate(false)`, so the HUD's button-down was discarded and only the button-up arrived. Why Codex's clean Windows baseline still accepted clicks is not explained.
+- **844 Node tests pass** (842 + 2 keyboard tests in `tests/hud-input.test.mjs`). Not run here: Windows, Electron, MPV; `scripts/test-player-hud.mjs` is unchanged.
+
 ## 2026-10-15 — player input after published 0.46.0
 
 - Reviewed published v0.46.0, main `dc0b7e3`. The owner reports tooltips working while every control click is ignored. This exact persistent failure was not reproduced on the clean local profile; the earlier CDP-only checks did not test Windows activation.

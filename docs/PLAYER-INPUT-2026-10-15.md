@@ -27,3 +27,15 @@ This launches an isolated profile and a byte-range local video/subtitle fixture 
 Passing cases: embedded fullscreen and separate-window playback, native subtitle/audio tab clicks and real tracks, timeline seeking, actual MPV volume and slider keys, Space/C/Escape while the HUD owns focus, Pause/Stop after reload, missed-heartbeat fallback and recovery. Native F8 also recovers a separate-window viewing while Chromium's debugger deliberately suspends the HUD renderer, retaining position and the saved HDR setting. Browser/CDP is still used to inspect state and suspend/resume the renderer, not to substitute for the control clicks under test.
 
 Evidence is local under `.cache/player-hud-test` and `.cache/hud-native-final.log`. The media is SDR even when labelled HDR to select the separate-window path. This is not HDR colour certification, a live provider/torrent test, or confirmation from the affected user's machine. No release or merge is implied by these results.
+
+## Review follow-up
+
+Chromium's `HWNDMessageHandler::OnMouseActivate` (ui/views/win/hwnd_message_handler.cc) answers `WM_MOUSEACTIVATE` for a widget with a non-client view (every Electron `BrowserWindow`) with `MA_ACTIVATE` when it can activate and `MA_NOACTIVATEANDEAT` when it cannot. Electron's `focusable: false` calls `SetCanActivate(false)` (shell/browser/native_window_views.cc). So the old HUD's button-down was discarded and only the button-up reached the page: no click, while hover and tooltips kept working. That matches the owner's report and the `pointerup`-only press seen above. With `focusable: true`, the first press activates the HUD and is delivered. Why the clean baseline accepted clicks is not explained.
+
+Two keyboard regressions found in review and fixed:
+
+- `hudKey` returned null for every key inside a slider or tab list, so after the volume was touched with the mouse, Space, Esc, F and M did nothing until something else was clicked. A slider or tab list now keeps only arrows, Home, End and Page Up/Down; the volume slider already handles its arrows itself.
+- Chromium focuses a clicked button, and `hudKey` left Space and Enter to it, so Space pressed the last clicked button again (it closed the panel; it would repeat skip or next episode). The HUD now blurs a button a pointer pressed (`pointerFocus`, on `pointerup` in the capture phase; the click still reaches it). A button reached with Tab keeps Space and Enter.
+
+`npm run build && node scripts/test-hud-keys.mjs` checks both in a real Chromium on any OS (the built `#hud` page over a stub bridge). It fails on the review's starting commit and passes on the fix. It does not exercise Windows activation; `scripts/test-player-hud.mjs` does.
+

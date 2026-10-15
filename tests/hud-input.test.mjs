@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { hudKey, keyboardBinding, publicHotkeys } from "../core/hotkeys.mjs";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import {
+  hudKey,
+  keyboardBinding,
+  pointerFocus,
+  publicHotkeys,
+} from "../core/hotkeys.mjs";
 
 const key = (value, extra = {}, custom = {}) =>
   hudKey(
@@ -36,6 +43,54 @@ test("editing, composing, button activation and accessible navigation keep their
   assert.equal(key("c", { target: button }), "c");
   assert.equal(key("ArrowRight", { target: { closest: () => true } }), null);
   assert.equal(key("Tab"), null);
+});
+
+test("a focused slider or tab list keeps only the keys it moves with", () => {
+  // After the volume is touched with the mouse, its slider keeps the focus:
+  // Space, Esc, F and M must still reach the player.
+  const inside = (role) => ({
+    tagName: "DIV",
+    closest: (selector) =>
+      selector.includes(`[role="${role}"]`) ? { role } : null,
+  });
+  for (const role of ["slider", "tablist"]) {
+    const target = inside(role);
+    for (const move of [
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowDown",
+      "Home",
+      "End",
+      "PageUp",
+      "PageDown",
+    ])
+      assert.equal(key(move, { target }), null, `${role} keeps ${move}`);
+    assert.equal(key(" ", { target }), "SPACE");
+    assert.equal(key("Escape", { target }), "ESC");
+    assert.equal(key("f", { target }), "f");
+    assert.equal(key("m", { target }), "m");
+  }
+});
+
+test("a button a pointer pressed gives its focus back, so Space pauses instead of pressing it again", () => {
+  const button = { tagName: "BUTTON" };
+  assert.equal(pointerFocus(button), button);
+  assert.equal(
+    pointerFocus({ tagName: "DIV" }),
+    null,
+    "the volume slider keeps its focus for its arrows",
+  );
+  assert.equal(pointerFocus({ tagName: "INPUT" }), null);
+  assert.equal(pointerFocus(null), null);
+  // Without that focus, Space goes to the player, not to the button.
+  assert.equal(key(" ", { target: { tagName: "BODY" } }), "SPACE");
+  const hud = readFileSync(
+    fileURLToPath(new URL("../src/components/Hud.jsx", import.meta.url)),
+    "utf8",
+  );
+  assert.match(hud, /pointerFocus\(document\.activeElement\)\?\.blur\(\)/);
+  assert.match(hud, /addEventListener\("pointerup", unfocus, true\)/);
 });
 
 test("HUD key forwarding accepts only one keyboard binding, never input commands", () => {
