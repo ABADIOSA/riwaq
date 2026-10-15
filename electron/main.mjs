@@ -47,7 +47,11 @@ import {
   authorizeUrl as spotifyAuthorizeUrl,
   pkce as spotifyPkce,
 } from "../core/spotify.mjs";
-import { inputConf } from "../core/hotkeys.mjs";
+import {
+  inputConf,
+  keyboardBinding,
+  resolveBindings,
+} from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
 import { artworkHost } from "../core/artwork.mjs";
@@ -613,9 +617,10 @@ function ensureHud() {
       maximizable: false,
       fullscreenable: false,
       skipTaskbar: true,
-      // Clicks never take focus from the main window, which keeps the
-      // keyboard shortcuts working while the HUD handles the mouse.
-      focusable: false,
+      // This is an interactive player, not a notification overlay. Allow
+      // Windows/Chromium to activate it on a real mouse press. showInactive
+      // below still avoids stealing focus just because playback started.
+      focusable: true,
       webPreferences: {
         preload: join(root, "electron", "preload.cjs"),
         nodeIntegration: false,
@@ -631,6 +636,25 @@ function ensureHud() {
     return null;
   }
   hud.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // The focused HUD's renderer may be the thing that froze. Keep its
+  // default recovery key in main, ahead of DOM/React and its event loop.
+  hud.webContents.on("before-input-event", (event, input) => {
+    if (
+      input.type === "keyDown" &&
+      input.key === "F8" &&
+      !input.control &&
+      !input.alt &&
+      !input.shift &&
+      !input.meta &&
+      player?.state.active &&
+      resolveBindings(client.state.hotkeys).recoverControls === "F8"
+    ) {
+      event.preventDefault();
+      player
+        .command({ action: "repairControls" })
+        ?.catch((error) => logError("hudRecovery", error));
+    }
+  });
   hud.webContents.on("will-navigate", onDropNavigate);
   hud.webContents.on("did-start-loading", () => {
     hudReady = false;
@@ -734,6 +758,15 @@ function placeHud() {
     // window only when its rectangle changed.
     if (!sameRect(hud.getBounds(), rect)) hud.setBounds(rect);
     if (!hud.isVisible()) hud.showInactive();
+    // Windows may consume the activating mouse-down of an inactive window.
+    // Transfer focus while OUR player owns it, before that first press;
+    // never take it back from another application on a periodic placement.
+    if (
+      !hud.isFocused() &&
+      (window.isFocused() ||
+        (separate && processWindow(player?.child?.pid)?.focused))
+    )
+      hud.focus();
     // MPV's window is on top as well and can come forward when it changes.
     if (separate) hud.moveTop();
     player?.setCovered(!!(separate && hud.isVisible()));
@@ -1216,6 +1249,8 @@ function controlsState() {
     separate: !!state.separate,
     ready: hudReady && hudHealth.usable(state),
     visible: !!hud && !hud.isDestroyed() && hud.isVisible(),
+    focusable: !!hud && !hud.isDestroyed() && hud.isFocusable(),
+    focused: !!hud && !hud.isDestroyed() && hud.isFocused(),
     surface: surfaceShown,
     covered: !!player?.covered,
     separateWindow: state.separate ? separateHudRect() : null,
@@ -2199,6 +2234,11 @@ const methods = {
     if (a?.action === "aid") rememberTrack("audio", a.value);
     else if (a?.action === "sid") rememberTrack("subtitle", a.value);
     return result;
+  },
+  playerKey: (a) => {
+    if (!player.state.active || !keyboardBinding(a?.binding)) return false;
+    player.send(["keypress", a.binding]);
+    return true;
   },
   trickplay,
   stop: async () => {

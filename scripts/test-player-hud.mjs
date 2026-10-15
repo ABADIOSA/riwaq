@@ -9,6 +9,11 @@ import { createRequire } from "node:module";
 import { execFileSync, execSync } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import {
+  nativeHudClick,
+  nativeHudKey,
+  restoreCursor,
+} from "./native-hud-input.mjs";
 
 if (process.platform !== "win32")
   throw new Error("Run the native HUD test on Windows");
@@ -153,7 +158,7 @@ try {
     main.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]);
   await call("settings", {
     hdrMode: "window",
-    autoFullscreen: false,
+    autoFullscreen: true,
     playerOverlay: true,
     seekThumbnails: "off",
   });
@@ -210,13 +215,52 @@ try {
         "Win32 finds MPV's actual window",
       );
     assert.equal((await snapshot()).player.separate, separate);
-    await hud.getByTitle("الترجمة والصوت (C أو الزر الأيمن)").click();
+    // Activate our isolated test app through Windows before testing its
+    // controls. A remote host's foreground browser is outside this test.
+    await nativeHudClick(app, hud, hud.locator(".hud-title"));
+    await hud.evaluate(() => {
+      window.nativeEvents = [];
+      for (const type of ["pointerdown", "pointerup", "click"])
+        document.addEventListener(
+          type,
+          (e) =>
+            window.nativeEvents.push({
+              type,
+              title: e.target.closest("button")?.title,
+            }),
+          true,
+        );
+    });
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByTitle("الترجمة والصوت (C أو الزر الأيمن)"),
+    );
+    console.log(
+      JSON.stringify({
+        separate,
+        nativeEvents: await hud.evaluate(() => window.nativeEvents),
+      }),
+    );
     await hud.locator(".player-side").waitFor();
-    await hud.getByRole("tab", { name: "الصوت", exact: true }).click();
+    assert.equal(
+      await hud.evaluate(() => document.hasFocus()),
+      true,
+      "a Windows click activates the HUD",
+    );
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByRole("tab", { name: "الصوت", exact: true }),
+    );
     assert.ok(
       await hud.getByText("المسار الصوتي", { exact: true }).isVisible(),
     );
-    await hud.getByRole("tab", { name: "الترجمة", exact: true }).click();
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByRole("tab", { name: "الترجمة", exact: true }),
+    );
     const subs = await call("subtitles");
     assert.ok(subs.length, "local subtitle addon is available");
     await call("subtitle", { key: subs[0].key });
@@ -231,12 +275,14 @@ try {
         separate ? "separate-panel.png" : "embedded-panel.png",
       ),
     });
-    await hud.getByTitle("إغلاق اللوحة").click();
+    await nativeHudKey(app, 27);
+    await waitFor(
+      async () => !(await hud.locator(".player-side").count()),
+      "native Escape closes the panel before stopping playback",
+    );
+    assert.equal((await snapshot()).player.active, true);
     const timeline = hud.locator(".hud-track");
-    const rect = await timeline.boundingBox();
-    await timeline.click({
-      position: { x: rect.width * 0.25, y: rect.height / 2 },
-    });
+    await nativeHudClick(app, hud, timeline, 0.25);
     await waitFor(
       async () => (await snapshot()).player.position >= 10,
       "the HUD seeks the video",
@@ -249,6 +295,34 @@ try {
         parts.reduce((time, part) => time * 60 + part, 0) >= 10
       );
     }, "the visible clock follows the actual seek");
+    await nativeHudClick(app, hud, hud.getByRole("slider"), 0.6);
+    await waitFor(
+      async () => Math.abs((await snapshot()).player.volume - 80) <= 2,
+      "native input sets real MPV volume",
+    );
+    await nativeHudKey(app, 39);
+    await waitFor(
+      async () => Math.abs((await snapshot()).player.volume - 85) <= 2,
+      "slider arrow changes volume once, without seeking",
+    );
+    await nativeHudClick(app, hud, hud.locator(".hud-title"), 0.5);
+    await nativeHudKey(app, 32);
+    await waitFor(
+      async () => !(await snapshot()).player.pause,
+      "Space still resumes after clicking the picture",
+    );
+    await nativeHudKey(app, 32);
+    await waitFor(
+      async () => (await snapshot()).player.pause,
+      "Space pauses exactly once",
+    );
+    await nativeHudKey(app, 67);
+    await hud.locator(".player-side").waitFor();
+    await nativeHudKey(app, 27);
+    await waitFor(
+      async () => !(await hud.locator(".player-side").count()),
+      "C opens and Escape closes the panel while HUD owns focus",
+    );
     await hud.screenshot({
       path: join(
         output,
@@ -267,6 +341,24 @@ try {
       (await snapshot()).player.pause,
       true,
       "reload hydrates paused playback",
+    );
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByTitle("تشغيل أو إيقاف مؤقت (Space)"),
+    );
+    await waitFor(
+      async () => !(await snapshot()).player.pause,
+      "native Pause button resumes after reload",
+    );
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByTitle("تشغيل أو إيقاف مؤقت (Space)"),
+    );
+    await waitFor(
+      async () => (await snapshot()).player.pause,
+      "native Pause button pauses after reload",
     );
     if (separate) {
       const debug = await hud.context().newCDPSession(hud);
@@ -291,7 +383,7 @@ try {
         "frozen HDR HUD releases fallback controls and recovers after resume",
       );
     }
-    await hud.getByTitle("إيقاف المشاهدة").click();
+    await nativeHudClick(app, hud, hud.getByTitle("إيقاف المشاهدة"));
     await waitFor(
       async () => !(await call("hudSnapshot")).player.active,
       "the HUD Stop ends MPV",
@@ -315,26 +407,20 @@ try {
         async () => (await snapshot()).player.position >= 10,
         "the recovery position is saved",
       );
-      await call("playerCommand", { action: "repairControls" });
-      await waitFor(async () => {
-        const p = (await snapshot()).player;
-        return p.active && !p.separate && !p.loading && p.position >= 10;
-      }, "F8's recovery command returns the viewing inside Riwaq").catch(
-        async (error) => {
-          const p = (await snapshot()).player;
-          console.error(
-            JSON.stringify({
-              active: p.active,
-              separate: p.separate,
-              loading: p.loading,
-              position: p.position,
-              duration: p.duration,
-              error: p.error,
-            }),
-          );
-          throw error;
-        },
-      );
+      await nativeHudClick(app, hud, hud.locator(".hud-title"));
+      const recoveryDebug = await hud.context().newCDPSession(hud);
+      await recoveryDebug.send("Debugger.enable");
+      await recoveryDebug.send("Debugger.pause");
+      try {
+        await nativeHudKey(app, 119); // Real Windows F8, renderer suspended.
+        await waitFor(async () => {
+          const p = (await call("hudSnapshot")).player;
+          return p.active && !p.separate && !p.loading && p.position >= 10;
+        }, "native F8 recovers playback even while the HUD renderer is frozen");
+      } finally {
+        await recoveryDebug.send("Debugger.resume");
+        await recoveryDebug.detach();
+      }
       assert.equal(
         (await call("init")).settings.hdrMode,
         "window",
@@ -342,19 +428,20 @@ try {
       );
       await hud.mouse.move(20, 20);
       await hud.mouse.move(60, 60);
-      await hud.getByTitle("إيقاف المشاهدة").click();
+      await nativeHudClick(app, hud, hud.getByTitle("إيقاف المشاهدة"));
       await waitFor(
         async () => !(await call("hudSnapshot")).player.active,
         "recovered playback stops",
       );
       checks.push(
-        "F8 recovery command resumes inside Riwaq and preserves the saved HDR preference",
+        "native Windows F8 with the HUD renderer frozen resumes inside Riwaq and preserves the saved HDR preference",
       );
     }
   }
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({ passed: true, checks, errors, output }));
 } finally {
+  restoreCursor();
   await app.close();
   server.close();
 }

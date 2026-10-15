@@ -120,6 +120,7 @@ const allowed = new Set([
   "letterboxdImport",
   "openService",
   "playerCommand",
+  "playerKey",
   "trickplay",
   "audioDevices",
   "speedTest",

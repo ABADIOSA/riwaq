@@ -7,6 +7,25 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.46.1",
+    title: "أزرار المشغّل تستجيب للنقر",
+    items: [
+      "أزرار أدوات المشغّل صارت تستجيب: نافذتها كانت ما تقبل التركيز، فيرمي ويندوز ضغطة الفأرة وتطلع التلميحات بدون نقرة. الحين توصلها النقرة كاملة.",
+      "اختصاراتك كلها تشتغل من أدوات المشغّل، حتى اللي غيّرتها بنفسك. وEsc يقفل اللوحة أول، وF8 يستعيد الأدوات حتى لو علّقت.",
+      "بعد ما تغيّر الصوت أو تضغط زر بالفأرة، المسافة توقف الفيديو بدل ما تعيد نفس الزر.",
+      "زر Tab صار يتنقّل بين أزرار المشغّل، فالتخطي من زره أو من مفتاح تختاره في الاختصارات.",
+    ],
+    en: {
+      title: "The player buttons respond to clicks",
+      items: [
+        "The player's buttons respond again: their window could not take focus, so Windows discarded the mouse press and tooltips showed without a click. It now gets the whole click.",
+        "All your shortcuts work from the player controls, including the ones you changed. Esc closes the panel first, and F8 recovers the controls even when they froze.",
+        "After you change the volume or click a button, Space pauses instead of pressing that button again.",
+        "Tab now moves between the player's buttons, so skip with its button or a key you choose in the shortcuts.",
+      ],
+    },
+  },
+  {
     version: "0.46.0",
     title: "تورنت يلقى مشاركين أكثر، وTorrServer احتياطياً",
     items: [

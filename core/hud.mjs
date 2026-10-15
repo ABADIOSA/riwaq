@@ -40,13 +40,17 @@ export const sameRect = (a, b) =>
 
 /**
  * The part of the app's state the HUD page reads: settings (subtitles,
- * controls, language) and progress (the episodes list's watched marks).
+ * controls, language), key bindings and progress (watched marks).
  * The whole state (addons, library, lists, collections) can run to
  * megabytes, and the HUD gets it on every change while a title plays.
  */
 export function hudState(state) {
   if (!state || typeof state !== "object") return null;
-  return { settings: state.settings, progress: state.progress };
+  return {
+    settings: state.settings,
+    progress: state.progress,
+    hotkeys: state.hotkeys,
+  };
 }
 
 /**
@@ -159,6 +163,7 @@ export const HUD_METHODS = new Set([
   "playbackAction",
   "init",
   "playerCommand",
+  "playerKey",
   "trickplay",
   "stop",
   "subtitles",

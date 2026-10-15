@@ -76,6 +76,7 @@ test("the HUD gets only the state it reads, and is placed only when it moved", (
   assert.deepEqual(hudState(full), {
     settings: full.settings,
     progress: full.progress,
+    hotkeys: full.hotkeys,
   });
   assert.equal(hudState(null), null);
   const rect = { x: 1, y: 2, width: 300, height: 200 };
@@ -88,7 +89,7 @@ test("the HUD gets only the state it reads, and is placed only when it moved", (
   const fields = new Set(
     [...hud.matchAll(/\bstate\??\.([a-zA-Z]+)/g)].map((m) => m[1]),
   );
-  assert.deepEqual([...fields].sort(), ["progress", "settings"]);
+  assert.deepEqual([...fields].sort(), ["hotkeys", "progress", "settings"]);
 });
 
 test("Discord hears an activity once, not on every player update", () => {

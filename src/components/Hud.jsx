@@ -30,6 +30,7 @@ import { hudHidden } from "../../core/hud-layout.mjs";
 import { SEPARATE_HIDDEN } from "../../core/hud.mjs";
 import { qualityChips } from "../../core/player-tuning.mjs";
 import { startLine } from "../../core/torrent-engine.mjs";
+import { hudKey, pointerFocus } from "../../core/hotkeys.mjs";
 import { useInterfaceLanguage } from "../lib/language.js";
 import { loc } from "../lib/format.js";
 
@@ -117,6 +118,48 @@ export default function Hud() {
     return result;
   };
   const command = (action, value) => act("playerCommand", { action, value });
+
+  useEffect(() => {
+    const key = (e) => {
+      if (!player.active) return;
+      // The menu's capture listener consumes Escape first. Panels close
+      // before a second Escape reaches MPV's normal fullscreen/stop rule.
+      if (e.key === "Escape" && (dock || sleepMenu || shaderMenu)) {
+        e.preventDefault();
+        setDock(null);
+        setSleepMenu(false);
+        setShaderMenu(false);
+        return;
+      }
+      const binding = hudKey(e, state?.hotkeys);
+      if (!binding) return;
+      e.preventDefault();
+      act("playerKey", { binding });
+      wake();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [player.active, state?.hotkeys, dock, sleepMenu, shaderMenu]);
+
+  useEffect(() => {
+    const release = () => {
+      clearTimeout(hold.current.timer);
+      if (hold.current.active) command("speed", hold.current.previous);
+      hold.current.active = false;
+      hold.current.swallow = false;
+      setHolding(false);
+    };
+    window.addEventListener("blur", release);
+    // A clicked button gives its focus back once the press ends, so Space
+    // pauses instead of pressing it again; the click still reaches it.
+    const unfocus = () => pointerFocus(document.activeElement)?.blur();
+    window.addEventListener("pointerup", unfocus, true);
+    return () => {
+      window.removeEventListener("blur", release);
+      window.removeEventListener("pointerup", unfocus, true);
+      clearTimeout(hold.current.timer);
+    };
+  }, []);
 
   const wake = () => {
     setAwake(true);
