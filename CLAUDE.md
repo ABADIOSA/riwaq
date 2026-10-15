@@ -11,7 +11,7 @@ README.md (since 0.41) is a short bilingual page, Arabic then English, under the
 - `npm run check` checks formatting. `npm run format` formats source.
 - `npm run package` builds a per-user NSIS installer and portable Windows executable. Update packages use Ed25519 signatures; Windows Authenticode remains unconfigured.
 - Native smoke: set a NEW `RIWAQ_DATA_DIR` under `.cache`, set `RIWAQ_SMOKE=1`, then `npm start`. Build first. Requires a Windows desktop session; a restrictive process sandbox may block DPAPI or GPU initialization.
-- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.46.0-win-x64.exe`.
+- Packaged smoke: `node scripts/test-packaged.mjs release/Riwaq-0.46.1-win-x64.exe`.
 - TorrServer against a real local swarm: `node scripts/test-torrserver.mjs <TorrServer binary>` (the Windows build on Windows, the Linux build elsewhere; downloaded by hand from the pinned release, never committed).
 - Web edition: `npm run build:web` (into `dist-web/`), `npm run dev:web`, and `node scripts/test-web.mjs` for the Chromium smoke (Playwright; local addon, no internet; it also builds a copy of the site against a local account service). Read docs/WEB.md.
 - HUD keyboard in Chromium (any OS): `npm run build`, then `node scripts/test-hud-keys.mjs` (the built `#hud` page over a stub bridge; no Electron or MPV).

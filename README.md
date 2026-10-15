@@ -30,20 +30,18 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.45.1-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.45.1-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.46.1-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.46.1-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.46.0
+### الجديد في 0.46.1
 
-- **التورنت يلقى مشاركين أكثر:** المحرك المدمج صار يسأل متتبعات عامة إضافية (منها HTTPS للشبكات اللي تحجب UDP)، ويبدأ شبكة DHT من آخر تشغيل، ويعيد السؤال كل 30 ثانية لما يكون المشاركين قليلين، مثل Harbor وNuvio HTPC.
-- **«اسمح للمشاركين يتصلون فيك»** (مفعّل من البداية) يطلب من الراوتر يفتح منفذ المحرك (UPnP وNAT-PMP)، و**«افحص الشبكة»** يقول لك وش اللي توصله شبكتك. في الإعدادات ← **محرك P2P**.
-- **حزم المواسم:** المحرك يشغّل الحلقة اللي سمّتها الإضافة بدل أكبر ملف في الحزمة.
-- **TorrServer احتياطياً:** برنامج تورنت مفتوح المصدر (GPL-3.0) تنزّله بضغطة من صفحة **محرك P2P**. لما المحرك المدمج ما يلقى بيانات خلال 40 ثانية، يجرّب رِواق نفس التورنت فيه قبل المصدر التالي. رِواق ما يحمله معه، ويتأكد من بصمته قبل ما يحفظه وقبل أول تشغيل.
-- **التثبيت لكل المستخدمين:** المثبّت يسمح مرة ثانية بخيار «Anyone who uses this computer»، بموافقة المسؤول ([#86](https://github.com/ABADIOSA/riwaq/issues/86)).
-- **أدوات المشغّل ما تعلق:** الضغط على الصورة مع حركة بسيطة للفأرة كان يخلي MPV يبدأ سحب نافذته، ونافذته جزء من نافذة رِواق، فتنمسك كل النقرات لين تضغط مرة ثانية. انطفى هالسحب، وصار رِواق أخف وقت المشاهدة: أقل تحديثات لأدوات التحكم، وحفظ الموضع كل 20 ثانية بدل كل 5.
+- **أزرار المشغّل تستجيب للنقر:** نافذة أدوات المشغّل كانت ما تقبل التركيز، وفي هالحالة يرمي ويندوز ضغطة زر الفأرة وتوصل رفعته لحالها، فتطلع التلميحات والنقرة ما تشتغل. الحين تقبل التركيز وتوصلها النقرة كاملة.
+- **اختصاراتك من أدوات المشغّل:** كلها تشتغل، حتى اللي غيّرتها بنفسك. وEsc يقفل اللوحة أول، وF8 يستعيد الأدوات حتى لو علّقت.
+- **المسافة توقف الفيديو دائماً:** حتى بعد ما تغيّر الصوت أو تضغط زر بالفأرة، بدل ما تعيد نفس الزر.
+- **Tab** صار يتنقّل بين أزرار المشغّل، فالتخطي من زره أو من مفتاح تختاره في الاختصارات.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -109,20 +107,18 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.45.1-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.45.1-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.46.1-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.46.1-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.46.0
+### What's new in 0.46.1
 
-- **Torrents find more peers:** the built-in engine now also asks public trackers (HTTPS ones included, for networks that block UDP), starts the DHT from the last run, and asks again every 30 seconds while there are few peers, as Harbor and Nuvio HTPC do.
-- **"Let peers connect to you"** (on from the start) asks your router to open the engine's port (UPnP and NAT-PMP), and **"Check the network"** tells you what your network reaches. Settings → **P2P engine**.
-- **Season packs:** the engine plays the episode the addon names instead of the pack's largest file.
-- **TorrServer as a fallback:** an open-source torrent program (GPL-3.0) you download with one click on the **P2P engine** page. When the built-in engine gets no data within 40 seconds, Riwaq tries the same torrent there before the next source. Riwaq does not ship it, and checks its fingerprint before saving it and before it first runs.
-- **Installing for every user:** the installer offers "Anyone who uses this computer" again, with administrator approval ([#86](https://github.com/ABADIOSA/riwaq/issues/86)).
-- **The player controls no longer freeze:** pressing on the picture and moving the mouse a little made MPV start dragging its own window, which is part of Riwaq's, so every click was held until the next one. That dragging is off, and Riwaq does less while a title plays: fewer updates to the controls, and the position saved every 20 seconds instead of every 5.
+- **The player buttons respond to clicks:** the controls window could not take focus, and for such a window Windows discards the mouse press so only the release arrives, which showed tooltips but ignored every click. It now takes focus and gets the whole click.
+- **Your shortcuts from the player controls:** all of them work, including the ones you changed. Esc closes the panel first, and F8 recovers the controls even when they froze.
+- **Space always pauses:** even after you change the volume or click a button, instead of pressing that button again.
+- **Tab** now moves between the player's buttons, so skip with its button or a key you choose in the shortcuts.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
