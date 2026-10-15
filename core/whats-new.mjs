@@ -15,6 +15,7 @@ export const WHATS_NEW = [
       "حزمة موسم كاملة؟ المحرك يشغّل الحلقة اللي سمّتها الإضافة بدل أكبر ملف.",
       "TorrServer احتياطياً: نزّله من صفحة محرك P2P، ولما المحرك المدمج ما يلقى بيانات خلال 40 ثانية يجرّب رِواق نفس التورنت فيه قبل المصدر التالي.",
       "المثبّت يسمح مرة ثانية بالتثبيت لكل مستخدمي الجهاز، بموافقة المسؤول.",
+      "أدوات المشغّل ما تعلق: MPV كان يبدأ سحب نافذته لما تضغط على الصورة وتحرك الفأرة شوي، فتنمسك كل النقرات في رِواق. وصار رِواق يشتغل أخف وقت المشاهدة.",
     ],
     en: {
       title: "Torrents that find more peers, and TorrServer as a fallback",
@@ -24,6 +25,7 @@ export const WHATS_NEW = [
         "A whole season pack? The engine plays the episode the addon names instead of the largest file.",
         "TorrServer as a fallback: download it from the P2P engine page, and when the built-in engine gets no data within 40 seconds, Riwaq tries the same torrent there before the next source.",
         "The installer can install for every user of the PC again, with administrator approval.",
+        "The player controls no longer freeze: MPV started dragging its own window when you pressed on the picture and moved the mouse a little, which held every click in Riwaq. Riwaq also does less work while a title plays.",
       ],
     },
   },

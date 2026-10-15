@@ -131,6 +131,24 @@ export function buildActivity({
   return activity;
 }
 
+/**
+ * Whether a new activity says nothing the last one did not: the same text,
+ * images and buttons, and a clock within `slack` ms (it is rebuilt from the
+ * position on every player update, so it drifts a little each time).
+ */
+export function samePresence(a, b, slack = 3000) {
+  if (!a || !b) return a === b;
+  const { timestamps: ta, ...restA } = a;
+  const { timestamps: tb, ...restB } = b;
+  if (JSON.stringify(restA) !== JSON.stringify(restB)) return false;
+  if (!ta || !tb) return !ta && !tb;
+  const near = (x, y) =>
+    x === undefined || y === undefined
+      ? x === y
+      : Math.abs(Number(x) - Number(y)) <= slack;
+  return near(ta.start, tb.start) && near(ta.end, tb.end);
+}
+
 function encode(opcode, payload) {
   const body = Buffer.from(JSON.stringify(payload), "utf8");
   const header = Buffer.alloc(8);

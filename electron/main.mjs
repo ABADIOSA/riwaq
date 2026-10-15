@@ -65,11 +65,17 @@ import {
   HUD_METHODS,
   HUD_REQUESTS,
   HudHealth,
+  hudState,
   hudRect,
+  sameRect,
   hudVisible,
   separateRect,
 } from "../core/hud.mjs";
-import { DiscordPresence, buildActivity } from "../core/presence.mjs";
+import {
+  DiscordPresence,
+  buildActivity,
+  samePresence,
+} from "../core/presence.mjs";
 import {
   direction,
   language,
@@ -450,6 +456,8 @@ function watchTorrentStart(hash, engine = "builtin") {
   torrentWatch = watch;
   return watch;
 }
+// When a viewing's saved position last went to the windows (onProgress).
+let progressShown = 0;
 // Media keys control playback only while something plays.
 let mediaKeys = false;
 function setMediaKeys(on) {
@@ -512,7 +520,8 @@ function sendTo(win, name, data) {
 }
 const emit = (name, data) => {
   if (name !== "hudCommand") sendTo(window, name, data);
-  if (hudReady && HUD_EVENTS.has(name)) sendTo(hud, name, data);
+  if (hudReady && HUD_EVENTS.has(name))
+    sendTo(hud, name, name === "state" ? hudState(data) : data);
 };
 /**
  * During a viewing: a heads-up five minutes before a prayer and a notice at
@@ -696,7 +705,9 @@ function placeHud() {
   try {
     if (hud.isAlwaysOnTop() !== separate)
       hud.setAlwaysOnTop(separate, "screen-saver");
-    hud.setBounds(rect);
+    // Placement runs on every player update; Windows is asked to move the
+    // window only when its rectangle changed.
+    if (!sameRect(hud.getBounds(), rect)) hud.setBounds(rect);
     if (!hud.isVisible()) hud.showInactive();
     // MPV's window is on top as well and can come forward when it changes.
     if (separate) hud.moveTop();
@@ -995,14 +1006,16 @@ function shaderLibraryView() {
 }
 /**
  * Rich Presence mirrors whatever the player is doing. It is rebuilt on every
- * player state change, which is cheap, and skipped entirely when the viewer
- * has not opted in.
+ * player state change, which is cheap, sent only when it changed, and
+ * skipped entirely when the viewer has not opted in.
  */
+let lastActivity;
 function updatePresence() {
   const settings = client?.state.settings || {};
   if (!presence?.ready) return;
   if (!settings.discordPresence || settings.presenceDetail === "off") {
     presence.set(null);
+    lastActivity = undefined;
     return;
   }
   const state = player?.state || {};
@@ -1014,24 +1027,25 @@ function updatePresence() {
       state.mediaType === "series" ? String(state.videoId || "") : "",
     ) || [];
   const video = (meta.videos || []).find((v) => v.id === state.videoId);
-  presence.set(
-    buildActivity({
-      playing: !!state.active,
-      paused: !!state.pause,
-      live: !!state.live,
-      title: state.name || "",
-      year:
-        /\d{4}/.exec(String(meta.year || meta.releaseInfo || ""))?.[0] || "",
-      poster: meta.poster || "",
-      imdb: meta.imdb_id || meta.id || "",
-      season,
-      number,
-      episodeTitle: video?.title || video?.name || "",
-      position: Number(state.position) || 0,
-      duration: Number(state.duration) || 0,
-      detail: settings.presenceDetail || "title",
-    }),
-  );
+  const activity = buildActivity({
+    playing: !!state.active,
+    paused: !!state.pause,
+    live: !!state.live,
+    title: state.name || "",
+    year: /\d{4}/.exec(String(meta.year || meta.releaseInfo || ""))?.[0] || "",
+    poster: meta.poster || "",
+    imdb: meta.imdb_id || meta.id || "",
+    season,
+    number,
+    episodeTitle: video?.title || video?.name || "",
+    position: Number(state.position) || 0,
+    duration: Number(state.duration) || 0,
+    detail: settings.presenceDetail || "title",
+  });
+  // Called on every player update: Discord hears only what changed (a
+  // pause, a seek, another title), not the same activity many times a second.
+  if (samePresence(activity, lastActivity)) return;
+  if (presence.set(activity)) lastActivity = activity;
 }
 async function applyPresence() {
   const settings = client.state.settings;
@@ -1041,6 +1055,7 @@ async function applyPresence() {
     return false;
   }
   await presence.enable(client.state.discordAppId || "");
+  lastActivity = undefined;
   updatePresence();
   return true;
 }
@@ -2130,7 +2145,10 @@ const methods = {
     return true;
   },
   // The HUD reports when its controls fall asleep or wake.
-  hudSnapshot: () => ({ state: client.publicState(), player: player.state }),
+  hudSnapshot: () => ({
+    state: hudState(client.publicState()),
+    player: player.state,
+  }),
   hudIdle: (a) => {
     hudHealth.report(player?.state, a);
     hudIdle = a?.idle === true;
@@ -2775,6 +2793,7 @@ app
           const failed = s.active && s.error && !watching.error;
           if (failed) logError("player", s.error);
           const starting = s.active && !watching.active;
+          const ended = !s.active && watching.active;
           if (starting) {
             hudHealth.reset();
             ensureHud();
@@ -2796,6 +2815,12 @@ app
           // (scrobbling, presence) still runs, the window calls do not.
           if (!window || window.isDestroyed()) return;
           if (!s.active) releaseTorrent();
+          // Positions saved during the viewing reach the disk and the
+          // interface now.
+          if (!s.active && ended) {
+            client.flushProgress();
+            broadcast();
+          }
           if (!s.active) {
             try {
               videoHost.hide();
@@ -2819,7 +2844,13 @@ app
         onProgress: (...args) => {
           client.recordProgress(...args);
           client.integrations.queueHistory(...args);
-          broadcast();
+          // The position is saved every 5 s, but the whole state (which can
+          // run to megabytes) goes to the windows at most every 30 s while
+          // a title plays, and once more when the viewing ends.
+          if (!player.state.active || Date.now() - progressShown >= 30000) {
+            progressShown = Date.now();
+            broadcast();
+          }
         },
         onEnded: (data) => {
           emit("ended", data);
@@ -2909,9 +2940,10 @@ app
       cursorCheck = checkCursor;
       setInterval(checkCursor, 150);
       // MPV's own true-HDR window moves and resizes by itself (its full
-      // screen key, another monitor): the HUD follows it.
+      // screen key, another monitor): the HUD follows it. Inside Riwaq's
+      // window every change of the surface already places it.
       setInterval(() => {
-        if (player.state.active) placeHud();
+        if (player.state.active && player.state.separate) placeHud();
       }, 400);
       // Sound without a picture: start again once in the compatibility
       // mode, and say so; a second failure points at the diagnostic.

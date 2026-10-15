@@ -29,6 +29,26 @@ export function hudRect({ content, surface, zoom = 1 }) {
   return { x, y, width, height };
 }
 
+/** Whether two rectangles are the same (a placement that changes nothing). */
+export const sameRect = (a, b) =>
+  !!a &&
+  !!b &&
+  a.x === b.x &&
+  a.y === b.y &&
+  a.width === b.width &&
+  a.height === b.height;
+
+/**
+ * The part of the app's state the HUD page reads: settings (subtitles,
+ * controls, language) and progress (the episodes list's watched marks).
+ * The whole state (addons, library, lists, collections) can run to
+ * megabytes, and the HUD gets it on every change while a title plays.
+ */
+export function hudState(state) {
+  if (!state || typeof state !== "object") return null;
+  return { settings: state.settings, progress: state.progress };
+}
+
 /**
  * Whether the HUD should be on screen: a full-size viewing whose surface is
  * visible, with the overlay enabled and the main window not minimised. In

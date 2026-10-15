@@ -43,6 +43,7 @@
 - **حزم المواسم:** المحرك يشغّل الحلقة اللي سمّتها الإضافة بدل أكبر ملف في الحزمة.
 - **TorrServer احتياطياً:** برنامج تورنت مفتوح المصدر (GPL-3.0) تنزّله بضغطة من صفحة **محرك P2P**. لما المحرك المدمج ما يلقى بيانات خلال 40 ثانية، يجرّب رِواق نفس التورنت فيه قبل المصدر التالي. رِواق ما يحمله معه، ويتأكد من بصمته قبل ما يحفظه وقبل أول تشغيل.
 - **التثبيت لكل المستخدمين:** المثبّت يسمح مرة ثانية بخيار «Anyone who uses this computer»، بموافقة المسؤول ([#86](https://github.com/ABADIOSA/riwaq/issues/86)).
+- **أدوات المشغّل ما تعلق:** الضغط على الصورة مع حركة بسيطة للفأرة كان يخلي MPV يبدأ سحب نافذته، ونافذته جزء من نافذة رِواق، فتنمسك كل النقرات لين تضغط مرة ثانية. انطفى هالسحب، وصار رِواق أخف وقت المشاهدة: أقل تحديثات لأدوات التحكم، وحفظ الموضع كل 20 ثانية بدل كل 5.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -121,6 +122,7 @@ Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/lat
 - **Season packs:** the engine plays the episode the addon names instead of the pack's largest file.
 - **TorrServer as a fallback:** an open-source torrent program (GPL-3.0) you download with one click on the **P2P engine** page. When the built-in engine gets no data within 40 seconds, Riwaq tries the same torrent there before the next source. Riwaq does not ship it, and checks its fingerprint before saving it and before it first runs.
 - **Installing for every user:** the installer offers "Anyone who uses this computer" again, with administrator approval ([#86](https://github.com/ABADIOSA/riwaq/issues/86)).
+- **The player controls no longer freeze:** pressing on the picture and moving the mouse a little made MPV start dragging its own window, which is part of Riwaq's, so every click was held until the next one. That dragging is off, and Riwaq does less while a title plays: fewer updates to the controls, and the position saved every 20 seconds instead of every 5.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 

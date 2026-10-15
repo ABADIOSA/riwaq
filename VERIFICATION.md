@@ -1,5 +1,24 @@
 # Verification — Riwaq
 
+## 2026-10-15 — 0.46.0: the player controls freeze (after 0.45.1)
+
+- The owner reported that the controls still freeze during playback on 0.45.1. It was not reproduced here: no Windows desktop, MPV window or HUD window in this environment.
+- **Cause found in MPV's own source (v0.41.0, the build Riwaq ships, commit 41f6a64):**
+  - With `window-dragging` and `input-builtin-dragging` at their defaults (yes), a left press on MPV's window that moves 3 px (`input-dragging-deadzone`) queues `begin-vo-dragging` (`input/input.c`).
+  - The window thread then runs `begin_dragging` (`video/out/w32_common.c`): `ReleaseCapture()` and `SendMessage(WM_NCLBUTTONDOWN, HTCAPTION)`, which enters Windows' modal move loop on MPV's window. It is not skipped for an embedded (`--wid`) window, only in MPV's own full screen.
+  - It starts asynchronously (a voctrl sets `start_dragging`, read at the next window message), so it can begin after the button is already up; the loop then holds the mouse until another click.
+  - MPV's window is a child of Riwaq's surface, and a cross-thread (here cross-process) parent/child relationship attaches the two threads' input queues (Raymond Chen, "Is it legal to have a cross-process parent/child or owner/owned window relationship?"). While the loop runs, Riwaq's windows, the HUD included, get no mouse input. Firefox saw its whole window hang through the same attachment with plugin windows (bug 818059).
+  - A press reaches MPV whenever the HUD does not cover the picture: the first moments of each viewing, before the HUD's first heartbeat; the theater layout; the HUD turned off; and the HUD hidden after a missed heartbeat.
+- **Fix:** MPV gets `--window-dragging=no`, in Riwaq's window and in its own. In 0.41 that switch stops both the voctrl path (`mp_input_test_dragging`) and the built-in dragging (`dragging_button_down` needs it). `--input-builtin-dragging` is not passed: mpv 0.37 (installed here) refuses it with "option not found" and would not start, and a viewer may choose an older MPV. mpv 0.37 accepted `--window-dragging=no` and played a test source.
+- **Less work in main on every player update** (measured with a synthetic heavy library: 2,000 library titles, 800 progress records, 1,000 list entries, 15 addons, 3 profiles):
+  - the saved state is 5.2 MB of JSON: `JSON.stringify` alone took 20 ms warm (285 ms cold) on this machine, before DPAPI and the file write, every 5 s during a viewing. A position alone is now written at most every 20 s (`persistProgress`); any other change, the end of a viewing and quitting write it at once;
+  - the public state is 1.3 MB per window and went to both windows every 5 s (about 12 ms to serialize each). Now at most every 30 s during a viewing and once at its end; the HUD gets settings and progress only (0.4 MB here);
+  - `demuxer-cache-time`, `cache-buffering-state` and `video-bitrate` were published at once on every report (MPV reports the cache every 0.25 s while it fills), each time re-placing the HUD window and resending the player state to both pages. They are coalesced with the position now (a test: 80 reports in a burst give 2 updates, and `paused-for-cache` still goes out at once);
+  - `placeHud` calls `setBounds` only when the rectangle changed, and its 400 ms timer runs only for MPV's own window;
+  - Discord presence was written on every player update; it is now written only when it changed (`samePresence`).
+- **831 Node tests pass** (825 + 6 in `tests/controls-freeze.test.mjs`; two older tests updated for the new code shape).
+- **Not run:** any of it on Windows. Not tried: detaching the input queues (`AttachThreadInput(…, FALSE)`) after MPV's window appears; Firefox reverted that for a focus regression. If a freeze remains with the HUD covering the picture, that and a main-process stall trace are the next steps.
+
 ## 2026-10-15 — 0.46.0: torrents that reach more peers, TorrServer as a fallback, all-users install
 
 - **Issue #86 (installer):** the screenshot shows electron-builder's assisted installer with "Anyone who uses this computer (all users) (must run as admin)" greyed out. electron-builder's `multiUserUi.nsh` disables that choice when `allowElevation` is false, which Riwaq's config had. It is now true; `perMachine` stays false, so the per-user default is unchanged. The NSIS installer was not built or run here (no Windows): the change is checked against electron-builder's template and by a test of the config, not by installing.
