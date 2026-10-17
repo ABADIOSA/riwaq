@@ -7,6 +7,11 @@
 // Needs Playwright with its Chromium (`npm i -g playwright`, or set
 // RIWAQ_PLAYWRIGHT to its folder). Nothing here reaches the internet; the
 // addon, the video and the subtitle are served from this machine.
+//
+// The subtitle Chromium draws is measured where it lands on screen (through
+// DevTools, since it lives in the video's own shadow tree) against the
+// theater's timeline and buttons, in Arabic and English, at 1280×800 and
+// 980×680: player.png, player-980.png, player-rest.png and player-en.png.
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
@@ -253,6 +258,157 @@ try {
 
   const call = (method, args) =>
     page.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]);
+
+  // --- Where the subtitle is drawn ---------------------------------------
+  // Chromium draws a cue inside the video's user-agent shadow tree, which a
+  // page cannot read; DevTools can, so the box measured is the one on screen.
+  const cdp = await context.newCDPSession(page);
+  const subtitleBox = async () => {
+    const { root } = await cdp.send("DOM.getDocument", {
+      depth: -1,
+      pierce: true,
+    });
+    const cues = [];
+    const walk = (node) => {
+      const a = node.attributes || [];
+      for (let i = 0; i < a.length; i += 2)
+        if (a[i] === "pseudo" && a[i + 1] === "cue") cues.push(node.nodeId);
+      for (const child of [
+        ...(node.children || []),
+        ...(node.shadowRoots || []),
+      ])
+        walk(child);
+    };
+    walk(root);
+    let box = null;
+    for (const nodeId of cues) {
+      // A cue laid again meanwhile has a new node: the callers ask again.
+      const drawn = await cdp
+        .send("DOM.getContentQuads", { nodeId })
+        .catch(() => null);
+      if (!drawn) return null;
+      for (const q of drawn.quads) {
+        const xs = [q[0], q[2], q[4], q[6]];
+        const ys = [q[1], q[3], q[5], q[7]];
+        const b = {
+          left: Math.min(...xs),
+          right: Math.max(...xs),
+          top: Math.min(...ys),
+          bottom: Math.max(...ys),
+        };
+        box = box
+          ? {
+              left: Math.min(box.left, b.left),
+              right: Math.max(box.right, b.right),
+              top: Math.min(box.top, b.top),
+              bottom: Math.max(box.bottom, b.bottom),
+            }
+          : b;
+      }
+    }
+    return box;
+  };
+  // The controls a subtitle must not cover: the timeline and the buttons.
+  const controlsBoxes = () =>
+    page.evaluate(() =>
+      [".seek-line", ".theater-actions"].map((name) => {
+        const r = document
+          .querySelector(`.theater-controls ${name}`)
+          .getBoundingClientRect();
+        return {
+          name,
+          left: r.left,
+          right: r.right,
+          top: r.top,
+          bottom: r.bottom,
+        };
+      }),
+    );
+  const crosses = (a, b) =>
+    a.left < b.right &&
+    b.left < a.right &&
+    a.top < b.bottom &&
+    b.top < a.bottom;
+  const cueLine = () =>
+    page.evaluate(
+      () =>
+        [...document.querySelector("video.riwaq-video").textTracks].find(
+          (t) => t.mode === "showing",
+        )?.cues?.[0]?.line,
+    );
+  const rounded = ({ left, right, top, bottom }) =>
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries({ left, right, top, bottom }).map(([k, v]) => [
+          k,
+          Math.round(v),
+        ]),
+      ),
+    );
+  /** The controls show: the subtitle is drawn whole above them. */
+  const subtitleClear = async (label, { overPicture = true } = {}) => {
+    assert.equal(
+      await page.evaluate(
+        () => !!document.querySelector(".theater:not(.controls-asleep)"),
+      ),
+      true,
+      `${label}: the controls show`,
+    );
+    let box = null;
+    let controls = [];
+    // The line moves on the next frame after the controls change.
+    for (let i = 0; i < 30; i++) {
+      box = await subtitleBox();
+      controls = await controlsBoxes();
+      if (box && !controls.some((c) => crosses(box, c))) break;
+      await page.waitForTimeout(100);
+    }
+    assert.ok(box, `${label}: a subtitle is drawn`);
+    for (const c of controls)
+      assert.ok(
+        !crosses(box, c),
+        `${label}: the subtitle ${rounded(box)} crosses ${c.name} ${rounded(c)}`,
+      );
+    assert.ok(box.bottom <= controls[0].top, `${label}: above the timeline`);
+    if (overPicture)
+      assert.ok((await cueLine()) < 95, `${label}: raised over the controls`);
+    else assert.equal(await cueLine(), 95, `${label}: the viewer's own line`);
+    return box;
+  };
+  /** The controls rest: the subtitle is back on the viewer's line. */
+  const subtitleRests = async (label, raised) => {
+    await page.waitForSelector(".theater.controls-asleep", { timeout: 8000 });
+    let box = null;
+    for (let i = 0; i < 30; i++) {
+      box = await subtitleBox();
+      if (box && box.bottom > raised.bottom + 20) break;
+      await page.waitForTimeout(100);
+    }
+    assert.ok(
+      box && box.bottom > raised.bottom + 20,
+      `${label}: the subtitle ${box && rounded(box)} came back down from ${rounded(raised)}`,
+    );
+    assert.equal(await cueLine(), 95, `${label}: the viewer's own line`);
+    return box;
+  };
+  const fullScreen = () =>
+    page.evaluate(() =>
+      document.documentElement.classList.contains("web-fullscreen"),
+    );
+  const pause = async (paused) => {
+    await call("playerCommand", { action: "pause" });
+    await page.waitForFunction(
+      (want) => document.querySelector("video.riwaq-video")?.paused === want,
+      paused,
+    );
+  };
+  // The notice that a subtitle was picked closes, so the pictures show only
+  // the subtitle and the controls.
+  const closeToast = async () => {
+    if (await page.locator(".toast").count())
+      await page.locator(".toast button").click();
+    await page.waitForFunction(() => !document.querySelector(".toast"));
+  };
   if (await page.locator(".whats-new").count())
     await page.locator(".whats-new .primary").click();
   await page.locator(".notification-trigger").click();
@@ -361,19 +517,108 @@ try {
     return t ? t.cues.length : 0;
   });
   assert.ok(track >= 1, "the subtitle shows as a text track");
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: join(output, "player.png") });
   step("an addon subtitle is fetched, parsed by core/subtitles and shown");
 
-  await call("playerCommand", { action: "pause" });
-  await page.waitForFunction(
-    () => document.querySelector("video.riwaq-video")?.paused,
+  // The browser's full screen (autoFullscreen) lays the controls over the
+  // picture. While they show, the subtitle sits above the timeline; when
+  // they rest, it goes back to the viewer's line. The video is 8 s long, so
+  // the checks pause or seek back before the controls are left to rest.
+  await closeToast();
+  assert.equal(await fullScreen(), true, "the viewing went full screen");
+  await pause(true);
+  const raised = await subtitleClear("paused at 1280×800");
+  await page.screenshot({ path: join(output, "player.png") });
+  await page.setViewportSize({ width: 980, height: 680 });
+  await subtitleClear("paused at 980×680");
+  await page.screenshot({ path: join(output, "player-980.png") });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  step(
+    "paused in full screen, the subtitle sits above the timeline and buttons at 1280×800 and 980×680",
   );
+
+  const surface = await page.locator(".theater .video-surface").boundingBox();
+  const onPicture = () =>
+    page.mouse.move(
+      surface.x + surface.width / 2,
+      surface.y + surface.height / 3,
+    );
+  await call("playerCommand", { action: "seek", value: 0.6 });
+  await onPicture();
+  await pause(false);
+  await subtitleRests("playing with the pointer still", raised);
+  await page.screenshot({ path: join(output, "player-rest.png") });
+  step("when the controls rest, the subtitle returns to the viewer's line");
+
+  const actions = await page
+    .locator(".theater-controls .theater-actions")
+    .boundingBox();
+  await page.mouse.move(
+    actions.x + actions.width / 2,
+    actions.y + actions.height / 2,
+  );
+  await subtitleClear("the pointer on the controls");
+  await call("playerCommand", { action: "seek", value: 0.6 });
+  await onPicture();
+  await subtitleRests("the pointer back on the picture", raised);
+  await page.locator(".theater-actions button").first().focus();
+  await page.keyboard.press("Tab");
+  await subtitleClear("keyboard focus in the controls");
+  await page.evaluate(() => document.activeElement?.blur());
+  step("the pointer on the controls, or keyboard focus in them, raises it");
+
+  // Outside full screen the controls have their own row under the picture:
+  // nothing covers it, and the subtitle stays on the viewer's line.
+  await pause(true);
+  await page.evaluate(() => document.exitFullscreen());
+  await page.waitForFunction(
+    () => !document.documentElement.classList.contains("web-fullscreen"),
+  );
+  await subtitleClear("outside full screen", { overPicture: false });
+  step("outside full screen the controls sit below the picture and it stays");
+
   await call("stop");
   await page.waitForFunction(() => !document.querySelector(".theater"));
   const progress = (await call("init")).progress["movie:webfix:last-train"];
   assert.ok(progress?.position > 1, "progress is saved");
   step("pause and stop work, and the position is saved for resuming");
+
+  // The English interface runs left to right: the same, in a new viewing.
+  await call("settings", { uiLanguage: "en" });
+  await page.reload();
+  await page.waitForSelector(".app", { timeout: 20000 });
+  assert.equal(await page.evaluate(() => document.documentElement.dir), "ltr");
+  const again = await call("streams", {
+    type: "movie",
+    id: "webfix:last-train",
+  });
+  await call("play", {
+    key: again.streams[0].key,
+    meta: { id: meta.id, type: "movie", name: meta.name },
+    videoId: "webfix:last-train",
+    resume: false,
+  });
+  await page.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.currentTime > 0.7,
+    null,
+    { timeout: 20000 },
+  );
+  await call("subtitle", { key: (await call("subtitles"))[0].key });
+  await closeToast();
+  await pause(true);
+  assert.equal(await fullScreen(), true, "the English viewing is full screen");
+  await subtitleClear("English, paused at 1280×800");
+  await page.screenshot({ path: join(output, "player-en.png") });
+  await page.setViewportSize({ width: 980, height: 680 });
+  await subtitleClear("English, paused at 980×680");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await call("stop");
+  await page.waitForFunction(() => !document.querySelector(".theater"));
+  await call("settings", { uiLanguage: "ar" });
+  await page.reload();
+  await page.waitForSelector(".app", { timeout: 20000 });
+  step(
+    "in English (left to right) the subtitle sits above the controls at 1280×800 and 980×680",
+  );
 
   // A backup made on the web opens with the desktop's own code.
   const [download] = await Promise.all([

@@ -56,7 +56,8 @@
 
 /* Full screen in a browser is the whole page. The theater keeps its own
    controls (there is no MPV controller here) and lays them over the
-   picture, fading while the pointer rests. */
+   picture, fading when they rest (PlayerView.jsx `controls-asleep`); while
+   they show, web/player.js raises the subtitles above the timeline. */
 html.web-fullscreen .theater:not(.mini-theater) {
   padding: 0;
   grid-template-rows: minmax(0, 1fr);
@@ -83,10 +84,10 @@ html.web-fullscreen .theater:not(.mini-theater) .theater-controls {
   padding-block: 40px 18px;
   background: linear-gradient(transparent, #000000d0);
 }
-html.web-fullscreen .theater.pointer-still:not(.mini-theater) .theater-header,
+html.web-fullscreen .theater.controls-asleep:not(.mini-theater) .theater-header,
 html.web-fullscreen
-  .theater.pointer-still:not(.mini-theater)
-  .theater-controls:not(:hover) {
+  .theater.controls-asleep:not(.mini-theater)
+  .theater-controls {
   opacity: 0;
 }
 

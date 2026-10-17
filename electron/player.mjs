@@ -1,4 +1,8 @@
-import { styleArgs, styleProperties } from "../core/subtitles.mjs";
+import {
+  styleArgs,
+  styleProperties,
+  subtitleLift,
+} from "../core/subtitles.mjs";
 import { t } from "../core/i18n.mjs";
 import { spawn } from "node:child_process";
 import net from "node:net";
@@ -335,6 +339,10 @@ export class Player {
     this.onEvent = onEvent || (() => {});
     this.state = { active: false };
     this.sleepTimer = null;
+    // Subtitles over the HUD's controls (setSubtitleCover); reset by start.
+    this.subtitleCover = 0;
+    this.subtitleSent = null;
+    this.subtitleAsked = [];
   }
   async start({
     executable,
@@ -458,9 +466,15 @@ export class Player {
       glslLabel: glsl.label,
       glslSkipped: glsl.skipped || "",
       glslOptions: glsl.options,
+      // The viewer's line (sub-pos); MPV's may sit higher over the HUD.
+      subtitlePosition: settings.subtitlePosition ?? 95,
     };
     // Riwaq's HUD covers MPV's own window only once main has found it.
     this.covered = false;
+    // MPV starts on the viewer's line; the HUD's controls cover nothing yet.
+    this.subtitleCover = 0;
+    this.subtitleSent = this.state.subtitlePosition;
+    this.subtitleAsked = [];
     // MPV creates its window at the surface's size of the moment: give the
     // hidden surface its size first, so that window never starts at 1×1.
     if (!separate) this.host?.prepare?.();
@@ -711,6 +725,43 @@ export class Player {
     this.covered = covered;
     if (this.state.active && this.state.separate) this.applyController();
   }
+  /**
+   * The share of the picture the HUD's controls cover while they show (0
+   * while they sleep or the HUD is not over it): MPV's subtitles rise above
+   * them, and come back down when they hide. state.subtitlePosition stays
+   * the viewer's own line throughout.
+   */
+  setSubtitleCover(cover) {
+    this.subtitleCover = typeof cover === "number" ? cover : 0;
+    this.applySubtitlePosition();
+  }
+  applySubtitlePosition() {
+    if (!this.state.active) return;
+    const line = subtitleLift(this.state.subtitlePosition, this.subtitleCover);
+    if (line === this.subtitleSent) return;
+    if (!this.send(["set_property", "sub-pos", line])) return;
+    this.subtitleSent = line;
+    // MPV reports each line back; those reports are not the viewer's.
+    this.subtitleAsked = [...this.subtitleAsked, line].slice(-8);
+  }
+  /**
+   * MPV reported sub-pos. A line Riwaq asked for (applySubtitlePosition) is
+   * passed over, with any it skipped; anything else is the viewer's own
+   * change, one of MPV's keys, and becomes their line.
+   */
+  readSubtitlePosition(value) {
+    if (!Number.isFinite(value)) return;
+    const asked = this.subtitleAsked.findIndex(
+      (line) => Math.abs(line - value) < 0.01,
+    );
+    if (asked >= 0) {
+      this.subtitleAsked = this.subtitleAsked.slice(asked + 1);
+      return;
+    }
+    this.subtitleSent = value;
+    this.state.subtitlePosition = value;
+    this.applySubtitlePosition();
+  }
   applyController() {
     const own = this.state.separate
       ? !this.covered
@@ -797,7 +848,8 @@ export class Player {
     if (event.event === "property-change") {
       if (event.name === "track-list") this.rawTracks = event.data || [];
       const mapping = PROPERTIES.find(([name]) => name === event.name);
-      if (mapping && event.data === undefined && NULLABLE.has(event.name))
+      if (event.name === "sub-pos") this.readSubtitlePosition(event.data);
+      else if (mapping && event.data === undefined && NULLABLE.has(event.name))
         this.state[mapping[1]] = null;
       else if (mapping && event.data !== undefined) {
         this.state[mapping[1]] =
@@ -1229,9 +1281,11 @@ export class Player {
       this.lastSaved = Date.now();
     }
   }
+  /** Whether the command reached MPV: nothing is sent before its pipe opens. */
   send(command) {
-    if (this.socket?.writable)
-      this.socket.write(JSON.stringify({ command }) + "\n");
+    if (!this.socket?.writable) return false;
+    this.socket.write(JSON.stringify({ command }) + "\n");
+    return true;
   }
   command({ action, value }) {
     if (!this.state.active) throw new Error("لا توجد مشاهدة حالية");
@@ -1291,13 +1345,10 @@ export class Player {
         "sub-font-size",
         Math.max(18, Math.min(80, number)),
       ]);
-    else if (action === "subtitlePosition" && Number.isFinite(number))
-      this.send([
-        "set_property",
-        "sub-pos",
-        Math.max(0, Math.min(150, number)),
-      ]);
-    else if (action === "subtitleStyle" && value && typeof value === "object")
+    else if (action === "subtitlePosition" && Number.isFinite(number)) {
+      this.state.subtitlePosition = Math.max(0, Math.min(150, number));
+      this.applySubtitlePosition();
+    } else if (action === "subtitleStyle" && value && typeof value === "object")
       for (const [name, v] of styleProperties(value))
         this.send(["set_property", name, v]);
     else if (action === "subtitleVisible")

@@ -101,3 +101,28 @@ test("the HUD reports its idle state and main releases the pointer", () => {
     );
   }
 });
+
+test("the HUD's awake controls lift MPV's subtitles, and nothing else does", () => {
+  const main = readFileSync(
+    new URL("../electron/main.mjs", import.meta.url),
+    "utf8",
+  );
+  const hud = readFileSync(
+    new URL("../src/components/Hud.jsx", import.meta.url),
+    "utf8",
+  );
+  // The report measures the timeline only while the controls show.
+  assert.match(hud, /shown && document\.querySelector\("\.hud-seek"\)/);
+  assert.match(hud, /cover: timeline\s*\?\s*controlsCover\(/);
+  // Covering applies only where the HUD is placed over the picture; a HUD
+  // that is hidden, not ready, closed or broken covers nothing.
+  assert.match(main, /setSubtitleCover\(hudIdle \? 0 : hudCover\)/);
+  for (const where of ["function closeHud", 'hud.on("closed"', "if (!show)"]) {
+    const at = main.indexOf(where);
+    assert.ok(at > 0, where);
+    assert.ok(
+      main.slice(at, at + 400).includes("setSubtitleCover(0)"),
+      `${where} lowers the subtitles again`,
+    );
+  }
+});

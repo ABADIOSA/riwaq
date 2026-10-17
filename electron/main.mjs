@@ -514,8 +514,10 @@ let hud = null;
 let hudReady = false;
 const hudHealth = new HudHealth();
 let surfaceShown = false;
-// Whether the HUD's controls are asleep, reported by the HUD page.
+// Whether the HUD's controls are asleep, reported by the HUD page, and the
+// share of the picture they cover while they show (subtitles rise over it).
 let hudIdle = false;
+let hudCover = 0;
 let cursorCheck = () => {};
 const cursorGate = new CursorGate((visible) => {
   if (process.platform === "win32") showSystemCursor(visible);
@@ -671,8 +673,10 @@ function ensureHud() {
     hudReady = false;
     hudHealth.reset();
     hudIdle = false;
+    hudCover = 0;
     cursorGate.release();
     player?.setOverlay(false);
+    player?.setSubtitleCover(0);
   });
   hud
     .loadFile(fileURLToPath(new URL("../dist/index.html", import.meta.url)), {
@@ -683,12 +687,14 @@ function ensureHud() {
 }
 function closeHud() {
   hudIdle = false;
+  hudCover = 0;
   cursorGate.release();
   if (hud && !hud.isDestroyed()) hud.destroy();
   hud = null;
   hudReady = false;
   hudHealth.reset();
   player?.setOverlay(false);
+  player?.setSubtitleCover(0);
 }
 /**
  * MPV's own true-HDR window, in DIPs for the HUD, or null. Found through
@@ -719,6 +725,7 @@ function placeHud() {
   ) {
     player?.setOverlay(false);
     player?.setCovered(false);
+    player?.setSubtitleCover(0);
     return;
   }
   // Readiness drives the theater layout; temporary surface hiding during a
@@ -746,6 +753,7 @@ function placeHud() {
   // MPV's own controller stands in while the HUD cannot cover its window.
   if (!show) {
     player?.setCovered(false);
+    player?.setSubtitleCover(0);
     if (hud.isVisible()) hud.hide();
     hudIdle = false;
     cursorGate.release();
@@ -770,10 +778,12 @@ function placeHud() {
     // MPV's window is on top as well and can come forward when it changes.
     if (separate) hud.moveTop();
     player?.setCovered(!!(separate && hud.isVisible()));
+    player?.setSubtitleCover(hudIdle ? 0 : hudCover);
   } catch (error) {
     hudHealth.reset();
     player?.setCovered(false);
     player?.setOverlay(false);
+    player?.setSubtitleCover(0);
     logError("hud", error);
   }
 }
@@ -2213,6 +2223,8 @@ const methods = {
   hudIdle: (a) => {
     hudHealth.report(player?.state, a);
     hudIdle = a?.idle === true;
+    // Player.setSubtitleCover bounds it; anything but a number is none.
+    hudCover = typeof a?.cover === "number" ? a.cover : 0;
     placeHud();
     cursorCheck();
     return true;

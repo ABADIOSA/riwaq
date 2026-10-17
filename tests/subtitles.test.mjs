@@ -15,7 +15,10 @@ import {
   styleProperties,
   styleArgs,
   audioLabel,
+  controlsCover,
+  subtitleLift,
   DEFAULT_SUBTITLE_STYLE,
+  SUBTITLE_CLEARANCE,
 } from "../core/subtitles.mjs";
 import { Client } from "../core/client.mjs";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
@@ -491,4 +494,68 @@ test("audio tracks read as language, title, codec and layout", () => {
   );
   assert.equal(audioLabel({ lang: "ara", channels: 2 }), "العربية · ستيريو");
   assert.equal(audioLabel({}), "غير محددة");
+});
+
+test("subtitles rise over the controls while they show, only as far as needed", () => {
+  // The web theater in full screen at 1280×800: its timeline starts 90 px
+  // above the picture's bottom edge.
+  const picture = { top: 0, bottom: 800 };
+  const cover = controlsCover(picture, 710);
+  assert.equal(cover, (90 + SUBTITLE_CLEARANCE) / 800);
+  assert.equal(subtitleLift(95, cover), 86);
+  // A line the viewer already put higher stays; a line is never lowered.
+  assert.equal(subtitleLift(70, cover), 70);
+  // The theater's own row under the picture covers none of it.
+  assert.equal(controlsCover(picture, 800), 0);
+  assert.equal(controlsCover(picture, 836), 0);
+  assert.equal(subtitleLift(95, 0), 95);
+  // Nothing measured covers nothing; however they measure, half at most.
+  assert.equal(controlsCover({ top: 0, bottom: 0 }, 10), 0);
+  assert.equal(controlsCover(picture, Number.NaN), 0);
+  assert.equal(controlsCover(picture, -300), 0.5);
+  assert.equal(subtitleLift(95, "most"), 95);
+  assert.equal(subtitleLift(95, 4), 50);
+  assert.equal(subtitleLift(undefined), 95);
+});
+
+test("MPV's subtitles rise over the HUD's controls and return, on the viewer's line", () => {
+  const sent = [];
+  let open = false;
+  const player = new Player({ onState: () => {} });
+  player.send = (command) => open && sent.push(command[2]) > 0;
+  player.state = { active: true, subtitlePosition: 95 };
+  player.subtitleSent = 95;
+  const mpv = (data) =>
+    player.event({ event: "property-change", name: "sub-pos", data });
+  // The HUD reports before MPV's pipe opens: nothing counts as sent yet.
+  player.setSubtitleCover(0.1325);
+  assert.deepEqual(sent, []);
+  open = true;
+  player.setSubtitleCover(0.1325);
+  assert.deepEqual(sent, [86]);
+  mpv(86);
+  assert.equal(player.state.subtitlePosition, 95, "MPV's echo is not theirs");
+  player.setSubtitleCover(0.1325);
+  assert.deepEqual(sent, [86], "the same cover sends nothing again");
+  // The panel moves the viewer's line: higher shows at once; lower waits
+  // under the controls until they hide.
+  player.command({ action: "subtitlePosition", value: 70 });
+  assert.deepEqual(sent, [86, 70]);
+  player.command({ action: "subtitlePosition", value: 92 });
+  assert.equal(player.state.subtitlePosition, 92);
+  assert.deepEqual(sent, [86, 70, 86]);
+  player.setSubtitleCover(0);
+  assert.deepEqual(sent, [86, 70, 86, 92]);
+  // MPV reports only the last of the lines it was sent.
+  mpv(92);
+  assert.equal(player.state.subtitlePosition, 92);
+  // One of MPV's own keys moves it: that is the viewer's line now.
+  mpv(93);
+  assert.equal(player.state.subtitlePosition, 93);
+  player.setSubtitleCover(0.2);
+  assert.deepEqual(sent, [86, 70, 86, 92, 80]);
+  mpv(80);
+  assert.equal(player.state.subtitlePosition, 93);
+  player.setSubtitleCover("x");
+  assert.deepEqual(sent, [86, 70, 86, 92, 80, 93]);
 });

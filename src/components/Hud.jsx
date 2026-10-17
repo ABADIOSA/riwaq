@@ -31,6 +31,7 @@ import { SEPARATE_HIDDEN } from "../../core/hud.mjs";
 import { qualityChips } from "../../core/player-tuning.mjs";
 import { startLine } from "../../core/torrent-engine.mjs";
 import { hudKey, pointerFocus } from "../../core/hotkeys.mjs";
+import { controlsCover } from "../../core/subtitles.mjs";
 import { useInterfaceLanguage } from "../lib/language.js";
 import { loc } from "../lib/format.js";
 
@@ -272,13 +273,23 @@ export default function Hud() {
   }, [volumePopup]);
   const series = player.mediaType === "series";
   // Main hides the pointer itself (CSS cursor alone does not in this window).
+  // While the controls show, MPV raises its subtitles above their timeline:
+  // the report says how much of the picture (this whole window) they cover.
   useEffect(() => {
-    const report = () =>
+    const report = () => {
+      const timeline = shown && document.querySelector(".hud-seek");
       call("hudIdle", {
         idle: !!player.active && !shown,
         active: !!player.active,
         videoId: player.videoId,
+        cover: timeline
+          ? controlsCover(
+              { top: 0, bottom: window.innerHeight },
+              timeline.getBoundingClientRect().top,
+            )
+          : 0,
       }).catch(() => {});
+    };
     report();
     if (!player.active) return;
     const timer = setInterval(report, 1000);

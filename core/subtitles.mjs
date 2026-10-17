@@ -291,6 +291,40 @@ export function styleArgs(input) {
   return styleProperties(input).map(([name, value]) => `--${name}=${value}`);
 }
 
+// --- Position over the controls ---------------------------------------------
+
+/** Room between a raised subtitle and the timeline under it, in CSS pixels. */
+export const SUBTITLE_CLEARANCE = 16;
+// The most of the picture the controls may claim, however they measure.
+const MAX_COVER = 0.5;
+
+/**
+ * The share of the picture's height that the player's controls cover while
+ * they show: from the picture's bottom edge up to `top`, the top of their
+ * timeline (both in the page's pixels), plus SUBTITLE_CLEARANCE. 0 when the
+ * timeline sits below the picture (the theater's own row) or nothing measures.
+ */
+export function controlsCover(picture, top, gap = SUBTITLE_CLEARANCE) {
+  const height = picture?.bottom - picture?.top;
+  if (!(height > 0) || !Number.isFinite(top) || top >= picture.bottom) return 0;
+  const covered = picture.bottom - Math.max(top, picture.top) + gap;
+  return Math.min(MAX_COVER, covered / height);
+}
+
+/**
+ * Where the subtitle line sits while the controls cover the bottom `cover`
+ * of the picture: the viewer's position (subtitlePosition, % of the height
+ * with 100 at the bottom edge, as MPV's sub-pos and the web's cue line both
+ * read it), raised just enough to clear them, never lowered. MPV keeps a
+ * margin under the line of its own, so the same number clears there too.
+ */
+export function subtitleLift(position, cover = 0) {
+  const base = Number.isFinite(Number(position)) ? Number(position) : 95;
+  const share = Number(cover);
+  if (!(share > 0)) return base;
+  return Math.min(base, Math.floor(100 - Math.min(MAX_COVER, share) * 100));
+}
+
 // --- Audio ------------------------------------------------------------------
 
 const LAYOUTS = { 1: "أحادي", 2: "ستيريو", 6: "5.1", 8: "7.1" };

@@ -23,8 +23,10 @@ import {
 } from "../core/skip-segments.mjs";
 import {
   DEFAULT_SUBTITLE_STYLE,
+  controlsCover,
   parseCues,
   safeSubtitleStyle,
+  subtitleLift,
 } from "../core/subtitles.mjs";
 
 const POSITION_MS = 250;
@@ -191,7 +193,58 @@ export class WebPlayer {
     const surface = document.querySelector(".theater .video-surface");
     if (surface && box.parentElement !== surface) surface.prepend(box);
     box.hidden = !this.visible || !surface;
+    this.watchControls(surface?.closest(".theater") || null);
+    this.measureCover();
     return !!surface && this.visible;
+  }
+
+  /**
+   * In the browser's full screen the theater lays its controls over the
+   * picture (web.css). While they show, the subtitle line rises above their
+   * timeline, and it returns when they hide: the theater says which with
+   * `controls-asleep` (PlayerView.jsx), so its class and sizes are watched.
+   */
+  watchControls(theater) {
+    if (this.watched === theater) return;
+    this.unwatchControls();
+    if (!theater || typeof MutationObserver === "undefined") return;
+    this.watched = theater;
+    const measure = () => this.measureCover();
+    const classes = new MutationObserver(measure);
+    classes.observe(theater, { attributes: true, attributeFilter: ["class"] });
+    const sizes =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(measure);
+    for (const el of theater.querySelectorAll(
+      ".video-surface, .theater-controls",
+    ))
+      sizes?.observe(el, { box: "border-box" });
+    this.unwatch = () => {
+      classes.disconnect();
+      sizes?.disconnect();
+    };
+  }
+  unwatchControls() {
+    this.unwatch?.();
+    this.unwatch = null;
+    this.watched = null;
+  }
+  measureCover() {
+    const theater = this.watched;
+    const timeline = theater?.querySelector(".theater-controls .seek-line");
+    const shown =
+      !!timeline &&
+      !!this.box &&
+      !this.box.hidden &&
+      !theater.classList.contains("controls-asleep");
+    const line = shown ? timeline.getBoundingClientRect() : null;
+    const cover = line?.height
+      ? controlsCover(this.box.getBoundingClientRect(), line.top)
+      : 0;
+    if (Math.abs(cover - (this.cover || 0)) < 0.002) return;
+    this.cover = cover;
+    if (this.state.active) this.relayout();
   }
 
   // --- Starting and stopping ----------------------------------------------
@@ -538,6 +591,8 @@ export class WebPlayer {
     if (cancelStart) this.startToken++;
     this.clearSleep();
     this.stopWatchdog();
+    this.unwatchControls();
+    this.cover = 0;
     clearTimeout(this.publishTimer);
     this.publishTimer = null;
     if (!this.state.active) return;
@@ -848,10 +903,15 @@ export class WebPlayer {
     }
   }
 
+  /**
+   * Lays the shown tracks out again: the viewer's line, raised over the
+   * controls while they show (measureCover). Chromium keeps a cue on screen
+   * where it was first drawn, so a new line needs the cues laid again.
+   */
   relayout() {
-    const bottom = Math.max(
-      5,
-      Math.min(100, Number(this.state.subtitlePosition ?? 95)),
+    const bottom = subtitleLift(
+      Math.max(5, Math.min(100, Number(this.state.subtitlePosition ?? 95))),
+      this.cover,
     );
     for (const sub of this.subs || []) {
       const id = `ext:${sub.id}`;

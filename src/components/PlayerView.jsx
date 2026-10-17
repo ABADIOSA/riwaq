@@ -46,6 +46,9 @@ export default function PlayerView({
     // it is open, as it does for any HTML dialog.
     [menu, setMenu] = useState(null),
     [still, setStill] = useState(false),
+    // The pointer rests on the controls, or a key brought focus into them.
+    [onControls, setOnControls] = useState(false),
+    [keyFocus, setKeyFocus] = useState(false),
     stillTimer = useRef();
   const mini = player.pip,
     // Full screen gives the whole window to the picture; MPV's own controller
@@ -55,6 +58,33 @@ export default function PlayerView({
     // only gives the whole window to the video.
     hudMode = !!player.overlay && !mini,
     command = (action, value) => act("playerCommand", { action, value });
+  // Without the HUD, the page still hides the pointer when the picture is
+  // the thing under it and the pointer has been still.
+  const wake = () => {
+    setStill(false);
+    clearTimeout(stillTimer.current);
+    stillTimer.current = setTimeout(() => setStill(true), 2500);
+  };
+  // The controls also come to rest when the pointer never moves: from the
+  // start, and again after a pause ends.
+  useEffect(() => {
+    if (!player.pause) wake();
+  }, [player.pause]);
+  useEffect(() => () => clearTimeout(stillTimer.current), []);
+  // As the HUD's (Hud.jsx `shown`): the controls stay while the pointer moves
+  // or rests on them, a key brought focus to them, the viewing is paused or
+  // loading, or the panel or the menu is open. Only the browser's full
+  // screen lays them over the picture and hides them (web/web.css), and the
+  // web player raises its subtitles above them while they show.
+  const asleep =
+    still &&
+    !mini &&
+    !onControls &&
+    !keyFocus &&
+    !dock &&
+    !menu &&
+    !player.loading &&
+    !(player.pause && state.settings.hudShowOnPause !== false);
   const series = player.mediaType === "series";
   const sleepLeft = player.sleepAt
     ? Math.max(0, Math.round((player.sleepAt - Date.now()) / 60000))
@@ -94,6 +124,7 @@ export default function PlayerView({
       if (e.code === "Space") {
         e.preventDefault();
         command("pause");
+        wake();
       }
       if (e.key.toLowerCase() === "f") command("fullscreen");
       if (e.key.toLowerCase() === "c" && !mini) {
@@ -105,7 +136,8 @@ export default function PlayerView({
         command("exitFullscreen");
       }
       // The same steps as MPV's own keys (core/hotkeys.mjs seekAmount).
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft")
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        wake();
         command(
           "seekBy",
           seekAmount(
@@ -113,6 +145,7 @@ export default function PlayerView({
             state.settings,
           ),
         );
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -147,14 +180,8 @@ export default function PlayerView({
         if (window.riwaq?.platform === "web") setDock("subs");
         else if (!mini) setMenu({ x: e.clientX, y: e.clientY });
       }}
-      onMouseMove={() => {
-        // Without the HUD, the page still hides the pointer when the picture
-        // is the thing under it and the pointer has been still.
-        setStill(false);
-        clearTimeout(stillTimer.current);
-        stillTimer.current = setTimeout(() => setStill(true), 2500);
-      }}
-      className={`theater ${still && !mini ? "pointer-still" : ""} ${mini ? "mini-theater" : ""} ${immersive || hudMode ? "immersive" : ""} ${dock && !hudMode ? "docked" : ""}`}
+      onMouseMove={wake}
+      className={`theater ${still && !mini ? "pointer-still" : ""} ${asleep ? "controls-asleep" : ""} ${mini ? "mini-theater" : ""} ${immersive || hudMode ? "immersive" : ""} ${dock && !hudMode ? "docked" : ""}`}
       aria-label="المشغل المدمج"
     >
       <header className="theater-header">
@@ -240,7 +267,16 @@ export default function PlayerView({
           onClose={() => setDock(null)}
         />
       )}
-      <div className="theater-controls">
+      <div
+        className="theater-controls"
+        onPointerEnter={() => setOnControls(true)}
+        onPointerLeave={() => setOnControls(false)}
+        // A click focuses a button too; only keyboard focus keeps them.
+        onFocus={(e) => setKeyFocus(e.target.matches(":focus-visible"))}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setKeyFocus(false);
+        }}
+      >
         <div className="seek-line" dir="ltr">
           <span>{player.live ? "مباشر" : clock(player.position)}</span>
           <span className="seek-track">
