@@ -30,18 +30,21 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.46.1-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.46.1-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.47.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.47.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.46.1
+### الجديد في 0.47.0
 
-- **أزرار المشغّل تستجيب للنقر:** نافذة أدوات المشغّل كانت ما تقبل التركيز، وفي هالحالة يرمي ويندوز ضغطة زر الفأرة وتوصل رفعته لحالها، فتطلع التلميحات والنقرة ما تشتغل. الحين تقبل التركيز وتوصلها النقرة كاملة.
-- **اختصاراتك من أدوات المشغّل:** كلها تشتغل، حتى اللي غيّرتها بنفسك. وEsc يقفل اللوحة أول، وF8 يستعيد الأدوات حتى لو علّقت.
-- **المسافة توقف الفيديو دائماً:** حتى بعد ما تغيّر الصوت أو تضغط زر بالفأرة، بدل ما تعيد نفس الزر.
-- **Tab** صار يتنقّل بين أزرار المشغّل، فالتخطي من زره أو من مفتاح تختاره في الاختصارات.
+- **فلاتر كتالوجات الإضافات** ([#90](https://github.com/ABADIOSA/riwaq/issues/90)): في «اكتشف» تختار الكتالوج والفلاتر اللي توفرها الإضافة نفسها، والاختيار يبقى مع «تحميل المزيد».
+- **Simkl وAniList** ([#92](https://github.com/ABADIOSA/riwaq/issues/92)): قوائمك كلها تظهر في «مكتبتي» بكل حالاتها، وتتبّع التشغيل في Simkl بخيار منك، و**«الاستئناف من Simkl»** يجيب المواضع اللي وقفت عندها إلى «نكمل الحكاية» ويبدأ من نفس النسبة.
+- **أزرار مباشرة في المشغّل** ([#89](https://github.com/ABADIOSA/riwaq/issues/89)): المسار الصوتي والسرعة والأبعاد بضغطة، بدون فتح اللوحة الكبيرة.
+- **معاينة شريط التقديم:** لو كانت متوقفة لمصادر الإنترنت، يقول لك المشغّل ويعرض تفعيلها لكل المصادر.
+- **الحلقات** ([#91](https://github.com/ABADIOSA/riwaq/issues/91)): انتقل لأي حلقة برقمها (حتى بالأرقام العربية)، ووصف الحلقة المختارة كامل، ومصادر التقييم بعلامات مختصرة.
+- **Discord** ([#93](https://github.com/ABADIOSA/riwaq/issues/93)): صورة الحلقة جنب غلاف العمل.
+- **إصلاحات:** اختصارات المشغّل تشتغل ولوحة المفاتيح عربي، وصورة الفيديو ما تختفي لو توقف رسم الصفحة.
 
 الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -107,18 +110,21 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.46.1-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.46.1-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.47.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.47.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.46.1
+### What's new in 0.47.0
 
-- **The player buttons respond to clicks:** the controls window could not take focus, and for such a window Windows discards the mouse press so only the release arrives, which showed tooltips but ignored every click. It now takes focus and gets the whole click.
-- **Your shortcuts from the player controls:** all of them work, including the ones you changed. Esc closes the panel first, and F8 recovers the controls even when they froze.
-- **Space always pauses:** even after you change the volume or click a button, instead of pressing that button again.
-- **Tab** now moves between the player's buttons, so skip with its button or a key you choose in the shortcuts.
+- **Addon catalog filters** ([#90](https://github.com/ABADIOSA/riwaq/issues/90)): in Discover, pick the catalog and the filters the addon itself offers, kept when you load more.
+- **Simkl and AniList** ([#92](https://github.com/ABADIOSA/riwaq/issues/92)): all your lists show in My Library with every status, playback tracking on Simkl is your choice, and **"Resume from Simkl"** brings the places where you paused into Continue watching, starting at the same percentage.
+- **Direct player buttons** ([#89](https://github.com/ABADIOSA/riwaq/issues/89)): audio track, speed and aspect ratio in one click, without the large panel.
+- **Seek previews:** when they are off for internet sources, the player says so and offers to turn them on for all sources.
+- **Episodes** ([#91](https://github.com/ABADIOSA/riwaq/issues/91)): jump to any episode by number (Arabic digits too), read the selected episode's full overview, and see rating sources as compact marks.
+- **Discord** ([#93](https://github.com/ABADIOSA/riwaq/issues/93)): the episode's artwork beside the title's cover.
+- **Fixes:** the player shortcuts work with an Arabic keyboard layout, and the picture no longer disappears when the page stops drawing.
 
 Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 

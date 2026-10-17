@@ -62,7 +62,7 @@ globalThis.reviewDragNative=(parent,pid)=>{const h=ownedChild(parent,pid);if(!h)
 const removeFile=fs.promises.rm;
 globalThis.reviewLockFile=(id)=>{fs.promises.rm=async(path,options)=>{if(String(path).endsWith(id+".media"))throw Object.assign(Error("fixture lock"),{code:"EPERM"});return removeFile(path,options);};syncBuiltinESMExports();};
 globalThis.reviewUnlockFile=()=>{fs.promises.rm=removeFile;syncBuiltinESMExports();};
-app.getVersion=()=>"0.46.1";
+app.getVersion=()=>"0.47.0";
 const spawn=childProcess.spawn;childProcess.spawn=(file,args,opts)=>{const proc=spawn(file,args,opts);if(String(file).endsWith("mpv.exe"))globalThis.reviewMpv=proc.pid;return proc;};syncBuiltinESMExports();
 const getUrl=TorrentHost.prototype.url;TorrentHost.prototype.url=function(stream,settings){if(stream.infoHash==="a".repeat(40))return new Promise(r=>globalThis.reviewResolve=r);return getUrl.call(this,stream,settings);};
 const originalFetch=globalThis.fetch;globalThis.fetch=(url,opts)=>String(url).startsWith(${JSON.stringify(base)})?originalFetch(url,opts):String(url).includes("raw.githubusercontent.com")?Promise.resolve(new Response('{"schema":1,"items":[]}')):String(url).endsWith("manifest.json")?Promise.resolve(new Response(JSON.stringify({id:"offline.fixture",name:"Offline",version:"1.0.0",types:["movie"],resources:["catalog"],catalogs:[]}))):Promise.resolve(new Response('{"metas":[]}'));
