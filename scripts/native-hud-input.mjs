@@ -43,6 +43,12 @@ export async function nativeHudKey(app, vk) {
   const input = Buffer.alloc(40);
   input.writeUInt32LE(1, 0);
   input.writeUInt16LE(vk, 8);
+  // A real keyboard supplies its scan code. Omitting it leaves DOM `code`
+  // empty, hiding layout-dependent shortcut failures from this test.
+  const scan = user32.func(
+    "uint32 __stdcall MapVirtualKeyW(uint32 code, uint32 map)",
+  )(vk, 0);
+  input.writeUInt16LE(scan, 10);
   assert.equal(send(1, input, input.length), 1);
   await delay(60);
   input.writeUInt32LE(2, 12);

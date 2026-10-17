@@ -46,7 +46,8 @@ import { shuffleCandidates, shufflePick } from "../../core/shuffle.mjs";
 const shuffled = new Map();
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { spoilerIds } from "../../core/spoilers.mjs";
-import { episodeDetails } from "../../core/season-details.mjs";
+import { episodeDetails, findEpisode } from "../../core/season-details.mjs";
+import RatingSource from "./RatingSource.jsx";
 import { runtimeMinutes } from "../../core/prayer.mjs";
 import { EndsAt } from "./Prayer.jsx";
 import { TitleCountdown } from "./Countdown.jsx";
@@ -121,6 +122,8 @@ export default function Details({
     [error, setError] = useState(""),
     [videoId, setVideoId] = useState(selection.videoId || ""),
     [season, setSeason] = useState(1),
+    [jumpNumber, setJumpNumber] = useState(""),
+    [jumpError, setJumpError] = useState(""),
     [shuffleAll, setShuffleAll] = useState(false),
     [result, setResult] = useState(null),
     [streamsLoading, setStreamsLoading] = useState(false),
@@ -1032,7 +1035,7 @@ export default function Details({
             <div className="ratings-strip">
               {meta.ratings.map((r) => (
                 <span key={r.source}>
-                  <small>{r.source}</small>
+                  <RatingSource source={r.source} />
                   <b>{r.value}</b>
                 </span>
               ))}
@@ -1260,6 +1263,47 @@ export default function Details({
             <section className="episodes">
               <div className="section-heading">
                 <h2>الحلقات</h2>
+                <form
+                  className="episode-jump"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const found = findEpisode(videos, season, jumpNumber);
+                    if (!found)
+                      return setJumpError(
+                        "لا توجد حلقة بهذا الرقم في الموسم المحدد.",
+                      );
+                    if (
+                      found.released &&
+                      Date.parse(found.released) > Date.now()
+                    )
+                      return setJumpError("هذه الحلقة لم تصدر بعد.");
+                    setJumpError("");
+                    setVideoId(found.id);
+                    requestAnimationFrame(() =>
+                      document
+                        .querySelector(".episode.selected")
+                        ?.scrollIntoView({
+                          block: "nearest",
+                          inline: "center",
+                        }),
+                    );
+                  }}
+                >
+                  <input
+                    aria-label="رقم الحلقة"
+                    inputMode="numeric"
+                    value={jumpNumber}
+                    onChange={(event) => {
+                      setJumpNumber(event.target.value);
+                      setJumpError("");
+                    }}
+                    placeholder="رقم الحلقة"
+                    maxLength={6}
+                  />
+                  <button className="secondary small" type="submit">
+                    انتقل للحلقة
+                  </button>
+                </form>
                 <div className="episode-shuffle">
                   <button
                     className="secondary small"
@@ -1347,6 +1391,11 @@ export default function Details({
                   ))}
                 </select>
               </div>
+              {jumpError && (
+                <p className="subtle" role="status">
+                  {jumpError}
+                </p>
+              )}
               <ScrollRow className="episode-list">
                 {videos
                   .filter((v) => (v.season ?? 1) === season)
@@ -1453,6 +1502,20 @@ export default function Details({
                     );
                   })}
               </ScrollRow>
+              {currentEpisode && (
+                <details
+                  className="selected-episode-summary"
+                  key={currentEpisode.id}
+                >
+                  <summary>تفاصيل الحلقة المختارة</summary>
+                  <p dir="auto">
+                    {episodeDetails(
+                      currentEpisode,
+                      seasonInfo?.episodes?.[currentEpisode.episode],
+                    ).overview || "لا يتوفر وصف لهذه الحلقة."}
+                  </p>
+                </details>
+              )}
               {videos.some((v) => v.id === videoId) && (
                 <EpisodeActions
                   meta={meta}

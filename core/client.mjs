@@ -1327,6 +1327,7 @@ export class Client {
     genre = "",
     catalogKey = "",
     skip = 0,
+    filters = {},
   } = {}) {
     const hideAdult = this.hidesAdult();
     return this.enabled()
@@ -1345,7 +1346,7 @@ export class Client {
       .filter((item) => !catalogKey || item.key === catalogKey)
       .map((item) => ({
         ...item,
-        extras: catalogExtras(item.cat, search, genre, skip),
+        extras: catalogExtras(item.cat, search, genre, skip, filters),
       }))
       .filter((item) => item.extras !== null);
   }
@@ -1359,6 +1360,15 @@ export class Client {
       name: cat.name || cat.id,
       provider: addon.manifest.name,
       type: cat.type,
+      filters: (cat.extra || [])
+        .filter(
+          (e) => !["search", "skip"].includes(e.name) && e.options?.length,
+        )
+        .map((e) => ({
+          name: e.name,
+          required: !!e.isRequired,
+          options: e.options,
+        })),
     }));
     // One of Riwaq's own rows opened on its full page.
     if (String(args.catalogKey || "").startsWith(FEED_PREFIX)) {

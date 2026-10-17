@@ -84,7 +84,9 @@ const player = {
   pause: false,
   tracks: [],
 };
-const browser = await chromium.launch();
+const browser = await chromium.launch({
+  executablePath: process.env.RIWAQ_CHROMIUM || undefined,
+});
 try {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 720 },
@@ -142,6 +144,17 @@ try {
   assert.deepEqual(await press("Space"), ["key:SPACE"], "Space after volume");
   assert.deepEqual(await press("f"), ["key:f"]);
   assert.deepEqual(await press("m"), ["key:m"]);
+  await page.evaluate(() => {
+    window.__calls.length = 0;
+    document.activeElement.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ؤ", code: "KeyC", bubbles: true }),
+    );
+  });
+  assert.deepEqual(
+    await sent(),
+    ["key:c"],
+    "Arabic layout forwards the physical panel shortcut",
+  );
   assert.deepEqual(await press("Escape"), ["key:ESC"], "Esc after volume");
   assert.deepEqual(
     await press("ArrowRight"),
@@ -150,6 +163,24 @@ try {
   );
   console.log(
     "- the volume slider keeps its arrows, the player every other key",
+  );
+
+  await wake();
+  await page.getByTitle("سرعة التشغيل", { exact: true }).click();
+  await page.waitForFunction(
+    () => document.activeElement?.textContent === "1×",
+  );
+  await page.evaluate(() => (window.__calls.length = 0));
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  assert.deepEqual(
+    await page.evaluate(() =>
+      window.__calls.filter(([m]) => m === "playerCommand"),
+    ),
+    [["playerCommand", { action: "speed", value: 1.25 }]],
+  );
+  console.log(
+    "- compact choices keep arrow/Enter navigation away from player volume",
   );
 
   await wake();

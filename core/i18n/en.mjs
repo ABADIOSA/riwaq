@@ -38,4 +38,31 @@ export default {
   ...owner,
   ...engine046,
   الإعدادات: "Settings",
+  "فلاتر الكتالوج": "Catalog filters",
+  "كتالوج الإضافة": "Addon catalog",
+  "تتبّع الأنمي اختياري عند إكمال الحلقة، واستيراد قوائم المشاهدة والتخطيط والتوقف والمتروك والإعادة والمكتمل من AniList.":
+    "Optional anime progress tracking after a finished episode, and import of current, planned, paused, dropped, repeating and completed AniList lists.",
+  "استيراد قوائم الأفلام والمسلسلات والأنمي من Simkl حسب حالة المشاهدة، مع تتبّع تشغيل اختياري.":
+    "Import Simkl movie, show and anime lists by watch status, with optional playback tracking.",
+  "تتبّع التشغيل في Simkl": "Track playback on Simkl",
+  "يرسل بدء التشغيل والتوقف المؤقت والإيقاف إلى Simkl، ويسجّل المشاهدة عند الإيقاف بعد 80%. لا يُرسل شيء حتى تفعّل هذا الخيار. استئناف المشاهدة هنا يعتمد على سجل رِواق المحلي.":
+    "Send start, pause and stop to Simkl, marking watched when stopped after 80%. Nothing is sent until you enable this option. Resume in Riwaq uses its local history.",
+  "بانتظار الإرسال:": "Pending:",
+  "AniList · متروك": "AniList · Dropped",
+  "AniList · إعادة المشاهدة": "AniList · Repeating",
+  "تعذّر إرسال التتبع إلى Simkl؛ جرّب المزامنة لاحقاً.":
+    "Could not send tracking to Simkl; try syncing later.",
+  أشاهده: "Watching",
+  "أريد مشاهدته": "Plan to watch",
+  متروك: "Dropped",
+  "استجابة مكتبة Simkl غير صالحة": "Invalid Simkl library response",
+  "استجابة مكتبة AniList غير صالحة": "Invalid AniList library response",
+  "لا توجد حلقة بهذا الرقم في الموسم المحدد.":
+    "No episode with this number in the selected season.",
+  "هذه الحلقة لم تصدر بعد.": "This episode has not been released yet.",
+  "رقم الحلقة": "Episode number",
+  "انتقل للحلقة": "Go to episode",
+  "تفاصيل الحلقة المختارة": "Selected episode details",
+  "لا يتوفر وصف لهذه الحلقة.": "No description is available for this episode.",
+  "نسبة الأبعاد": "Aspect ratio",
 };

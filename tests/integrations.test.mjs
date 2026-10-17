@@ -315,8 +315,18 @@ test("Simkl PIN authentication never exposes bearer token and imports supported 
     if (p === "/oauth/pin/PIN")
       return { result: "OK", access_token: "simkl-private" };
     return {
-      movies: [{ movie: { title: "Movie", ids: { imdb: "tt111" } } }],
-      anime: [{ anime: { title: "Anime", ids: { imdb: "tt222" } } }],
+      movies: [
+        {
+          status: "plantowatch",
+          movie: { title: "Movie", ids: { imdb: "tt111" } },
+        },
+      ],
+      anime: [
+        {
+          status: "watching",
+          show: { title: "Anime", ids: { imdb: "tt222" } },
+        },
+      ],
     };
   });
   c.integrations.save({ id: "simkl", clientId: "simkl-id" });
@@ -357,7 +367,14 @@ test("Simkl AUTH V2: device code, pending and slow-down answers, then a token", 
         token_type: "Bearer",
       };
     }
-    return { movies: [{ movie: { title: "Movie", ids: { imdb: "tt111" } } }] };
+    return {
+      movies: [
+        {
+          status: "plantowatch",
+          movie: { title: "Movie", ids: { imdb: "tt111" } },
+        },
+      ],
+    };
   });
   c.version = "0.41.0";
   c.integrations.save({ id: "simkl", clientId: "v2-public-id" });
@@ -395,7 +412,7 @@ test("Simkl AUTH V2: device code, pending and slow-down answers, then a token", 
   );
   await c.integrations.sync("simkl");
   const list = calls.at(-1);
-  assert.equal(list.path, "/sync/all-items/all/plantowatch");
+  assert.equal(list.path, "/sync/all-items");
   assert.equal(list.init.headers.Authorization, "Bearer v2-access");
   assert.equal(list.params.get("app-name"), "riwaq");
   assert.equal(c.state.connectedLists.flatMap((l) => l.metas).length, 1);

@@ -80,6 +80,7 @@ const siteServer = createServer(serveDir(site));
 // --- A Stremio addon on this machine --------------------------------------
 let video = Buffer.alloc(0);
 let base;
+const catalogRequests = [];
 const titles = [
   ["last-train", "القطار الأخير"],
   ["blue-hour", "الساعة الزرقاء"],
@@ -91,11 +92,46 @@ const metas = () =>
     name,
     type: "movie",
     runtime: "1 min",
+    imdbRating: "8.2",
     genres: ["Drama"],
     poster: `${base}/poster/${id}.svg`,
     releaseInfo: "2025",
     description: "عنوان تجريبي لاختبار نسخة الويب من رِواق.",
   }));
+const seriesFixture = () => ({
+  id: "webfix:series",
+  type: "series",
+  name: "مسلسل تجريبي طويل",
+  poster: `${base}/poster/series.svg`,
+  ratings: [
+    { source: "Internet Movie Database", value: "8.2/10" },
+    { source: "Rotten Tomatoes", value: "90%" },
+  ],
+  videos: [
+    ...Array.from({ length: 120 }, (_, i) => ({
+      id: `webfix:series:1:${i + 1}`,
+      season: 1,
+      episode: i + 1,
+      title: `Fixture episode ${i + 1}`,
+      overview: `Complete episode overview ${i + 1}`,
+      released: "2025-01-01T00:00:00Z",
+    })),
+    {
+      id: "webfix:series:1:121",
+      season: 1,
+      episode: 121,
+      title: "Future episode",
+      released: "2100-01-01T00:00:00Z",
+    },
+    {
+      id: "webfix:series:2:1",
+      season: 2,
+      episode: 1,
+      title: "Season two",
+      released: "2025-01-01T00:00:00Z",
+    },
+  ],
+});
 const SRT = `1\n00:00:00,500 --> 00:00:30,000\nترجمة تجريبية من الإضافة\n\n`;
 const addon = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -124,13 +160,34 @@ const addon = createServer((req, res) => {
       name: "Riwaq web fixture",
       version: "1.0.0",
       resources: ["catalog", "meta", "stream", "subtitles"],
-      types: ["movie"],
+      types: ["movie", "series"],
       idPrefixes: ["webfix:"],
-      catalogs: [{ id: "webfix", type: "movie", name: "أعمال تجريبية" }],
+      catalogs: [
+        {
+          id: "webfix",
+          type: "movie",
+          name: "أعمال تجريبية",
+          extra: [
+            { name: "sort", isRequired: true, options: ["Popular", "Rating"] },
+            { name: "language", options: ["Arabic", "English"] },
+          ],
+        },
+        { id: "series", type: "series", name: "مسلسل الاختبار" },
+      ],
     };
-  else if (url.startsWith("/catalog/")) data = { metas: metas() };
-  else if (url.startsWith("/meta/"))
-    data = { meta: metas().find((m) => url.includes(m.id)) };
+  else if (url.startsWith("/catalog/")) {
+    catalogRequests.push(url);
+    data = {
+      metas: url.includes("language=English")
+        ? []
+        : url.includes("/catalog/series/")
+          ? [seriesFixture()]
+          : metas(),
+    };
+  } else if (url.startsWith("/meta/"))
+    data = {
+      meta: [...metas(), seriesFixture()].find((m) => url.includes(m.id)),
+    };
   else if (url.startsWith("/stream/"))
     data = {
       streams: [
@@ -158,6 +215,7 @@ base = `http://127.0.0.1:${await listen(addon)}`;
 const siteUrl = `http://127.0.0.1:${sitePort}/`;
 
 const browser = await chromium.launch({
+  executablePath: process.env.RIWAQ_CHROMIUM || undefined,
   args: ["--autoplay-policy=no-user-gesture-required"],
 });
 const openContext = async (options) => {
@@ -323,6 +381,124 @@ try {
   });
   await page.screenshot({ path: join(output, "discover.png") });
   step("Discover shows the addon's titles");
+  const catalogPicker = page.getByRole("combobox", {
+    name: "كتالوج الإضافة",
+    exact: true,
+  });
+  await catalogPicker.selectOption({
+    label: "Riwaq web fixture · أعمال تجريبية",
+  });
+  const sort = page.getByRole("combobox", { name: "sort", exact: true });
+  const languageFilter = page.getByRole("combobox", {
+    name: "language",
+    exact: true,
+  });
+  await sort.waitFor();
+  assert.equal(await sort.inputValue(), "Popular");
+  await sort.selectOption("Rating");
+  await page.waitForFunction(
+    () =>
+      document.querySelector('select[aria-label="sort"]')?.value === "Rating",
+  );
+  const filteredReply = page.waitForResponse((response) => {
+    const url = decodeURIComponent(response.url());
+    return (
+      url.includes("/catalog/") &&
+      url.includes("sort=Rating") &&
+      url.includes("language=English")
+    );
+  });
+  await languageFilter.selectOption("English");
+  assert.equal((await filteredReply).status(), 200);
+  await page.waitForFunction(() => !document.querySelector(".poster-card"));
+  assert.ok(
+    catalogRequests.some(
+      (url) => url.includes("sort=Rating") && url.includes("language=English"),
+    ),
+  );
+  assert.equal(
+    await languageFilter.isVisible(),
+    true,
+    "filters remain available after empty results",
+  );
+  await languageFilter.selectOption("Arabic");
+  await page.waitForSelector(".poster-card .rating");
+  await page.screenshot({ path: join(output, "catalog-filters.png") });
+  await call("settings", { showRatings: false });
+  // Direct bridge calls return state; the UI's update() applies it. Reload
+  // here to verify the persisted choice without inventing a state event.
+  await page.reload();
+  await page.waitForSelector(".app");
+  await page.getByText("اكتشف", { exact: true }).first().click();
+  await page.waitForSelector(".poster-card .rating", { state: "attached" });
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".poster-card .rating")].every(
+      (e) => getComputedStyle(e).display === "none",
+    ),
+  );
+  await call("settings", { showRatings: true });
+  await page.reload();
+  await page.waitForSelector(".app");
+  await page.getByText("اكتشف", { exact: true }).first().click();
+  await page.waitForSelector(".poster-card .rating");
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll(".poster-card .rating")].some(
+      (e) => getComputedStyle(e).display !== "none",
+    ),
+  );
+  step(
+    "addon filters change real requests, survive empty results; poster rating visibility works",
+  );
+  const catalogs = page.getByRole("combobox", {
+    name: "كتالوج الإضافة",
+    exact: true,
+  });
+  // A fresh full Discover plan includes both movie and series fixture catalogs.
+  await catalogs.selectOption({ label: "Riwaq web fixture · مسلسل الاختبار" });
+  await page
+    .getByRole("button", { name: "تفاصيل مسلسل تجريبي طويل", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "رقم الحلقة", exact: true })
+    .fill("١٠٠");
+  await page.getByRole("button", { name: "انتقل للحلقة", exact: true }).click();
+  await page
+    .locator(".episode.selected")
+    .filter({ hasText: "Fixture episode 100" })
+    .waitFor();
+  await page.getByText("تفاصيل الحلقة المختارة", { exact: true }).click();
+  await page
+    .getByText("Complete episode overview 100", { exact: true })
+    .last()
+    .waitFor();
+  assert.equal(
+    await page
+      .getByRole("img", { name: "Internet Movie Database", exact: true })
+      .count(),
+    1,
+  );
+  await page
+    .getByRole("textbox", { name: "رقم الحلقة", exact: true })
+    .fill("999");
+  await page.getByRole("button", { name: "انتقل للحلقة", exact: true }).click();
+  await page
+    .getByText("لا توجد حلقة بهذا الرقم في الموسم المحدد.", { exact: true })
+    .waitFor();
+  await page.screenshot({ path: join(output, "episode-jump.png") });
+  await page
+    .getByRole("textbox", { name: "رقم الحلقة", exact: true })
+    .fill("121");
+  await page.getByRole("button", { name: "انتقل للحلقة", exact: true }).click();
+  await page.getByText("هذه الحلقة لم تصدر بعد.", { exact: true }).waitFor();
+  assert.ok(
+    (await page.locator(".episode.selected").textContent()).includes(
+      "Fixture episode 100",
+    ),
+  );
+  await page.locator(".back-button").click();
+  step(
+    "a long series jumps to an Arabic episode number, shows its full overview and keeps unknown numbers safe",
+  );
 
   // Sources and playback: the bridge picks the stream, the interface shows
   // the theater, and the HTML5 player plays inside its surface.
@@ -349,6 +525,20 @@ try {
     { timeout: 20000 },
   );
   step("the stream plays in the theater's surface");
+  await page.getByTitle("سرعة التشغيل", { exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "1.5×", exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.playbackRate === 1.5,
+  );
+  await page.getByTitle("نسبة الأبعاد", { exact: true }).click();
+  await page.keyboard.press("Escape");
+  assert.equal(
+    (await call("hudSnapshot")).player.active,
+    true,
+    "Escape closes choices without stopping the video",
+  );
+  await page.getByTitle("سرعة التشغيل", { exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "1×", exact: true }).click();
 
   // An addon subtitle, as the panel adds it.
   const subs = await call("subtitles");

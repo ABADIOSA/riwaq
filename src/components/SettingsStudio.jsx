@@ -1773,8 +1773,8 @@ function IntegrationCard({ integration: s, update, act, notice }) {
           : id === "letterboxd"
             ? "قوائم المشاهدة والإعجابات العامة عبر إضافة Stremboxd، أو استيراد ملفات CSV الرسمية."
             : id === "anilist"
-              ? "تتبّع الأنمي: يرفع تقدّمك في AniList عند إكمال الحلقة (اختياري)، ويستورد قائمتي «أشاهده» و«أريد مشاهدته»."
-              : "استيراد قائمة «أريد المشاهدة» للأفلام والمسلسلات والأنمي المتطابق مع IMDb."}
+              ? "تتبّع الأنمي اختياري عند إكمال الحلقة، واستيراد قوائم المشاهدة والتخطيط والتوقف والمتروك والإعادة والمكتمل من AniList."
+              : "استيراد قوائم الأفلام والمسلسلات والأنمي من Simkl حسب حالة المشاهدة، مع تتبّع تشغيل اختياري."}
       </p>
       {!s.connected && (
         <>
@@ -2022,6 +2022,30 @@ function IntegrationCard({ integration: s, update, act, notice }) {
           <button
             className={`toggle ${s.trackHistory ? "on" : ""}`}
             aria-label="تسجيل تقدّم الأنمي في AniList"
+            aria-pressed={!!s.trackHistory}
+            onClick={() =>
+              update("integrationSave", { id, trackHistory: !s.trackHistory })
+            }
+          >
+            <span />
+          </button>
+        </div>
+      )}
+      {id === "simkl" && s.connected && (
+        <div className="setting-row">
+          <div>
+            <b>تتبّع التشغيل في Simkl</b>
+            <p>
+              يرسل بدء التشغيل والتوقف المؤقت والإيقاف إلى Simkl، ويسجّل
+              المشاهدة عند الإيقاف بعد 80%. لا يُرسل شيء حتى تفعّل هذا الخيار.
+              استئناف المشاهدة هنا يعتمد على سجل رِواق المحلي.
+            </p>
+            {s.pending > 0 && <p>بانتظار الإرسال: {s.pending}</p>}
+            {s.trackingError && <p role="status">{s.trackingError}</p>}
+          </div>
+          <button
+            className={`toggle ${s.trackHistory ? "on" : ""}`}
+            aria-label="تتبّع التشغيل في Simkl"
             aria-pressed={!!s.trackHistory}
             onClick={() =>
               update("integrationSave", { id, trackHistory: !s.trackHistory })

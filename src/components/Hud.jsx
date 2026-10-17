@@ -10,6 +10,7 @@ import {
   Volume2,
   VolumeX,
   Captions,
+  AudioLines,
   SlidersHorizontal,
   Maximize,
   Minimize,
@@ -21,6 +22,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import PlayerDock from "./PlayerDock.jsx";
+import PlaybackChoices from "./PlaybackChoices.jsx";
 import VolumeSlider from "./VolumeSlider.jsx";
 import PlayerMenu from "./PlayerMenu.jsx";
 import { api, call } from "../lib/api.js";
@@ -83,6 +85,7 @@ export default function Hud() {
   const [player, setPlayer] = useState({ active: false });
   const [awake, setAwake] = useState(true);
   const [dock, setDock] = useState(null);
+  const [quick, setQuick] = useState(null);
   // The right-click menu ({x, y}), drawn here (src/components/PlayerMenu.jsx).
   const [menu, setMenu] = useState(null);
   const menuClosed = useRef(0);
@@ -252,6 +255,7 @@ export default function Hud() {
     (player.pause && settings.hudShowOnPause !== false) ||
     !!dock ||
     !!menu ||
+    !!quick ||
     sleepMenu ||
     shaderMenu ||
     player.loading;
@@ -856,11 +860,29 @@ export default function Hud() {
             {shows("subs") && (
               <button
                 title="الترجمة والصوت (C أو الزر الأيمن)"
-                className={dock ? "on" : ""}
-                onClick={() => setDock(dock ? null : "subs")}
+                className={dock === "subs" ? "on" : ""}
+                aria-pressed={dock === "subs"}
+                onClick={() => setDock(dock === "subs" ? null : "subs")}
               >
                 <Captions size={20} />
               </button>
+            )}
+            {shows("subs") && (
+              <button
+                title="المسار الصوتي"
+                aria-pressed={dock === "audio"}
+                onClick={() => setDock(dock === "audio" ? null : "audio")}
+              >
+                <AudioLines size={20} />
+              </button>
+            )}
+            {!hidden.has("settings") && (
+              <PlaybackChoices
+                player={player}
+                act={act}
+                open={quick}
+                setOpen={setQuick}
+              />
             )}
             {shows("settings") && (
               <button

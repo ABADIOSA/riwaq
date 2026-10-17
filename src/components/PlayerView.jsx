@@ -10,6 +10,7 @@ import {
   RotateCcw,
   RotateCw,
   Subtitles,
+  AudioLines,
   SkipForward,
   SkipBack,
   Camera,
@@ -20,11 +21,13 @@ import {
 } from "lucide-react";
 import { IconButton } from "./UI.jsx";
 import PlayerDock from "./PlayerDock.jsx";
+import PlaybackChoices from "./PlaybackChoices.jsx";
 import VolumeSlider from "./VolumeSlider.jsx";
 import PlayerMenu from "./PlayerMenu.jsx";
 import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
 import { seekAmount } from "../../core/hotkeys.mjs";
+import { surfaceReporter } from "../../core/surface.mjs";
 import { startLine } from "../../core/torrent-engine.mjs";
 import { loc } from "../lib/format.js";
 
@@ -42,6 +45,7 @@ export default function PlayerView({
 }) {
   const surface = useRef(),
     [dock, setDock] = useState(null),
+    [quick, setQuick] = useState(null),
     // The right-click menu ({x, y}); the native picture steps aside while
     // it is open, as it does for any HTML dialog.
     [menu, setMenu] = useState(null),
@@ -60,33 +64,29 @@ export default function PlayerView({
     ? Math.max(0, Math.round((player.sleepAt - Date.now()) / 60000))
     : 0;
   useEffect(() => {
-    let pending;
-    const report = () => {
-      cancelAnimationFrame(pending);
-      pending = requestAnimationFrame(() => {
-        const r = surface.current?.getBoundingClientRect();
-        if (r)
-          call("videoBounds", {
-            x: r.x,
-            y: r.y,
-            width: r.width,
-            height: r.height,
-            viewportWidth: window.innerWidth,
-            visible: !hidden && !menu,
-          }).catch(() => {});
-      });
-    };
-    const observer = new ResizeObserver(report);
+    const reporter = surfaceReporter(() => {
+      const r = surface.current?.getBoundingClientRect();
+      if (r)
+        call("videoBounds", {
+          x: r.x,
+          y: r.y,
+          width: r.width,
+          height: r.height,
+          viewportWidth: window.innerWidth,
+          visible: !hidden && !menu && !quick,
+        }).catch(() => {});
+    });
+    const observer = new ResizeObserver(reporter.schedule);
     if (surface.current) observer.observe(surface.current);
-    window.addEventListener("resize", report);
-    report();
+    window.addEventListener("resize", reporter.schedule);
+    reporter.schedule();
     return () => {
       observer.disconnect();
-      cancelAnimationFrame(pending);
-      window.removeEventListener("resize", report);
+      reporter.cancel();
+      window.removeEventListener("resize", reporter.schedule);
       call("videoBounds", { visible: false }).catch(() => {});
     };
-  }, [mini, hidden, immersive, hudMode, !!dock, !!menu]);
+  }, [mini, hidden, immersive, hudMode, !!dock, !!menu, !!quick]);
   useEffect(() => {
     const onKey = (e) => {
       if (hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName))
@@ -139,7 +139,10 @@ export default function PlayerView({
   useEffect(() => {
     if (mini) setDock(null);
   }, [mini]);
-  useEffect(() => setMenu(null), [player.videoId, mini, hidden]);
+  useEffect(() => {
+    setMenu(null);
+    setQuick(null);
+  }, [player.videoId, mini, hidden]);
   return (
     <section
       onContextMenu={(e) => {
@@ -401,13 +404,25 @@ export default function PlayerView({
             <IconButton
               title="الترجمة والصوت (C)"
               className={dock ? "icon-button on" : "icon-button"}
-              onClick={() => setDock(dock ? null : "subs")}
+              onClick={() => setDock(dock === "subs" ? null : "subs")}
             >
               <Subtitles size={20} />
             </IconButton>
             <IconButton title="إعدادات المشغل" onClick={onSettings}>
               <SlidersHorizontal size={20} />
             </IconButton>
+            <IconButton
+              title="المسار الصوتي"
+              onClick={() => setDock(dock === "audio" ? null : "audio")}
+            >
+              <AudioLines size={20} />
+            </IconButton>
+            <PlaybackChoices
+              player={player}
+              act={act}
+              open={quick}
+              setOpen={setQuick}
+            />
             <IconButton
               title={player.fullscreen ? "الخروج من ملء الشاشة" : "ملء الشاشة"}
               onClick={() => command("fullscreen")}

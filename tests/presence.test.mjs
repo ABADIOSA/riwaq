@@ -17,6 +17,35 @@ const viewing = {
   at,
 };
 
+test("episode artwork accompanies the cover without leaking it at generic/off privacy levels", () => {
+  const episodePoster = "https://image.tmdb.org/t/p/w400/episode.jpg";
+  const full = buildActivity({ ...viewing, episodePoster });
+  assert.equal(full.assets.large_image, viewing.poster);
+  assert.equal(full.assets.small_image, episodePoster);
+  assert.equal(full.assets.small_text, "S1 · E3 — Optics");
+  const generic = buildActivity({
+    ...viewing,
+    episodePoster,
+    detail: "generic",
+  });
+  assert.ok(!JSON.stringify(generic).includes(episodePoster));
+  for (const value of [
+    "http://host/image.jpg",
+    "https://user:secret@host/image.jpg",
+    "https://host/image.jpg?token=private",
+    "https://host/image.jpg#secret",
+    "https://private-addon.test/secret-token/episode.jpg",
+  ])
+    assert.equal(
+      buildActivity({ ...viewing, episodePoster: value }).assets.small_image,
+      RIWAQ_ICON,
+    );
+  assert.equal(
+    buildActivity({ ...viewing, live: true, episodePoster }).assets.small_image,
+    RIWAQ_ICON,
+  );
+});
+
 test("a viewing shows as Watching the title, with poster, episode and a progress bar", () => {
   const a = buildActivity(viewing);
   assert.equal(a.type, 3);

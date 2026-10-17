@@ -9,6 +9,47 @@
  * itself. Browser-safe: the Win32 calls stay in electron/video-host.mjs.
  */
 
+/** Coalesce layout reports, but still commit when an occluded page pauses RAF. */
+export function surfaceReporter(
+  commit,
+  {
+    frame = (fn) => globalThis.requestAnimationFrame(fn),
+    cancelFrame = (id) => globalThis.cancelAnimationFrame(id),
+    delay = setTimeout,
+    cancelDelay = clearTimeout,
+  } = {},
+) {
+  let frameId = null,
+    timerId = null,
+    pending = false,
+    disposed = false;
+  const clear = () => {
+    if (frameId !== null) cancelFrame(frameId);
+    if (timerId !== null) cancelDelay(timerId);
+    frameId = timerId = null;
+  };
+  const flush = () => {
+    if (!pending || disposed) return;
+    pending = false;
+    clear();
+    commit();
+  };
+  return {
+    schedule() {
+      if (disposed) return;
+      clear();
+      pending = true;
+      frameId = frame(flush);
+      timerId = delay(flush, 120);
+    },
+    cancel() {
+      disposed = true;
+      pending = false;
+      clear();
+    },
+  };
+}
+
 /**
  * The surface's rectangle in physical pixels from the layout React reported
  * (CSS pixels) and the window's client area. Null when the report is unusable;

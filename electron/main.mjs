@@ -1096,6 +1096,7 @@ function updatePresence() {
     season,
     number,
     episodeTitle: video?.title || video?.name || "",
+    episodePoster: video?.thumbnail || "",
     position: Number(state.position) || 0,
     duration: Number(state.duration) || 0,
     detail: settings.presenceDetail || "title",
