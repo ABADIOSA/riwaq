@@ -665,6 +665,52 @@ export class Client {
     };
     this.persistProgress();
   }
+  /**
+   * Resume points from a tracker (Simkl's paused sessions, issue #92) join
+   * this profile's "continue watching" only where nothing local is newer:
+   * a record saved or marked after the pause wins, and so does one at the
+   * same place (Riwaq's own pause, sent to Simkl and read back). A point
+   * keeps the exact percentage for the player (`startPercent`); its seconds
+   * come from an estimated runtime, so only their ratio is meaningful. A
+   * title hidden from the row stays hidden until a newer viewing.
+   */
+  importResume(points = []) {
+    let added = 0;
+    for (const point of Array.isArray(points) ? points.slice(0, 200) : []) {
+      if (!point?.meta?.id || !(point.percent > 0 && point.percent < 95))
+        continue;
+      const keys = [point, ...(point.alternates || [])].map(
+        (p) => `${p.meta.type}:${p.videoId}`,
+      );
+      // An anime saved under its anime addon's ID keeps that key.
+      const key = keys.find((k) => this.state.progress[k]) || keys[0];
+      const target =
+        key === keys[0] ? point : point.alternates[keys.indexOf(key) - 1];
+      const local = this.state.progress[key];
+      if (local) {
+        if (Math.max(local.updated || 0, local.markedAt || 0) >= point.pausedAt)
+          continue;
+        const percent =
+          local.duration > 0 ? (local.position / local.duration) * 100 : null;
+        if (percent !== null && Math.abs(percent - point.percent) < 2) continue;
+      }
+      this.state.progress[key] = {
+        meta: target.meta,
+        videoId: target.videoId,
+        position: Math.round((point.duration * point.percent) / 100),
+        duration: point.duration,
+        updated: point.pausedAt,
+        startPercent: point.percent,
+        ...(local?.source ? { source: local.source } : {}),
+        ...(Number.isFinite(local?.hiddenAt)
+          ? { hiddenAt: local.hiddenAt }
+          : {}),
+      };
+      added++;
+    }
+    if (added) this.persist();
+    return added;
+  }
   collectionsEdit(input) {
     this.profiles.gate("library");
     this.state.collections = editCollections(
@@ -1327,6 +1373,7 @@ export class Client {
     genre = "",
     catalogKey = "",
     skip = 0,
+    filters = {},
   } = {}) {
     const hideAdult = this.hidesAdult();
     return this.enabled()
@@ -1345,7 +1392,7 @@ export class Client {
       .filter((item) => !catalogKey || item.key === catalogKey)
       .map((item) => ({
         ...item,
-        extras: catalogExtras(item.cat, search, genre, skip),
+        extras: catalogExtras(item.cat, search, genre, skip, filters),
       }))
       .filter((item) => item.extras !== null);
   }
@@ -1359,6 +1406,15 @@ export class Client {
       name: cat.name || cat.id,
       provider: addon.manifest.name,
       type: cat.type,
+      filters: (cat.extra || [])
+        .filter(
+          (e) => !["search", "skip"].includes(e.name) && e.options?.length,
+        )
+        .map((e) => ({
+          name: e.name,
+          required: !!e.isRequired,
+          options: e.options,
+        })),
     }));
     // One of Riwaq's own rows opened on its full page.
     if (String(args.catalogKey || "").startsWith(FEED_PREFIX)) {

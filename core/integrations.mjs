@@ -16,6 +16,12 @@ import {
   nextListEntry,
   validTarget,
 } from "./anime.mjs";
+import {
+  simklLists,
+  simklPlaybackMark,
+  simklPlaybacks,
+  simklScrobbleBody,
+} from "./simkl.mjs";
 
 const SERVICES = ["trakt", "letterboxd", "simkl", "anilist"];
 
@@ -235,6 +241,7 @@ export class Integrations {
     this.refreshing = null;
     this.flushing = null;
     this.session = null;
+    this.simklGeneration = 0;
     this.inflight = new Set();
   }
   publicState() {
@@ -250,6 +257,9 @@ export class Integrations {
         trackHistory: !!s.trackHistory,
         scrobble: !!s.scrobble,
         pending: (s.pending || []).length,
+        ...(id === "simkl"
+          ? { trackingError: s.trackingError || "", resume: !!s.resume }
+          : {}),
         ...(id === "anilist"
           ? {
               expiresAt: s.token?.expiresAt || null,
@@ -263,7 +273,15 @@ export class Integrations {
     if (!SERVICES.includes(id)) throw new Error("منصة غير معروفة");
     return ((this.client.state.integrations ||= {})[id] ||= {});
   }
-  save({ id, clientId, clientSecret, username, trackHistory, scrobble }) {
+  save({
+    id,
+    clientId,
+    clientSecret,
+    username,
+    trackHistory,
+    scrobble,
+    resume,
+  }) {
     let s = this.get(id);
     for (const value of [clientId, clientSecret])
       if (
@@ -303,6 +321,21 @@ export class Integrations {
       s.trackHistory = trackHistory && !!s.token;
       if (!s.trackHistory) s.pending = [];
     }
+    if (id === "simkl" && typeof trackHistory === "boolean") {
+      s.trackHistory = trackHistory && !!s.token?.access_token;
+      if (!s.trackHistory) {
+        this.simklGeneration++;
+        this.simklSession = null;
+        s.pending = [];
+        s.trackingError = "";
+      }
+    }
+    // Resume points read from Simkl join "continue watching": their own
+    // consent, since they bring activity from elsewhere into this profile.
+    if (id === "simkl" && typeof resume === "boolean") {
+      s.resume = resume && !!s.token?.access_token;
+      s.playbackSeen = {};
+    }
     // Live scrobbling is a mode of history tracking, never a way around it.
     if (id === "trakt" && typeof scrobble === "boolean") {
       s.scrobble = scrobble && !!s.trackHistory;
@@ -314,6 +347,10 @@ export class Integrations {
   disconnect(id) {
     const s = this.get(id);
     this.devices.delete(id);
+    if (id === "simkl") {
+      this.simklGeneration++;
+      this.simklSession = null;
+    }
     if (id === "simkl" && s.token?.v2 && s.token.access_token)
       Promise.resolve()
         .then(() =>
@@ -428,6 +465,20 @@ export class Integrations {
       if (!token?.access_token) return { pending: true, interval: d.interval };
       if (this.get(id) !== s || this.devices.get(id) !== d)
         return { cancelled: true };
+      if (id === "simkl") {
+        // A fresh interactive grant may belong to a different person even
+        // with the same app ID. Old activity and consent cannot follow it.
+        this.simklGeneration++;
+        this.simklSession = null;
+        s.trackHistory = false;
+        s.resume = false;
+        s.playbackSeen = {};
+        s.pending = [];
+        s.trackingError = "";
+        this.client.state.connectedLists = (
+          this.client.state.connectedLists || []
+        ).filter((l) => l.service !== id);
+      }
       s.token = {
         ...token,
         created_at: token.created_at || Math.floor(Date.now() / 1000),
@@ -683,8 +734,15 @@ export class Integrations {
     this.simklRefreshing = job;
     return job.promise;
   }
-  async simkl(path, authed = true, retried = false) {
-    const s = this.get("simkl");
+  async simkl(
+    path,
+    authed = true,
+    retried = false,
+    body,
+    account = this.get("simkl"),
+    allowed = () => true,
+  ) {
+    const s = account;
     if (authed && !s.token) throw new Error("اربط حساب Simkl أولاً");
     const expires =
       (Number(s.token?.created_at) || 0) + (Number(s.token?.expires_in) || 0);
@@ -696,16 +754,22 @@ export class Integrations {
       Date.now() / 1000 > expires - 300
     )
       await this.simklRefresh(s);
+    if (this.client.state.integrations?.simkl !== s || !allowed())
+      throw new Error("تغير الحساب أثناء المزامنة");
     try {
-      return await this.client.request(this.simklUrl(path, s), {
-        redirect: "error",
-        headers: {
-          ...this.simklHeaders(s),
-          ...(authed
-            ? { Authorization: `Bearer ${s.token.access_token}` }
-            : {}),
-        },
-      });
+      const headers = {
+        ...this.simklHeaders(s),
+        ...(authed ? { Authorization: `Bearer ${s.token.access_token}` } : {}),
+      };
+      return await this.client.request(
+        this.simklUrl(path, s),
+        body === undefined
+          ? {
+              redirect: "error",
+              headers,
+            }
+          : POST(body, headers),
+      );
     } catch (error) {
       if (
         authed &&
@@ -715,7 +779,7 @@ export class Integrations {
         s.token.refresh_token
       ) {
         await this.simklRefresh(s);
-        return this.simkl(path, authed, true);
+        return this.simkl(path, authed, true, body, s, allowed);
       }
       throw simklProblem(error);
     }
@@ -724,6 +788,7 @@ export class Integrations {
     const s = this.get(id);
     const owner = this.client.profiles.store.active;
     let lists = [];
+    let resume = null;
     if (id === "letterboxd") {
       if (!s.username) throw new Error("أدخل اسم مستخدم Letterboxd");
       const config = Buffer.from(
@@ -777,27 +842,28 @@ export class Integrations {
       s.username = String(viewer?.Viewer?.name || s.username || "AniList");
       s.userId = Number(viewer?.Viewer?.id) || s.userId;
       const data = await this.anilist(LISTS_QUERY, { userId: s.userId });
+      if (!Array.isArray(data?.MediaListCollection?.lists))
+        throw new Error("استجابة مكتبة AniList غير صالحة");
       lists = anilistLists(data?.MediaListCollection);
       await this.flushAnilist().catch(() => {});
     } else if (id === "simkl") {
-      const result = await this.simkl(
-        "/sync/all-items/all/plantowatch?extended=full",
-      );
-      for (const kind of ["movies", "shows", "anime"])
-        lists.push({
-          key: `simkl-${kind}`,
-          service: id,
-          name: `Simkl · ${kind === "movies" ? "أفلام" : kind === "shows" ? "مسلسلات" : "أنمي"}`,
-          metas: (result[kind] || [])
-            .map((e) => metaFrom(e, kind === "movies" ? "movie" : "series"))
-            .filter(Boolean),
-        });
+      lists = simklLists(await this.simkl("/sync/all-items"));
+      await this.flushSimkl();
+      if (s.resume) resume = await this.simklPlayback(s, owner);
     }
     if (this.get(id) !== s) throw new Error("تغير الحساب أثناء المزامنة");
     if (this.client.profiles.store.active !== owner)
       throw new Error(
         "تغير الملف الشخصي أثناء المزامنة؛ أعد المحاولة من الملف المطلوب",
       );
+    // Written only now: the same account, and the profile that asked.
+    if (resume && s.resume) {
+      this.client.importResume(resume.points);
+      s.playbackSeen = {
+        ...Object.fromEntries(Object.entries(s.playbackSeen || {}).slice(-19)),
+        [owner]: resume.mark,
+      };
+    }
     this.client.state.connectedLists = [
       ...(this.client.state.connectedLists || []).filter(
         (l) => l.service !== id,
@@ -807,6 +873,20 @@ export class Integrations {
     s.lastSync = Date.now();
     this.client.persist();
     return this.client.publicState();
+  }
+  /**
+   * Simkl's paused sessions (issue #92), read only when its activities say
+   * playback changed since this profile last read them, as Simkl asks.
+   */
+  async simklPlayback(s, owner) {
+    const mark = simklPlaybackMark(
+      await this.simkl("/sync/activities", true, false, undefined, s),
+    );
+    if (mark && s.playbackSeen?.[owner] === mark) return null;
+    const points = simklPlaybacks(
+      await this.simkl("/sync/playback", true, false, undefined, s),
+    );
+    return { mark, points };
   }
   queueHistory(meta, videoId, position, duration) {
     this.queueAnilist(meta, videoId, position, duration);
@@ -841,6 +921,7 @@ export class Integrations {
    * stop. Called on every player update, so it only acts on transitions.
    */
   observePlayback(player) {
+    this.observeSimkl(player);
     // Read, never create: this runs on every player frame.
     const s = this.client.state.integrations?.trakt;
     if (!s?.token || !s.trackHistory || !s.scrobble) {
@@ -893,6 +974,148 @@ export class Integrations {
       want === "playing" ? "start" : want === "paused" ? "pause" : "stop",
       { ...this.session },
     );
+  }
+  /** Simkl receives actions, never heartbeats; its server advances playback. */
+  observeSimkl(player) {
+    const s = this.client.state.integrations?.simkl;
+    if (!s?.token?.access_token || !s.trackHistory) {
+      this.simklSession = null;
+      return;
+    }
+    const progress =
+      player?.duration > 0 ? (player.position / player.duration) * 100 : 0;
+    const eligible =
+      !player?.live &&
+      simklScrobbleBody(player?.meta, player?.videoId, progress);
+    const key = eligible ? `${player.meta.type}:${player.videoId}` : null;
+    let session = this.simklSession;
+    if (session && session.key !== key) {
+      if (["playing", "paused"].includes(session.state))
+        this.sendSimkl("stop", session);
+      session = this.simklSession = null;
+    }
+    if (!key) return;
+    session ||= this.simklSession = {
+      key,
+      meta: { id: player.meta.id, type: player.meta.type },
+      videoId: player.videoId,
+      state: "idle",
+      progress: 0,
+    };
+    if (player.duration > 0) session.progress = progress;
+    const want = !player.active
+      ? "stopped"
+      : player.loading || !(player.duration > 0)
+        ? null
+        : player.pause
+          ? "paused"
+          : "playing";
+    if (
+      !want ||
+      want === session.state ||
+      (want === "paused" && session.state === "idle")
+    )
+      return;
+    const wasIdle = session.state === "idle";
+    session.state = want;
+    if (want === "stopped" && wasIdle) return;
+    this.sendSimkl(
+      want === "playing" ? "start" : want === "paused" ? "pause" : "stop",
+      { ...session },
+    );
+  }
+  sendSimkl(event, session) {
+    const account = this.client.state.integrations?.simkl;
+    const generation = this.simklGeneration;
+    const allowed = () =>
+      this.client.state.integrations?.simkl === account &&
+      account?.trackHistory &&
+      this.simklGeneration === generation;
+    const body = simklScrobbleBody(
+      session.meta,
+      session.videoId,
+      session.progress,
+    );
+    if (!body || !allowed()) return Promise.resolve();
+    // Serializing prevents an older start from overtaking pause/stop.
+    const job = (this.simklTail || Promise.resolve()).then(async () => {
+      if (!allowed()) return;
+      try {
+        await this.simkl(
+          `/scrobble/${event}`,
+          true,
+          false,
+          body,
+          account,
+          allowed,
+        );
+        if (allowed()) {
+          account.trackingError = "";
+          if (event === "stop")
+            account.pending = (account.pending || []).filter(
+              (e) => e.key !== session.key,
+            );
+          this.client.persist();
+        }
+      } catch (error) {
+        if (!allowed()) return;
+        if (event === "stop" && error.status === 409) {
+          account.pending = (account.pending || []).filter(
+            (e) => e.key !== session.key,
+          );
+          account.trackingError = "";
+          this.client.persist();
+          return;
+        }
+        account.trackingError =
+          "تعذّر إرسال التتبع إلى Simkl؛ جرّب المزامنة لاحقاً.";
+        // Never replay stale starts after a restart. Only final positions wait
+        // for an explicit sync; regenerating the body also validates backups.
+        if (event === "stop")
+          account.pending = [
+            ...(account.pending || []).filter((e) => e.key !== session.key),
+            {
+              key: session.key,
+              meta: session.meta,
+              videoId: session.videoId,
+              progress: session.progress,
+            },
+          ].slice(-100);
+        this.client.persist();
+      }
+    });
+    this.simklTail = job.catch(() => {});
+    this.inflight.add(job);
+    job.finally(() => this.inflight.delete(job)).catch(() => {});
+    return job;
+  }
+  async flushSimkl() {
+    const account = this.client.state.integrations?.simkl;
+    if (!account?.trackHistory || !account.token?.access_token) return;
+    if (this.simklFlushing) return this.simklFlushing;
+    this.simklFlushing = (async () => {
+      for (const entry of [...(account.pending || [])]) {
+        if (
+          this.simklSession?.key === entry.key &&
+          ["playing", "paused"].includes(this.simklSession.state)
+        )
+          continue;
+        if (
+          this.client.state.integrations?.simkl !== account ||
+          !account.trackHistory
+        )
+          break;
+        // Remove first: a failed stop is requeued by sendSimkl.
+        account.pending = account.pending.filter((e) => e !== entry);
+        await this.sendSimkl("stop", entry);
+        if (account.pending.some((e) => e.key === entry.key)) break;
+      }
+      if (this.client.state.integrations?.simkl === account)
+        this.client.persist();
+    })().finally(() => {
+      this.simklFlushing = null;
+    });
+    return this.simklFlushing;
   }
   sendScrobble(event, session) {
     const body = scrobbleBody(session.meta, session.videoId, session.progress);
@@ -1043,7 +1266,11 @@ export class Integrations {
     const target = anilistTarget(meta, videoId);
     if (!target) return;
     const key = `${target.source}:${target.id}:${target.episode}`;
-    if (s.sent?.includes(key) || s.pending?.some((e) => e.key === key)) return;
+    if (s.sent?.includes(key)) return;
+    if (s.pending?.some((e) => e.key === key)) {
+      this.flushAnilist().catch(() => {});
+      return;
+    }
     s.pending = [...(s.pending || []), { key, ...target }].slice(-200);
     this.client.persist();
     this.flushAnilist().catch(() => {});
@@ -1087,16 +1314,31 @@ export class Integrations {
         try {
           // A restored backup's queue is checked like a fresh one.
           media = validTarget(entry) ? await this.anilistMedia(entry) : null;
-          if (this.client.state.integrations?.anilist !== s) break;
+          if (
+            this.client.state.integrations?.anilist !== s ||
+            !s.trackHistory ||
+            !s.pending?.includes(entry)
+          )
+            break;
           const write = media && nextListEntry(media, entry);
           if (write) await this.anilist(SAVE_ENTRY, write);
         } catch (error) {
-          if (error.status === 429) s.retryAt = Date.now() + 60000;
+          if (this.client.state.integrations?.anilist !== s || !s.trackHistory)
+            break;
+          if (error.status !== 404) {
+            s.retryAt = Date.now() + 60000;
+            this.client.persist();
+          }
           // A missing work is not worth retrying; anything else waits.
           if (error.status !== 404) break;
           media = null;
         }
-        if (this.client.state.integrations?.anilist !== s) break;
+        if (
+          this.client.state.integrations?.anilist !== s ||
+          !s.trackHistory ||
+          !s.pending?.includes(entry)
+        )
+          break;
         s.pending = (s.pending || []).filter((e) => e !== entry);
         if (media) s.sent = [...(s.sent || []), entry.key].slice(-3000);
         else s.unmatched = (s.unmatched || 0) + 1;

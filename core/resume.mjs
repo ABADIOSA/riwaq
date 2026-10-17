@@ -39,3 +39,28 @@ export function resumePick(streams = [], saved) {
   );
   return close ? { stream: close, exact: false } : null;
 }
+
+/** A resume point's exact place in the file, as a percentage (Simkl). */
+export const cleanStartPercent = (value) =>
+  Number.isFinite(value) && value > 0 && value < 95
+    ? Math.round(value * 100) / 100
+    : undefined;
+
+/**
+ * Where a viewing starts: the saved position, unless it is finished or
+ * almost (95%). A point imported from a tracker starts at its exact
+ * percentage once the player knows the file's length (`startPercent`);
+ * `start` is then only an estimate for the clock shown meanwhile.
+ */
+export function resumeStart(progress) {
+  if (
+    !progress ||
+    progress.completed ||
+    (progress.duration && progress.position / progress.duration >= 0.95)
+  )
+    return { start: 0 };
+  const startPercent = cleanStartPercent(progress.startPercent);
+  return startPercent
+    ? { start: progress.position || 0, startPercent }
+    : { start: progress.position || 0 };
+}

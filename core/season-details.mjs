@@ -31,6 +31,29 @@ const text = (value, max) =>
     ? value.replace(/\s+/g, " ").trim().slice(0, max)
     : "";
 
+/** Exact episode number within a season; never guess across seasons. */
+export function findEpisode(videos, season, input) {
+  const digits = String(input ?? "")
+    .trim()
+    .replace(/[٠-٩۰-۹]/g, (c) =>
+      String(c.charCodeAt(0) - (c <= "٩" ? 0x660 : 0x6f0)),
+    );
+  if (
+    !/^\d{1,6}$/.test(digits) ||
+    Number(digits) < 1 ||
+    !Number.isInteger(Number(season)) ||
+    Number(season) < 0
+  )
+    return null;
+  const matches = (Array.isArray(videos) ? videos : []).filter(
+    (v) =>
+      v?.id &&
+      Number(v.season ?? 1) === Number(season) &&
+      Number(v.episode) === Number(digits),
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
 /** The TMDB request for one season, or null when the IDs are not usable. */
 export function seasonRequest(tmdbId, season, language = "ar-SA") {
   if (

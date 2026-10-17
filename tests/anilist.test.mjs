@@ -196,7 +196,8 @@ test("AniList lists become rows of anilist: titles with AniList's own covers onl
       { status: "DROPPED", entries: [{ media: { id: 1 } }] },
     ],
   });
-  assert.equal(rows.length, 1);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[1].key, "anilist-dropped");
   assert.equal(rows[0].key, "anilist-current");
   assert.deepEqual(rows[0].metas[0], {
     id: "anilist:21",

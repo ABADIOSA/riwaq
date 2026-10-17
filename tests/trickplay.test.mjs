@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   isHomeHost,
+  previewBlocked,
   thumbnailArgs,
   thumbnailSlot,
   thumbnailsAllowed,
@@ -58,6 +59,45 @@ test("previews follow the viewer's reach: off, local only, or every source", () 
   assert.equal(thumbnailsAllowed({ url: "file:///c/x" }, "all"), false);
   assert.equal(thumbnailsAllowed(null, "all"), false);
   assert.equal(thumbnailsAllowed(nas, "sometimes"), false);
+});
+
+test("previews blocked by the mode, not the source, are named so the HUD can say so (issue #89)", () => {
+  const debrid = { url: "https://download.real-debrid.com/x.mkv" };
+  const torrent = { url: `${server}/abc/0` };
+  const nas = { url: "http://192.168.1.20:8096/video.mkv" };
+  const live = { url: "https://example.com/live.m3u8", live: true };
+  assert.equal(previewBlocked(debrid, "local", server), true);
+  assert.equal(previewBlocked(torrent, "local", server), true);
+  assert.equal(previewBlocked(nas, "local", server), false, "it has previews");
+  assert.equal(previewBlocked(debrid, "all", server), false, "already on");
+  assert.equal(
+    previewBlocked(debrid, "off", server),
+    false,
+    "the viewer chose",
+  );
+  assert.equal(previewBlocked(live, "local", server), false, "never live");
+  assert.equal(previewBlocked(null, "local", server), false);
+});
+
+test("the HUD names a blocked preview and offers every source once per profile", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const read = (path) =>
+    readFileSync(fileURLToPath(new URL(path, import.meta.url)), "utf8");
+  const main = read("../electron/main.mjs");
+  assert.match(
+    main,
+    /if \(previewBlocked\(player\.source, mode, serverUrl\)\) return \{ blocked: true \};/,
+    "main answers before any frame is fetched",
+  );
+  const hud = read("../src/components/Hud.jsx");
+  assert.match(hud, /if \(image\?\.blocked\)/);
+  assert.match(hud, /seekThumbnails: "all", seekHintSeen: true/);
+  assert.match(hud, /const hintCard = previewHint && !settings\.seekHintSeen;/);
+  assert.match(hud, /thumb\?\.blocked && !hintCard/, "the card is not covered");
+  assert.equal(DEFAULT_SETTINGS.seekHintSeen, false);
+  assert.equal(safeSettings({ seekHintSeen: true }).seekHintSeen, true);
+  assert.ok(HUD_METHODS.has("settings"), "the card saves through settings");
 });
 
 test("previews share slices of the film", () => {

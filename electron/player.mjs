@@ -66,6 +66,7 @@ export function playerArgs({
   url,
   title,
   start = 0,
+  startPercent,
   headers = {},
   host,
   inputConf,
@@ -120,7 +121,10 @@ export function playerArgs({
     "--sub-font=Segoe UI",
     ...styleArgs(settings.subtitleStyle),
     `--sub-pos=${settings.subtitlePosition ?? 95}`,
-    `--start=${Math.max(0, Number(start) || 0)}`,
+    // A Simkl resume point: its exact place in the file, whatever the length.
+    Number.isFinite(startPercent) && startPercent > 0 && startPercent < 95
+      ? `--start=${Math.round(startPercent * 100) / 100}%`
+      : `--start=${Math.max(0, Number(start) || 0)}`,
     `--panscan=${settings.videoFill ? "1.0" : "0.0"}`,
   ];
   const profile = PICTURE_PROFILES[settings.shader] ? settings.shader : "none";
@@ -343,6 +347,7 @@ export class Player {
     meta,
     videoId,
     start = 0,
+    startPercent,
     headers = {},
     local = false,
     live = false,
@@ -391,6 +396,8 @@ export class Player {
       bufferMiB,
       tags,
     };
+    // Until MPV reports a position, a restart starts at the same percentage.
+    this.pendingPercent = startPercent;
     this.stopWatchdog();
     this.meta = meta;
     this.videoId = videoId;
@@ -472,6 +479,7 @@ export class Player {
         url,
         title: `${meta.name} · Riwaq`,
         start,
+        startPercent,
         headers,
         host: this.host?.handle?.toString(),
         inputConf: inputConf || this.inputConf,
@@ -812,7 +820,10 @@ export class Player {
       }
       if (event.name === "chapter-list" || event.name === "duration")
         this.refreshSegments();
-      if (event.name === "time-pos") this.refreshSkip();
+      if (event.name === "time-pos") {
+        if (Number.isFinite(event.data)) this.pendingPercent = undefined;
+        this.refreshSkip();
+      }
       if (
         ["hwdec-current", "video-params/h", "video-params/gamma"].includes(
           event.name,
@@ -1007,6 +1018,7 @@ export class Player {
     return this.start({
       ...this.lastStart,
       start: Math.max(0, Number(this.state.position) || 0),
+      startPercent: this.pendingPercent,
       settings: {
         ...this.lastStart.settings,
         ...safeVideo(stage, { dolbyVision }),
@@ -1021,6 +1033,7 @@ export class Player {
     return this.start({
       ...this.lastStart,
       start: Math.max(0, Number(this.state.position) || 0),
+      startPercent: this.pendingPercent,
       safe: true,
     });
   }

@@ -3,11 +3,35 @@ import assert from "node:assert/strict";
 import {
   episodeDetails,
   fillOverviews,
+  findEpisode,
   needsEnglish,
   parseSeason,
   seasonRequest,
 } from "../core/season-details.mjs";
 import { Client } from "../core/client.mjs";
+
+test("episode jump accepts Arabic numbers and preserves exact season and unique episode identity", () => {
+  const videos = [
+    { id: "s1e2", season: 1, episode: 2 },
+    { id: "s2e2", season: 2, episode: 2 },
+    { id: "special", season: 0, episode: 1 },
+    { id: "absolute", episode: 1000 },
+  ];
+  assert.equal(findEpisode(videos, 2, "٢")?.id, "s2e2");
+  assert.equal(findEpisode(videos, 1, "۱۰۰۰")?.id, "absolute");
+  assert.equal(findEpisode(videos, 0, "1")?.id, "special");
+  for (const value of ["", "0", "-2", "2.5", "2junk", "1e3", "1000000"])
+    assert.equal(findEpisode(videos, 1, value), null);
+  assert.equal(findEpisode(videos, 3, "2"), null);
+  assert.equal(
+    findEpisode(
+      [...videos, { id: "duplicate", season: 1, episode: 2 }],
+      1,
+      "2",
+    ),
+    null,
+  );
+});
 
 test("a season request needs a numeric TMDB ID and a season number", () => {
   assert.deepEqual(seasonRequest(1396, 2, "ar-SA"), {

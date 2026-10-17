@@ -7,6 +7,29 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.47.0",
+    title: "فلاتر الإضافات، وSimkl كامل، وأزرار مباشرة في المشغّل",
+    items: [
+      "فلاتر كتالوجات الإضافات في «اكتشف»: اختر الكتالوج وفلاتره اللي توفرها الإضافة نفسها، والاختيار يبقى مع «تحميل المزيد».",
+      "Simkl وAniList: قوائمك كلها في «مكتبتي»، وتتبّع التشغيل في Simkl بخيار منك، و«الاستئناف من Simkl» يجيب مواضعك إلى «نكمل الحكاية».",
+      "المسار الصوتي والسرعة والأبعاد صارت أزراراً مباشرة في المشغّل، بدون فتح اللوحة الكبيرة.",
+      "معاينة شريط التقديم: لو كانت متوقفة لمصادر الإنترنت، يقول لك المشغّل ويعرض تفعيلها بضغطة.",
+      "انتقل لأي حلقة برقمها (حتى بالأرقام العربية)، واقرأ وصف الحلقة كاملاً، ومصادر التقييم بعلامات مختصرة.",
+      "صورة الحلقة جنب الغلاف في Discord، واختصارات المشغّل تشتغل ولوحة المفاتيح عربي.",
+    ],
+    en: {
+      title: "Addon filters, full Simkl, and direct player buttons",
+      items: [
+        "Addon catalog filters in Discover: pick the catalog and the filters the addon itself offers, kept when you load more.",
+        "Simkl and AniList: all your lists in My Library, optional playback tracking on Simkl, and “Resume from Simkl” brings your paused places into Continue watching.",
+        "Audio track, speed and aspect ratio are now direct buttons in the player, without the large panel.",
+        "Seek previews: when they are off for internet sources, the player says so and offers to turn them on in one click.",
+        "Jump to any episode by number (Arabic digits too), read an episode's full overview, and see rating sources as compact marks.",
+        "Episode artwork beside the cover in Discord, and the player shortcuts work with an Arabic keyboard layout.",
+      ],
+    },
+  },
+  {
     version: "0.46.1",
     title: "أزرار المشغّل تستجيب للنقر",
     items: [

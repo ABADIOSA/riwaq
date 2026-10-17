@@ -128,9 +128,12 @@ export const Poster = memo(function Poster({ meta, onOpen, progress }) {
       <strong dir="auto">{meta.name}</strong>
       <span className="poster-sub">
         {progress
-          ? progress.duration > 0
-            ? `متبقي ${arabicCount(Math.max(0, Math.round((progress.duration - progress.position) / 60)), MINUTES)}`
-            : `وصلت إلى ${clock(progress.position)}`
+          ? // A Simkl resume point knows its percentage, not its minutes.
+            progress.startPercent
+            ? `وصلت إلى ${Math.round(progress.startPercent)}%`
+            : progress.duration > 0
+              ? `متبقي ${arabicCount(Math.max(0, Math.round((progress.duration - progress.position) / 60)), MINUTES)}`
+              : `وصلت إلى ${clock(progress.position)}`
           : meta.releaseInfo || meta.year || typeName(meta.type)}
       </span>
     </button>

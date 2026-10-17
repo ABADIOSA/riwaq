@@ -139,6 +139,7 @@ const initial = {
   user: null,
 };
 export default function App() {
+  const catalogRun = useRef(0);
   const [state, setState] = useState(initial),
     [ready, setReady] = useState(false),
     [view, setView] = useState("home"),
@@ -151,6 +152,9 @@ export default function App() {
     // Discover's section (core/discover.mjs), kept between visits.
     [discoverTab, setDiscoverTab] = useState("movies"),
     [catalog, setCatalog] = useState(""),
+    [catalogSelection, setCatalogSelection] = useState({ key: "", values: {} }),
+    [catalogFilters, setCatalogFilters] = useState([]),
+    [addonCatalogs, setAddonCatalogs] = useState([]),
     [rows, setRows] = useState([]),
     [failures, setFailures] = useState([]),
     [loading, setLoading] = useState(true),
@@ -411,6 +415,7 @@ export default function App() {
     setQuery("");
     setSearch("");
     setCatalog("");
+    setAddonCatalogs([]);
   }, [state.profiles?.active]);
   const addonSignature = state.addons
     .map((a) => `${a.key}:${a.enabled}`)
@@ -427,6 +432,8 @@ export default function App() {
       : "off";
   useEffect(() => {
     if (!ready || !["home", "discover", "search"].includes(view)) return;
+    catalogRun.current++;
+    setPaging(false);
     let current = true;
     setLoading(true);
     setLoadError("");
@@ -439,6 +446,7 @@ export default function App() {
       type: view === "home" ? "" : filter,
       search: view === "search" ? query : "",
       catalogKey: view !== "home" ? catalog : "",
+      filters: catalogSelection.key === catalog ? catalogSelection.values : {},
     };
     // Each catalog is its own request, so rows appear as addons answer
     // instead of waiting for the slowest of dozens. Order follows the plan.
@@ -446,6 +454,9 @@ export default function App() {
     (async () => {
       const plan = await call("catalogPlan", args);
       if (!current) return;
+      if (!catalog)
+        setAddonCatalogs(plan.filter((item) => Array.isArray(item.filters)));
+      setCatalogFilters(catalog ? plan[0]?.filters || [] : []);
       const found = new Array(plan.length);
       const failed = new Set();
       const show = () => {
@@ -492,6 +503,7 @@ export default function App() {
       });
     return () => {
       current = false;
+      catalogRun.current++;
       clearTimeout(flush);
     };
   }, [
@@ -504,6 +516,7 @@ export default function App() {
     feedSignature,
     view === "discover" ? `${discoverTab}|${tmdbOn}` : "",
     refresh,
+    catalogSelection,
     state.profiles?.active,
   ]);
   useEffect(() => {
@@ -776,6 +789,7 @@ export default function App() {
   };
   const loadMore = async () => {
     if (paging || !rows[0]) return;
+    const run = catalogRun.current;
     setPaging(true);
     try {
       const result = await call("catalog", {
@@ -783,10 +797,13 @@ export default function App() {
         type: filter,
         search: view === "search" ? query : "",
         skip: rows[0].metas.length,
+        filters:
+          catalogSelection.key === catalog ? catalogSelection.values : {},
         // Riwaq's TMDB rows page by number; their pages lose unmatched titles.
         page: (rows[0].page || 1) + 1,
       });
       const next = result.rows[0];
+      if (run !== catalogRun.current) return;
       if (next)
         setRows((old) => [
           {
@@ -801,9 +818,9 @@ export default function App() {
           },
         ]);
     } catch (e) {
-      notice(e.message);
+      if (run === catalogRun.current) notice(e.message);
     } finally {
-      setPaging(false);
+      if (run === catalogRun.current) setPaging(false);
     }
   };
   const appearance = resolveAppearance(state.settings);
@@ -1195,6 +1212,69 @@ export default function App() {
                     >
                       <RefreshCw size={19} />
                     </IconButton>
+                  </div>
+                )}
+                {view !== "home" && addonCatalogs.length > 0 && (
+                  <label className="catalog-picker">
+                    كتالوج الإضافة
+                    <select
+                      aria-label="كتالوج الإضافة"
+                      value={
+                        addonCatalogs.some((item) => item.key === catalog)
+                          ? catalog
+                          : ""
+                      }
+                      onChange={(event) => {
+                        setCatalog(event.target.value);
+                        setCatalogSelection({
+                          key: event.target.value,
+                          values: {},
+                        });
+                      }}
+                    >
+                      <option value="">الكل</option>
+                      {addonCatalogs.map((item) => (
+                        <option key={item.key} value={item.key}>
+                          {item.provider} · {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {catalog && catalogFilters.length > 0 && (
+                  <div
+                    className="filter-tabs catalog-filters"
+                    aria-label="فلاتر الكتالوج"
+                  >
+                    {catalogFilters.map((field) => (
+                      <label key={field.name}>
+                        {field.name}
+                        <select
+                          aria-label={field.name}
+                          value={
+                            (catalogSelection.key === catalog &&
+                              catalogSelection.values[field.name]) ||
+                            (field.required ? field.options[0] : "")
+                          }
+                          onChange={(event) =>
+                            setCatalogSelection((old) => ({
+                              key: catalog,
+                              values: {
+                                ...(old.key === catalog ? old.values : {}),
+                                [field.name]: event.target.value,
+                              },
+                            }))
+                          }
+                        >
+                          {!field.required && <option value="">الكل</option>}
+                          {field.options.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
                   </div>
                 )}
                 {view === "search" && !catalog && rowGroups.length > 0 && (

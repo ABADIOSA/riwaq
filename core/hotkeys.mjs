@@ -282,6 +282,10 @@ export function hudKey(event, bindings) {
   if (event.key === "Tab") return null;
   let key = named[event.key] || event.key;
   if (typeof key !== "string") return null;
+  // Latin bindings remain reachable on Arabic keyboards without changing
+  // text entry or the character-based choices of other Latin layouts.
+  if (/^[^\x00-\x7f]$/u.test(key) && /^Key[A-Z]$/.test(event.code || ""))
+    key = event.code.slice(3).toLowerCase();
   const letter = /^[A-Z]$/i.test(key);
   if (letter) key = key.toLowerCase();
   const modifiers = [

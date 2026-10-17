@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 
 const sourceMode = process.argv.includes("--source");
 const offlineMode = process.argv.includes("--offline");
+const stallLayout = process.argv.includes("--stall-layout");
 const executable = resolve(
   sourceMode
     ? "node_modules/electron/dist/electron.exe"
@@ -180,6 +181,10 @@ try {
   await evaluate(
     `window.riwaq.call('queueEdit',{action:'add',meta:{id:'riwaq:packaged',type:'movie',name:'Packaged native verification'},videoId:'riwaq:packaged'})`,
   );
+  if (stallLayout)
+    await evaluate(
+      `window.__normalLayoutFrame = window.requestAnimationFrame; window.__stalledLayoutFrames = 0; window.requestAnimationFrame = () => { window.__stalledLayoutFrames++; return 0; }; true`,
+    );
   await evaluate(
     `window.riwaq.call('play',{key:${JSON.stringify(streams.streams[0].key)},meta:{id:'riwaq:packaged',type:'movie',name:'Packaged native verification'},videoId:'riwaq:packaged'})`,
   );
@@ -232,6 +237,15 @@ try {
     ),
     "MPV's actual child output is visible, not just the grey host",
   );
+  if (stallLayout) {
+    assert.ok(
+      await evaluate(`window.__stalledLayoutFrames > 0`),
+      "layout rendering frames were actually suspended",
+    );
+    await evaluate(
+      `window.requestAnimationFrame = window.__normalLayoutFrame; delete window.__normalLayoutFrame; true`,
+    );
+  }
   const recoveries = [];
   for (const stage of [1, 2]) {
     const position = await evaluate(`window.__packagedPlayer.position`);
@@ -293,6 +307,11 @@ try {
       "Native module creates child video surface",
       "Bundled MPV decodes a real video fixture inside the application",
       "Native surface is visible and Chromium siblings clip correctly",
+      ...(stallLayout
+        ? [
+            "Video bounds reach the native surface even when rendering frames are suspended",
+          ]
+        : []),
     ],
     diagnostics,
     activeVideo: active.video,

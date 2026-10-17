@@ -151,10 +151,11 @@ export const SAVE_ENTRY = `mutation ($mediaId: Int, $progress: Int, $status: Med
 }`;
 export const VIEWER_QUERY = "query { Viewer { id name } }";
 export const LISTS_QUERY = `query ($userId: Int) {
-  MediaListCollection(userId: $userId, type: ANIME, status_in: [CURRENT, PLANNING]) {
+  MediaListCollection(userId: $userId, type: ANIME) {
     lists {
       status
       entries {
+        status
         media {
           id
           format
@@ -196,32 +197,53 @@ export function anilistLists(collection) {
   const names = {
     CURRENT: "AniList · أشاهده",
     PLANNING: "AniList · أريد مشاهدته",
+    PAUSED: "AniList · متوقف مؤقتاً",
+    DROPPED: "AniList · متروك",
+    REPEATING: "AniList · إعادة المشاهدة",
+    COMPLETED: "AniList · مكتمل",
   };
-  return (collection?.lists || [])
-    .filter((list) => names[list.status])
-    .map((list) => ({
-      key: `anilist-${list.status.toLowerCase()}`,
-      service: "anilist",
-      name: names[list.status],
-      metas: (list.entries || [])
-        .map((e) => e?.media)
-        .filter((m) => Number.isInteger(m?.id))
-        .slice(0, 1000)
-        .map((m) => ({
-          id: `anilist:${m.id}`,
-          type: m.format === "MOVIE" ? "movie" : "series",
-          name:
-            String(
-              m.title?.english || m.title?.romaji || m.title?.native || "",
-            ).slice(0, 200) || `AniList ${m.id}`,
-          poster: /^https:\/\/s\d*\.anilist\.co\//.test(
-            m.coverImage?.large || "",
-          )
-            ? m.coverImage.large
-            : undefined,
-          releaseInfo: m.startDate?.year ? String(m.startDate.year) : undefined,
-        })),
-    }));
+  // Custom lists can repeat a status and a work. Merge them so React row
+  // keys are unique and a title is not displayed twice in the same row.
+  return Object.entries(names).flatMap(([status, name]) => {
+    const entries = (collection?.lists || []).flatMap((list) =>
+      (list.entries || []).filter(
+        (entry) => (entry?.status || list.status) === status,
+      ),
+    );
+    if (!entries.length) return [];
+    return [
+      {
+        key: `anilist-${status.toLowerCase()}`,
+        service: "anilist",
+        name,
+        metas: [
+          ...new Map(
+            entries
+              .map((e) => e?.media)
+              .filter((m) => Number.isInteger(m?.id) && m.id > 0)
+              .map((m) => [m.id, m]),
+          ).values(),
+        ]
+          .slice(0, 1000)
+          .map((m) => ({
+            id: `anilist:${m.id}`,
+            type: m.format === "MOVIE" ? "movie" : "series",
+            name:
+              String(
+                m.title?.english || m.title?.romaji || m.title?.native || "",
+              ).slice(0, 200) || `AniList ${m.id}`,
+            poster: /^https:\/\/s\d*\.anilist\.co\//.test(
+              m.coverImage?.large || "",
+            )
+              ? m.coverImage.large
+              : undefined,
+            releaseInfo: m.startDate?.year
+              ? String(m.startDate.year)
+              : undefined,
+          })),
+      },
+    ];
+  });
 }
 
 /** AniList's refusals in Arabic, keeping `status` on the error. */

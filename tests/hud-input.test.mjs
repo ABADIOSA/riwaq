@@ -45,6 +45,20 @@ test("editing, composing, button activation and accessible navigation keep their
   assert.equal(key("Tab"), null);
 });
 
+test("Arabic and other non-Latin layouts keep physical player shortcuts outside text fields", () => {
+  assert.equal(key("ؤ", { code: "KeyC" }), "c");
+  assert.equal(key("ب", { code: "KeyF" }), "f");
+  assert.equal(key("Ъ", { code: "KeyM" }), "m");
+  assert.equal(key("ب", { code: "KeyF", target: { tagName: "INPUT" } }), null);
+  assert.equal(key("ؤ", { code: "KeyC", isComposing: true }), null);
+  assert.equal(key("ؤ", { code: "KeyC" }, { panel: "Ctrl+y" }), null);
+  assert.equal(
+    key("z", { code: "KeyY", ctrlKey: true }, { panel: "Ctrl+z" }),
+    "Ctrl+z",
+    "Latin layouts keep the character the viewer bound",
+  );
+});
+
 test("a focused slider or tab list keeps only the keys it moves with", () => {
   // After the volume is touched with the mouse, its slider keeps the focus:
   // Space, Esc, F and M must still reach the player.

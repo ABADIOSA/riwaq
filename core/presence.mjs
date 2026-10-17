@@ -67,6 +67,7 @@ export function buildActivity({
   season,
   number,
   episodeTitle = "",
+  episodePoster = "",
   episode = "",
   position = 0,
   duration = 0,
@@ -84,6 +85,24 @@ export function buildActivity({
   const generic = detail !== "title";
   const name = line(title) || t("بلا عنوان");
   const art = generic ? "" : picture(poster);
+  // Only an opted-in title-level activity may share episode art. Never hand
+  // private/signed query strings or fragments to Discord's image service.
+  const candidate =
+    !generic && !live && episodeLine({ season, number, episode })
+      ? picture(episodePoster)
+      : "";
+  const episodeUrl = candidate ? new URL(candidate) : null;
+  // Addon thumbnails can contain credentials in the path, not just the
+  // query. Share only known public artwork CDNs, never addon server URLs.
+  const publicEpisodeHost =
+    episodeUrl &&
+    ["image.tmdb.org", "images.metahub.space", "artworks.thetvdb.com"].includes(
+      episodeUrl.hostname,
+    );
+  const episodeArt =
+    publicEpisodeHost && !episodeUrl.search && !episodeUrl.hash
+      ? candidate
+      : "";
   const status = paused ? t("متوقف مؤقتاً") : live ? t("بث مباشر") : "";
   const activity = {
     type: 3, // Watching
@@ -102,10 +121,21 @@ export function buildActivity({
       large_text: generic
         ? t("رِواق")
         : line(year ? `${name} (${year})` : name) || t("رِواق"),
-      ...(art
+      ...(art || episodeArt
         ? {
-            small_image: RIWAQ_ICON,
-            small_text: paused ? t("متوقف مؤقتاً") : t("على رِواق"),
+            small_image: episodeArt || RIWAQ_ICON,
+            small_text: episodeArt
+              ? line(
+                  [
+                    episodeLine({ season, number, episodeTitle, episode }),
+                    status,
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+                )
+              : paused
+                ? t("متوقف مؤقتاً")
+                : t("على رِواق"),
           }
         : {}),
     },

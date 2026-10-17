@@ -92,6 +92,8 @@ export const DEFAULT_SETTINGS = {
   // The long step (Shift with the arrows), in seconds.
   seekLongStep: 60,
   seekThumbnails: "local",
+  // The one-time card offering previews for internet sources (issue #89).
+  seekHintSeen: false,
   holdSpeed: 2,
   streamSafety: "strict",
   preferCached: true,
@@ -351,7 +353,13 @@ export function resourceUrl(transport, resource, type, id, extras = {}) {
     ".json";
   return url.toString();
 }
-export function catalogExtras(catalog, search = "", genre = "", skip = 0) {
+export function catalogExtras(
+  catalog,
+  search = "",
+  genre = "",
+  skip = 0,
+  selected = {},
+) {
   const extras = {};
   const definitions = catalog.extra || [];
   if (search && !definitions.some((e) => e.name === "search")) return null;
@@ -359,6 +367,21 @@ export function catalogExtras(catalog, search = "", genre = "", skip = 0) {
   if (genre && definitions.some((e) => e.name === "genre"))
     extras.genre = genre;
   if (skip && definitions.some((e) => e.name === "skip")) extras.skip = skip;
+  for (const def of definitions) {
+    if (["search", "skip"].includes(def.name)) continue;
+    const value =
+      selected && Object.hasOwn(selected, def.name)
+        ? selected[def.name]
+        : undefined;
+    if (value === undefined || value === "") continue;
+    if (
+      typeof value !== "string" ||
+      value.length > 500 ||
+      (def.options?.length && !def.options.includes(value))
+    )
+      return null;
+    extras[def.name] = value;
+  }
   for (const def of definitions) {
     if (!def.isRequired || extras[def.name]) continue;
     if (def.name === "search" || !def.options?.length) return null;
@@ -445,6 +468,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "heroAutoplay",
     "rememberSeries",
     "resumeSameSource",
+    "seekHintSeen",
     "themeSongHinted",
     "stremioBannerHidden",
     "quietInterface",

@@ -220,6 +220,10 @@ try {
     await nativeHudClick(app, hud, hud.locator(".hud-title"));
     await hud.evaluate(() => {
       window.nativeEvents = [];
+      window.nativeKeys = [];
+      window.addEventListener("keydown", (event) =>
+        window.nativeKeys.push({ key: event.key, code: event.code }),
+      );
       for (const type of ["pointerdown", "pointerup", "click"])
         document.addEventListener(
           type,
@@ -281,6 +285,48 @@ try {
       "native Escape closes the panel before stopping playback",
     );
     assert.equal((await snapshot()).player.active, true);
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByTitle("المسار الصوتي", { exact: true }),
+    );
+    await hud.getByRole("tab", { name: "الصوت", exact: true }).waitFor();
+    assert.equal(
+      await hud
+        .getByRole("tab", { name: "الصوت", exact: true })
+        .getAttribute("aria-selected"),
+      "true",
+    );
+    await nativeHudKey(app, 27);
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByTitle("سرعة التشغيل", { exact: true }),
+    );
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByRole("menuitemradio", { name: "1.5×", exact: true }),
+    );
+    await waitFor(
+      async () => (await snapshot()).player.speed === 1.5,
+      "direct picker changes actual MPV speed",
+    );
+    await call("playerCommand", { action: "speed", value: 1 });
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByTitle("نسبة الأبعاد", { exact: true }),
+    );
+    await nativeHudClick(
+      app,
+      hud,
+      hud.getByRole("menuitemradio", { name: "16:9", exact: true }),
+    );
+    await waitFor(
+      async () => (await snapshot()).player.aspect === "16:9",
+      "direct picker changes actual MPV aspect ratio",
+    );
     const timeline = hud.locator(".hud-track");
     await nativeHudClick(app, hud, timeline, 0.25);
     await waitFor(
@@ -317,6 +363,12 @@ try {
       "Space pauses exactly once",
     );
     await nativeHudKey(app, 67);
+    console.log(
+      JSON.stringify({
+        separate,
+        nativeKeys: await hud.evaluate(() => window.nativeKeys),
+      }),
+    );
     await hud.locator(".player-side").waitFor();
     await nativeHudKey(app, 27);
     await waitFor(
@@ -426,9 +478,30 @@ try {
         "window",
         "saved HDR preference is preserved",
       );
+      await waitFor(async () => {
+        const controls = (await call("diagnostics")).controls;
+        return controls.ready && controls.visible && !controls.covered;
+      }, "the resumed renderer and embedded HUD finish the recovery transition");
+      await hud.getByTitle("تصغير ومتابعة التصفح").waitFor();
+      await hud.evaluate(() => {
+        window.recoveryClicks = [];
+        document.addEventListener(
+          "click",
+          (event) =>
+            window.recoveryClicks.push(
+              event.target.closest("button")?.title || event.target.className,
+            ),
+          { capture: true, once: true },
+        );
+      });
       await hud.mouse.move(20, 20);
       await hud.mouse.move(60, 60);
       await nativeHudClick(app, hud, hud.getByTitle("إيقاف المشاهدة"));
+      console.log(
+        JSON.stringify({
+          recoveryClicks: await hud.evaluate(() => window.recoveryClicks),
+        }),
+      );
       await waitFor(
         async () => !(await call("hudSnapshot")).player.active,
         "recovered playback stops",

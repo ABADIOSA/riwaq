@@ -6,7 +6,68 @@ import {
   childFix,
   outputFits,
   surfaceRect,
+  surfaceReporter,
 } from "../core/surface.mjs";
+
+function layoutClock() {
+  let id = 0;
+  const frames = new Map(),
+    timers = new Map();
+  return {
+    frames,
+    timers,
+    hooks: {
+      frame: (fn) => {
+        frames.set(++id, fn);
+        return id;
+      },
+      cancelFrame: (key) => frames.delete(key),
+      delay: (fn) => {
+        timers.set(++id, fn);
+        return id;
+      },
+      cancelDelay: (key) => timers.delete(key),
+    },
+  };
+}
+test("video layout commits the latest bounds when rendering frames are suspended", () => {
+  const clock = layoutClock();
+  let bounds = 800;
+  const reported = [];
+  const reporter = surfaceReporter(() => reported.push(bounds), clock.hooks);
+  reporter.schedule();
+  const lateFrame = [...clock.frames.values()][0];
+  bounds = 2560;
+  [...clock.timers.values()][0]();
+  assert.deepEqual(reported, [2560]);
+  lateFrame();
+  assert.deepEqual(
+    reported,
+    [2560],
+    "a resumed frame does not duplicate the report",
+  );
+  assert.equal(clock.frames.size + clock.timers.size, 0);
+});
+test("layout changes coalesce, and a retired view cannot publish late geometry", () => {
+  const clock = layoutClock();
+  let reports = 0;
+  const reporter = surfaceReporter(() => reports++, clock.hooks);
+  reporter.schedule();
+  reporter.schedule();
+  reporter.schedule();
+  assert.equal(clock.frames.size, 1);
+  assert.equal(clock.timers.size, 1);
+  [...clock.frames.values()][0]();
+  assert.equal(reports, 1);
+  assert.equal(clock.timers.size, 0);
+  reporter.schedule();
+  const late = [...clock.timers.values()][0];
+  reporter.cancel();
+  reporter.schedule();
+  late();
+  assert.equal(reports, 1);
+  assert.equal(clock.frames.size + clock.timers.size, 0);
+});
 
 test("the surface's rectangle follows the reported layout in physical pixels", () => {
   const layout = { x: 10, y: 20, width: 800, height: 450, viewportWidth: 1000 };
