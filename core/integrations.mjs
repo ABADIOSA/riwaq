@@ -16,7 +16,12 @@ import {
   nextListEntry,
   validTarget,
 } from "./anime.mjs";
-import { simklLists, simklScrobbleBody } from "./simkl.mjs";
+import {
+  simklLists,
+  simklPlaybackMark,
+  simklPlaybacks,
+  simklScrobbleBody,
+} from "./simkl.mjs";
 
 const SERVICES = ["trakt", "letterboxd", "simkl", "anilist"];
 
@@ -252,7 +257,9 @@ export class Integrations {
         trackHistory: !!s.trackHistory,
         scrobble: !!s.scrobble,
         pending: (s.pending || []).length,
-        ...(id === "simkl" ? { trackingError: s.trackingError || "" } : {}),
+        ...(id === "simkl"
+          ? { trackingError: s.trackingError || "", resume: !!s.resume }
+          : {}),
         ...(id === "anilist"
           ? {
               expiresAt: s.token?.expiresAt || null,
@@ -266,7 +273,15 @@ export class Integrations {
     if (!SERVICES.includes(id)) throw new Error("منصة غير معروفة");
     return ((this.client.state.integrations ||= {})[id] ||= {});
   }
-  save({ id, clientId, clientSecret, username, trackHistory, scrobble }) {
+  save({
+    id,
+    clientId,
+    clientSecret,
+    username,
+    trackHistory,
+    scrobble,
+    resume,
+  }) {
     let s = this.get(id);
     for (const value of [clientId, clientSecret])
       if (
@@ -314,6 +329,12 @@ export class Integrations {
         s.pending = [];
         s.trackingError = "";
       }
+    }
+    // Resume points read from Simkl join "continue watching": their own
+    // consent, since they bring activity from elsewhere into this profile.
+    if (id === "simkl" && typeof resume === "boolean") {
+      s.resume = resume && !!s.token?.access_token;
+      s.playbackSeen = {};
     }
     // Live scrobbling is a mode of history tracking, never a way around it.
     if (id === "trakt" && typeof scrobble === "boolean") {
@@ -450,6 +471,8 @@ export class Integrations {
         this.simklGeneration++;
         this.simklSession = null;
         s.trackHistory = false;
+        s.resume = false;
+        s.playbackSeen = {};
         s.pending = [];
         s.trackingError = "";
         this.client.state.connectedLists = (
@@ -765,6 +788,7 @@ export class Integrations {
     const s = this.get(id);
     const owner = this.client.profiles.store.active;
     let lists = [];
+    let resume = null;
     if (id === "letterboxd") {
       if (!s.username) throw new Error("أدخل اسم مستخدم Letterboxd");
       const config = Buffer.from(
@@ -825,12 +849,21 @@ export class Integrations {
     } else if (id === "simkl") {
       lists = simklLists(await this.simkl("/sync/all-items"));
       await this.flushSimkl();
+      if (s.resume) resume = await this.simklPlayback(s, owner);
     }
     if (this.get(id) !== s) throw new Error("تغير الحساب أثناء المزامنة");
     if (this.client.profiles.store.active !== owner)
       throw new Error(
         "تغير الملف الشخصي أثناء المزامنة؛ أعد المحاولة من الملف المطلوب",
       );
+    // Written only now: the same account, and the profile that asked.
+    if (resume && s.resume) {
+      this.client.importResume(resume.points);
+      s.playbackSeen = {
+        ...Object.fromEntries(Object.entries(s.playbackSeen || {}).slice(-19)),
+        [owner]: resume.mark,
+      };
+    }
     this.client.state.connectedLists = [
       ...(this.client.state.connectedLists || []).filter(
         (l) => l.service !== id,
@@ -840,6 +873,20 @@ export class Integrations {
     s.lastSync = Date.now();
     this.client.persist();
     return this.client.publicState();
+  }
+  /**
+   * Simkl's paused sessions (issue #92), read only when its activities say
+   * playback changed since this profile last read them, as Simkl asks.
+   */
+  async simklPlayback(s, owner) {
+    const mark = simklPlaybackMark(
+      await this.simkl("/sync/activities", true, false, undefined, s),
+    );
+    if (mark && s.playbackSeen?.[owner] === mark) return null;
+    const points = simklPlaybacks(
+      await this.simkl("/sync/playback", true, false, undefined, s),
+    );
+    return { mark, points };
   }
   queueHistory(meta, videoId, position, duration) {
     this.queueAnilist(meta, videoId, position, duration);

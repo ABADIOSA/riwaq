@@ -19,6 +19,7 @@ import announcements from "./en/announcements.mjs";
 import review083 from "./en/review083.mjs";
 import owner from "./en/owner.mjs";
 import engine046 from "./en/engine046.mjs";
+import feedback094 from "./en/feedback094.mjs";
 
 export default {
   ...core,
@@ -37,6 +38,7 @@ export default {
   ...review083,
   ...owner,
   ...engine046,
+  ...feedback094,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",
@@ -45,8 +47,8 @@ export default {
   "استيراد قوائم الأفلام والمسلسلات والأنمي من Simkl حسب حالة المشاهدة، مع تتبّع تشغيل اختياري.":
     "Import Simkl movie, show and anime lists by watch status, with optional playback tracking.",
   "تتبّع التشغيل في Simkl": "Track playback on Simkl",
-  "يرسل بدء التشغيل والتوقف المؤقت والإيقاف إلى Simkl، ويسجّل المشاهدة عند الإيقاف بعد 80%. لا يُرسل شيء حتى تفعّل هذا الخيار. استئناف المشاهدة هنا يعتمد على سجل رِواق المحلي.":
-    "Send start, pause and stop to Simkl, marking watched when stopped after 80%. Nothing is sent until you enable this option. Resume in Riwaq uses its local history.",
+  "يرسل بدء التشغيل والتوقف المؤقت والإيقاف إلى Simkl، ويسجّل المشاهدة عند الإيقاف بعد 80%. لا يُرسل شيء حتى تفعّل هذا الخيار.":
+    "Send start, pause and stop to Simkl, marking watched when stopped after 80%. Nothing is sent until you enable this option.",
   "بانتظار الإرسال:": "Pending:",
   "AniList · متروك": "AniList · Dropped",
   "AniList · إعادة المشاهدة": "AniList · Repeating",

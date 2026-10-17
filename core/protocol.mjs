@@ -92,6 +92,8 @@ export const DEFAULT_SETTINGS = {
   // The long step (Shift with the arrows), in seconds.
   seekLongStep: 60,
   seekThumbnails: "local",
+  // The one-time card offering previews for internet sources (issue #89).
+  seekHintSeen: false,
   holdSpeed: 2,
   streamSafety: "strict",
   preferCached: true,
@@ -466,6 +468,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "heroAutoplay",
     "rememberSeries",
     "resumeSameSource",
+    "seekHintSeen",
     "themeSongHinted",
     "stremioBannerHidden",
     "quietInterface",

@@ -108,6 +108,7 @@ import {
 import { parseStream } from "../core/stream-engine.mjs";
 import { measureDownload, suggestCap } from "../core/speed-test.mjs";
 import { Thumbnailer } from "./thumbnails.mjs";
+import { previewBlocked } from "../core/trickplay.mjs";
 import { dropKind } from "../core/drop.mjs";
 import { nextSource, playableKeys } from "../core/failover.mjs";
 import { VideoHost, processWindow, showSystemCursor } from "./video-host.mjs";
@@ -129,6 +130,7 @@ import { probeAddons, runDiagnostics } from "./diagnose.mjs";
 import { ErrorLog, formatReport } from "../core/diagnose.mjs";
 import { homedir, totalmem } from "node:os";
 import { MusicLibrary, AUDIO_TYPES } from "./music-library.mjs";
+import { resumeStart } from "../core/resume.mjs";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -1174,17 +1176,21 @@ async function trickplay(a) {
     tmpDir: join(app.getPath("temp"), "riwaq-thumbs"),
   });
   if (thumbnails.source !== player.source) thumbnails.reset(player.source);
+  const mode = client.state.settings.seekThumbnails || "local";
+  // Torrents from either engine are remote, however local their address.
+  const serverUrl = [
+    client.state.settings.serverUrl,
+    torrentHost?.origin,
+    torrServer?.origin,
+  ].filter(Boolean);
+  // The HUD says why there is no picture (issue #89); nothing is fetched.
+  if (previewBlocked(player.source, mode, serverUrl)) return { blocked: true };
   return thumbnails.frame({
     at: Number(a?.at) || 0,
     duration: Number(player.state.duration) || 0,
     executable: executable(),
-    mode: client.state.settings.seekThumbnails || "local",
-    // Torrents from either engine are remote, however local their address.
-    serverUrl: [
-      client.state.settings.serverUrl,
-      torrentHost?.origin,
-      torrServer?.origin,
-    ].filter(Boolean),
+    mode,
+    serverUrl,
   });
 }
 function executable() {
@@ -1381,13 +1387,8 @@ async function play(
   if (torrentHash) builtinTorrent = torrentHash;
   if (fallbackHash) fallbackTorrent = fallbackHash;
   const progress = client.state.progress[`${meta.type}:${videoId}`];
-  const start =
-    resume &&
-    progress &&
-    !progress.completed &&
-    (!progress.duration || progress.position / progress.duration < 0.95)
-      ? progress.position
-      : 0;
+  // A Simkl resume point starts at its exact percentage (core/resume.mjs).
+  const { start, startPercent } = resume ? resumeStart(progress) : { start: 0 };
   // A new object per viewing: late replies compare it by identity.
   const series = seriesOf(meta);
   nowPlaying = { key, type: meta.type, id: videoId, series, request };
@@ -1416,6 +1417,7 @@ async function play(
     meta,
     videoId,
     start,
+    startPercent,
     headers: stream.behaviorHints?.proxyHeaders?.request || {},
     inputConf: hotkeyFile(),
     screenshotDir: screenshotDir(),

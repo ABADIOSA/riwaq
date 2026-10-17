@@ -600,14 +600,22 @@ export default function Details({
       ).runtime) ||
     runtimeMinutes(meta.runtime) ||
     (saved?.duration > 0 ? Math.round(saved.duration / 60) : 0);
+  // A Simkl resume point knows its percentage; its seconds are an estimate.
+  const resumeShare = resuming && saved.startPercent ? saved.startPercent : 0;
   const remainingMinutes = Math.max(
     0,
-    Math.round(totalMinutes - (resuming ? saved.position / 60 : 0)),
+    Math.round(
+      resumeShare
+        ? totalMinutes * (1 - resumeShare / 100)
+        : totalMinutes - (resuming ? saved.position / 60 : 0),
+    ),
   );
   const playLabel = currentEpisode
     ? `${resuming ? "متابعة" : "تشغيل"} ${episodeLabel(currentEpisode)}`
     : resuming
-      ? `متابعة من ${clock(saved.position)}`
+      ? resumeShare
+        ? `متابعة من ${Math.round(resumeShare)}%`
+        : `متابعة من ${clock(saved.position)}`
       : "تشغيل";
   // The sources, on the page or inside the window that Play opens.
   const sourcesSection = (

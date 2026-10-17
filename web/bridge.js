@@ -78,6 +78,7 @@ import {
   saveFile,
 } from "./files.js";
 import { DESKTOP_ONLY } from "./desktop-only.js";
+import { resumeStart } from "../core/resume.mjs";
 
 const EVENTS = new Set([
   "state",
@@ -390,13 +391,10 @@ export async function startBridge({ version, store }) {
     await player.stop();
     checkOwner();
     const progress = client.state.progress[`${meta.type}:${videoId}`];
-    const start =
-      resume &&
-      progress &&
-      !progress.completed &&
-      (!progress.duration || progress.position / progress.duration < 0.95)
-        ? progress.position
-        : 0;
+    // A Simkl resume point starts at its exact percentage (core/resume.mjs).
+    const { start, startPercent } = resume
+      ? resumeStart(progress)
+      : { start: 0 };
     const series = seriesOf(meta);
     nowPlaying = { key, type: meta.type, id: videoId, series };
     if (series && stream.memory)
@@ -414,6 +412,7 @@ export async function startBridge({ version, store }) {
       meta,
       videoId,
       start,
+      startPercent,
     });
   }
 

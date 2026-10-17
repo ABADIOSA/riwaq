@@ -146,6 +146,45 @@ html.hud-root #root {
   box-shadow: 0 10px 30px #000a;
   pointer-events: none;
 }
+/* Where the picture would be when previews are off for this source. */
+.hud-seek-note {
+  position: absolute;
+  bottom: 44px;
+  transform: translateX(-50%);
+  background: #000d;
+  border: 1px solid #ffffff2e;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Offered once per profile, above the timeline, hidden with the controls. */
+.hud-preview-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  width: fit-content;
+  max-width: min(640px, 100%);
+  margin-block-end: 12px;
+  padding: 10px 14px;
+  background: #111827ee;
+  border: 1px solid #ffffff26;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.hud-preview-hint p {
+  flex: 1 1 280px;
+  margin: 0;
+  text-align: var(--align-start, start);
+}
+.hud-preview-hint button {
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #ffffff14;
+}
 .hud-actions {
   display: flex;
   justify-content: space-between;

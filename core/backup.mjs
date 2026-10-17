@@ -32,7 +32,7 @@ import { cleanMedia, queueKey } from "./library.mjs";
 import { cleanCollections } from "./collections.mjs";
 import { HOTKEY_ACTIONS, validBinding } from "./hotkeys.mjs";
 import { LOCKABLE_ROOMS } from "./profiles.mjs";
-import { cleanResumeSource } from "./resume.mjs";
+import { cleanResumeSource, cleanStartPercent } from "./resume.mjs";
 import {
   validDiscordWebhook,
   validTelegramToken,
@@ -288,6 +288,8 @@ function cleanRecord(record, key) {
   if (Number.isFinite(record.hiddenAt)) clean.hiddenAt = record.hiddenAt;
   const source = cleanResumeSource(record.source);
   if (source) clean.source = source;
+  const startPercent = cleanStartPercent(record.startPercent);
+  if (startPercent) clean.startPercent = startPercent;
   return clean;
 }
 

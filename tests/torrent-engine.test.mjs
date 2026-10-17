@@ -688,7 +688,7 @@ test("main, the web bridge and the interface route torrents through the rules", 
   );
   assert.match(
     main,
-    /serverUrl: \[\s*client\.state\.settings\.serverUrl,\s*torrentHost\?\.origin,\s*torrServer\?\.origin,\s*\]/,
+    /const serverUrl = \[\s*client\.state\.settings\.serverUrl,\s*torrentHost\?\.origin,\s*torrServer\?\.origin,\s*\]/,
   );
   assert.match(main, /\.then\(\(\) => torrentHost\?\.stop\(\)\)/);
   assert.match(main, /shell\.openExternal\(SERVICE_DOWNLOAD\)/);

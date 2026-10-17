@@ -201,6 +201,7 @@ export class WebPlayer {
     meta,
     videoId,
     start = 0,
+    startPercent,
     live = false,
     local = false,
     settings = {},
@@ -211,6 +212,13 @@ export class WebPlayer {
     await this.stop({ cancelStart: false });
     if (token !== this.startToken) throw new Error("بدأ تشغيل مصدر آخر");
     if (!restart) this.stallRetries = 0;
+    // A Simkl resume point starts at its percentage once the length is
+    // known; a restart before that keeps it (core/resume.mjs).
+    if (!restart)
+      this.pendingPercent =
+        Number.isFinite(startPercent) && startPercent > 0 && startPercent < 95
+          ? startPercent
+          : undefined;
     this.meta = meta;
     this.videoId = videoId;
     this.settings = settings;
@@ -300,6 +308,23 @@ export class WebPlayer {
     });
   }
 
+  /** Moves to a pending resume percentage once the length is known. */
+  seekPercent(video) {
+    const percent = this.pendingPercent;
+    if (
+      !percent ||
+      this.state.live ||
+      !Number.isFinite(video.duration) ||
+      !(video.duration > 0)
+    )
+      return false;
+    this.pendingPercent = undefined;
+    try {
+      video.currentTime = (video.duration * percent) / 100;
+    } catch {}
+    return true;
+  }
+
   attempt(index, start, token) {
     const step = this.plan[index];
     this.planIndex = index;
@@ -317,16 +342,28 @@ export class WebPlayer {
     this.video = video;
     this.applyPicture();
     this.place({ visible: this.visible });
-    const viewing = { token, index, start, failed: false };
+    // A resume point's percentage replaces its estimated seconds outright:
+    // Chromium reports the length (durationchange) before loadedmetadata.
+    const viewing = {
+      token,
+      index,
+      start: this.pendingPercent ? 0 : start,
+      failed: false,
+    };
     this.viewing = viewing;
     const live = () => this.viewing === viewing && this.state.active;
     const on = (name, fn) =>
       video.addEventListener(name, (event) => live() && fn(event));
     on("loadedmetadata", () => {
       this.readVideo();
-      if (start > 0 && !this.state.live && step.kind !== "hls") {
+      if (
+        !this.seekPercent(video) &&
+        viewing.start > 0 &&
+        !this.state.live &&
+        step.kind !== "hls"
+      ) {
         try {
-          video.currentTime = start;
+          video.currentTime = viewing.start;
         } catch {}
       }
       if (!this.loadedOnce) {
@@ -339,6 +376,8 @@ export class WebPlayer {
       this.checkDecoding(viewing);
     });
     on("durationchange", () => {
+      // A length learnt late (some WebM files) still places a resume point.
+      this.seekPercent(video);
       this.readVideo();
       this.refreshSegments();
       this.emit();
@@ -381,7 +420,7 @@ export class WebPlayer {
     if (step.kind === "direct") {
       video.src = step.url;
       this.play();
-    } else this.attachHls(step, viewing, start);
+    } else this.attachHls(step, viewing, viewing.start);
     this.startWatchdog();
   }
 

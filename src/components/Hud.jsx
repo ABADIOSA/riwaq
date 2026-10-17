@@ -92,6 +92,9 @@ export default function Hud() {
   const [notice, setNotice] = useState("");
   const [seekHover, setSeekHover] = useState(null);
   const [thumb, setThumb] = useState(null);
+  // Previews are off for this internet or torrent source (issue #89): the
+  // card offering them for every source shows until the viewer chooses.
+  const [previewHint, setPreviewHint] = useState(false);
   const thumbAsk = useRef(0);
   const [flash, setFlash] = useState(null);
   const [skipNext, setSkipNext] = useState("");
@@ -226,6 +229,7 @@ export default function Hud() {
     setDock(null);
     setMenu(null);
     setThumb(null);
+    setPreviewHint(false);
     setSleepMenu(false);
     setShaderMenu(false);
     lastVolume.current = null;
@@ -244,12 +248,30 @@ export default function Hud() {
       const image = await call("trickplay", { at: seekHover.t }).catch(
         () => null,
       );
-      if (ask === thumbAsk.current) setThumb(image ? { image } : null);
+      if (ask !== thumbAsk.current) return;
+      if (image?.blocked) {
+        setThumb({ blocked: true });
+        if (!state?.settings.seekHintSeen) setPreviewHint(true);
+      } else setThumb(typeof image === "string" ? { image } : null);
     }, 220);
     return () => clearTimeout(timer);
   }, [seekHover?.t, thumbMode, player.live]);
 
   const settings = state?.settings || {};
+  // The card's answer is kept per profile; "all" applies at the next rest
+  // on the timeline (the same setting as Settings → the player page).
+  const choosePreviews = (all) => {
+    setPreviewHint(false);
+    thumbAsk.current++;
+    setThumb(null);
+    update(
+      "settings",
+      all
+        ? { seekThumbnails: "all", seekHintSeen: true }
+        : { seekHintSeen: true },
+    );
+  };
+  const hintCard = previewHint && !settings.seekHintSeen;
   const shown =
     awake ||
     (player.pause && settings.hudShowOnPause !== false) ||
@@ -714,6 +736,18 @@ export default function Hud() {
         onMouseEnter={() => (overControls.current = true)}
         onMouseLeave={() => (overControls.current = false)}
       >
+        {hintCard && (
+          <div className="hud-preview-hint" role="status">
+            <p>
+              معاينة الصورة على شريط التقديم متوقفة لمصادر الإنترنت والتورنت.
+              تفعيلها لكل المصادر يفتح المصدر مرة ثانية مع كل معاينة.
+            </p>
+            <button className="on" onClick={() => choosePreviews(true)}>
+              فعّلها لكل المصادر
+            </button>
+            <button onClick={() => choosePreviews(false)}>لا، شكراً</button>
+          </div>
+        )}
         <div className="hud-seek" dir="ltr">
           <span>{player.live ? "مباشر" : clock(player.position)}</span>
           <div
@@ -752,7 +786,21 @@ export default function Hud() {
                   }}
                 />
               ))}
-            {seekHover && thumb && (
+            {/* The card says it already, where the bubble would cover it. */}
+            {seekHover && thumb?.blocked && !hintCard && (
+              <span
+                className="hud-seek-note"
+                style={{
+                  left: Math.max(
+                    100,
+                    Math.min((seekHover.w || 0) - 100, seekHover.x),
+                  ),
+                }}
+              >
+                المعاينة متوقفة لمصادر الإنترنت
+              </span>
+            )}
+            {seekHover && thumb?.image && (
               <img
                 className="hud-seek-thumb"
                 src={thumb.image}

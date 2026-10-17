@@ -68,6 +68,20 @@ export function thumbnailsAllowed(source, mode, serverUrl = "") {
 }
 
 /**
+ * Whether the viewer's mode, not the source, keeps previews away: "local"
+ * leaves out internet and torrent sources that "all" would cover (issue
+ * #89: a viewer streaming from the internet never saw a preview and asked
+ * for the feature). The HUD then says so where the picture would be.
+ */
+export function previewBlocked(source, mode, serverUrl = "") {
+  return (
+    mode === "local" &&
+    !thumbnailsAllowed(source, "local", serverUrl) &&
+    thumbnailsAllowed(source, "all", serverUrl)
+  );
+}
+
+/**
  * The moment a preview stands for: previews are shared within a slice of the
  * film, so sweeping the pointer asks for a handful of frames, not hundreds.
  */
