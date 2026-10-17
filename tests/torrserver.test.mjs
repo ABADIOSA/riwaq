@@ -185,8 +185,15 @@ test("the addon's file is found in TorrServer's sorted list, never guessed", () 
  * source: -p/-i/-d/-a, accs.db Basic auth on the API, settings.json read at
  * start, /stream for torrents it holds without the password.
  */
-function fakeTorrServer({ ignoreSettings = false, open = false } = {}) {
+function fakeTorrServer({
+  ignoreSettings = false,
+  open = false,
+  metaAfter = 1,
+} = {}) {
   const runs = [];
+  // Polls answered without file stats; read at each request, so a test can
+  // change it between starts.
+  const fake = { runs, metaAfter };
   const spawn = (exe, args, options) => {
     const child = new EventEmitter();
     const flag = (name) => args[args.indexOf(name) + 1];
@@ -243,7 +250,7 @@ function fakeTorrServer({ ignoreSettings = false, open = false } = {}) {
               active_peers: 3,
               download_speed: 2048,
               loaded_size: 0,
-              ...(entry.polls > 1
+              ...(entry.polls > fake.metaAfter
                 ? {
                     file_stats: [
                       { id: 1, path: "Pack/E02.mkv", length: 20 },
@@ -264,7 +271,8 @@ function fakeTorrServer({ ignoreSettings = false, open = false } = {}) {
     };
     return child;
   };
-  return { spawn, runs };
+  fake.spawn = spawn;
+  return fake;
 }
 
 function installed(extra = {}) {
@@ -475,7 +483,9 @@ test("a TorrServer that runs open or ignores Riwaq's settings is stopped", async
 });
 
 test("a file without metadata or a known file gives its start back", async () => {
-  const fake = fakeTorrServer();
+  // No metadata however many polls fit in readyMs: a fast reply once polled
+  // again and got the files, failing on the mapping instead.
+  const fake = fakeTorrServer({ metaAfter: Infinity });
   const { dir, release } = installed();
   const host = new TorrServerHost({
     dir,
@@ -490,6 +500,7 @@ test("a file without metadata or a known file gives its start back", async () =>
       /ما وصلت بيانات التورنت/,
     );
     assert.equal(fake.runs[0].torrents.size, 0, "dropped");
+    fake.metaAfter = 1;
     host.readyMs = 5000;
     await assert.rejects(
       host.url({ infoHash: HASH, fileIdx: 1 }, {}),
