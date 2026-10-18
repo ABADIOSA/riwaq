@@ -36,7 +36,7 @@ test("TheIntroDB is asked by IMDb title, with season and episode for a series", 
   );
   assert.equal(
     theIntroDbUrl({ imdb: "tt0111161" }),
-    "https://api.theintrodb.org/v3/media?imdb_id=tt0111161",
+    "https://api.theintrodb.org/v4/media?imdb_id=tt0111161",
   );
 });
 

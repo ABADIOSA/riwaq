@@ -137,6 +137,23 @@ try {
   assert.equal((await player()).active, false);
   console.log("Stop during pending engine preparation prevents late playback.");
   if (!process.argv.includes("--race-only")) {
+    const owner = (await call("init")).profiles.active;
+    const started = await call("offlineStart", {
+      ...args,
+      key: direct.key,
+      profileId: owner,
+    });
+    const directDownload = started.items[0].id;
+    await wait(
+      async () =>
+        (await call("offlineList", { profileId: owner })).items.find(
+          (x) => x.id === directDownload,
+        )?.status === "ready",
+      "download starts directly without opening MPV",
+    );
+    assert.equal((await player()).active, false);
+    await call("offlineRemove", { profileId: owner, id: directDownload });
+    console.log("Direct source download finishes without starting the player.");
     await call("play", { ...args, key: direct.key });
     await wait(async () => {
       const p = await player();

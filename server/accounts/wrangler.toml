@@ -16,3 +16,7 @@ binding = "DB"
 database_name = "riwaq-accounts"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
+
+# Daily expiry: records older than 31 days are removed within 32 days.
+[triggers]
+crons = ["17 2 * * *"]

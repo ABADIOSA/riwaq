@@ -35,6 +35,9 @@ export async function downloadFile({
   progress = () => {},
   request = fetch,
   idleMs = 45000,
+  resume = null,
+  checkpoint = () => {},
+  identity = "",
 }) {
   const abort = new AbortController();
   const cancel = () => abort.abort();
@@ -53,8 +56,32 @@ export async function downloadFile({
     timer.unref?.();
   };
   try {
+    const existing = await lstat(part).catch(() => null);
+    if (existing && (!existing.isFile() || existing.isSymbolicLink()))
+      throw Error("ملف التنزيل غير صالح");
+    const etag = /^"[^\r\n]{1,250}"$/.test(resume?.etag || "")
+      ? resume.etag
+      : "";
+    const modified =
+      !etag && Number.isFinite(Date.parse(resume?.modified || ""))
+        ? resume.modified
+        : "";
+    let offset = existing?.size || 0;
+    const canResume =
+      offset > 0 &&
+      offset < resume?.total &&
+      (etag || modified || (identity && identity === resume?.identity));
+    if (!canResume) offset = 0;
     let target = mediaUrl(url),
-      sentHeaders = { ...headers };
+      sentHeaders = {
+        ...headers,
+        ...(offset
+          ? {
+              Range: `bytes=${offset}-`,
+              ...(etag || modified ? { "If-Range": etag || modified } : {}),
+            }
+          : {}),
+      };
     for (let n = 0; n < 4; n++) {
       pulse();
       response = await request(target.href, {
@@ -70,14 +97,20 @@ export async function downloadFile({
         const next = mediaUrl(new URL(location, target).href);
         if (target.protocol === "https:" && next.protocol !== "https:")
           throw Error("تعذر تنزيل المصدر");
-        if (next.origin !== target.origin) sentHeaders = {};
+        if (next.origin !== target.origin)
+          sentHeaders = offset
+            ? {
+                Range: `bytes=${offset}-`,
+                ...(etag || modified ? { "If-Range": etag || modified } : {}),
+              }
+            : {};
         target = next;
         continue;
       }
       break;
     }
     if (
-      response.status !== 200 ||
+      ![200, 206].includes(response.status) ||
       !response.body ||
       UNSUPPORTED.test(response.headers.get("content-type") || "") ||
       /\.(m3u8|mpd)(\?|$)/i.test(target.href)
@@ -85,10 +118,36 @@ export async function downloadFile({
       throw Error(
         "هذا المصدر يحتاج بثًا مباشرًا؛ اختر ملف فيديو أو تورنت للتنزيل",
       );
-    total = Number(response.headers.get("content-length") || 0);
+    const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(
+      response.headers.get("content-range") || "",
+    );
+    if (
+      response.status === 206 &&
+      (!offset ||
+        !range ||
+        Number(range[1]) !== offset ||
+        Number(range[2]) !== Number(range[3]) - 1 ||
+        Number(range[3]) !== resume.total ||
+        (etag && response.headers.get("etag") !== etag) ||
+        (modified && response.headers.get("last-modified") !== modified))
+    )
+      throw Error("تغيّر ملف المصدر؛ أعد التنزيل من البداية");
+    if (response.status === 200) offset = 0;
+    total =
+      response.status === 206
+        ? Number(range[3])
+        : Number(response.headers.get("content-length") || 0);
     if (!Number.isSafeInteger(total) || total < 0 || total > MAX_BYTES)
       throw Error("حجم التنزيل غير مدعوم");
-    handle = await open(part, "wx");
+    if (existing && offset === 0) await removeFile(part);
+    handle = await open(part, offset ? "r+" : "wx");
+    bytes = offset;
+    checkpoint({
+      etag: response.headers.get("etag") || "",
+      modified: response.headers.get("last-modified") || "",
+      total,
+      identity,
+    });
     reader = response.body.getReader();
     pulse();
     for (;;) {
@@ -103,6 +162,7 @@ export async function downloadFile({
           value.value,
           offset,
           value.value.length - offset,
+          bytes - value.value.length + offset,
         );
         if (!written.bytesWritten) throw Error("تعذر حفظ التنزيل");
         offset += written.bytesWritten;
@@ -200,21 +260,28 @@ export class OfflineLibrary {
       busy: !!this.job,
     };
   }
-  start({ profileId, stream, meta, videoId, settings }) {
+  start({ profileId, stream, meta, videoId, settings, resumeId }) {
     const profile = this.profile(profileId);
     if (this.job) throw Error("يوجد تنزيل جارٍ؛ انتظر اكتماله أو أوقفه");
-    if (this.bag(profile).length >= 50)
+    if (!resumeId && this.bag(profile).length >= 50)
       throw Error("أزل تنزيلًا قبل إضافة المزيد");
-    const record = {
-      id: randomBytes(16).toString("hex"),
-      meta: cleanMedia(meta),
-      videoId: String(videoId).slice(0, 1000),
-      episode: offlineEpisode(meta, videoId),
-      at: Date.now(),
-      status: "downloading",
-      bytes: 0,
-      total: 0,
-    };
+    const record = resumeId
+      ? this.bag(profile).find((x) => x.id === resumeId && x.status !== "ready")
+      : {
+          stream: structuredClone(stream),
+          id: randomBytes(16).toString("hex"),
+          meta: cleanMedia(meta),
+          videoId: String(videoId).slice(0, 1000),
+          episode: offlineEpisode(meta, videoId),
+          at: Date.now(),
+          status: "downloading",
+          bytes: 0,
+          total: 0,
+        };
+    if (!record || !record.stream)
+      throw Error("اختر المصدر مجدداً لبدء تنزيل جديد");
+    const previousStatus = record.status;
+    record.status = "downloading";
     const job = {
       id: record.id,
       profile,
@@ -223,25 +290,37 @@ export class OfflineLibrary {
       abort: new AbortController(),
     };
     this.job = job;
-    this.bag(profile).unshift(record);
+    if (!resumeId) this.bag(profile).unshift(record);
     try {
       this.persist();
     } catch (error) {
       this.job = null;
-      this.client.state.offline[profile] = this.bag(profile).filter(
-        (x) => x !== record,
-      );
+      if (!resumeId)
+        this.client.state.offline[profile] = this.bag(profile).filter(
+          (x) => x !== record,
+        );
+      else record.status = previousStatus;
       throw error;
     }
     job.done = (async () => {
       let source;
       try {
         await mkdir(this.root, { recursive: true });
-        source = await this.resolveSource(stream, settings, job.abort.signal);
+        source = await this.resolveSource(
+          record.stream,
+          settings,
+          job.abort.signal,
+        );
         if (job.abort.signal.aborted) throw Error("توقف التنزيل");
         const bytes = await downloadFile({
           ...source,
           part: this.path(record.id, true),
+          resume: record.resume,
+          checkpoint: (value) => {
+            record.resume = value;
+            record.total = value.total;
+            this.persist();
+          },
           signal: job.abort.signal,
           request: this.request,
           progress: (b, t) => {
@@ -256,12 +335,25 @@ export class OfflineLibrary {
           throw Error("توقف التنزيل");
         }
         record.status = "ready";
+        delete record.stream;
+        delete record.resume;
         record.bytes = bytes;
         record.total = bytes;
         this.persist();
       } catch {
-        record.status = job.abort.signal.aborted ? "cancelled" : "error";
-        await rm(this.path(record.id, true), { force: true }).catch(() => {});
+        record.status = job.pause
+          ? "paused"
+          : job.abort.signal.aborted
+            ? "cancelled"
+            : "error";
+        const partial = await lstat(this.path(record.id, true)).catch(
+          () => null,
+        );
+        record.bytes = partial?.isFile() ? partial.size : 0;
+        if (record.status === "cancelled") {
+          await rm(this.path(record.id, true), { force: true }).catch(() => {});
+          record.bytes = 0;
+        }
         await removeFile(this.path(record.id)).catch(() => {});
       } finally {
         await Promise.resolve()
@@ -277,6 +369,22 @@ export class OfflineLibrary {
         }
       }
     })();
+    return this.list(profileId);
+  }
+  resume(profileId, id, settings) {
+    const profile = this.profile(profileId);
+    const record = this.bag(profile).find((x) => x.id === id);
+    if (!record || record.status === "ready")
+      throw Error("التنزيل غير قابل للاستئناف");
+    return this.start({ profileId, settings, resumeId: id });
+  }
+  async pause(profileId, id) {
+    const profile = this.profile(profileId);
+    if (this.job?.profile === profile && this.job.id === id) {
+      this.job.pause = true;
+      this.job.abort.abort();
+      await this.job.done;
+    }
     return this.list(profileId);
   }
   async cancel(profileId, id) {
@@ -352,6 +460,7 @@ export class OfflineLibrary {
     }
   }
   async stop() {
+    if (this.job) this.job.pause = true;
     this.job?.abort.abort();
     await this.job?.done;
   }

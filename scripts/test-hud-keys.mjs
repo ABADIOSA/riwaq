@@ -100,6 +100,10 @@ try {
         call: async (method, args) => {
           window.__calls.push([method, args]);
           if (method === "hudSnapshot") return { state, player };
+          if (method === "trickplay")
+            return new Promise((resolve) =>
+              (window.__previewWaits ||= []).push(resolve),
+            );
           if (method === "subtitles") return [];
           if (method === "playerSources") return { streams: [] };
           return true;
@@ -184,7 +188,7 @@ try {
   );
 
   await wake();
-  await page.getByTitle("الترجمة والصوت (C أو الزر الأيمن)").click();
+  await page.getByTitle("الترجمة (C أو الزر الأيمن)").click();
   await page.locator(".player-side").waitFor();
   assert.equal(
     await page.evaluate(() => document.activeElement.tagName),
@@ -215,6 +219,43 @@ try {
   assert.ok(!enter.some((call) => call.startsWith("key:")), enter.join());
   console.log("- a button reached with Tab keeps Enter");
 
+  await wake();
+  if (await page.locator(".player-side").count())
+    await page.getByTitle("إغلاق اللوحة").click();
+  const timeline = page.locator(".hud-track"),
+    track = await timeline.boundingBox();
+  await page.mouse.move(
+    track.x + track.width * 0.3,
+    track.y + track.height / 2,
+  );
+  await page.getByRole("status", { name: "جاري تحميل المعاينة" }).waitFor();
+  assert.ok(
+    (await page.locator(".hud-seek-thumb").boundingBox()).height > 100,
+    "preview reserves its frame before loading",
+  );
+  await page.waitForFunction(() => window.__previewWaits?.length === 1);
+  await page.mouse.move(
+    track.x + track.width * 0.7,
+    track.y + track.height / 2,
+  );
+  await page.waitForFunction(() => window.__previewWaits?.length === 2);
+  await page.evaluate(() => window.__previewWaits[0]("old-scene"));
+  await page.getByRole("status", { name: "جاري تحميل المعاينة" }).waitFor();
+  assert.equal(
+    await page.locator(".hud-seek-thumb img").count(),
+    0,
+    "retired reply cannot show the previous scene",
+  );
+  await page.screenshot({
+    path: join(dist, "../.cache/user-fixes-2026-10-18/preview-loading.png"),
+  });
+  await page.evaluate(() => window.__previewWaits[1](null));
+  await page.getByRole("status", { name: "المعاينة غير متاحة" }).waitFor();
+  await page.mouse.move(650, 300);
+  await page.locator(".hud-seek-thumb").waitFor({ state: "detached" });
+  console.log(
+    "- preview frame appears immediately, ignores retired replies and reports unavailable results",
+  );
   assert.deepEqual(errors, []);
   console.log("HUD keyboard: OK");
 } finally {

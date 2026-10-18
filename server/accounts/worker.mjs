@@ -1,3 +1,4 @@
+import { usageRoute } from "./usage.mjs";
 /**
  * Riwaq accounts: a Cloudflare Worker with a D1 database (docs/ACCOUNTS.md).
  *
@@ -231,6 +232,15 @@ async function routes(request, env, now) {
     request.headers.get("CF-Connecting-IP") || "unknown",
   );
   const addressKey = (kind) => `${kind}:${address.slice(0, 32)}`;
+  if (["/v1/usage", "/v1/admin/usage"].includes(path))
+    return usageRoute(request, env, now, {
+      reply,
+      sha256,
+      equal,
+      limited,
+      count,
+      addressKey,
+    });
   // Expired counters go now and then.
   if (Math.random() < 0.02)
     await db
@@ -517,5 +527,11 @@ export async function handle(request, env, { now = Date.now() } = {}) {
 }
 
 export default {
+  scheduled: (_event, env, context) =>
+    context.waitUntil(
+      env.DB.prepare("DELETE FROM usage_devices WHERE seen_at < ?1")
+        .bind(Date.now() - 31 * 86400000)
+        .run(),
+    ),
   fetch: (request, env) => handle(request, env),
 };

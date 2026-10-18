@@ -162,6 +162,11 @@ export async function startBridge({ version, store }) {
     // Set at build time for tests and development (vite.web.config.mjs).
     accountServer: import.meta.env.RIWAQ_ACCOUNT_SERVER || undefined,
   });
+  client.usage.start(() => document.visibilityState === "visible");
+  window.addEventListener("pagehide", () => client.usage.stop());
+  window.addEventListener("pageshow", () =>
+    client.usage.start(() => document.visibilityState === "visible"),
+  );
   const broadcast = () => emit("state", client.publicState());
   client.updates = new WebUpdates(client, {
     current: version,
@@ -1191,6 +1196,11 @@ export async function startBridge({ version, store }) {
     setHotkey: (a) => client.setHotkey(a),
     resetHotkeys: () => client.resetHotkeys(),
     notifySave: (a) => client.notifier.save(a),
+    usageState: () => client.usage.publicState(),
+    usageEdit: (a) => {
+      client.profiles.gate("settings");
+      return client.usage.edit(a?.enabled);
+    },
     announcementState: () => client.announcements.publicState(),
     announcementRefresh: () => client.announcements.refresh(),
     announcementEdit: (a) => client.announcements.edit(a),

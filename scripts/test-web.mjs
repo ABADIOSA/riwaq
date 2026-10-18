@@ -530,13 +530,15 @@ try {
   await page.waitForFunction(
     () => document.querySelector("video.riwaq-video")?.playbackRate === 1.5,
   );
-  await page.getByTitle("نسبة الأبعاد", { exact: true }).click();
-  await page.keyboard.press("Escape");
-  assert.equal(
-    (await call("hudSnapshot")).player.active,
-    true,
-    "Escape closes choices without stopping the video",
-  );
+  for (const fit of ["cover", "fill", "contain"]) {
+    await page.locator("[data-picture-mode]").click();
+    await page.waitForFunction(
+      (value) =>
+        document.querySelector("video.riwaq-video")?.style.objectFit === value,
+      fit,
+    );
+  }
+  assert.equal((await call("hudSnapshot")).player.active, true);
   await page.getByTitle("سرعة التشغيل", { exact: true }).click();
   await page.getByRole("menuitemradio", { name: "1×", exact: true }).click();
 
@@ -591,7 +593,11 @@ try {
   const accountServer = createServer(serveDir(accountSite));
   const accountOrigin = `http://127.0.0.1:${await listen(accountServer)}`;
   const db = sqliteD1();
-  const service = await serveLocally({ origins: accountOrigin, db });
+  const service = await serveLocally({
+    origins: accountOrigin,
+    db,
+    metricsKey: "a".repeat(64),
+  });
   execFileSync(
     process.execPath,
     [
@@ -759,6 +765,32 @@ try {
   );
   step(
     "remote settings wait during a real video, then apply after Stop at 980×680",
+  );
+  assert.equal((await phone.call("usageState")).enabled, false);
+  await pc.call("usageEdit", { enabled: true });
+  const active = await (
+    await fetch(service.url + "/v1/admin/usage", {
+      headers: { Authorization: "Bearer " + "a".repeat(64) },
+    })
+  ).json();
+  assert.equal(active.online, 1);
+  assert.equal(active.versions[0].platform, "web");
+  await pc.call("accountSync");
+  await phone.call("accountSync");
+  assert.equal(
+    (await phone.call("usageState")).enabled,
+    false,
+    "usage consent must never sync with the account",
+  );
+  await pc.call("usageEdit", { enabled: false });
+  const removed = await (
+    await fetch(service.url + "/v1/admin/usage", {
+      headers: { Authorization: "Bearer " + "a".repeat(64) },
+    })
+  ).json();
+  assert.equal(removed.online, 0);
+  step(
+    "opt-in usage reaches real local HTTP/SQLite aggregates, stays device-local through account sync, and opt-out removes it",
   );
   await service.close();
   accountServer.close();

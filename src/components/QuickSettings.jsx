@@ -1,3 +1,4 @@
+import UsageSettings from "./UsageSettings.jsx";
 import React from "react";
 import { LanguageCard } from "./settings/LanguageCard.jsx";
 import { isWeb } from "../lib/api.js";
@@ -6,6 +7,7 @@ export default function QuickSettings({
   update,
   onAdvanced,
   onProfiles,
+  notice,
 }) {
   const s = state.settings,
     save = (key, value) => update("settings", { [key]: value });
@@ -88,6 +90,20 @@ export default function QuickSettings({
             <span />
           </button>
         </div>
+        <div className="setting-row">
+          <div>
+            <b>إظهار جلسة اليوم</b>
+            <p>عند إخفائها تبدأ الرئيسية مباشرة بصفوف الأفلام والمسلسلات.</p>
+          </div>
+          <button
+            className={`toggle ${s.showSession !== false ? "on" : ""}`}
+            aria-label="إظهار جلسة اليوم"
+            aria-pressed={s.showSession !== false}
+            onClick={() => save("showSession", s.showSession === false)}
+          >
+            <span />
+          </button>
+        </div>
         <div className="button-row">
           <button className="secondary" onClick={onProfiles}>
             عرض الملفات الشخصية
@@ -106,6 +122,7 @@ export default function QuickSettings({
           </button>
         </div>
       </section>
+      <UsageSettings notice={notice} />
     </section>
   );
 }

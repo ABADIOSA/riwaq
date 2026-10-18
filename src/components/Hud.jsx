@@ -11,6 +11,8 @@ import {
   VolumeX,
   Captions,
   AudioLines,
+  ListVideo,
+  Server,
   SlidersHorizontal,
   Maximize,
   Minimize,
@@ -244,6 +246,7 @@ export default function Hud() {
       return;
     }
     const ask = ++thumbAsk.current;
+    setThumb({ loading: true });
     const timer = setTimeout(async () => {
       const image = await call("trickplay", { at: seekHover.t }).catch(
         () => null,
@@ -252,10 +255,14 @@ export default function Hud() {
       if (image?.blocked) {
         setThumb({ blocked: true });
         if (!state?.settings.seekHintSeen) setPreviewHint(true);
-      } else setThumb(typeof image === "string" ? { image } : null);
+      } else
+        setThumb(typeof image === "string" ? { image } : { unavailable: true });
     }, 220);
-    return () => clearTimeout(timer);
-  }, [seekHover?.t, thumbMode, player.live]);
+    return () => {
+      clearTimeout(timer);
+      thumbAsk.current++;
+    };
+  }, [seekHover?.t, thumbMode, player.live, player.videoId]);
 
   const settings = state?.settings || {};
   // The card's answer is kept per profile; "all" applies at the next rest
@@ -800,18 +807,32 @@ export default function Hud() {
                 المعاينة متوقفة لمصادر الإنترنت
               </span>
             )}
-            {seekHover && thumb?.image && (
-              <img
+            {seekHover && thumb && !thumb.blocked && thumbMode !== "off" && (
+              <span
                 className="hud-seek-thumb"
-                src={thumb.image}
-                alt=""
+                role="status"
+                aria-label={
+                  thumb.loading
+                    ? "جاري تحميل المعاينة"
+                    : thumb.unavailable
+                      ? "المعاينة غير متاحة"
+                      : "معاينة المشهد"
+                }
                 style={{
                   left: Math.max(
                     100,
                     Math.min((seekHover.w || 0) - 100, seekHover.x),
                   ),
                 }}
-              />
+              >
+                {thumb.image ? (
+                  <img src={thumb.image} alt="" />
+                ) : thumb.loading ? (
+                  <Loader2 className="hud-spin" size={22} />
+                ) : (
+                  <small>المعاينة غير متاحة</small>
+                )}
+              </span>
             )}
             {seekHover && (
               <b className="hud-seek-time" style={{ left: seekHover.x }}>
@@ -907,7 +928,7 @@ export default function Hud() {
             )}
             {shows("subs") && (
               <button
-                title="الترجمة والصوت (C أو الزر الأيمن)"
+                title="الترجمة (C أو الزر الأيمن)"
                 className={dock === "subs" ? "on" : ""}
                 aria-pressed={dock === "subs"}
                 onClick={() => setDock(dock === "subs" ? null : "subs")}
@@ -922,6 +943,24 @@ export default function Hud() {
                 onClick={() => setDock(dock === "audio" ? null : "audio")}
               >
                 <AudioLines size={20} />
+              </button>
+            )}
+            {!hidden.has("episodes") && series && (
+              <button
+                title="الحلقات"
+                aria-pressed={dock === "episodes"}
+                onClick={() => setDock(dock === "episodes" ? null : "episodes")}
+              >
+                <ListVideo size={20} />
+              </button>
+            )}
+            {!["local", "live"].includes(player.mediaType) && (
+              <button
+                title="المصادر"
+                aria-pressed={dock === "sources"}
+                onClick={() => setDock(dock === "sources" ? null : "sources")}
+              >
+                <Server size={20} />
               </button>
             )}
             {!hidden.has("settings") && (

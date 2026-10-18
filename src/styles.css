@@ -3688,3 +3688,17 @@ em.tag-custom.has-text:not(.badge-outlined) {
   font-size: 19px;
   background: transparent;
 }
+
+.stream-download {
+  flex: 0 0 42px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.stream-download:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

@@ -203,6 +203,10 @@ async function offlineSource(stream, settings, signal) {
     if (signal.aborted) throw new Error("توقف التنزيل");
     return {
       url,
+      identity:
+        Number.isInteger(stream.fileIdx) && stream.fileIdx >= 0
+          ? `${stream.infoHash}:${stream.fileIdx}`
+          : "",
       dispose: () => {
         signal.removeEventListener("abort", stop);
         return host.stop();
@@ -2083,6 +2087,11 @@ const methods = {
   },
   // Only GitHub's own page for a new fine-grained token.
   ownerTokenPage: () => shell.openExternal(OWNER_TOKEN_PAGE).then(() => true),
+  usageState: () => client.usage.publicState(),
+  usageEdit: (a) => {
+    client.profiles.gate("settings");
+    return client.usage.edit(a?.enabled);
+  },
   announcementState: () => client.announcements.publicState(),
   announcementRefresh: () => client.announcements.refresh(),
   announcementEdit: (a) => client.announcements.edit(a),
@@ -2253,6 +2262,28 @@ const methods = {
   },
   playbackMenu: () => playbackMenu(),
   playbackAction: (a) => playbackAction(a),
+  offlineStart: (a) => {
+    offline.profile(a?.profileId);
+    const stream = client.streams.get(a?.key);
+    if (
+      !stream ||
+      stream.videoId !== a?.videoId ||
+      stream.type !== a?.meta?.type ||
+      !["movie", "series"].includes(a?.meta?.type) ||
+      (!stream.url && !stream.infoHash)
+    )
+      throw Error("أعد تحميل المصادر أولاً");
+    return offline.start({
+      profileId: a.profileId,
+      stream,
+      meta: a.meta,
+      videoId: a.videoId,
+      settings: { ...client.state.settings },
+    });
+  },
+  offlineResume: (a) =>
+    offline.resume(a?.profileId, a?.id, { ...client.state.settings }),
+  offlinePause: (a) => offline.pause(a?.profileId, a?.id),
   offlineList: (a) => offline.list(a?.profileId),
   offlineCancel: (a) => offline.cancel(a?.profileId, a?.id),
   offlineRemove: (a) => offline.remove(a?.profileId, a?.id),
@@ -2721,6 +2752,16 @@ app
       app.exit(1);
     }
     if (client) {
+      client.usage.start(
+        () =>
+          !!(player?.state.active && !player.state.pause) ||
+          !!(
+            window &&
+            !window.isDestroyed() &&
+            window.isVisible() &&
+            !window.isMinimized()
+          ),
+      );
       // Covers become small JPEG data URLs, made and kept in memory only.
       musicLibrary = new MusicLibrary(client, {
         thumbnail: (bytes) => {
@@ -3177,6 +3218,7 @@ app.on("window-all-closed", () => app.quit());
 let closing = false;
 app.on("will-quit", () => {
   cursorGate.release();
+  client?.usage.stop();
   thumbnails?.reset();
   globalShortcut.unregisterAll();
 });

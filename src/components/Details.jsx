@@ -34,6 +34,7 @@ import {
   Music2,
   Pause,
   VolumeX,
+  Download,
 } from "lucide-react";
 import ArtworkGallery from "./ArtworkGallery.jsx";
 import { TasteFeedback } from "./TasteDiscovery.jsx";
@@ -84,7 +85,7 @@ import {
   preferredPlatform,
   soundtrackQuery,
 } from "../../core/music.mjs";
-import { api, call } from "../lib/api.js";
+import { api, call, isWeb } from "../lib/api.js";
 import {
   queueKey,
   releasedEpisodes,
@@ -920,6 +921,27 @@ export default function Details({
                             )}
                           </span>
                         </button>
+                        {!isWeb && s.downloadable && (
+                          <button
+                            className="stream-download"
+                            title="تنزيل المصدر دون تشغيل"
+                            disabled={!!playing}
+                            onClick={async () => {
+                              const r = await act("offlineStart", {
+                                key: s.key,
+                                meta,
+                                videoId,
+                                profileId: state.profiles?.active,
+                              });
+                              if (r)
+                                notice(
+                                  "بدأ التنزيل؛ يمكنك إغلاق المشغل ومتابعته من التنزيلات.",
+                                );
+                            }}
+                          >
+                            <Download size={18} />
+                          </button>
+                        )}
                         <button
                           className="stream-why-toggle"
                           title="لماذا هذا الترتيب؟"

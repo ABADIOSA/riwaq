@@ -15,17 +15,6 @@ const FIELDS = [
       [2, "2×"],
     ],
   ],
-  [
-    "aspect",
-    "نسبة الأبعاد",
-    Proportions,
-    [
-      [-1, "تلقائي"],
-      ["16:9", "16:9"],
-      ["4:3", "4:3"],
-      ["2.35:1", "2.35:1"],
-    ],
-  ],
 ];
 
 /** Small HTML pickers shared by the native HUD and web/theater controls. */
@@ -86,6 +75,25 @@ export default function PlaybackChoices({ player, act, open, setOpen }) {
   }, [open]);
   return (
     <div className="playback-choices" ref={root}>
+      <button
+        title={`ملاءمة الصورة: ${player.pictureMode === "stretch" ? "تمديد الصورة" : player.pictureMode === "crop" || player.fill ? "قص الأطراف" : "ملاءمة الشاشة"}`}
+        data-picture-mode={player.pictureMode || (player.fill ? "crop" : "fit")}
+        onClick={() => {
+          setOpen(null);
+          const current = player.pictureMode || (player.fill ? "crop" : "fit");
+          act("playerCommand", {
+            action: "pictureMode",
+            value:
+              current === "fit"
+                ? "crop"
+                : current === "crop"
+                  ? "stretch"
+                  : "fit",
+          });
+        }}
+      >
+        <Proportions size={19} />
+      </button>
       {FIELDS.map(([id, label, Icon, values]) => {
         const selected = player[id] ?? (id === "speed" ? 1 : -1);
         const equal = (value) =>

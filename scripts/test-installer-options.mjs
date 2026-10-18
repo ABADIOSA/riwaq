@@ -21,6 +21,7 @@ const cls = dll.func(
 );
 const style = dll.func("int32 __stdcall GetWindowLongW(void *hwnd, int index)");
 const enabled = dll.func("bool __stdcall IsWindowEnabled(void *hwnd)");
+const visible = dll.func("bool __stdcall IsWindowVisible(void *hwnd)");
 const post = dll.func(
   "bool __stdcall PostMessageW(void *hwnd, uint32 msg, uintptr_t wp, intptr_t lp)",
 );
@@ -50,7 +51,9 @@ const children = (parent, depth = 0) => {
 const child = spawn(exe, ["/NCRC"], {
   stdio: "ignore",
   shell: false,
-  windowsHide: true,
+  // NSIS respects STARTUPINFO's hidden-show flag: it can create its window
+  // but never display/populate the wizard. This is an interactive UI test.
+  windowsHide: false,
 });
 let failure;
 child.on("error", (e) => {
@@ -64,7 +67,7 @@ const window = () => {
   ) {
     const pid = [0];
     pidOf(h, pid);
-    if (pid[0] === child.pid) return h;
+    if (pid[0] === child.pid && visible(h)) return h;
   }
   return null;
 };
@@ -78,7 +81,23 @@ try {
   assert.ok(dialog, "this installer opens its own wizard");
   let option;
   for (let page = 0; page < 4; page++) {
-    const controls = children(dialog);
+    // NSIS can expose its dialog while it is still unpacking/creating the
+    // first page. Wait for real, visible controls, never guess an ID click.
+    let controls = [];
+    for (let wait = 0; wait < 100; wait++) {
+      dialog = window() || dialog;
+      controls = children(dialog).filter((c) => visible(c.h));
+      if (
+        controls.some(
+          (c) =>
+            classOf(c.h) === "Button" &&
+            (/anyone|all users/i.test(c.label) ||
+              (c.id === 1 && /next/i.test(c.label) && enabled(c.h))),
+        )
+      )
+        break;
+      await pause(50);
+    }
     option = controls.find(
       (c) =>
         classOf(c.h) === "Button" &&
@@ -89,7 +108,7 @@ try {
     const next = controls.find((c) => c.id === 1 && /next/i.test(c.label));
     assert.ok(
       next && !/install/i.test(next.label),
-      "only a verified Next button may be clicked, never Install",
+      `only a verified Next button may be clicked, never Install: ${controls.map((c) => c.label).join(" | ")}`,
     );
     post(dialog, 0x111, 1, 0);
     await pause(300);

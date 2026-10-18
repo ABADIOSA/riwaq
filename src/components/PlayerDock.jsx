@@ -73,11 +73,17 @@ export default function PlayerDock({
   const series = player.mediaType === "series";
   const addon = !["local", "live"].includes(player.mediaType);
   return (
-    <aside className="player-side" aria-label="الترجمة والصوت">
+    <aside
+      className="player-side"
+      aria-label={TABS.find(([id]) => id === tab)?.[1] || "الترجمة"}
+    >
       <header className="dock-head">
         <div className="dock-tabs" role="tablist">
           {TABS.filter(
             ([id]) =>
+              (["audio", "episodes", "sources"].includes(tab)
+                ? id === tab
+                : ["subs", "sync", "style"].includes(id)) &&
               (id !== "episodes" || (series && onEpisode)) &&
               (id !== "sources" || addon),
           ).map(([id, label, Icon]) => (

@@ -10,6 +10,10 @@ const methods = new Set([
   "task",
   "stopTask",
   "releases",
+  "downloadStats",
+  "metricsConnect",
+  "metricsDisconnect",
+  "usageStats",
   "open",
 ]);
 contextBridge.exposeInMainWorld("riwaqAdmin", {
