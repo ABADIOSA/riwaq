@@ -1,3 +1,4 @@
+import { UsagePulse } from "./usage.mjs";
 import {
   CINEMETA,
   DEFAULT_SETTINGS,
@@ -285,6 +286,10 @@ export class Client {
     this.announcements = new Announcements(this, {
       platform: announcementPlatform,
       ...(announcementRequest ? { request: announcementRequest } : {}),
+    });
+    this.usage = new UsagePulse(this, {
+      platform: announcementPlatform,
+      ...(accountServer !== undefined ? { server: accountServer } : {}),
     });
     this.updates = new Updates(this);
     // The active profile owns favorites, progress, lists and settings, so the
@@ -1952,6 +1957,9 @@ export class Client {
       );
       return {
         key,
+        downloadable:
+          !!stream.infoHash ||
+          (!!stream.url && !/\.(m3u8|mpd)([?#]|$)/i.test(stream.url)),
         name: stream.name || stream.provider,
         title: stream.title || stream.description || "",
         provider: stream.provider,

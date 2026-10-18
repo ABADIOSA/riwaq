@@ -38,12 +38,13 @@ globalThis.adminWrites=[];globalThis.adminConfirmations=0;
 dialog.showOpenDialog=async()=>({canceled:false,filePaths:[${JSON.stringify(process.cwd())}]});
 dialog.showMessageBox=async()=>{globalThis.adminConfirmations++;return {response:1};};
 globalThis.fetch=async(url,args={})=>{
+  if(String(url).endsWith("/v1/admin/usage"))return new Response(JSON.stringify({at:Date.now(),online:3,day:7,month:10,windowMinutes:10,versions:[{platform:"desktop",version:"0.47.0",devices:7},{platform:"web",version:"0.47.0",devices:3}]}),{headers:{"Content-Type":"application/json"}});
   if(!String(url).startsWith("https://api.github.com/"))throw Error("Offline test");
   let value;
   if(url.endsWith("/user"))value={login:"ABADIOSA"};
   else if(url.endsWith("/repos/ABADIOSA/riwaq"))value={private:false,default_branch:"main",permissions:{push:true}};
   else if(args.method==="PUT"){globalThis.adminWrites.push(JSON.parse(args.body));value={commit:{sha:"c".repeat(40)}};}
-  else if(url.includes("/releases?"))value=[{tag_name:"v0.43.1",name:"Riwaq",published_at:new Date().toISOString(),prerelease:true}];
+  else if(url.includes("/releases?"))value=[{tag_name:"v0.43.1",name:"Riwaq",published_at:new Date().toISOString(),prerelease:true,assets:[{name:"Riwaq-Setup-0.47.0-win-x64.exe",download_count:40},{name:"Riwaq-0.47.0-win-x64.exe",download_count:20}]}];
   else value={encoding:"base64",size:24,sha:"a".repeat(40),content:Buffer.from('{"schema":1,"items":[]}').toString("base64")};
   return new Response(JSON.stringify(value),{headers:{"Content-Type":"application/json"}});
 };
@@ -67,6 +68,35 @@ try {
   await page.waitForFunction(() => !!window.riwaqAdmin);
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].setSize(980, 780),
+  );
+  await page.locator("#refreshDownloads").click();
+  await page.waitForFunction(
+    () => document.querySelector("#downloadsTotal").textContent === "٦٠",
+  );
+  await page.locator("#metricsKey").fill("a".repeat(64));
+  await page.locator("#connectMetrics").click();
+  await page.waitForFunction(
+    () => document.querySelector("#usageOnline").textContent === "٣",
+  );
+  assert.equal(await page.locator("#metricsKey").inputValue(), "");
+  assert.ok(
+    !JSON.stringify(
+      await page.evaluate(() => window.riwaqAdmin.call("state")),
+    ).includes("a".repeat(64)),
+  );
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+    true,
+  );
+  await page.screenshot({
+    path: join(out, "dashboard-980.png"),
+    fullPage: true,
+  });
+  await page.locator("#disconnectMetrics").click();
+  await page.waitForFunction(
+    () => document.querySelector("#usageOnline").textContent === "—",
   );
   await page.locator("[name=arTitle]").fill("خبر تجريبي للمراجعة");
   await page

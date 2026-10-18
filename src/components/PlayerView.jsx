@@ -11,6 +11,8 @@ import {
   RotateCw,
   Subtitles,
   AudioLines,
+  ListVideo,
+  Server,
   SkipForward,
   SkipBack,
   Camera,
@@ -402,7 +404,7 @@ export default function PlayerView({
               </>
             )}
             <IconButton
-              title="الترجمة والصوت (C)"
+              title="الترجمة (C)"
               className={dock ? "icon-button on" : "icon-button"}
               onClick={() => setDock(dock === "subs" ? null : "subs")}
             >
@@ -417,6 +419,22 @@ export default function PlayerView({
             >
               <AudioLines size={20} />
             </IconButton>
+            {player.mediaType === "series" && (
+              <IconButton
+                title="الحلقات"
+                onClick={() => setDock(dock === "episodes" ? null : "episodes")}
+              >
+                <ListVideo size={20} />
+              </IconButton>
+            )}
+            {!["local", "live"].includes(player.mediaType) && (
+              <IconButton
+                title="المصادر"
+                onClick={() => setDock(dock === "sources" ? null : "sources")}
+              >
+                <Server size={20} />
+              </IconButton>
+            )}
             <PlaybackChoices
               player={player}
               act={act}

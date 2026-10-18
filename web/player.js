@@ -256,6 +256,7 @@ export class WebPlayer {
       fullscreen: false,
       overlay: false,
       fill: !!settings.videoFill,
+      pictureMode: settings.videoFill ? "crop" : "fit",
       live,
       abLoop: null,
       sleepAt: null,
@@ -963,7 +964,8 @@ export class WebPlayer {
     const natural = video.videoWidth / video.videoHeight;
     const stretch = ratio && natural ? ratio / natural : 1;
     video.style.transform = `translate(${(Number(s.panX) || 0) * 50}%, ${(Number(s.panY) || 0) * 50}%) scale(${scale * stretch}, ${scale})`;
-    video.style.objectFit = s.fill ? "cover" : "contain";
+    video.style.objectFit =
+      s.pictureMode === "stretch" ? "fill" : s.fill ? "cover" : "contain";
   }
 
   // --- Commands -----------------------------------------------------------
@@ -1056,7 +1058,17 @@ export class WebPlayer {
     } else if (action === "fullscreen") this.toggleFullscreen();
     else if (action === "exitFullscreen") {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    } else if (
+      action === "pictureMode" &&
+      ["fit", "crop", "stretch"].includes(value)
+    ) {
+      s.pictureMode = value;
+      s.fill = value === "crop";
+      s.aspect = "-1";
+      s.zoom = s.panX = s.panY = 0;
+      this.applyPicture();
     } else if (action === "fill") {
+      s.pictureMode = value === true ? "crop" : "fit";
       s.fill = value === true;
       this.applyPicture();
     } else if (action === "pip") s.pip = !s.pip;
@@ -1098,6 +1110,7 @@ export class WebPlayer {
       action === "aspect" &&
       ["-1", "16:9", "4:3", "2.35:1", "1.85:1"].includes(value)
     ) {
+      s.pictureMode = value === "-1" ? (s.fill ? "crop" : "fit") : "custom";
       s.aspect = value;
       this.applyPicture();
     } else if (action === "aid" && Number.isInteger(value)) {

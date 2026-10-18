@@ -238,7 +238,7 @@ try {
     await nativeHudClick(
       app,
       hud,
-      hud.getByTitle("الترجمة والصوت (C أو الزر الأيمن)"),
+      hud.getByTitle("الترجمة (C أو الزر الأيمن)"),
     );
     console.log(
       JSON.stringify({
@@ -255,7 +255,7 @@ try {
     await nativeHudClick(
       app,
       hud,
-      hud.getByRole("tab", { name: "الصوت", exact: true }),
+      hud.getByTitle("المسار الصوتي", { exact: true }),
     );
     assert.ok(
       await hud.getByText("المسار الصوتي", { exact: true }).isVisible(),
@@ -263,7 +263,7 @@ try {
     await nativeHudClick(
       app,
       hud,
-      hud.getByRole("tab", { name: "الترجمة", exact: true }),
+      hud.getByTitle("الترجمة (C أو الزر الأيمن)", { exact: true }),
     );
     const subs = await call("subtitles");
     assert.ok(subs.length, "local subtitle addon is available");
@@ -313,20 +313,17 @@ try {
       "direct picker changes actual MPV speed",
     );
     await call("playerCommand", { action: "speed", value: 1 });
-    await nativeHudClick(
-      app,
-      hud,
-      hud.getByTitle("نسبة الأبعاد", { exact: true }),
-    );
-    await nativeHudClick(
-      app,
-      hud,
-      hud.getByRole("menuitemradio", { name: "16:9", exact: true }),
-    );
-    await waitFor(
-      async () => (await snapshot()).player.aspect === "16:9",
-      "direct picker changes actual MPV aspect ratio",
-    );
+    for (const mode of ["crop", "stretch", "fit"]) {
+      await nativeHudClick(app, hud, hud.locator("[data-picture-mode]"));
+      await waitFor(async () => {
+        const p = (await snapshot()).player;
+        return (
+          p.pictureMode === mode &&
+          p.keepAspect === (mode !== "stretch") &&
+          p.panscan === (mode === "crop" ? 1 : 0)
+        );
+      }, "native fit button changes actual MPV keepaspect and panscan");
+    }
     const timeline = hud.locator(".hud-track");
     await nativeHudClick(app, hud, timeline, 0.25);
     await waitFor(

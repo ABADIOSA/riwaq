@@ -20,6 +20,64 @@
       <span class="badge">خاص بالأدمن · أساس أولي</span>
     </header>
     <main>
+      <section class="card wide" aria-label="لوحة الإحصاءات">
+        <div class="section-head">
+          <h2>لوحة الإحصاءات</h2>
+          <button id="refreshDownloads">تحديث التنزيلات</button>
+        </div>
+        <p>
+          تنزيلات ملفات ويندوز من GitHub، وليست أشخاصاً فريدين. إعادة التنزيل
+          تحسب مرة أخرى؛ حزم التحديث التلقائي ZIP خارج هذا العدد.
+        </p>
+        <div class="metric-cards">
+          <article>
+            <span>تنزيلات EXE</span><strong id="downloadsTotal">—</strong>
+          </article>
+          <article>
+            <span>المثبّت</span><strong id="downloadsInstaller">—</strong>
+          </article>
+          <article>
+            <span>المحمول</span><strong id="downloadsPortable">—</strong>
+          </article>
+        </div>
+        <p id="downloadsState" role="status">لم تُحمّل التنزيلات بعد.</p>
+        <div id="downloadRows" class="metric-rows"></div>
+        <h3>الأجهزة المشاركة النشطة</h3>
+        <p>
+          الأرقام تشمل من وافق على الإحصاءات فقط. الجهاز ليس شخصاً: تثبيت جديد
+          أو متصفح آخر قد يحسب جهازاً آخر. «الآن» يعني وصول نبضة خلال آخر 10
+          دقائق، وليس اتصالاً لحظياً مؤكداً. لا توجد بيانات تاريخية قبل نشر هذه
+          الميزة وموافقة المستخدمين.
+        </p>
+        <div class="actions">
+          <input
+            id="metricsKey"
+            type="password"
+            autocomplete="off"
+            aria-label="مفتاح لوحة الإحصاءات"
+            placeholder="مفتاح لوحة الإحصاءات"
+          /><button id="connectMetrics">اتصال بالإحصاءات</button
+          ><button id="disconnectMetrics">قطع اتصال الإحصاءات</button
+          ><button id="refreshUsage" disabled>تحديث الاستخدام</button>
+        </div>
+        <p class="hint">
+          مفتاح مستقل METRICS_ADMIN_KEY في خدمة رِواق؛ لا تدخل رمز GitHub هنا.
+          يبقى في ذاكرة الأدمن حتى قطع الاتصال أو الإغلاق.
+        </p>
+        <div class="metric-cards">
+          <article>
+            <span>الآن · آخر 10 دقائق</span><strong id="usageOnline">—</strong>
+          </article>
+          <article>
+            <span>آخر 24 ساعة</span><strong id="usageDay">—</strong>
+          </article>
+          <article>
+            <span>آخر 30 يوماً</span><strong id="usageMonth">—</strong>
+          </article>
+        </div>
+        <p id="usageState" role="status">غير متصل؛ الاستخدام غير معلوم.</p>
+        <div id="usageRows" class="metric-rows"></div>
+      </section>
       <section class="card">
         <div class="section-head">
           <h2>مختبر التحديثات</h2>

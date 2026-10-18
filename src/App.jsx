@@ -1138,16 +1138,19 @@ export default function App() {
                     fromRiwaq={feedRows.length > 0}
                   />
                 )}
-              {view === "home" && riwaqExperience && ready && (
-                <SessionHome
-                  key={state.profiles?.active || "default"}
-                  state={state}
-                  rows={shownRows}
-                  onOpen={openStable}
-                  update={update}
-                  notice={notice}
-                />
-              )}
+              {view === "home" &&
+                riwaqExperience &&
+                ready &&
+                state.settings.showSession !== false && (
+                  <SessionHome
+                    key={state.profiles?.active || "default"}
+                    state={state}
+                    rows={shownRows}
+                    onOpen={openStable}
+                    update={update}
+                    notice={notice}
+                  />
+                )}
               {view === "home" &&
                 !state.user &&
                 !loading &&

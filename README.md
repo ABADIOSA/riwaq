@@ -78,6 +78,7 @@
 
 - مفاتيحك وحساباتك تنحفظ مشفّرة على جهازك. رِواق ما يطلب كلمات مرور المنصات، وما يرسل سجل مشاهدتك إلا للمنصات اللي تفعّل التسجيل فيها.
 - صندوق الإشعارات يقرأ ملف الإشعارات العام من GitHub عند فتح رِواق وكل 15 دقيقة، بدون أي بيانات عنك. تقدر توقفه من نافذة الإشعارات.
+- في المصدر قيد المراجعة: إحصاءات استخدام اختيارية ومعطلة افتراضياً، ترسل معرّف جهاز عشوائياً والإصدار ونوع التطبيق فقط. لا تُرسل سجل المشاهدة أو الحساب، والموافقة لا تتزامن. [التفاصيل والتفعيل للأدمن](docs/ADMIN.md#usage-dashboard).
 - استيراد Stremio باتجاه واحد إلى رِواق.
 - اختبارات الحسابات الخارجية استخدمت المحاكاة. اختُبر MPV والواجهة العربية والإنجليزية على ويندوز بمصادر محلية، والتورنت بسرب محلي. لم يُختبر HDR الحقيقي على جهاز المستخدم أو توفر التورنت العام أو شيدرات GPU. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
 
@@ -159,6 +160,7 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
 - Keys and accounts are stored encrypted on your machine. Riwaq never asks for platform passwords. It sends your viewing history only to platforms where you turn tracking on.
 - The notification inbox reads Riwaq's public notice file from GitHub when Riwaq opens and every 15 minutes, sending nothing about you. You can turn it off in the notifications window.
+- In the source under review: optional usage counts are off by default. They send a random device identifier, app version and platform only; no viewing history or account. Consent never syncs. [Admin setup and limits](docs/ADMIN.md#usage-dashboard).
 - Stremio import is one-way, into Riwaq.
 - External-account tests use mocks. MPV and Arabic/English UI were exercised on Windows with local sources; torrents used a local swarm. Real HDR output on the reported device, public torrent availability and GPU shaders were not verified. See [what was and was not tested](VERIFICATION.md).
 

@@ -126,6 +126,7 @@ export const DEFAULT_SETTINGS = {
   volumeMax: 150,
   settingsMode: "simple",
   quietInterface: false,
+  showSession: true,
   audioDevice: "auto",
   // A connection speed cap in Mbps (0 for none); heavier streams rank lower.
   bandwidthCap: 0,
@@ -472,6 +473,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "themeSongHinted",
     "stremioBannerHidden",
     "quietInterface",
+    "showSession",
     "skipOnline",
     "simpleColor",
     "rtxUpscale",

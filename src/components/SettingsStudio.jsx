@@ -1,3 +1,4 @@
+import UsageSettings from "./UsageSettings.jsx";
 import UpdatesCard from "./UpdatesCard.jsx";
 import OwnerTools from "./OwnerTools.jsx";
 import QuickSettings from "./QuickSettings.jsx";
@@ -886,6 +887,7 @@ export default function SettingsStudio({
       </div>
       {!advanced && (
         <QuickSettings
+          notice={notice}
           state={state}
           update={update}
           onProfiles={onProfiles}
@@ -1135,8 +1137,14 @@ export default function SettingsStudio({
                     part="interface"
                   />
                   <ScreensaverCard state={state} update={update} />
+                  <UsageSettings notice={notice} />
                   <section className="settings-card">
                     <h2>السلوك</h2>
+                    {toggle(
+                      "showSession",
+                      "إظهار جلسة اليوم",
+                      "عند إخفائها تبدأ الرئيسية مباشرة بصفوف الأفلام والمسلسلات.",
+                    )}
                     {toggle(
                       "reduceMotion",
                       "تقليل الحركة",

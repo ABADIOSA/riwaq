@@ -53,9 +53,15 @@ export async function serveLocally({
   port = 0,
   pepper = "local-development-pepper-0123456789abcdef",
   origins = "",
+  metricsKey = "",
   db = sqliteD1(process.env.RIWAQ_ACCOUNTS_DB || ":memory:"),
 } = {}) {
-  const env = { DB: db, AUTH_PEPPER: pepper, ALLOWED_ORIGINS: origins };
+  const env = {
+    DB: db,
+    AUTH_PEPPER: pepper,
+    ALLOWED_ORIGINS: origins,
+    METRICS_ADMIN_KEY: metricsKey,
+  };
   const server = createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);

@@ -196,3 +196,43 @@ footer {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+.metric-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-block: 20px;
+}
+.metric-cards article {
+  background: #192332;
+  border: 1px solid #2e4157;
+  border-radius: 14px;
+  padding: 18px;
+  display: grid;
+  gap: 8px;
+}
+.metric-cards strong {
+  font-size: 34px;
+  color: #8fe0c1;
+  font-variant-numeric: tabular-nums;
+}
+.metric-rows {
+  max-height: 280px;
+  overflow: auto;
+}
+.metric-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) 2fr 90px;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid #ffffff0d;
+}
+.metric-row progress {
+  width: 100%;
+  accent-color: #8fe0c1;
+  height: 7px;
+}
+.metric-row b {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}

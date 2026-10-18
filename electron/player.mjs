@@ -252,6 +252,8 @@ const PROPERTIES = [
   ["saturation", "saturation"],
   ["gamma", "gamma"],
   ["video-aspect-override", "aspect"],
+  ["keepaspect", "keepAspect"],
+  ["panscan", "panscan"],
   ["sub-delay", "subtitleDelay"],
   ["sub-font-size", "subtitleSize"],
   ["sub-visibility", "subtitleVisible"],
@@ -446,6 +448,7 @@ export class Player {
       fullscreen: this.fullscreen,
       overlay: !!this.overlay,
       fill: !!settings.videoFill,
+      pictureMode: settings.videoFill ? "crop" : "fit",
       live,
       abLoop: null,
       sleepAt: null,
@@ -1285,7 +1288,21 @@ export class Player {
         ? this.send(["cycle", "fullscreen"])
         : this.onFullscreen?.();
     else if (action === "exitFullscreen") this.onEscape?.();
-    else if (action === "fill") {
+    else if (
+      action === "pictureMode" &&
+      ["fit", "crop", "stretch"].includes(value)
+    ) {
+      this.state.pictureMode = value;
+      this.state.fill = value === "crop";
+      this.send(["set_property", "keepaspect", value !== "stretch"]);
+      this.send(["set_property", "panscan", value === "crop" ? 1 : 0]);
+      this.send(["set_property", "video-aspect-override", "-1"]);
+      this.send(["set_property", "video-zoom", 0]);
+      this.send(["set_property", "video-pan-x", 0]);
+      this.send(["set_property", "video-pan-y", 0]);
+    } else if (action === "fill") {
+      this.state.pictureMode = value === true ? "crop" : "fit";
+      this.send(["set_property", "keepaspect", true]);
       this.state.fill = value === true;
       this.send(["set_property", "panscan", this.state.fill ? 1 : 0]);
     } else if (action === "pip") {
@@ -1352,9 +1369,12 @@ export class Player {
     } else if (
       action === "aspect" &&
       ["-1", "16:9", "4:3", "2.35:1", "1.85:1"].includes(value)
-    )
+    ) {
+      this.state.pictureMode =
+        value === "-1" ? (this.state.fill ? "crop" : "fit") : "custom";
+      this.send(["set_property", "keepaspect", true]);
       this.send(["set_property", "video-aspect-override", value]);
-    else if (
+    } else if (
       ["sid", "aid"].includes(action) &&
       (value === "no" || Number.isInteger(value))
     )

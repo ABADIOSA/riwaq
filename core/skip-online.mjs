@@ -73,7 +73,7 @@ export function parseAniskip(body) {
  * the viewer's key, sent as a Bearer token, raises the request limit.
  * The request shape follows TheIntroDB's own MPV script.
  */
-export const THEINTRODB_API = "https://api.theintrodb.org/v3/media";
+export const THEINTRODB_API = "https://api.theintrodb.org/v4/media";
 
 /** The IMDb title, season and episode a viewing names, or null. */
 export function introDbTarget(videoId) {

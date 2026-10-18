@@ -5,6 +5,7 @@ import { offlineEpisode } from "../../core/offline-media.mjs";
 import { episodeLabel } from "../../core/episodes.mjs";
 const LABELS = {
   downloading: "جارٍ التنزيل",
+  paused: "متوقف مؤقتاً · يمكن استئنافه",
   ready: "جاهز دون إنترنت",
   cancelled: "أُوقف التنزيل",
   interrupted: "توقف عند إغلاق التطبيق",
@@ -46,8 +47,9 @@ export default function OfflineLibrary({ state, onClose, notice }) {
     <Modal className="offline-library" onClose={onClose}>
       <h2>التنزيلات</h2>
       <p>
-        نزّل المصدر من قائمة الزر الأيمن أثناء المشاهدة، ثم شاهده من هنا دون
-        إنترنت.
+        نزّل مباشرة من قائمة المصادر أو أثناء المشاهدة. يستمر التنزيل بعد إغلاق
+        المشغل؛ عند إغلاق التطبيق يتوقف ويمكن استئنافه من هنا. إذا لم يدعم
+        المصدر الاستئناف الآمن يبدأ من جديد.
       </p>
       {isWeb ? (
         <p>التنزيل والمشاهدة دون إنترنت متاحان في تطبيق ويندوز.</p>
@@ -100,9 +102,20 @@ export default function OfflineLibrary({ state, onClose, notice }) {
                   <button
                     className="secondary small"
                     disabled={busy}
-                    onClick={() => act("offlineCancel", x.id)}
+                    onClick={() => act("offlinePause", x.id)}
                   >
-                    إيقاف التنزيل
+                    إيقاف مؤقت
+                  </button>
+                )}
+                {["paused", "interrupted", "error", "cancelled"].includes(
+                  x.status,
+                ) && (
+                  <button
+                    className="secondary small"
+                    disabled={busy}
+                    onClick={() => act("offlineResume", x.id)}
+                  >
+                    استئناف التنزيل
                   </button>
                 )}
                 <button

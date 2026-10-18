@@ -144,3 +144,101 @@ for (const [name, value] of Object.entries(state.draft || {})) {
   const input = $("editor").elements.namedItem(name);
   if (input) input.value = value;
 }
+// Counts are fetched on demand; a disconnected or failed service never becomes zero.
+const number = (n) => new Intl.NumberFormat("ar-SA").format(n);
+const stamp = (at) =>
+  new Date(at).toLocaleString("ar-SA", { timeZone: "Asia/Riyadh" });
+function rows(id, values) {
+  const root = $(id);
+  root.replaceChildren();
+  const max = Math.max(1, ...values.map((x) => x.count));
+  for (const value of values) {
+    const row = document.createElement("div");
+    row.className = "metric-row";
+    const name = document.createElement("span");
+    name.textContent = value.name;
+    name.dir = "auto";
+    const bar = document.createElement("progress");
+    bar.max = max;
+    bar.value = value.count;
+    bar.setAttribute("aria-label", value.name);
+    const count = document.createElement("b");
+    count.textContent = number(value.count);
+    row.append(name, bar, count);
+    root.append(row);
+  }
+}
+click("refreshDownloads", async () => {
+  $("refreshDownloads").disabled = true;
+  $("downloadsState").textContent = "جارٍ قراءة جميع صفحات الإصدارات…";
+  try {
+    const d = await action("downloadStats");
+    $("downloadsTotal").textContent = number(d.total);
+    $("downloadsInstaller").textContent = number(d.installer);
+    $("downloadsPortable").textContent = number(d.portable);
+    $("downloadsState").textContent =
+      `${d.complete ? "اكتملت قراءة الإصدارات" : "المجموع جزئي؛ وصل حد صفحات الإصدارات"} · ${stamp(d.at)}`;
+    rows(
+      "downloadRows",
+      d.releases.map((r) => ({ name: r.tag, count: r.total })),
+    );
+  } catch {
+    $("downloadsState").textContent =
+      "تعذر تحديث التنزيلات؛ الأرقام السابقة إن وجدت قديمة.";
+  } finally {
+    $("refreshDownloads").disabled = false;
+  }
+});
+let metricsConnected = false,
+  metricsGeneration = 0,
+  readingUsage = false;
+async function readUsage() {
+  if (!metricsConnected || readingUsage) return;
+  const generation = metricsGeneration;
+  readingUsage = true;
+  try {
+    const d = await action("usageStats");
+    if (generation !== metricsGeneration) return;
+    $("usageOnline").textContent = number(d.online);
+    $("usageDay").textContent = number(d.day);
+    $("usageMonth").textContent = number(d.month);
+    $("usageState").textContent =
+      `آخر تحديث ${stamp(d.at)} · تحديث تلقائي كل دقيقة أثناء فتح الأدمن.`;
+    rows(
+      "usageRows",
+      d.versions.map((r) => ({
+        name: `${r.platform === "web" ? "الويب" : "ويندوز"} · ${r.version}`,
+        count: r.devices,
+      })),
+    );
+  } catch {
+    if (generation === metricsGeneration)
+      $("usageState").textContent =
+        "تعذر الاتصال أو رفض المفتاح؛ الاستخدام الحالي غير معلوم والأرقام السابقة قديمة.";
+  } finally {
+    readingUsage = false;
+  }
+}
+click("connectMetrics", async () => {
+  const key = $("metricsKey").value.trim();
+  $("metricsKey").value = "";
+  await action("metricsConnect", { key });
+  metricsConnected = true;
+  metricsGeneration++;
+  $("refreshUsage").disabled = false;
+  await readUsage();
+});
+click("disconnectMetrics", async () => {
+  await action("metricsDisconnect");
+  metricsConnected = false;
+  metricsGeneration++;
+  $("refreshUsage").disabled = true;
+  for (const id of ["usageOnline", "usageDay", "usageMonth"])
+    $(id).textContent = "—";
+  $("usageRows").replaceChildren();
+  $("usageState").textContent = "غير متصل؛ الاستخدام غير معلوم.";
+});
+click("refreshUsage", readUsage);
+setInterval(() => {
+  if (document.visibilityState === "visible") readUsage();
+}, 60000);

@@ -1,3 +1,4 @@
+import { AdminMetrics } from "./metrics.mjs";
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { readFileSync, writeFileSync, mkdirSync, accessSync } from "node:fs";
 import { join } from "node:path";
@@ -34,6 +35,9 @@ let win,
   jobId = 0,
   log = "";
 const github = new AdminGithub();
+const metrics = new AdminMetrics({
+  server: process.env.RIWAQ_ACCOUNT_SERVER || undefined,
+});
 const home = fileURLToPath(new URL("./", import.meta.url));
 const page = pathToFileURL(join(home, "index.html")).href;
 const state = () => ({
@@ -149,6 +153,10 @@ const actions = {
     return state();
   },
   releases: () => github.releases(),
+  downloadStats: () => github.downloadStats(),
+  metricsConnect: ({ key }) => metrics.connect(key),
+  metricsDisconnect: () => metrics.disconnect(),
+  usageStats: () => metrics.read(),
   open: async ({ id, tag }) => {
     if (id === "source" && workspace) {
       const error = await shell.openPath(workspace.root);
@@ -213,8 +221,9 @@ app
         const code = /HTTP (\d{3})/.exec(error.message)?.[1];
         return {
           ok: false,
-          error:
-            code === "409"
+          error: ["metricsConnect", "usageStats"].includes(method)
+            ? "تعذر قراءة الإحصاءات. تحقق من مفتاح الخدمة وإعدادها والاتصال."
+            : code === "409"
               ? "تغير ملف الإشعارات، عاين المسودة مجددًا."
               : code === "401" || code === "403"
                 ? "تحقق من صلاحية GitHub والرمز."
@@ -233,4 +242,5 @@ app.on("before-quit", () => {
   if (taskName !== "launch") child?.kill();
   else child?.unref();
   github.token = "";
+  metrics.disconnect();
 });
