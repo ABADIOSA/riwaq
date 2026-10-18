@@ -1,5 +1,14 @@
 # Verification — Riwaq
 
+## 2026-10-18 — v0.48.0 beta release preparation
+
+- Prepared from main `0277edb` after PR #98 merged. This release changes version metadata, bilingual release highlights, download links and release documentation only; the merged application code and dependencies are preserved.
+- Re-ran all **882 Node tests: 882 pass, 0 fail/skip**, Prettier and both production builds at version 0.48.0. Chromium web smoke passes, including local HTTP/SQLite metrics, opt-out deletion, encrypted accounts and deferred settings. The earlier Windows/MPV, offline download and private Admin inspections below cover the unchanged application code.
+- Built v0.48.0 Windows NSIS and portable packages. Actual portable playback passes with bundled MPV and deliberately stalled RAF. The installer wizard passes the all-users-option check and is cancelled before Install. In both extracted packages 136 source/build/key/notice files match, ASARs are identical, MPV matches the pinned vendor binary and Admin is absent. Windows publisher-signature status is NotSigned. Logs and package-inspection JSON: `.cache/release-0.48.0/`.
+- Account deployment on main completed successfully. A read-only production check returned health 200 and unauthorized usage-read 401 after the owner configured the metrics secret. No admin key was requested/read, no usage counts were accessed and no synthetic production pulse was sent.
+- Publication is owner-authorized, **beta only**, through the existing Windows build / Ed25519 signing / draft-first publication / web deployment workflow. This preparation entry does not itself attest that the release or website has published. Windows Authenticode remains unconfigured; no stable certification, machine-wide installation, real HDR hardware or live provider-account validation is implied.
+- The private Admin app is excluded from the public release. No public notification, licensing transition, payment, subscription, DRM, premium restriction or change to account encryption is included.
+
 ## 2026-10-18 — user requests, TheIntroDB v4 and private Admin metrics
 
 - Started from main d49e6af / 0.47.0 after the Claude review and PR #95; preserved that work. [Arabic request matrix and evidence](docs/USER-FIXES-2026-10-18.md) covers #89–#97 and older regressions, without closing issues or claiming private support access.

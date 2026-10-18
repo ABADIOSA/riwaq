@@ -7,6 +7,29 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.48.0",
+    title: "أدوات أوضح، تنزيلات قابلة للاستئناف، وخيارات أكثر لك",
+    items: [
+      "إطار معاينة ثابت ومؤشر تحميل على خط التقديم، مع تجاهل صور المواضع القديمة عند تحريك المؤشر.",
+      "الترجمة والصوت والحلقات والمصادر بأزرار مستقلة، وزر للصورة يبدّل بين ملاءمة الشاشة وقص الأطراف والتمديد.",
+      "نزّل مباشرة من قائمة المصادر دون تشغيل الفيديو، وأوقف التنزيل مؤقتاً واستأنفه بأمان عندما يدعم المصدر ذلك.",
+      "خيار إخفاء «جلسة اليوم» والبدء مباشرة بصفوف الأفلام والمسلسلات، من الإعدادات الأساسية أو المظهر.",
+      "إحصاءات استخدام اختيارية ومعطلة افتراضياً، دون إرسال اسمك أو حسابك أو سجل مشاهدتك؛ يمكنك إيقافها وطلب حذف الجهاز.",
+      "تحديث خدمة تخطي المقدمات TheIntroDB إلى v4، مع الحفاظ على إصلاحات MPV ومزامنة Simkl وAniList.",
+    ],
+    en: {
+      title: "Clearer controls, resumable downloads, and more choice",
+      items: [
+        "A fixed seek-preview frame and loading indicator, with obsolete replies ignored when the pointer moves.",
+        "Independent subtitle, audio, episode and source buttons, plus a one-click Fit/Crop/Stretch cycle.",
+        "Download directly from the source list without playing. Pause and safely resume downloads when the source supports it.",
+        "Hide Today's session and open Home's movie and series rows directly, from basic or appearance settings.",
+        "Optional usage statistics are off by default, with no name, account or viewing history sent. Turn them off and request device deletion at any time.",
+        "TheIntroDB intro skipping now uses v4, preserving the MPV, Simkl and AniList fixes.",
+      ],
+    },
+  },
+  {
     version: "0.47.0",
     title: "فلاتر الإضافات، وSimkl كامل، وأزرار مباشرة في المشغّل",
     items: [
