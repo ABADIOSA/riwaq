@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ABADIOSA/riwaq/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
+  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.48.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-15191e">
   <a href="https://abadiosa.github.io/riwaq/"><img alt="Web" src="https://img.shields.io/badge/web-abadiosa.github.io%2Friwaq-15191e"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-15191e"></a>
@@ -30,23 +30,22 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.47.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.47.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.48.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.48.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/latest)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
+الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.48.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.47.0
+### الجديد في 0.48.0 · تجريبي
 
-- **فلاتر كتالوجات الإضافات** ([#90](https://github.com/ABADIOSA/riwaq/issues/90)): في «اكتشف» تختار الكتالوج والفلاتر اللي توفرها الإضافة نفسها، والاختيار يبقى مع «تحميل المزيد».
-- **Simkl وAniList** ([#92](https://github.com/ABADIOSA/riwaq/issues/92)): قوائمك كلها تظهر في «مكتبتي» بكل حالاتها، وتتبّع التشغيل في Simkl بخيار منك، و**«الاستئناف من Simkl»** يجيب المواضع اللي وقفت عندها إلى «نكمل الحكاية» ويبدأ من نفس النسبة.
-- **أزرار مباشرة في المشغّل** ([#89](https://github.com/ABADIOSA/riwaq/issues/89)): المسار الصوتي والسرعة والأبعاد بضغطة، بدون فتح اللوحة الكبيرة.
-- **معاينة شريط التقديم:** لو كانت متوقفة لمصادر الإنترنت، يقول لك المشغّل ويعرض تفعيلها لكل المصادر.
-- **الحلقات** ([#91](https://github.com/ABADIOSA/riwaq/issues/91)): انتقل لأي حلقة برقمها (حتى بالأرقام العربية)، ووصف الحلقة المختارة كامل، ومصادر التقييم بعلامات مختصرة.
-- **Discord** ([#93](https://github.com/ABADIOSA/riwaq/issues/93)): صورة الحلقة جنب غلاف العمل.
-- **إصلاحات:** اختصارات المشغّل تشتغل ولوحة المفاتيح عربي، وصورة الفيديو ما تختفي لو توقف رسم الصفحة.
+- إطار معاينة ثابت ومؤشر تحميل على خط التقديم، مع تجاهل صور المواضع القديمة عند تحريك المؤشر.
+- الترجمة والصوت والحلقات والمصادر بأزرار مستقلة، وزر للصورة يبدّل بين ملاءمة الشاشة وقص الأطراف والتمديد.
+- نزّل مباشرة من قائمة المصادر دون تشغيل الفيديو، وأوقف التنزيل مؤقتاً واستأنفه بأمان عندما يدعم المصدر ذلك.
+- خيار إخفاء «جلسة اليوم» والبدء مباشرة بصفوف الأفلام والمسلسلات، من الإعدادات الأساسية أو المظهر.
+- إحصاءات استخدام اختيارية ومعطلة افتراضياً، دون إرسال اسمك أو حسابك أو سجل مشاهدتك؛ يمكنك إيقافها وطلب حذف الجهاز.
+- تحديث خدمة تخطي المقدمات TheIntroDB إلى v4، مع الحفاظ على إصلاحات MPV ومزامنة Simkl وAniList.
 
-الإصدارات السابقة كلها في [سجل الإصدارات](docs/CHANGELOG.md).
+الإصدارات السابقة في [سجل الإصدارات](docs/CHANGELOG.md).
 
 ### أبرز ما فيه
 
@@ -78,7 +77,7 @@
 
 - مفاتيحك وحساباتك تنحفظ مشفّرة على جهازك. رِواق ما يطلب كلمات مرور المنصات، وما يرسل سجل مشاهدتك إلا للمنصات اللي تفعّل التسجيل فيها.
 - صندوق الإشعارات يقرأ ملف الإشعارات العام من GitHub عند فتح رِواق وكل 15 دقيقة، بدون أي بيانات عنك. تقدر توقفه من نافذة الإشعارات.
-- في المصدر قيد المراجعة: إحصاءات استخدام اختيارية ومعطلة افتراضياً، ترسل معرّف جهاز عشوائياً والإصدار ونوع التطبيق فقط. لا تُرسل سجل المشاهدة أو الحساب، والموافقة لا تتزامن. [التفاصيل والتفعيل للأدمن](docs/ADMIN.md#usage-dashboard).
+- إحصاءات استخدام اختيارية ومعطلة افتراضياً، ترسل معرّف جهاز عشوائياً والإصدار ونوع التطبيق فقط. لا تُرسل سجل المشاهدة أو الحساب، والموافقة لا تتزامن. [التفاصيل والتفعيل للأدمن](docs/ADMIN.md#usage-dashboard).
 - استيراد Stremio باتجاه واحد إلى رِواق.
 - اختبارات الحسابات الخارجية استخدمت المحاكاة. اختُبر MPV والواجهة العربية والإنجليزية على ويندوز بمصادر محلية، والتورنت بسرب محلي. لم يُختبر HDR الحقيقي على جهاز المستخدم أو توفر التورنت العام أو شيدرات GPU. [ما اختُبر فعلاً وما لم يُختبر](VERIFICATION.md).
 
@@ -111,23 +110,22 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.47.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.47.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.48.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.48.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/latest), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
+Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.48.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.47.0
+### What's new in 0.48.0 · Beta
 
-- **Addon catalog filters** ([#90](https://github.com/ABADIOSA/riwaq/issues/90)): in Discover, pick the catalog and the filters the addon itself offers, kept when you load more.
-- **Simkl and AniList** ([#92](https://github.com/ABADIOSA/riwaq/issues/92)): all your lists show in My Library with every status, playback tracking on Simkl is your choice, and **"Resume from Simkl"** brings the places where you paused into Continue watching, starting at the same percentage.
-- **Direct player buttons** ([#89](https://github.com/ABADIOSA/riwaq/issues/89)): audio track, speed and aspect ratio in one click, without the large panel.
-- **Seek previews:** when they are off for internet sources, the player says so and offers to turn them on for all sources.
-- **Episodes** ([#91](https://github.com/ABADIOSA/riwaq/issues/91)): jump to any episode by number (Arabic digits too), read the selected episode's full overview, and see rating sources as compact marks.
-- **Discord** ([#93](https://github.com/ABADIOSA/riwaq/issues/93)): the episode's artwork beside the title's cover.
-- **Fixes:** the player shortcuts work with an Arabic keyboard layout, and the picture no longer disappears when the page stops drawing.
+- A fixed seek-preview frame and loading indicator, with obsolete replies ignored when the pointer moves.
+- Independent subtitle, audio, episode and source buttons, plus a one-click Fit/Crop/Stretch cycle.
+- Download directly from the source list without playing. Pause and safely resume downloads when the source supports it.
+- Hide Today's session and open Home's movie and series rows directly, from basic or appearance settings.
+- Optional usage statistics are off by default, with no name, account or viewing history sent. Turn them off and request device deletion at any time.
+- TheIntroDB intro skipping now uses v4, preserving the MPV, Simkl and AniList fixes.
 
-Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
+Earlier releases are in the [changelog](docs/CHANGELOG.md).
 
 ### Highlights
 
@@ -160,7 +158,7 @@ Every earlier release is in the [changelog](docs/CHANGELOG.md) (Arabic).
 
 - Keys and accounts are stored encrypted on your machine. Riwaq never asks for platform passwords. It sends your viewing history only to platforms where you turn tracking on.
 - The notification inbox reads Riwaq's public notice file from GitHub when Riwaq opens and every 15 minutes, sending nothing about you. You can turn it off in the notifications window.
-- In the source under review: optional usage counts are off by default. They send a random device identifier, app version and platform only; no viewing history or account. Consent never syncs. [Admin setup and limits](docs/ADMIN.md#usage-dashboard).
+- Optional usage counts are off by default. They send a random device identifier, app version and platform only; no viewing history or account. Consent never syncs. [Admin setup and limits](docs/ADMIN.md#usage-dashboard).
 - Stremio import is one-way, into Riwaq.
 - External-account tests use mocks. MPV and Arabic/English UI were exercised on Windows with local sources; torrents used a local swarm. Real HDR output on the reported device, public torrent availability and GPU shaders were not verified. See [what was and was not tested](VERIFICATION.md).
 
