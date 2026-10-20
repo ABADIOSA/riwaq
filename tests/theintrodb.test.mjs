@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import {
   THEINTRODB_API,
   introDbTarget,
@@ -106,7 +107,7 @@ test("the key goes as a Bearer token; 'none yet' is silence, a failure throws", 
 });
 
 test("the client sends the saved key, remembers answers and retries failures", async () => {
-  const c = new Client({ load: () => ({}), save: () => {} });
+  const c = new Client({ load: () => ({}), save: () => {}, version: "0.49.0" });
   c.state.settings.skipOnline = true;
   c.dataHub.save({ id: "theintrodb", key: "tidb_secret", enabled: true });
   const calls = [];
@@ -129,10 +130,35 @@ test("the client sends the saved key, remembers answers and retries failures", a
     await c.skipTimes("tt0903747:1:1", { duration: 3000 });
     assert.equal(calls.length, 2, "an answer is remembered");
     assert.equal(calls[1].init.headers.Authorization, "Bearer tidb_secret");
+    assert.equal(calls[1].init.headers["User-Agent"], "Riwaq/0.49.0");
     assert.equal(calls[1].init.redirect, "error");
     c.state.settings.skipOnline = false;
     assert.deepEqual(await c.skipTimes("tt0903747:1:2"), []);
     assert.equal(calls.length, 2, "nothing is asked when it is off");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("keyless skip requests identify the running build and use dev when no version is available", async () => {
+  const c = new Client({ load: () => ({}), save: () => {} });
+  c.state.settings.skipOnline = true;
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), headers: init.headers });
+    return new Response("{}", { status: 200 });
+  };
+  try {
+    for (const [index, version] of ["", "0.50.0-beta.1"].entries()) {
+      c.version = version;
+      await c.skipTimes(`tt0903747:1:${index + 1}`);
+    }
+    assert.deepEqual(
+      calls.map((call) => call.headers),
+      [{ "User-Agent": "Riwaq/dev" }, { "User-Agent": "Riwaq/0.50.0-beta.1" }],
+    );
+    assert.ok(calls.every((call) => call.url.startsWith(THEINTRODB_API + "?")));
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -149,4 +175,45 @@ test("the key never reaches the interface, and travels only in a secrets backup"
   assert.doesNotMatch(JSON.stringify(plain), /tidb_secret/);
   const secret = collectBackup(c.state, { includeSecrets: true }).payload;
   assert.equal(secret.providers.theintrodb.key, "tidb_secret");
+});
+
+test("the actual HTTP request carries the client build without an account or device identifier", async () => {
+  const requests = [];
+  const server = createServer((req, res) => {
+    requests.push({ path: req.url, headers: req.headers });
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ intro: [{ start_ms: 5000, end_ms: 65000 }] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (url, init) => {
+    const target = new URL(url);
+    assert.equal(target.origin, "https://api.theintrodb.org");
+    return realFetch(
+      `http://127.0.0.1:${server.address().port}${target.pathname}${target.search}`,
+      init,
+    );
+  };
+  try {
+    const client = new Client({
+      load: () => ({}),
+      save: () => {},
+      version: "0.50.0-beta.1",
+    });
+    client.state.settings.skipOnline = true;
+    const segments = await client.skipTimes("tt0903747:1:1");
+    assert.equal(segments.length, 1);
+    assert.equal(requests.length, 1);
+    assert.equal(
+      requests[0].path,
+      "/v4/media?imdb_id=tt0903747&season=1&episode=1",
+    );
+    assert.equal(requests[0].headers["user-agent"], "Riwaq/0.50.0-beta.1");
+    assert.equal(requests[0].headers.authorization, undefined);
+    assert.equal(requests[0].headers.cookie, undefined);
+  } finally {
+    globalThis.fetch = realFetch;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
