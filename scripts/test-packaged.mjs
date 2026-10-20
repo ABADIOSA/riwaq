@@ -131,10 +131,17 @@ try {
     true,
     "fresh packaged install needs the guide",
   );
-  assert.equal(
-    await evaluate(`!!document.querySelector('dialog.first-run[open]')`),
-    true,
-  );
+  // IPC hydration can finish before React opens the guide's dialog.
+  // Keep the visible-guide assertion, but allow its renderer to catch up.
+  let welcomeVisible = false;
+  for (let n = 0; n < 100; n++) {
+    welcomeVisible = await evaluate(
+      `!!document.querySelector('dialog.first-run[open]')`,
+    );
+    if (welcomeVisible) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(welcomeVisible, true, "fresh guide becomes visible");
   const welcomeShot = await send("Page.captureScreenshot", { format: "png" });
   writeFileSync(
     join(output, "packaged-welcome.png"),
