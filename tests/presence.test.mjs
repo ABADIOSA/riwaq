@@ -3,6 +3,18 @@ import assert from "node:assert/strict";
 import { RIWAQ_ICON, buildActivity, episodeLine } from "../core/presence.mjs";
 
 const at = 1_800_000_000_000;
+test("browsing can be hidden without hiding playback or overriding off privacy", () => {
+  assert.equal(buildActivity({ browsing: false }), null);
+  assert.equal(buildActivity({ browsing: true }).type, 0);
+  assert.deepEqual(
+    buildActivity({ ...viewing, browsing: false }),
+    buildActivity(viewing),
+  );
+  assert.equal(
+    buildActivity({ ...viewing, browsing: false, detail: "off" }),
+    null,
+  );
+});
 const viewing = {
   playing: true,
   title: "Daredevil: Born Again",

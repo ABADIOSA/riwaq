@@ -327,6 +327,30 @@ try {
       async () => (await snapshot()).player.speed === 1.5,
       "direct picker changes actual MPV speed",
     );
+    // Native Windows keydown/up, not synthetic DOM events.
+    await hud.evaluate(() => document.activeElement?.blur());
+    const holdWasPaused = (await snapshot()).player.pause;
+    if (holdWasPaused) await call("playerCommand", { action: "pause" });
+    await waitFor(
+      async () => !(await snapshot()).player.pause,
+      "hold starts playing",
+    );
+    await nativeHudKey(app, 32, 500, async () => {
+      await waitFor(
+        async () => (await snapshot()).player.speed === 2,
+        "native held Space accelerates MPV",
+      );
+    });
+    await waitFor(
+      async () => (await snapshot()).player.speed === 1.5,
+      "released Space restores actual MPV speed",
+    );
+    assert.equal(
+      (await snapshot()).player.pause,
+      false,
+      "hold never pauses MPV",
+    );
+    if (holdWasPaused) await call("playerCommand", { action: "pause" });
     await call("playerCommand", { action: "speed", value: 1 });
     for (const mode of ["crop", "stretch", "fit"]) {
       await nativeHudClick(app, hud, hud.locator("[data-picture-mode]"));

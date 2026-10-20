@@ -131,6 +131,14 @@ test("continue watching excludes finished titles", () => {
   );
 });
 test("settings clamp values and reject executable overrides from renderer", () => {
+  assert.equal(
+    safeSettings({ presenceBrowsing: false }).presenceBrowsing,
+    false,
+  );
+  assert.equal(
+    safeSettings({ presenceBrowsing: "false" }).presenceBrowsing,
+    DEFAULT_SETTINGS.presenceBrowsing,
+  );
   const result = safeSettings({
     subtitleSize: 1000,
     subtitleDelay: -100,

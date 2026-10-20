@@ -1800,7 +1800,6 @@ export default function App() {
               profilesOpen ||
               !!unlockRoom
             }
-            onSettings={() => setPlayerOpen(true)}
             update={update}
             dockRequest={dockRequest}
             menuRequest={menuRequest}

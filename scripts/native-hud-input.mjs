@@ -27,7 +27,7 @@ const mouse = (flags) => {
   assert.equal(send(1, input, input.length), 1, "Windows accepts mouse input");
 };
 export const restoreCursor = () => cursor(previous.x, previous.y);
-export async function nativeHudKey(app, vk) {
+export async function nativeHudKey(app, vk, holdMs = 60, during) {
   const handle = await app.evaluate(({ BrowserWindow }) => {
     const w = BrowserWindow.getAllWindows().find((w) =>
       w.webContents.getURL().endsWith("#hud"),
@@ -50,9 +50,13 @@ export async function nativeHudKey(app, vk) {
   )(vk, 0);
   input.writeUInt16LE(scan, 10);
   assert.equal(send(1, input, input.length), 1);
-  await delay(60);
-  input.writeUInt32LE(2, 12);
-  assert.equal(send(1, input, input.length), 1);
+  try {
+    await delay(holdMs);
+    await during?.();
+  } finally {
+    input.writeUInt32LE(2, 12);
+    assert.equal(send(1, input, input.length), 1);
+  }
   await delay(200);
 }
 export async function nativeHudClick(app, hud, locator, ratio = 0.5) {

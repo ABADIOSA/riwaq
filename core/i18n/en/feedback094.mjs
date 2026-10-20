@@ -1,5 +1,9 @@
 // English for the seek-preview hint (issue #89) and Simkl resume (#92).
 export default {
+  "رِواق — الرئيسية": "Riwaq — Home",
+  "إظهار حالة التصفح": "Show browsing activity",
+  "أطفئه لإخفاء التصفح على Discord مع إبقاء حالة المشاهدة.":
+    "Turn off to hide browsing on Discord while keeping watching activity.",
   "المعاينة متوقفة لمصادر الإنترنت": "Previews are off for internet sources",
   "معاينة الصورة على شريط التقديم متوقفة لمصادر الإنترنت والتورنت. تفعيلها لكل المصادر يفتح المصدر مرة ثانية مع كل معاينة.":
     "Seek previews are off for internet and torrent sources. Turning them on for all sources opens the source again for each preview.",

@@ -2238,6 +2238,24 @@ function PresenceAndAlerts({ state, update, act, notice }) {
             <span />
           </button>
         </div>
+        <div className="setting-row">
+          <div>
+            <b>إظهار حالة التصفح</b>
+            <p>أطفئه لإخفاء التصفح على Discord مع إبقاء حالة المشاهدة.</p>
+          </div>
+          <button
+            className={`toggle ${s.presenceBrowsing !== false ? "on" : ""}`}
+            aria-label="إظهار حالة التصفح"
+            aria-pressed={s.presenceBrowsing !== false}
+            onClick={() =>
+              update("settings", {
+                presenceBrowsing: s.presenceBrowsing === false,
+              })
+            }
+          >
+            <span />
+          </button>
+        </div>
         <label className="setting-row">
           <b>مستوى التفصيل</b>
           <select

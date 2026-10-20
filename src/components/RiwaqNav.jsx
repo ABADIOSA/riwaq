@@ -56,7 +56,7 @@ export default function RiwaqNav({
       <button
         className="riwaq-wordmark"
         onClick={() => go("home")}
-        aria-label="رِواق — جلسة اليوم"
+        aria-label="رِواق — الرئيسية"
       >
         {appearance.logoStyle === "image" ? (
           <img
@@ -84,7 +84,7 @@ export default function RiwaqNav({
       </button>
       <nav className="riwaq-destinations" aria-label="التنقل الرئيسي">
         {[
-          [ArrowUpLeft, "home", "جلسة اليوم"],
+          [ArrowUpLeft, "home", "الرئيسية"],
           [Compass, "discover", "اكتشف"],
           [Library, "library", "مكتبتي"],
           [Music2, "music", "موسيقى"],

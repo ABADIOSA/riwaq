@@ -479,6 +479,30 @@ try {
   assert.equal(await page.locator("dialog.first-run[open]").count(), 0);
   assert.ok(after.addons.some((a) => a.id === "riwaq.web-fixture"));
   step("after a reload the encrypted store opens with the addon in it");
+  assert.equal(
+    await page
+      .locator('.riwaq-destinations [aria-current="page"]')
+      .textContent()
+      .then((s) => s.trim()),
+    "الرئيسية",
+  );
+  assert.equal(
+    await page.locator(".session-heading .session-kicker").textContent(),
+    "جلسة اليوم",
+  );
+  await call("settings", { showSession: false });
+  await page.reload();
+  await page.waitForSelector(".app");
+  assert.equal(await page.locator(".session-home").count(), 0);
+  assert.equal(
+    await page
+      .locator('.riwaq-destinations [aria-current="page"]')
+      .textContent()
+      .then((s) => s.trim()),
+    "الرئيسية",
+  );
+  await call("settings", { showSession: true });
+  step("Home keeps its name when Today's session and its heading are hidden");
 
   // The catalog reaches the interface: open Discover and find a poster.
   await page.getByText("اكتشف", { exact: true }).first().click();
@@ -635,6 +659,30 @@ try {
   await page.getByRole("menuitemradio", { name: "1.5×", exact: true }).click();
   await page.waitForFunction(
     () => document.querySelector("video.riwaq-video")?.playbackRate === 1.5,
+  );
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.down("Space");
+  await page.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.playbackRate === 2,
+  );
+  await page.keyboard.up("Space");
+  await page.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.playbackRate === 1.5,
+  );
+  assert.equal(
+    await page.locator("video.riwaq-video").evaluate((video) => video.paused),
+    false,
+  );
+  await page.keyboard.press("Space");
+  await page.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.paused,
+  );
+  await page.keyboard.press("Space");
+  await page.waitForFunction(
+    () => !document.querySelector("video.riwaq-video")?.paused,
+  );
+  step(
+    "Space hold accelerates actual web video, restores its speed and short taps pause/resume",
   );
   for (const fit of ["cover", "fill", "contain"]) {
     await page.locator("[data-picture-mode]").click();

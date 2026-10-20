@@ -14,7 +14,13 @@ import {
   sourceIdentity,
   trackIdentity,
 } from "../core/series-memory.mjs";
-import { HOTKEY_ACTIONS, inputConf, seekAmount } from "../core/hotkeys.mjs";
+import {
+  HOTKEY_ACTIONS,
+  inputConf,
+  seekAmount,
+  hudKey,
+  publicHotkeys,
+} from "../core/hotkeys.mjs";
 import { Client } from "../core/client.mjs";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 import { Player } from "../electron/player.mjs";
@@ -65,7 +71,15 @@ test("the step settings are validated, and the interface keys share them", () =>
   assert.equal(safeSettings({ seekStep: 15 }).seekStep, 15);
   const view = source("src/components/PlayerView.jsx");
   assert.match(view, /seekAmount\(/);
-  assert.match(view, /e\.shiftKey \? "Long" : ""/);
+  // Long seeks follow the effective binding, including user overrides.
+  const event = { key: "ArrowRight", code: "ArrowRight", shiftKey: true };
+  assert.equal(hudKey(event, publicHotkeys({})), "Shift+RIGHT");
+  const custom = publicHotkeys({ seekForwardLong: "Ctrl+q" });
+  assert.equal(hudKey(event, custom), null);
+  assert.equal(
+    hudKey({ key: "q", code: "KeyQ", ctrlKey: true }, custom),
+    "Ctrl+q",
+  );
 });
 
 test("a source is remembered by addon, group and quality, never by its link", () => {

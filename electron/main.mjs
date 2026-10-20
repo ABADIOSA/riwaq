@@ -1106,6 +1106,7 @@ function updatePresence() {
     position: Number(state.position) || 0,
     duration: Number(state.duration) || 0,
     detail: settings.presenceDetail || "title",
+    browsing: settings.presenceBrowsing !== false,
   });
   // Called on every player update: Discord hears only what changed (a
   // pause, a seek, another title), not the same activity many times a second.

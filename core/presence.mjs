@@ -72,9 +72,11 @@ export function buildActivity({
   position = 0,
   duration = 0,
   detail = "title",
+  browsing = true,
   at = Date.now(),
 } = {}) {
   if (detail === "off") return null;
+  if (!playing && !browsing) return null;
   if (!playing)
     return {
       type: 0,
