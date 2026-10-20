@@ -2205,7 +2205,10 @@ export class Client {
         fetchJson(url, {
           timeout: 6000,
           redirect: "error",
-          headers: { "User-Agent": "Riwaq", ...headers },
+          headers: {
+            "User-Agent": `Riwaq/${String(this.version || "dev").replace(/[^\w.-]/g, "") || "dev"}`,
+            ...headers,
+          },
         }),
     });
     boundedSet(cache, videoId, { at: Date.now(), segments }, 300);

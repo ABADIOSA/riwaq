@@ -7,6 +7,21 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.49.1",
+    title: "تعريف إصدار رِواق لدى TheIntroDB",
+    items: [
+      "نسخة ويندوز تعرّف TheIntroDB باسم رِواق ورقم إصداره، لمساعدة مزوّد الخدمة على متابعة التوافق والتواصل قبل التغييرات.",
+      "ترويسة التعريف تحمل اسم التطبيق وإصداره فقط؛ تفعيل تخطي المقدمات ومفاتيحك وخيارات الخصوصية تبقى كما اخترتها.",
+    ],
+    en: {
+      title: "Riwaq version identification for TheIntroDB",
+      items: [
+        "The Windows app identifies itself and its version to TheIntroDB, helping the provider track compatibility and contact maintainers before changes.",
+        "The identifying header contains only the app name and version; intro-skipping consent, saved keys and privacy choices remain unchanged.",
+      ],
+    },
+  },
+  {
     version: "0.49.0",
     title: "بداية أوضح وتحكم أدق بالمشغّل",
     items: [

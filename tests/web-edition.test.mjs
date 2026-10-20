@@ -304,6 +304,18 @@ test("the bridge drops headers a browser refuses and keeps errors free of addres
   });
   assert.equal(seen.headers.get("user-agent"), null);
   assert.equal(seen.headers.get("trakt-api-key"), "k");
+  await fetcher("https://api.theintrodb.org/v4/media?imdb_id=tt0111161", {
+    headers: {
+      "User-Agent": "Riwaq/0.50.0-beta.1",
+      Authorization: "Bearer tidb_fixture",
+    },
+  });
+  assert.equal(
+    seen.headers.get("user-agent"),
+    null,
+    "the web keeps its browser-provided identity",
+  );
+  assert.equal(seen.headers.get("authorization"), "Bearer tidb_fixture");
   assert.equal(cleanError(new Error("تعذّر الاتصال")), "تعذّر الاتصال");
   assert.match(cleanError(new Error("HTTP 404")), /404/);
   assert.doesNotMatch(

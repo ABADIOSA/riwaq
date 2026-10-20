@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
+  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.1"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-15191e">
   <a href="https://abadiosa.github.io/riwaq/"><img alt="Web" src="https://img.shields.io/badge/web-abadiosa.github.io%2Friwaq-15191e"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-15191e"></a>
@@ -30,20 +30,16 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.49.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.49.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.49.1-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.49.1-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
+الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.1)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.49.0 · تجريبي
+### الجديد في 0.49.1 · تجريبي
 
-- شاشة ترحيب عربية وإنجليزية عند أول تشغيل: شرح مختصر، مفاتيح بيانات اختيارية مثل TMDB، وخيارات بداية واضحة؛ يمكن تخطيها أو فتحها مجدداً من الإعدادات.
-- مشاركة إحصاءات الاستخدام اختيارية ومعطلة افتراضياً، مع شرح البيانات والحذف؛ لا تنتقل الموافقة مع الحساب أو النسخ الاحتياطية.
-- اضغط المسافة مطولاً للتسريع المؤقت ثم اتركها لاستعادة سرعتك السابقة؛ الضغطة القصيرة توقف وتشغّل الفيديو.
-- إغلاق قوائم السرعة والنوم بنقرة خارجها دون إيقاف الفيديو، والتمرير داخل قوائم المشغل لا يغيّر الصوت.
-- الرئيسية باسم ثابت، وعنوان «جلسة اليوم» داخل قسمها فقط، مع إزالة زر إعدادات المشغل المكرر من شريط التشغيل.
-- خيار لإخفاء حالة التصفح على Discord مع استمرار ظهور المشاهدة.
+- نسخة ويندوز تعرّف TheIntroDB باسم رِواق ورقم إصداره، لمساعدة مزوّد الخدمة على متابعة التوافق والتواصل قبل التغييرات.
+- ترويسة التعريف تحمل اسم التطبيق وإصداره فقط؛ تفعيل تخطي المقدمات ومفاتيحك وخيارات الخصوصية تبقى كما اخترتها.
 
 الإصدارات السابقة في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -110,20 +106,16 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.49.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.49.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.49.1-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.49.1-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
+Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.1), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.49.0 · Beta
+### What's new in 0.49.1 · Beta
 
-- An Arabic/English first-run welcome guide with an introduction, optional metadata keys such as TMDB, and clear starting destinations. Skip it or reopen it from Settings.
-- Usage sharing remains optional and off by default, with data and deletion explained. Consent never syncs with accounts or backups.
-- Hold Space to speed up temporarily and release to restore your previous speed; a short tap pauses or resumes.
-- Outside clicks dismiss speed and sleep menus without pausing. Scrolling player menus no longer changes volume.
-- Home keeps its name, Today’s session is headed inside its own section, and the redundant player-settings toolbar button is removed.
-- Hide Discord browsing activity independently while keeping watching activity.
+- The Windows app identifies itself and its version to TheIntroDB, helping the provider track compatibility and contact maintainers before changes.
+- The identifying header contains only the app name and version; intro-skipping consent, saved keys and privacy choices remain unchanged.
 
 Earlier releases are in the [changelog](docs/CHANGELOG.md).
 

@@ -1,5 +1,11 @@
 # Verification — Riwaq
 
+## 2026-10-20 — v0.49.1 beta / TheIntroDB client identification
+
+- Based on published v0.49.0 / main `59adbba`. Implements the optional [provider follow-up on #96](https://github.com/ABADIOSA/riwaq/issues/96#issuecomment-6297441224): the existing skip-request User-Agent now includes the running app version (`Riwaq/<version>`), with `dev` as a source-run fallback. No new account/device identifier or relay. Existing skip consent, Bearer-key handling, response cache and failure/retry rules remain unchanged.
+- **896 Node tests pass**, zero failures/skips; formatting and the web production build pass. Added keyless/dynamic-version checks and an actual loopback HTTP request that verifies the transmitted header. The existing browser-adapter test also checks TheIntroDB: the browser keeps its own User-Agent and an existing Bearer token is preserved. No replacement custom header, query identifier or proxy is introduced for web users.
+- Release highlights/README/changelog/package metadata identify 0.49.1 as a free beta. Source tests do not claim that the provider has inspected production traffic or that a new binary has reached users; Windows packages, signed release assets and the live website are checked separately during the authorized release. Prior MPV, HDR and external-account verification limits still apply; no player, encryption, monetization or licensing change.
+
 ## 2026-10-20 — v0.49.0 beta user-feedback release candidate
 
 - Started from current main `e25bbed`; preserved the unpublished first-run guide as `883a941`. Audited all 14 public issues and their comments, including #100's five new requests and #93's browsing-presence request. [Per-request results and limits](docs/USER-FIXES-2026-10-20.md). Existing advanced picture controls remain reachable from the title's player options; the duplicate toolbar trigger is removed rather than deleting those functions.
