@@ -41,7 +41,7 @@ export function Empty({ icon: Icon = Film, title, children, action }) {
     </div>
   );
 }
-export function Modal({ children, onClose, className = "" }) {
+export function Modal({ children, onClose, className = "", labelledBy }) {
   const ref = useRef();
   useEffect(() => {
     const d = ref.current;
@@ -52,6 +52,7 @@ export function Modal({ children, onClose, className = "" }) {
     <dialog
       ref={ref}
       className={`modal ${className}`}
+      aria-labelledby={labelledBy}
       onCancel={(e) => {
         e.preventDefault();
         // A dialog opened from another closes alone.

@@ -20,6 +20,7 @@ import review083 from "./en/review083.mjs";
 import owner from "./en/owner.mjs";
 import engine046 from "./en/engine046.mjs";
 import feedback094 from "./en/feedback094.mjs";
+import onboarding from "./en/onboarding.mjs";
 
 export default {
   ...core,
@@ -39,6 +40,7 @@ export default {
   ...owner,
   ...engine046,
   ...feedback094,
+  ...onboarding,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",

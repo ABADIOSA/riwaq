@@ -750,6 +750,7 @@ export default function SettingsStudio({
   initialTab = "theme",
   onNuvio,
   onProfiles,
+  onWelcome,
 }) {
   const [first] = useState(
     () => takeSettingsPage() || MOVED[initialTab] || initialTab,
@@ -845,6 +846,9 @@ export default function SettingsStudio({
           <p>من أول بوستر… إلى آخر مشهد.</p>
         </div>
         <div className="version-tools">
+          <button className="secondary small" onClick={onWelcome}>
+            <Sparkles size={15} /> دليل البداية
+          </button>
           {ownerDevice && (
             <button
               className="secondary small owner-entry"

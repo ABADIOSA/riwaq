@@ -68,6 +68,7 @@ import TasteDiscovery from "./components/TasteDiscovery.jsx";
 import SmartShelves from "./components/SmartHome.jsx";
 import DiscoverSections from "./components/DiscoverSections.jsx";
 import WhatsNew from "./components/WhatsNew.jsx";
+import FirstRun from "./components/FirstRun.jsx";
 import TorrentSetup from "./components/TorrentSetup.jsx";
 import { NEEDS_ENGINE } from "../core/torrent-engine.mjs";
 import ShortcutsHelp from "./components/ShortcutsHelp.jsx";
@@ -169,6 +170,7 @@ export default function App() {
     [nuvioOpen, setNuvioOpen] = useState(false),
     // "What's new" after an update, and the keyboard shortcuts ("?").
     [whatsNew, setWhatsNew] = useState(null),
+    [welcomeRequested, setWelcomeRequested] = useState(false),
     [shortcutsOpen, setShortcutsOpen] = useState(false),
     [offlineOpen, setOfflineOpen] = useState(false),
     // A torrent with no engine to play it: the guide, and the play to retry.
@@ -545,8 +547,12 @@ export default function App() {
   // Once per profile and version: the highlights since the release the
   // viewer last saw (core/whats-new.mjs). A fresh install just records it.
   const runningVersion = state.update?.current || "";
+  const welcomeOpen =
+    ready &&
+    !player.active &&
+    (welcomeRequested || state.onboarding?.required === true);
   useEffect(() => {
-    if (!ready || !runningVersion) return;
+    if (!ready || !runningVersion || welcomeOpen) return;
     const used =
       (state.favorites || []).length > 0 ||
       Object.keys(state.progress || {}).length > 0;
@@ -557,7 +563,7 @@ export default function App() {
       });
     else if (seenVersion !== runningVersion)
       call("settings", { seenVersion: runningVersion }).catch(() => {});
-  }, [ready, runningVersion, state.profiles?.active]);
+  }, [ready, runningVersion, state.profiles?.active, welcomeOpen]);
   const [win] = useWindowState();
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -879,7 +885,7 @@ export default function App() {
           minutes={state.settings.screensaver || 0}
           clock={state.settings.screensaverClock !== false}
           items={shownRows.flatMap((r) => r.metas).concat(favorites)}
-          blocked={player.active}
+          blocked={player.active || welcomeOpen}
         />
         {riwaqExperience ? (
           <RiwaqNav
@@ -1639,6 +1645,7 @@ export default function App() {
                 key={settingsTab}
                 initialTab={settingsTab}
                 onNuvio={() => setNuvioOpen(true)}
+                onWelcome={() => setWelcomeRequested(true)}
                 state={state}
                 update={update}
                 act={act}
@@ -1711,7 +1718,18 @@ export default function App() {
           />
         )}
 
-        {whatsNew && (
+        {welcomeOpen && (
+          <FirstRun
+            state={state}
+            onState={setState}
+            onDone={(destination) => {
+              setWelcomeRequested(false);
+              if (destination === "stremio") setAccount(true);
+              else navigate(destination);
+            }}
+          />
+        )}
+        {!welcomeOpen && whatsNew && (
           <WhatsNew
             current={runningVersion}
             seen={whatsNew.seen}

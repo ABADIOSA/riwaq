@@ -1197,6 +1197,7 @@ export async function startBridge({ version, store }) {
     resetHotkeys: () => client.resetHotkeys(),
     notifySave: (a) => client.notifier.save(a),
     usageState: () => client.usage.publicState(),
+    onboardingComplete: () => client.onboarding.complete(),
     usageEdit: (a) => {
       client.profiles.gate("settings");
       return client.usage.edit(a?.enabled);

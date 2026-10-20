@@ -156,6 +156,21 @@ try {
   await main.waitForSelector(".app", { timeout: 20000 });
   const call = (method, args) =>
     main.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]);
+  // A fresh viewer completes or skips setup before it can click Play.
+  // Do the same here instead of starting MPV beneath a live modal.
+  const welcome = main.locator("dialog.first-run[open]");
+  await welcome.waitFor({ timeout: 25000 });
+  assert.equal((await call("usageState")).enabled, false);
+  await main.screenshot({ path: join(output, "first-run-native.png") });
+  await welcome
+    .getByRole("button", { name: "الدخول مباشرة، أكمل لاحقاً", exact: true })
+    .click();
+  await welcome.waitFor({ state: "hidden" });
+  assert.equal((await call("init")).onboarding.required, false);
+  assert.equal((await call("usageState")).enabled, false);
+  checks.push(
+    "Windows first-run guide can be skipped without enabling usage sharing",
+  );
   await call("settings", {
     hdrMode: "window",
     autoFullscreen: true,

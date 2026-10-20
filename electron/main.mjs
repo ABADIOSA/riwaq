@@ -2088,6 +2088,7 @@ const methods = {
   // Only GitHub's own page for a new fine-grained token.
   ownerTokenPage: () => shell.openExternal(OWNER_TOKEN_PAGE).then(() => true),
   usageState: () => client.usage.publicState(),
+  onboardingComplete: () => client.onboarding.complete(),
   usageEdit: (a) => {
     client.profiles.gate("settings");
     return client.usage.edit(a?.enabled);
