@@ -5,7 +5,6 @@ import {
   Maximize,
   Minimize2,
   X,
-  SlidersHorizontal,
   Volume2,
   RotateCcw,
   RotateCw,
@@ -28,7 +27,8 @@ import VolumeSlider from "./VolumeSlider.jsx";
 import PlayerMenu from "./PlayerMenu.jsx";
 import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
-import { seekAmount } from "../../core/hotkeys.mjs";
+import { seekAmount, hudKey } from "../../core/hotkeys.mjs";
+import { useSpaceHold } from "../lib/use-space-hold.js";
 import { surfaceReporter } from "../../core/surface.mjs";
 import { startLine } from "../../core/torrent-engine.mjs";
 import { loc } from "../lib/format.js";
@@ -38,7 +38,6 @@ export default function PlayerView({
   state,
   act,
   hidden,
-  onSettings,
   onAdvance,
   update,
   dockRequest,
@@ -62,6 +61,14 @@ export default function PlayerView({
     hudMode = !!player.overlay && !mini,
     command = (action, value) => act("playerCommand", { action, value });
   const series = player.mediaType === "series";
+  const space = useSpaceHold({
+    player,
+    settings: state.settings,
+    hotkeys: state.hotkeys,
+    command,
+    tap: () => command("pause"),
+    enabled: !hidden,
+  });
   const sleepLeft = player.sleepAt
     ? Math.max(0, Math.round((player.sleepAt - Date.now()) / 60000))
     : 0;
@@ -91,30 +98,44 @@ export default function PlayerView({
   }, [mini, hidden, immersive, hudMode, !!dock, !!menu, !!quick]);
   useEffect(() => {
     const onKey = (e) => {
-      if (hidden || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName))
-        return;
-      if (e.code === "Space") {
+      if (hidden) return;
+      const binding = hudKey(e, state.hotkeys);
+      if (space.down(e, binding)) return;
+      if (!binding) return;
+      const action = state.hotkeys.findLast(
+        (key) => key.binding === binding,
+      )?.id;
+      // Rebinding play/pause still works; auto-repeat never toggles it repeatedly.
+      if (action === "playPause" && !e.repeat) {
         e.preventDefault();
         command("pause");
       }
-      if (e.key.toLowerCase() === "f") command("fullscreen");
-      if (e.key.toLowerCase() === "c" && !mini) {
+      if (action === "fullscreen" && !e.repeat) command("fullscreen");
+      if (action === "panel" && !mini && !e.repeat) {
         if (hudMode) call("hudPanel").catch(() => {});
         else setDock((open) => (open ? null : "subs"));
       }
-      if (e.key === "Escape" && player.fullscreen) {
+      if (binding === "ESC" && player.fullscreen) {
         e.preventDefault();
         command("exitFullscreen");
       }
       // The same steps as MPV's own keys (core/hotkeys.mjs seekAmount).
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft")
+      if (
+        ["seekForward", "seekBack", "seekForwardLong", "seekBackLong"].includes(
+          action,
+        )
+      ) {
+        e.preventDefault();
         command(
           "seekBy",
           seekAmount(
-            `${e.key === "ArrowRight" ? "forward" : "back"}${e.shiftKey ? "Long" : ""}`,
+            action
+              .replace("seek", "")
+              .replace(/^./, (letter) => letter.toLowerCase()),
             state.settings,
           ),
         );
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -125,6 +146,7 @@ export default function PlayerView({
     hidden,
     state.settings.seekStep,
     state.settings.seekLongStep,
+    state.hotkeys,
   ]);
   // A right click or C inside MPV asks for the panel; the mini player has none.
   useEffect(() => {
@@ -409,9 +431,6 @@ export default function PlayerView({
               onClick={() => setDock(dock === "subs" ? null : "subs")}
             >
               <Subtitles size={20} />
-            </IconButton>
-            <IconButton title="إعدادات المشغل" onClick={onSettings}>
-              <SlidersHorizontal size={20} />
             </IconButton>
             <IconButton
               title="المسار الصوتي"

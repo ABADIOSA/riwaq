@@ -750,6 +750,7 @@ export default function SettingsStudio({
   initialTab = "theme",
   onNuvio,
   onProfiles,
+  onWelcome,
 }) {
   const [first] = useState(
     () => takeSettingsPage() || MOVED[initialTab] || initialTab,
@@ -845,6 +846,9 @@ export default function SettingsStudio({
           <p>من أول بوستر… إلى آخر مشهد.</p>
         </div>
         <div className="version-tools">
+          <button className="secondary small" onClick={onWelcome}>
+            <Sparkles size={15} /> دليل البداية
+          </button>
           {ownerDevice && (
             <button
               className="secondary small owner-entry"
@@ -2229,6 +2233,24 @@ function PresenceAndAlerts({ state, update, act, notice }) {
             aria-pressed={!!s.discordPresence}
             onClick={() =>
               update("settings", { discordPresence: !s.discordPresence })
+            }
+          >
+            <span />
+          </button>
+        </div>
+        <div className="setting-row">
+          <div>
+            <b>إظهار حالة التصفح</b>
+            <p>أطفئه لإخفاء التصفح على Discord مع إبقاء حالة المشاهدة.</p>
+          </div>
+          <button
+            className={`toggle ${s.presenceBrowsing !== false ? "on" : ""}`}
+            aria-label="إظهار حالة التصفح"
+            aria-pressed={s.presenceBrowsing !== false}
+            onClick={() =>
+              update("settings", {
+                presenceBrowsing: s.presenceBrowsing === false,
+              })
             }
           >
             <span />

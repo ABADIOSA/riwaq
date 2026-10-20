@@ -18,7 +18,13 @@ const FIELDS = [
 ];
 
 /** Small HTML pickers shared by the native HUD and web/theater controls. */
-export default function PlaybackChoices({ player, act, open, setOpen }) {
+export default function PlaybackChoices({
+  player,
+  act,
+  open,
+  setOpen,
+  onDismiss,
+}) {
   const root = useRef(null);
   useEffect(() => {
     setOpen(null);
@@ -27,7 +33,10 @@ export default function PlaybackChoices({ player, act, open, setOpen }) {
     if (!open) return;
     const close = () => setOpen(null);
     const outside = (e) => {
-      if (!root.current?.contains(e.target)) close();
+      if (!root.current?.contains(e.target)) {
+        onDismiss?.();
+        close();
+      }
     };
     const key = (e) => {
       if (e.key === "Escape") {

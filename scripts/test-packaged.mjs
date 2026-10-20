@@ -126,6 +126,40 @@ try {
   assert.equal(state.addons.length, 1);
   assert.equal(state.addons[0].name, "Cinemeta");
   assert.deepEqual(state.queue, []);
+  assert.equal(
+    state.onboarding.required,
+    true,
+    "fresh packaged install needs the guide",
+  );
+  assert.equal(
+    await evaluate(`!!document.querySelector('dialog.first-run[open]')`),
+    true,
+  );
+  const welcomeShot = await send("Page.captureScreenshot", { format: "png" });
+  writeFileSync(
+    join(output, "packaged-welcome.png"),
+    Buffer.from(welcomeShot.data, "base64"),
+  );
+  assert.equal(
+    await evaluate(
+      `(() => { const button = [...document.querySelectorAll('dialog.first-run[open] button')].find(b => b.textContent.includes('الدخول مباشرة، أكمل لاحقاً')); if (!button) return false; button.click(); return true; })()`,
+    ),
+    true,
+  );
+  for (let n = 0; n < 100; n++) {
+    if (!(await evaluate(`window.riwaq.call('init')`)).onboarding.required)
+      break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(
+    (await evaluate(`window.riwaq.call('init')`)).onboarding.required,
+    false,
+  );
+  assert.equal(
+    (await evaluate(`window.riwaq.call('usageState')`)).enabled,
+    false,
+    "skip never consents to metrics",
+  );
   const screenshot = await send("Page.captureScreenshot", { format: "png" });
   writeFileSync(
     join(output, "packaged-home.png"),

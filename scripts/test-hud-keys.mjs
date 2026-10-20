@@ -96,6 +96,11 @@ try {
   await page.addInitScript(
     ({ state, player }) => {
       window.__calls = [];
+      const listeners = {};
+      window.__emit = (event, value) =>
+        listeners[event]?.forEach((fn) => fn(value));
+      window.__player = player;
+      window.__state = state;
       window.riwaq = {
         call: async (method, args) => {
           window.__calls.push([method, args]);
@@ -108,7 +113,10 @@ try {
           if (method === "playerSources") return { streams: [] };
           return true;
         },
-        on: () => () => {},
+        on: (event, fn) => {
+          (listeners[event] ||= []).push(fn);
+          return () => listeners[event].splice(listeners[event].indexOf(fn), 1);
+        },
       };
     },
     { state, player },
@@ -187,9 +195,108 @@ try {
     "- compact choices keep arrow/Enter navigation away from player volume",
   );
 
+  const commands = () =>
+    page.evaluate(() =>
+      window.__calls.filter(
+        ([m]) => m === "playerCommand" || m === "playerKey",
+      ),
+    );
+  const clear = () => page.evaluate(() => (window.__calls.length = 0));
+  for (const title of ["سرعة التشغيل", "مؤقت النوم"]) {
+    await wake();
+    await page.getByTitle(title, { exact: true }).click();
+    await page.getByRole("menu").waitFor();
+    await clear();
+    await page
+      .getByRole("menu")
+      .dispatchEvent("wheel", { deltaY: 120, bubbles: true });
+    assert.deepEqual(
+      await commands(),
+      [],
+      "scrolling a menu must not change volume",
+    );
+    await page.mouse.click(640, 300);
+    await page.getByRole("menu").waitFor({ state: "detached" });
+    await page.waitForTimeout(500);
+    assert.deepEqual(
+      await commands(),
+      [],
+      `${title}: dismissing must not pause`,
+    );
+  }
+  await clear();
+  await page.mouse.move(640, 300);
+  await page.mouse.wheel(0, -120);
+  await page.waitForTimeout(100);
+  assert.deepEqual(
+    await commands(),
+    [["playerCommand", { action: "volume", value: 65 }]],
+    "wheel on bare picture still adjusts volume",
+  );
+  assert.equal(
+    await page.getByTitle("إعدادات المشغل", { exact: true }).count(),
+    0,
+  );
+  await page.evaluate(() => {
+    window.__player.speed = 1.25;
+    window.__emit("player", { ...window.__player });
+    document.activeElement?.blur();
+  });
+  await clear();
+  await page.keyboard.down("Space");
+  await page.waitForTimeout(420);
+  await page.keyboard.down("Space");
+  await page.keyboard.up("Space");
+  assert.deepEqual(
+    await commands(),
+    [
+      ["playerCommand", { action: "speed", value: 2 }],
+      ["playerCommand", { action: "speed", value: 1.25 }],
+    ],
+    "Space hold restores previous speed without pause or repeat",
+  );
+  await clear();
+  await page.keyboard.down("Space");
+  await page.waitForTimeout(420);
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await page.keyboard.up("Space");
+  assert.deepEqual(
+    await commands(),
+    [
+      ["playerCommand", { action: "speed", value: 2 }],
+      ["playerCommand", { action: "speed", value: 1.25 }],
+    ],
+    "losing focus restores speed",
+  );
+  await clear();
+  await page.keyboard.down("Space");
+  await page.evaluate(() => {
+    window.__player.videoId = "tt0000002";
+    window.__emit("player", { ...window.__player });
+  });
+  await page.waitForTimeout(450);
+  await page.keyboard.up("Space");
+  assert.deepEqual(
+    await commands(),
+    [],
+    "retired pending hold must not change or pause the next video",
+  );
+  console.log(
+    "- outside clicks only dismiss speed/sleep; wheel stays in controls; Space hold restores speed on release/blur and cancels for replacement video",
+  );
+
   await wake();
   await page.getByTitle("الترجمة (C أو الزر الأيمن)").click();
   await page.locator(".player-side").waitFor();
+  await clear();
+  await page
+    .locator(".player-side")
+    .dispatchEvent("wheel", { deltaY: 120, bubbles: true });
+  assert.deepEqual(
+    await commands(),
+    [],
+    "scrolling subtitles/audio does not change volume",
+  );
   assert.equal(
     await page.evaluate(() => document.activeElement.tagName),
     "BODY",

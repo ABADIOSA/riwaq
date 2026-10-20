@@ -1,4 +1,5 @@
 import { UsagePulse } from "./usage.mjs";
+import { FirstRun } from "./onboarding.mjs";
 import {
   CINEMETA,
   DEFAULT_SETTINGS,
@@ -244,6 +245,7 @@ export class Client {
     this.request = request;
     this.requestText = requestText;
     this.api = api;
+    const loaded = load();
     this.state = {
       addons: [],
       favorites: [],
@@ -251,8 +253,9 @@ export class Client {
       settings: { ...DEFAULT_SETTINGS },
       auth: null,
       lastSync: null,
-      ...load(),
+      ...loaded,
     };
+    this.onboarding = new FirstRun(this, loaded);
     this.state.settings = retireLineless({
       ...DEFAULT_SETTINGS,
       ...this.state.settings,
@@ -385,6 +388,7 @@ export class Client {
       profiles: this.profiles.publicState(),
       notify: this.notifier.publicState(),
       announcements: this.announcements.publicState(),
+      onboarding: this.onboarding.publicState(),
       hotkeys: publicHotkeys(this.state.hotkeys),
       update: this.updates.publicState(this.version),
       connectedLists: this.state.connectedLists || [],

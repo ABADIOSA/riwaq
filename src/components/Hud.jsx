@@ -13,7 +13,6 @@ import {
   AudioLines,
   ListVideo,
   Server,
-  SlidersHorizontal,
   Maximize,
   Minimize,
   Minimize2,
@@ -37,6 +36,7 @@ import { startLine } from "../../core/torrent-engine.mjs";
 import { hudKey, pointerFocus } from "../../core/hotkeys.mjs";
 import { useInterfaceLanguage } from "../lib/language.js";
 import { loc } from "../lib/format.js";
+import { useSpaceHold } from "../lib/use-space-hold.js";
 
 // Controls fade after the pointer has been still this long, and the pointer
 // hides with them. Paused playback and an open panel keep them up.
@@ -126,6 +126,14 @@ export default function Hud() {
     return result;
   };
   const command = (action, value) => act("playerCommand", { action, value });
+  const space = useSpaceHold({
+    player,
+    settings: state?.settings,
+    hotkeys: state?.hotkeys,
+    command,
+    tap: () => act("playerKey", { binding: "SPACE" }),
+    blocked: () => hold.current.active || !!hold.current.timer,
+  });
 
   useEffect(() => {
     const key = (e) => {
@@ -140,6 +148,10 @@ export default function Hud() {
         return;
       }
       const binding = hudKey(e, state?.hotkeys);
+      if (space.down(e, binding)) {
+        wake();
+        return;
+      }
       if (!binding) return;
       e.preventDefault();
       act("playerKey", { binding });
@@ -152,6 +164,7 @@ export default function Hud() {
   useEffect(() => {
     const release = () => {
       clearTimeout(hold.current.timer);
+      hold.current.timer = 0;
       if (hold.current.active) command("speed", hold.current.previous);
       hold.current.active = false;
       hold.current.swallow = false;
@@ -165,9 +178,34 @@ export default function Hud() {
     return () => {
       window.removeEventListener("blur", release);
       window.removeEventListener("pointerup", unfocus, true);
-      clearTimeout(hold.current.timer);
+      release();
     };
   }, []);
+
+  useEffect(() => {
+    // Do not restore the previous title's speed into a new viewing.
+    clearTimeout(hold.current.timer);
+    hold.current.timer = 0;
+    clearTimeout(click.current);
+    hold.current.active = false;
+    hold.current.swallow = false;
+    setHolding(false);
+  }, [player.videoId, player.active]);
+
+  useEffect(() => {
+    if (!sleepMenu && !shaderMenu) return;
+    const outside = (event) => {
+      const selector = shaderMenu
+        ? ".hud-shader"
+        : ".hud-sleep:not(.hud-shader)";
+      if (event.target.closest?.(selector)) return;
+      menuClosed.current = Date.now();
+      setSleepMenu(false);
+      setShaderMenu(false);
+    };
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
+  }, [sleepMenu, shaderMenu]);
 
   const wake = () => {
     setAwake(true);
@@ -360,7 +398,23 @@ export default function Hud() {
   };
   const onStageDown = (e) => {
     if (e.button !== 0 || e.target !== e.currentTarget) return;
-    if (!holdRate || player.live || player.pause || dock || menu) return;
+    if (dock || quick || sleepMenu || shaderMenu) {
+      menuClosed.current = Date.now();
+      setDock(null);
+      setQuick(null);
+      setSleepMenu(false);
+      setShaderMenu(false);
+      return;
+    }
+    if (
+      !holdRate ||
+      player.live ||
+      player.pause ||
+      menu ||
+      space.busy() ||
+      Date.now() - menuClosed.current < 400
+    )
+      return;
     clearTimeout(hold.current.timer);
     hold.current.timer = setTimeout(() => {
       hold.current = {
@@ -374,6 +428,7 @@ export default function Hud() {
   };
   const onStageUp = () => {
     clearTimeout(hold.current.timer);
+    hold.current.timer = 0;
     if (!hold.current.active) return;
     // The click that ends a hold must not also pause.
     hold.current = { ...hold.current, active: false, swallow: true };
@@ -386,7 +441,14 @@ export default function Hud() {
   const onStageClick = (e) => {
     if (e.target !== e.currentTarget) return;
     // The click that closed the menu does not also pause.
-    if (menu || Date.now() - menuClosed.current < 400) return;
+    if (
+      menu ||
+      quick ||
+      sleepMenu ||
+      shaderMenu ||
+      Date.now() - menuClosed.current < 400
+    )
+      return;
     if (hold.current.swallow) {
       hold.current.swallow = false;
       return;
@@ -401,9 +463,29 @@ export default function Hud() {
   const onStageDouble = (e) => {
     if (e.target !== e.currentTarget) return;
     clearTimeout(click.current);
+    if (
+      menu ||
+      dock ||
+      quick ||
+      sleepMenu ||
+      shaderMenu ||
+      Date.now() - menuClosed.current < 400
+    )
+      return;
     command("fullscreen");
   };
   const onWheel = (e) => {
+    // Scrolling controls, tracks or popups must never also alter volume.
+    if (
+      e.target !== e.currentTarget ||
+      dock ||
+      menu ||
+      quick ||
+      sleepMenu ||
+      shaderMenu ||
+      !e.deltaY
+    )
+      return;
     const volume = Math.max(
       0,
       Math.min(maxVolume, (player.volume || 0) + (e.deltaY < 0 ? 5 : -5)),
@@ -482,6 +564,8 @@ export default function Hud() {
             <div className="hud-sleep hud-shader">
               <button
                 title="الشيدر"
+                aria-haspopup="menu"
+                aria-expanded={shaderMenu}
                 className={player.glsl ? "on" : ""}
                 onClick={() => {
                   setSleepMenu(false);
@@ -527,6 +611,8 @@ export default function Hud() {
             <div className="hud-sleep">
               <button
                 title="مؤقت النوم"
+                aria-haspopup="menu"
+                aria-expanded={sleepMenu}
                 className={sleeping ? "on" : ""}
                 onClick={() => {
                   setShaderMenu(false);
@@ -648,7 +734,7 @@ export default function Hud() {
           <b>{Math.round(player.volume || 0)}%</b>
         </div>
       )}
-      {holding && (
+      {(holding || space.holding) && (
         <div className="hud-hold" aria-live="polite">
           <FastForward size={18} fill="currentColor" /> {holdRate}×
         </div>
@@ -969,15 +1055,10 @@ export default function Hud() {
                 act={act}
                 open={quick}
                 setOpen={setQuick}
+                onDismiss={() => {
+                  menuClosed.current = Date.now();
+                }}
               />
-            )}
-            {shows("settings") && (
-              <button
-                title="إعدادات المشغل"
-                onClick={() => act("hudRequest", { type: "settings" })}
-              >
-                <SlidersHorizontal size={19} />
-              </button>
             )}
             {shows("fullscreen") && (
               <button

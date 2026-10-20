@@ -311,6 +311,110 @@ try {
 
   const call = (method, args) =>
     page.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]);
+  const guide = page.locator("dialog.first-run[open]");
+  await guide.waitFor();
+  assert.equal((await call("usageState")).enabled, false);
+  await guide.getByRole("button", { name: "English", exact: true }).click();
+  await guide
+    .getByRole("heading", {
+      name: "All your stories. A space of your own.",
+      exact: true,
+    })
+    .waitFor();
+  assert.equal(await page.locator("html").getAttribute("dir"), "ltr");
+  await page.screenshot({ path: join(output, "welcome-en.png") });
+  await guide.getByRole("button", { name: "العربية", exact: true }).click();
+  await guide
+    .getByRole("heading", { name: "كل حكاياتك، في مساحة تشبهك.", exact: true })
+    .waitFor();
+  for (const viewport of [
+    { width: 980, height: 680 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const bounds = await guide.boundingBox();
+    assert(
+      bounds.x >= 0 &&
+        bounds.y >= 0 &&
+        bounds.x + bounds.width <= viewport.width + 1 &&
+        bounds.y + bounds.height <= viewport.height + 1,
+    );
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.screenshot({
+      path: join(output, `welcome-ar-${viewport.width}.png`),
+    });
+  }
+  await page.setViewportSize({ width: 980, height: 680 });
+  await guide
+    .getByRole("button", { name: "خلّنا نجهّز رِواق", exact: true })
+    .click();
+  await guide
+    .getByLabel("مفتاح TMDB أو API Read Access Token", { exact: true })
+    .fill("a".repeat(32));
+  await guide.getByRole("button", { name: "حفظ واختبار", exact: true }).click();
+  await guide
+    .getByText(
+      "المفتاح محفوظ، لكن تعذّر التحقق. يمكنك المتابعة وفحصه لاحقاً من الإعدادات.",
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    await guide
+      .getByLabel("مفتاح TMDB أو API Read Access Token", { exact: true })
+      .inputValue(),
+    "",
+  );
+  await page.screenshot({ path: join(output, "welcome-providers.png") });
+  await call("providerSave", { id: "tmdb", clear: true });
+  await guide.getByRole("button", { name: "متابعة", exact: true }).click();
+  await guide.getByRole("switch").waitFor({ state: "visible" });
+  assert.equal(
+    await guide.getByRole("switch").getAttribute("aria-checked"),
+    "false",
+  );
+  await page.screenshot({ path: join(output, "welcome-privacy.png") });
+  await guide
+    .getByRole("button", { name: "متابعة باختياري الحالي", exact: true })
+    .click();
+  await page.screenshot({ path: join(output, "welcome-ready.png") });
+  await guide.getByRole("button", { name: "ابدأ رِواق", exact: true }).click();
+  await guide.waitFor({ state: "hidden" });
+  assert.equal((await call("init")).onboarding.required, false);
+  assert.equal((await call("usageState")).enabled, false);
+  step(
+    "first-run guide supports Arabic/English and compact widths, optional offline TMDB setup, and completion without usage consent",
+  );
+  const escapeContext = await openContext({
+    viewport: { width: 980, height: 680 },
+  });
+  const escapePage = await escapeContext.newPage();
+  watch(escapePage);
+  await escapePage.goto(siteUrl);
+  await escapePage.locator("dialog.first-run[open]").waitFor();
+  await escapePage.keyboard.press("Escape");
+  await escapePage
+    .locator("dialog.first-run[open]")
+    .waitFor({ state: "hidden" });
+  assert.equal(
+    (await escapePage.evaluate(() => window.riwaq.call("usageState"))).enabled,
+    false,
+  );
+  await escapePage.reload();
+  await escapePage.waitForFunction(
+    async () =>
+      window.riwaq && !(await window.riwaq.call("init")).onboarding.required,
+  );
+  assert.equal(await escapePage.locator("dialog.first-run[open]").count(), 0);
+  await escapeContext.close();
+  step(
+    "Escape skips setup without consent and the encrypted store remembers the dismissal after reload",
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
   if (await page.locator(".whats-new").count())
     await page.locator(".whats-new .primary").click();
   await page.locator(".notification-trigger").click();
@@ -371,8 +475,34 @@ try {
   await page.reload();
   await page.waitForSelector(".app", { timeout: 20000 });
   const after = await call("init");
+  assert.equal(after.onboarding.required, false);
+  assert.equal(await page.locator("dialog.first-run[open]").count(), 0);
   assert.ok(after.addons.some((a) => a.id === "riwaq.web-fixture"));
   step("after a reload the encrypted store opens with the addon in it");
+  assert.equal(
+    await page
+      .locator('.riwaq-destinations [aria-current="page"]')
+      .textContent()
+      .then((s) => s.trim()),
+    "الرئيسية",
+  );
+  assert.equal(
+    await page.locator(".session-heading .session-kicker").textContent(),
+    "جلسة اليوم",
+  );
+  await call("settings", { showSession: false });
+  await page.reload();
+  await page.waitForSelector(".app");
+  assert.equal(await page.locator(".session-home").count(), 0);
+  assert.equal(
+    await page
+      .locator('.riwaq-destinations [aria-current="page"]')
+      .textContent()
+      .then((s) => s.trim()),
+    "الرئيسية",
+  );
+  await call("settings", { showSession: true });
+  step("Home keeps its name when Today's session and its heading are hidden");
 
   // The catalog reaches the interface: open Discover and find a poster.
   await page.getByText("اكتشف", { exact: true }).first().click();
@@ -530,6 +660,35 @@ try {
   await page.waitForFunction(
     () => document.querySelector("video.riwaq-video")?.playbackRate === 1.5,
   );
+  assert.equal(
+    (await call("hudSnapshot")).player.speed,
+    1.5,
+    "speed commands publish the actual rate before the async ratechange event",
+  );
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.down("Space");
+  await page.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.playbackRate === 2,
+  );
+  await page.keyboard.up("Space");
+  await page.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.playbackRate === 1.5,
+  );
+  assert.equal(
+    await page.locator("video.riwaq-video").evaluate((video) => video.paused),
+    false,
+  );
+  await page.keyboard.press("Space");
+  await page.waitForFunction(
+    () => document.querySelector("video.riwaq-video")?.paused,
+  );
+  await page.keyboard.press("Space");
+  await page.waitForFunction(
+    () => !document.querySelector("video.riwaq-video")?.paused,
+  );
+  step(
+    "Space hold accelerates actual web video, restores its speed and short taps pause/resume",
+  );
   for (const fit of ["cover", "fill", "contain"]) {
     await page.locator("[data-picture-mode]").click();
     await page.waitForFunction(
@@ -628,6 +787,11 @@ try {
     // The first init settles before navigating (it can send the view home).
     await tab.evaluate(() => window.riwaq.call("init"));
     await tab.waitForTimeout(500);
+    const welcome = tab.locator("dialog.first-run[open]");
+    await welcome
+      .getByRole("button", { name: "الدخول مباشرة، أكمل لاحقاً", exact: true })
+      .click();
+    await welcome.waitFor({ state: "hidden" });
     return {
       tab,
       call: (method, args) =>
@@ -767,7 +931,23 @@ try {
     "remote settings wait during a real video, then apply after Stop at 980×680",
   );
   assert.equal((await phone.call("usageState")).enabled, false);
-  await pc.call("usageEdit", { enabled: true });
+  await pc.tab
+    .getByRole("button", { name: "دليل البداية", exact: true })
+    .click();
+  const privacyGuide = pc.tab.locator("dialog.first-run[open]");
+  await privacyGuide
+    .getByRole("button", { name: "خلّنا نجهّز رِواق", exact: true })
+    .click();
+  await privacyGuide
+    .getByRole("button", { name: "متابعة", exact: true })
+    .click();
+  await privacyGuide.getByRole("switch").click();
+  await pc.tab.waitForFunction(
+    () =>
+      document
+        .querySelector(".first-run [role=switch]")
+        ?.getAttribute("aria-checked") === "true",
+  );
   const active = await (
     await fetch(service.url + "/v1/admin/usage", {
       headers: { Authorization: "Bearer " + "a".repeat(64) },
@@ -782,13 +962,21 @@ try {
     false,
     "usage consent must never sync with the account",
   );
-  await pc.call("usageEdit", { enabled: false });
+  await privacyGuide.getByRole("switch").click();
+  await pc.tab.waitForFunction(
+    () =>
+      document
+        .querySelector(".first-run [role=switch]")
+        ?.getAttribute("aria-checked") === "false",
+  );
   const removed = await (
     await fetch(service.url + "/v1/admin/usage", {
       headers: { Authorization: "Bearer " + "a".repeat(64) },
     })
   ).json();
   assert.equal(removed.online, 0);
+  await pc.tab.keyboard.press("Escape");
+  await privacyGuide.waitFor({ state: "hidden" });
   step(
     "opt-in usage reaches real local HTTP/SQLite aggregates, stays device-local through account sync, and opt-out removes it",
   );

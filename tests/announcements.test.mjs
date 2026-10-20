@@ -8,6 +8,7 @@ import {
   audience,
   boundedJson,
   ANNOUNCEMENT_URL,
+  FEED_LIMIT,
 } from "../core/announcements.mjs";
 import { AdminGithub } from "../admin/github.mjs";
 import { workspaceTask, sandboxDirectory } from "../admin/workspace.mjs";
@@ -15,6 +16,13 @@ import { collectBackup } from "../core/backup.mjs";
 import { readFileSync } from "node:fs";
 
 const now = 1800000000000;
+test("the Admin-managed public feed is valid and bounded regardless of JSON whitespace", () => {
+  const raw = readFileSync(
+    new URL("../announcements/feed.json", import.meta.url),
+  );
+  assert.ok(raw.byteLength <= FEED_LIMIT);
+  assert.doesNotThrow(() => cleanFeed(JSON.parse(raw)));
+});
 const item = (extra = {}) => ({
   id: "notice_123456",
   at: now - 1000,

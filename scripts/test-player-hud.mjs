@@ -156,6 +156,21 @@ try {
   await main.waitForSelector(".app", { timeout: 20000 });
   const call = (method, args) =>
     main.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]);
+  // A fresh viewer completes or skips setup before it can click Play.
+  // Do the same here instead of starting MPV beneath a live modal.
+  const welcome = main.locator("dialog.first-run[open]");
+  await welcome.waitFor({ timeout: 25000 });
+  assert.equal((await call("usageState")).enabled, false);
+  await main.screenshot({ path: join(output, "first-run-native.png") });
+  await welcome
+    .getByRole("button", { name: "الدخول مباشرة، أكمل لاحقاً", exact: true })
+    .click();
+  await welcome.waitFor({ state: "hidden" });
+  assert.equal((await call("init")).onboarding.required, false);
+  assert.equal((await call("usageState")).enabled, false);
+  checks.push(
+    "Windows first-run guide can be skipped without enabling usage sharing",
+  );
   await call("settings", {
     hdrMode: "window",
     autoFullscreen: true,
@@ -312,6 +327,30 @@ try {
       async () => (await snapshot()).player.speed === 1.5,
       "direct picker changes actual MPV speed",
     );
+    // Native Windows keydown/up, not synthetic DOM events.
+    await hud.evaluate(() => document.activeElement?.blur());
+    const holdWasPaused = (await snapshot()).player.pause;
+    if (holdWasPaused) await call("playerCommand", { action: "pause" });
+    await waitFor(
+      async () => !(await snapshot()).player.pause,
+      "hold starts playing",
+    );
+    await nativeHudKey(app, 32, 500, async () => {
+      await waitFor(
+        async () => (await snapshot()).player.speed === 2,
+        "native held Space accelerates MPV",
+      );
+    });
+    await waitFor(
+      async () => (await snapshot()).player.speed === 1.5,
+      "released Space restores actual MPV speed",
+    );
+    assert.equal(
+      (await snapshot()).player.pause,
+      false,
+      "hold never pauses MPV",
+    );
+    if (holdWasPaused) await call("playerCommand", { action: "pause" });
     await call("playerCommand", { action: "speed", value: 1 });
     for (const mode of ["crop", "stretch", "fit"]) {
       await nativeHudClick(app, hud, hud.locator("[data-picture-mode]"));

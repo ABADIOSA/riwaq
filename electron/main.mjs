@@ -1106,6 +1106,7 @@ function updatePresence() {
     position: Number(state.position) || 0,
     duration: Number(state.duration) || 0,
     detail: settings.presenceDetail || "title",
+    browsing: settings.presenceBrowsing !== false,
   });
   // Called on every player update: Discord hears only what changed (a
   // pause, a seek, another title), not the same activity many times a second.
@@ -2088,6 +2089,7 @@ const methods = {
   // Only GitHub's own page for a new fine-grained token.
   ownerTokenPage: () => shell.openExternal(OWNER_TOKEN_PAGE).then(() => true),
   usageState: () => client.usage.publicState(),
+  onboardingComplete: () => client.onboarding.complete(),
   usageEdit: (a) => {
     client.profiles.gate("settings");
     return client.usage.edit(a?.enabled);

@@ -17,6 +17,7 @@ const allowed = new Set([
   "ownerPublish",
   "ownerTokenPage",
   "usageState",
+  "onboardingComplete",
   "usageEdit",
   "announcementState",
   "announcementRefresh",

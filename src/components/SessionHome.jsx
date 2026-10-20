@@ -159,7 +159,7 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
     <section className="session-home" aria-label="جلسة رِواق">
       <div className="session-heading">
         <div>
-          <span className="session-kicker">RIWAQ / YOUR TIME, YOUR STORY</span>
+          <span className="session-kicker">جلسة اليوم</span>
           <h1>وقتك له حكاية.</h1>
           <p>جلسة على مقاسك، من الأشياء التي تحبها.</p>
         </div>

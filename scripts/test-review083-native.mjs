@@ -91,6 +91,13 @@ try {
   const page = await app.firstWindow();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.waitForSelector(".app");
+  const welcome = page.locator("dialog.first-run[open]");
+  if (await welcome.count()) {
+    await welcome
+      .getByRole("button", { name: "الدخول مباشرة، أكمل لاحقاً", exact: true })
+      .click();
+    await welcome.waitFor({ state: "hidden" });
+  }
   const call = (m, a) =>
     page.evaluate(([m, a]) => window.riwaq.call(m, a), [m, a]);
   const player = async () => (await call("hudSnapshot")).player;
