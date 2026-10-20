@@ -82,7 +82,7 @@ export function useSpaceHold({
             current.player.live || current.player.pause
               ? 0
               : Number(current.settings?.holdSpeed ?? 2),
-          previous: Number(current.player.speed) || 1,
+          previous: () => Number(latest.current.player.speed) || 1,
         });
       return true;
     },

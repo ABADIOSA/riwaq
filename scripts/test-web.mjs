@@ -660,6 +660,11 @@ try {
   await page.waitForFunction(
     () => document.querySelector("video.riwaq-video")?.playbackRate === 1.5,
   );
+  assert.equal(
+    (await call("hudSnapshot")).player.speed,
+    1.5,
+    "speed commands publish the actual rate before the async ratechange event",
+  );
   await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.down("Space");
   await page.waitForFunction(

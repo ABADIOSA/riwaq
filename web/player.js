@@ -1098,7 +1098,12 @@ export class WebPlayer {
       s[action] = Math.max(-100, Math.min(100, number));
       this.applyPicture();
     } else if (action === "speed" && Number.isFinite(number)) {
-      if (video) video.playbackRate = Math.max(0.25, Math.min(4, number));
+      if (video) {
+        video.playbackRate = Math.max(0.25, Math.min(4, number));
+        // ratechange is asynchronous; publish the actual value immediately so
+        // a new gesture cannot save the previous command's stale speed.
+        s.speed = video.playbackRate;
+      }
     } else if (action === "zoom" && Number.isFinite(number)) {
       s.zoom = Math.max(-1, Math.min(1.5, number));
       this.applyPicture();

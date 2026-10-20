@@ -27,6 +27,9 @@ export function holdSpeed({
       if (rate > 0)
         current.timer = later(() => {
           if (press !== current) return;
+          // Read at activation: a just-selected speed can arrive after keydown.
+          current.speed =
+            typeof previous === "function" ? previous() : previous;
           current.active = true;
           speed(rate);
           change(true);

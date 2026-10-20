@@ -55,6 +55,15 @@ test("blur restores speed; cancelled or replaced video never receives an old tim
   gesture.up();
   assert.deepEqual(calls, [2, 1.5, 2]);
 });
+test("a speed selected just before keydown is read when the hold actually activates", () => {
+  const { gesture, calls, run } = fixture();
+  let speed = 1;
+  gesture.down({ previous: () => speed });
+  speed = 1.5;
+  run();
+  gesture.up();
+  assert.deepEqual(calls, [2, 1.5]);
+});
 test("disabled hold (live or paused) remains one short-press action without changing speed", () => {
   const { gesture, calls, run } = fixture();
   gesture.down({ rate: 0 });

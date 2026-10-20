@@ -16,6 +16,7 @@ import {
   isHlsUrl,
   playPlan,
   serverHlsUrl,
+  WebPlayer,
 } from "../web/player.js";
 import { readCallback } from "../web/callback.js";
 import { WebMusicLibrary } from "../web/music.js";
@@ -26,6 +27,20 @@ import { WebMusicLibrary } from "../web/music.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const read = (file) => readFileSync(join(root, file), "utf8");
+test("web speed commands publish the applied rate before ratechange arrives", () => {
+  const published = [];
+  const player = new WebPlayer({
+    onState: (state) => published.push(state.speed),
+  });
+  player.state = { active: true, speed: 1 };
+  // No ratechange events: mirrors the browser's pending asynchronous event.
+  player.video = { playbackRate: 1 };
+  for (const value of [1.5, 2, 1.5, 99]) {
+    player.command({ action: "speed", value });
+    assert.equal(player.state.speed, player.video.playbackRate);
+  }
+  assert.deepEqual(published, [1.5, 2, 1.5, 4]);
+});
 const names = (text) =>
   new Set([...text.matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1]));
 
