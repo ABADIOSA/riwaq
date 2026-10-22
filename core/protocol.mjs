@@ -124,6 +124,8 @@ export const DEFAULT_SETTINGS = {
   audioNormalize: false,
   audioDownmix: false,
   volumeMax: 150,
+  rememberVolume: false,
+  lastVolume: 100,
   settingsMode: "simple",
   quietInterface: false,
   showSession: true,
@@ -487,6 +489,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "hudShowOnPause",
     "hudSleep",
     "volumeOsd",
+    "rememberVolume",
     "keepFullscreen",
     "torrentIncoming",
     "torrServerFallback",
@@ -505,6 +508,11 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
       next[k] = input[k];
   if (Number.isFinite(input.subtitleSize))
     next.subtitleSize = Math.max(18, Math.min(80, input.subtitleSize));
+  if (Number.isFinite(input.lastVolume))
+    next.lastVolume = Math.max(
+      0,
+      Math.min(Math.max(...VOLUME_MAX), Math.round(input.lastVolume)),
+    );
   if (Number.isFinite(input.subtitleDelay))
     next.subtitleDelay = Math.max(-60, Math.min(60, input.subtitleDelay));
   if (Number.isFinite(input.streamSizeLimit))

@@ -1,5 +1,8 @@
 // English for the seek-preview hint (issue #89) and Simkl resume (#92).
 export default {
+  "إجراءات العمل": "Title actions",
+  "لا توجد حلقة متاحة لإضافتها إلى الطابور":
+    "No available episode to add to the queue",
   "رِواق — الرئيسية": "Riwaq — Home",
   "إظهار حالة التصفح": "Show browsing activity",
   "أطفئه لإخفاء التصفح على Discord مع إبقاء حالة المشاهدة.":

@@ -39,8 +39,18 @@ export function PrayerChip({ settings, onSettings }) {
   useEffect(() => {
     if (!open) return;
     const close = (e) => !box.current?.contains(e.target) && setOpen(false);
+    const key = (e) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setOpen(false);
+      box.current?.querySelector(".prayer-chip")?.focus();
+    };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("keydown", key, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", key, true);
+    };
   }, [open]);
   if (!settings.prayerOn) return null;
   const place = prayerPlace(settings);

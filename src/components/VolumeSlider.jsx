@@ -88,6 +88,13 @@ export default function VolumeSlider({
     release();
   };
   const key = (e) => {
+    if (e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      e.stopPropagation();
+      choose(e.key === "Home" ? 0 : top);
+      release();
+      return;
+    }
     const step = { ArrowRight: 5, ArrowUp: 5, ArrowLeft: -5, ArrowDown: -5 }[
       e.key
     ];

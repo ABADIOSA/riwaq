@@ -85,6 +85,7 @@ const titles = [
   ["last-train", "القطار الأخير"],
   ["blue-hour", "الساعة الزرقاء"],
   ["quiet-city", "مدينة هادئة"],
+  ...Array.from({ length: 14 }, (_, i) => [`row-${i}`, `Row fixture ${i}`]),
 ];
 const metas = () =>
   titles.map(([id, name]) => ({
@@ -511,6 +512,193 @@ try {
   });
   await page.screenshot({ path: join(output, "discover.png") });
   step("Discover shows the addon's titles");
+  // #104: compact header keeps every utility reachable in both directions.
+  for (const language of ["ar", "en"]) {
+    await call("settings", { uiLanguage: language, prayerOn: true });
+    await page.reload();
+    await page.waitForFunction(
+      (lang) => document.querySelector(".app")?.lang === lang,
+      language,
+    );
+    for (const width of [1440, 980, 740, 390]) {
+      await page.setViewportSize({ width, height: 840 });
+      const layout = await page
+        .locator(".riwaq-masthead")
+        .evaluate((header) => {
+          const items = [...header.children].map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              left: r.left,
+              right: r.right,
+              top: r.top,
+              bottom: r.bottom,
+            };
+          });
+          return {
+            width: innerWidth,
+            items,
+            height: header.getBoundingClientRect().height,
+          };
+        });
+      for (const r of layout.items)
+        assert.ok(
+          r.left >= -1 && r.right <= width + 1,
+          JSON.stringify({ language, width, layout }),
+        );
+      for (let i = 0; i < layout.items.length; i++)
+        for (let j = i + 1; j < layout.items.length; j++) {
+          const a = layout.items[i],
+            b = layout.items[j];
+          assert.ok(
+            Math.min(a.right, b.right) - Math.max(a.left, b.left) <= 1 ||
+              Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) <= 1,
+            "header controls must not overlap",
+          );
+        }
+      if (width === 1440 || width === 390)
+        await page.screenshot({
+          path: join(output, `header-${language}-${width}.png`),
+        });
+      await page.locator(".prayer-chip").click();
+      const popover = await page.locator(".prayer-pop").boundingBox();
+      assert.ok(
+        popover.x >= 0 && popover.x + popover.width <= width,
+        "prayer times stay within the window",
+      );
+      await page.keyboard.press("Escape");
+      await page.locator(".prayer-pop").waitFor({ state: "detached" });
+    }
+    await page.setViewportSize({ width: 980, height: 840 });
+    await page.locator(".riwaq-destination").nth(1).click();
+    const row = page
+      .locator(".poster-row")
+      .filter({ has: page.locator('img[src*="last-train"]') })
+      .first();
+    await row.waitFor();
+    await row.scrollIntoViewIfNeeded();
+    await row.evaluate((el) => (el.scrollLeft = 0));
+    const box = await row.boundingBox();
+    const startX =
+      language === "ar" ? box.x + box.width * 0.35 : box.x + box.width * 0.65;
+    const endX = startX + (language === "ar" ? 230 : -230);
+    await page.mouse.move(startX, box.y + 70);
+    await page.mouse.down();
+    await page.mouse.move(endX, box.y + 70, { steps: 15 });
+    await page.mouse.up();
+    assert.ok(
+      Math.abs(await row.evaluate((el) => el.scrollLeft)) > 100,
+      "mouse drag scrolls RTL and LTR rails",
+    );
+    assert.equal(
+      await page.locator(".title-page").count(),
+      0,
+      "drag does not open the card",
+    );
+    assert.equal(
+      await row.evaluate((el) => el.classList.contains("is-dragging")),
+      false,
+    );
+    await page.setViewportSize({ width: 390, height: 840 });
+    await row.evaluate((el) => (el.scrollLeft = 0));
+    await row.locator(".poster-card").first().click({ button: "right" });
+    const quickBounds = await page.locator(".poster-actions").boundingBox();
+    assert.ok(quickBounds.x >= 0 && quickBounds.x + quickBounds.width <= 390);
+    assert.ok(quickBounds.y >= 0 && quickBounds.y + quickBounds.height <= 840);
+    assert.ok(
+      await page.locator(".poster-actions").evaluate((menu) =>
+        [...menu.querySelectorAll("button")].every((button) => {
+          const r = button.getBoundingClientRect();
+          return button.contains(
+            document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+          );
+        }),
+      ),
+      "every quick action is clickable above the web download pill",
+    );
+    assert.equal(
+      await page
+        .locator(".poster-actions")
+        .evaluate((el) => getComputedStyle(el).direction),
+      language === "ar" ? "rtl" : "ltr",
+    );
+    await page.screenshot({
+      path: join(output, `poster-actions-${language}.png`),
+    });
+    await page.keyboard.press("Escape");
+  }
+  await call("settings", { uiLanguage: "ar" });
+  await page.reload();
+  await page.waitForFunction(
+    () => document.querySelector(".app")?.lang === "ar",
+  );
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.locator(".riwaq-destination").nth(1).click();
+  step(
+    "unified header fits Arabic/English at four widths; mouse rails scroll without accidental navigation",
+  );
+
+  const quickPoster = page
+    .locator(".poster-card")
+    .filter({ has: page.locator('img[src*="last-train"]') })
+    .first();
+  await quickPoster.click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "أضف إلى مكتبتي", exact: true })
+    .click();
+  assert.ok(
+    (await call("init")).favorites.some((m) => m.id === "webfix:last-train"),
+  );
+  assert.equal(await page.locator(".title-page").count(), 0);
+  await quickPoster.focus();
+  await page.keyboard.press("Shift+F10");
+  assert.equal(
+    await page
+      .getByRole("menuitem", { name: "في مكتبتي", exact: true })
+      .isDisabled(),
+    true,
+  );
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.locator(".poster-actions").waitFor({ state: "detached" });
+  assert.ok(
+    (await call("init")).queue.some((q) => q.videoId === "webfix:last-train"),
+  );
+  await quickPoster.click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "أضف لمجموعة", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "مجموعة جديدة" })
+    .fill("Quick actions fixture");
+  await page.getByRole("button", { name: "إنشاء وإضافة", exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelector(".collection-create input")?.value === "",
+  );
+  const quickState = await call("init");
+  assert.ok(
+    quickState.collections.some(
+      (c) =>
+        c.title === "Quick actions fixture" &&
+        c.folders.some((f) =>
+          f.titles.some((m) => m.id === "webfix:last-train"),
+        ),
+    ),
+  );
+  await page.keyboard.press("Escape");
+  await quickPoster.click({ button: "right" });
+  await page.keyboard.press("Escape");
+  assert.equal(
+    await quickPoster.evaluate((el) => document.activeElement === el),
+    true,
+  );
+  await quickPoster.click({ button: "right" });
+  await page.locator(".riwaq-wordmark").click();
+  assert.equal(await page.locator(".poster-actions").count(), 0);
+  await page.locator(".riwaq-destination").nth(1).click();
+  step(
+    "poster mouse/keyboard actions save library, queue and collection without opening details; Escape restores focus",
+  );
+
   const catalogPicker = page.getByRole("combobox", {
     name: "كتالوج الإضافة",
     exact: true,
@@ -654,7 +842,14 @@ try {
     null,
     { timeout: 20000 },
   );
-  step("the stream plays in the theater's surface");
+  await call("settings", { rememberVolume: true });
+  await call("playerCommand", { action: "volume", value: 45 });
+  await page.waitForFunction(
+    async () => (await window.riwaq.call("init")).settings.lastVolume === 45,
+  );
+  step(
+    "the stream plays in the theater's surface and records actual volume changes",
+  );
   await page.getByTitle("سرعة التشغيل", { exact: true }).click();
   await page.getByRole("menuitemradio", { name: "1.5×", exact: true }).click();
   await page.waitForFunction(
@@ -725,6 +920,38 @@ try {
   const progress = (await call("init")).progress["movie:webfix:last-train"];
   assert.ok(progress?.position > 1, "progress is saved");
   step("pause and stop work, and the position is saved for resuming");
+
+  await page.reload();
+  await page.waitForSelector(".app");
+  assert.equal((await call("init")).settings.lastVolume, 45);
+  const replay = async () => {
+    const sources = await call("streams", {
+      type: "movie",
+      id: "webfix:last-train",
+    });
+    await call("play", {
+      key: sources.streams[0].key,
+      meta: { id: "webfix:last-train", type: "movie", name: "Volume fixture" },
+      videoId: "webfix:last-train",
+    });
+    await page.waitForSelector("video.riwaq-video");
+  };
+  await replay();
+  assert.equal(
+    await page.locator("video.riwaq-video").evaluate((v) => v.volume),
+    0.45,
+  );
+  await call("stop");
+  await call("settings", { rememberVolume: false });
+  await replay();
+  assert.equal(
+    await page.locator("video.riwaq-video").evaluate((v) => v.volume),
+    1,
+  );
+  await call("stop");
+  step(
+    "volume survives encrypted-store reload, and disabling memory restores 100% on the next video",
+  );
 
   // A backup made on the web opens with the desktop's own code.
   const [download] = await Promise.all([

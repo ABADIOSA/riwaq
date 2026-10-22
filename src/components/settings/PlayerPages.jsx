@@ -339,6 +339,12 @@ export function AudioPage({ state, update, act }) {
     <>
       <section className="settings-card">
         <h2>الصوت</h2>
+        <Toggle
+          on={s.rememberVolume === true}
+          title="حفظ مستوى الصوت الأخير"
+          text="يستعيد آخر مستوى صوت لهذا الملف الشخصي. عند التعطيل يبدأ كل فيديو على 100%. الويب يدعم حتى 100% فقط."
+          onChange={(rememberVolume) => set({ rememberVolume })}
+        />
         <p>
           يتغير الصوت فوراً أثناء المشاهدة، بفلاتر FFmpeg المدمجة في MPV نفسه.
         </p>

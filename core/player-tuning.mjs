@@ -207,8 +207,19 @@ export function parseAudioDevices(text) {
 const DOWNMIX = ["--audio-channels=stereo", "--audio-swresample-o=clev=1.0"];
 
 /** Start-up options for the sound. */
+export function initialVolume(settings = {}, ceiling = volumeMax(settings)) {
+  const value =
+    settings.rememberVolume === true && Number.isFinite(settings.lastVolume)
+      ? settings.lastVolume
+      : 100;
+  return Math.round(Math.max(0, Math.min(ceiling, value)));
+}
+
 export function audioArgs(settings = {}) {
-  const args = [`--volume-max=${volumeMax(settings)}`];
+  const args = [
+    `--volume-max=${volumeMax(settings)}`,
+    `--volume=${initialVolume(settings)}`,
+  ];
   const filters = audioFilters(settings);
   if (filters) args.push(`--af=${filters}`);
   if (settings.audioDownmix) args.push(...DOWNMIX);

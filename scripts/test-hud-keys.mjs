@@ -177,6 +177,19 @@ try {
     "- the volume slider keeps its arrows, the player every other key",
   );
 
+  await press("Home");
+  await page.waitForTimeout(80);
+  assert.equal(await slider.getAttribute("aria-valuenow"), "0");
+  await press("End");
+  await page.waitForTimeout(80);
+  assert.equal(await slider.getAttribute("aria-valuenow"), "150");
+  const spacing = await slider.evaluate((el) => {
+    const knob = el.querySelector(".volume-knob").getBoundingClientRect();
+    const value = el.nextElementSibling.getBoundingClientRect();
+    return Math.max(value.left - knob.right, knob.left - value.right);
+  });
+  assert.ok(spacing >= 8, "volume text has clearance from the knob at maximum");
+
   await wake();
   await page.getByTitle("سرعة التشغيل", { exact: true }).click();
   await page.waitForFunction(

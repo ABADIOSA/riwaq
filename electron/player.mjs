@@ -23,6 +23,7 @@ import {
 } from "../core/shaders.mjs";
 import {
   audioArgs,
+  initialVolume,
   bufferArgs,
   liveTuning,
   rtxFilters,
@@ -300,6 +301,7 @@ export class Player {
   constructor({
     onState,
     onProgress,
+    onVolume,
     onEnded,
     onEvent,
     host,
@@ -337,6 +339,7 @@ export class Player {
     this.externalSubs = new Map();
     this.onState = onState;
     this.onProgress = onProgress;
+    this.onVolume = onVolume;
     this.onEnded = onEnded;
     this.onEvent = onEvent || (() => {});
     this.state = { active: false };
@@ -439,7 +442,7 @@ export class Player {
       pause: false,
       // A built-in torrent's start (counts only), shown while loading.
       torrent: null,
-      volume: 100,
+      volume: initialVolume(settings),
       tracks: [],
       chapters: [],
       segments: [],
@@ -806,6 +809,8 @@ export class Player {
     if (event.event === "client-message" && typeof event.args?.[0] === "string")
       this.message(event.args[0], event.args[1]);
     if (event.event === "property-change") {
+      if (event.name === "volume" && Number.isFinite(event.data))
+        this.onVolume?.(event.data);
       if (event.name === "track-list") this.rawTracks = event.data || [];
       const mapping = PROPERTIES.find(([name]) => name === event.name);
       if (mapping && event.data === undefined && NULLABLE.has(event.name))
