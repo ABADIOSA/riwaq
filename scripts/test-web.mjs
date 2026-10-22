@@ -626,6 +626,15 @@ try {
     });
     await page.keyboard.press("Escape");
   }
+  // Reproduce slow encrypted persistence: the response must mean the new
+  // settings are durable, not just that in-memory state has changed.
+  await page.evaluate(() => {
+    const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+    crypto.subtle.encrypt = async (...args) => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return encrypt(...args);
+    };
+  });
   await call("settings", { uiLanguage: "ar" });
   await page.reload();
   await page.waitForFunction(

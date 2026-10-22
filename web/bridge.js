@@ -1024,6 +1024,9 @@ export async function startBridge({ version, store }) {
     settings: async (a) => {
       const state = client.settings(a, player?.state);
       player.applyCueStyle();
+      // A successful settings response must survive an immediate reload,
+      // including on browsers where encryption/IndexedDB writes are slower.
+      await store.settled();
       return state;
     },
     providerSave: (a) => client.dataHub.save(a),
