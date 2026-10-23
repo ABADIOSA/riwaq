@@ -787,6 +787,12 @@ try {
   assert.equal(await page.locator(".title-page").count(), 0);
   await quickPoster.focus();
   await page.keyboard.press("Shift+F10");
+  assert.equal(await page.locator(".poster-actions").count(), 0);
+  assert.equal(
+    await quickPoster.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("ContextMenu");
   assert.equal(
     await page
       .getByRole("menuitem", { name: "في مكتبتي", exact: true })

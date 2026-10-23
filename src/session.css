@@ -1,5 +1,4 @@
-/* A separate composition for Riwaq: a masthead, a session desk and a timeline.
-   The previous layouts remain available through interfaceStyle: classic. */
+/* The unified Riwaq shell: mirrored navigation, masthead and optional session. */
 .app.experience-riwaq {
   --session-gutter: clamp(24px, 3.8vw, 76px);
 }
