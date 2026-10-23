@@ -495,6 +495,53 @@ try {
   await page.reload();
   await page.waitForSelector(".app");
   assert.equal(await page.locator(".session-home").count(), 0);
+  const homeBeforeDividerCheck = (await call("init")).settings;
+  await call("settings", {
+    homeGrouping: "rows",
+    homeSections: ["catalogs"],
+    homeSeen: [
+      "hero",
+      "countdowns",
+      "continue",
+      "upnext",
+      "suggestions",
+      "collections",
+      "services",
+      "catalogs",
+      "taste",
+    ],
+  });
+  const firstHomeRail = page.locator(".without-session > .rail:first-child");
+  await page.reload();
+  await page.waitForSelector(".app");
+  await firstHomeRail.waitFor();
+  assert.deepEqual(
+    await firstHomeRail.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return [s.borderTopWidth, s.paddingTop, s.marginTop];
+    }),
+    ["0px", "0px", "0px"],
+    "hiding the session removes the orphan divider and spacing",
+  );
+  await call("settings", { showSession: true });
+  await page.reload();
+  await page.waitForSelector(".app");
+  assert.equal(
+    await page
+      .locator(".page-body > .rail")
+      .first()
+      .evaluate((el) => getComputedStyle(el).borderTopWidth),
+    "1px",
+    "normal row separators are retained",
+  );
+  await call("settings", {
+    showSession: false,
+    homeGrouping: homeBeforeDividerCheck.homeGrouping,
+    homeSections: homeBeforeDividerCheck.homeSections,
+    homeSeen: homeBeforeDividerCheck.homeSeen,
+  });
+  await page.reload();
+  await page.waitForSelector(".app");
   assert.equal(
     await page
       .locator('.riwaq-destinations [aria-current="page"]')
@@ -503,6 +550,48 @@ try {
     "الرئيسية",
   );
   await call("settings", { showSession: true });
+  await page.evaluate(() => {
+    document.activeElement?.blur();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "ن",
+        code: "KeyK",
+        ctrlKey: true,
+        bubbles: true,
+      }),
+    );
+  });
+  assert.equal(
+    await page
+      .locator(".search-box input")
+      .evaluate((el) => el === document.activeElement),
+    true,
+    "physical Ctrl+K focuses search with Arabic keyboard layout",
+  );
+  assert.equal(await page.locator(".hero").count(), 0);
+  await page.locator('.riwaq-sidebar [aria-label="الإعدادات"]').click();
+  const showcaseToggle = page.getByRole("button", {
+    name: "العرض الرئيسي",
+    exact: true,
+  });
+  await showcaseToggle.click();
+  await page.waitForFunction(
+    async () =>
+      (await window.riwaq.call("init")).settings.showShowcase === true,
+  );
+  await page.locator(".riwaq-wordmark").click();
+  await page.locator(".hero").waitFor();
+  await call("settings", { showShowcase: false });
+  await page.reload();
+  await page.waitForSelector(".app");
+  await call("settings", { showShowcase: true });
+  await page.reload();
+  await page.locator(".hero").waitFor();
+  assert.equal((await call("init")).settings.showShowcase, true);
+  await call("settings", { showShowcase: false });
+  await page.reload();
+  await page.waitForSelector(".app");
+  assert.equal(await page.locator(".hero").count(), 0);
   step("Home keeps its name when Today's session and its heading are hidden");
 
   // The catalog reaches the interface: open Discover and find a poster.
@@ -559,6 +648,44 @@ try {
         await page.screenshot({
           path: join(output, `header-${language}-${width}.png`),
         });
+      if (width > 760) {
+        const rail = await page.locator(".riwaq-sidebar").boundingBox();
+        assert.ok(
+          language === "ar" ? rail.x > width / 2 : rail.x < 1,
+          "sidebar follows language direction",
+        );
+        await page.locator(".riwaq-collapse").click();
+        await page.waitForFunction(() =>
+          document.querySelector(".app.sidebar-collapsed"),
+        );
+        assert.ok(
+          (await page.locator(".riwaq-sidebar").boundingBox()).width < 80,
+        );
+        assert.ok(
+          (await page.locator(".riwaq-sidebar [aria-label]").count()) >= 8,
+        );
+        await page.locator(".riwaq-collapse").click();
+        await page.waitForFunction(
+          () => !document.querySelector(".app.sidebar-collapsed"),
+        );
+      } else {
+        await page.locator(".riwaq-drawer-trigger").click();
+        await page.locator(".riwaq-nav-dialog[open]").waitFor();
+        assert.equal(
+          await page.evaluate(
+            () => !!document.activeElement?.closest(".riwaq-nav-dialog"),
+          ),
+          true,
+        );
+        await page.keyboard.press("Escape");
+        await page.locator(".riwaq-nav-dialog").waitFor({ state: "hidden" });
+        assert.equal(
+          await page.evaluate(() =>
+            document.activeElement?.classList.contains("riwaq-drawer-trigger"),
+          ),
+          true,
+        );
+      }
       await page.locator(".prayer-chip").click();
       const popover = await page.locator(".prayer-pop").boundingBox();
       assert.ok(
@@ -1039,7 +1166,7 @@ try {
       call: (method, args) =>
         tab.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]),
       openAccount: async () => {
-        await tab.click('button.riwaq-tool[aria-label="الإعدادات"]');
+        await tab.click('.riwaq-sidebar button[aria-label="الإعدادات"]');
         const advanced = tab.getByRole("button", {
           name: "إعدادات متقدمة",
           exact: true,

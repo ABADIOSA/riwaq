@@ -402,28 +402,6 @@ export default function AppearanceStudio({ state, update, part = "" }) {
       )}
 
       {show("interface") && (
-        <section className="settings-card">
-          <h2>تجربة رِواق</h2>
-          <div className="layout-choices">
-            {[
-              ["riwaq", "جلسة رِواق", "تنقل علوي وجلسة مشاهدة على وقتك"],
-              ["classic", "التخطيط السابق", "قائمة جانبية وواجهة كبيرة"],
-            ].map(([id, title, caption]) => (
-              <button
-                key={id}
-                className={
-                  (s.interfaceStyle || "riwaq") === id ? "selected" : ""
-                }
-                onClick={() => update("settings", { interfaceStyle: id })}
-              >
-                <b>{title}</b>
-                <small>{caption}</small>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-      {show("interface") && s.interfaceStyle === "classic" && (
         <section className="settings-card identity-picker">
           <h2>هوية الواجهة</h2>
           <p>
@@ -458,51 +436,26 @@ export default function AppearanceStudio({ state, update, part = "" }) {
       {show("interface") && (
         <section className="settings-card">
           <h2>الصفحات والتنقل</h2>
-          {s.interfaceStyle === "classic" && (
-            <>
-              <div className="layout-choices">
-                {[
-                  ["cinematic", "سينمائي", "عرض واسع وبداية غامرة"],
-                  ["sidebar", "كلاسيكي", "قائمة جانبية وبطاقة رئيسية"],
-                  ["topbar", "شريط علوي", "مساحة أكبر للحكايات"],
-                ].map(([value, title, caption]) => (
-                  <button
-                    className={s.layout === value ? "selected" : ""}
-                    key={value}
-                    onClick={() => update("settings", { layout: value })}
-                  >
-                    <span className={`layout-symbol ${value}`}>
-                      <i />
-                      <i />
-                      <i />
-                    </span>
-                    <b>{title}</b>
-                    <small>{caption}</small>
-                  </button>
-                ))}
-              </div>
-              <label className="studio-field">
-                العرض الرئيسي في الصفحة الرئيسية
-                {pick(
-                  "hero",
-                  [
-                    ["full", "كامل"],
-                    ["compact", "مختصر"],
-                    ["off", "مخفي"],
-                  ],
-                  s.showHero === false ? "off" : draft.heroStyle,
-                  (id) => {
-                    if (id === "off") update("settings", { showHero: false });
-                    else {
-                      if (s.showHero === false)
-                        update("settings", { showHero: true });
-                      change({ heroStyle: id });
-                    }
-                  },
-                )}
-              </label>
-            </>
-          )}
+          <label className="studio-field">
+            العرض الرئيسي في الصفحة الرئيسية
+            {pick(
+              "hero",
+              [
+                ["full", "كامل"],
+                ["compact", "مختصر"],
+                ["off", "مخفي"],
+              ],
+              s.showShowcase === false ? "off" : draft.heroStyle,
+              (id) => {
+                if (id === "off") update("settings", { showShowcase: false });
+                else {
+                  if (s.showShowcase === false)
+                    update("settings", { showShowcase: true });
+                  change({ heroStyle: id });
+                }
+              },
+            )}
+          </label>
 
           <div className="studio-field">
             اسم العمل في العرض الرئيسي وصفحة العمل
@@ -521,7 +474,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               إذا ما وُجد شعار يظهر الاسم مكتوباً.
             </small>
           </div>
-          {s.interfaceStyle === "classic" && (
+          {
             <div className="studio-field">
               تقليب العرض الرئيسي
               {pick(
@@ -537,7 +490,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
                 يتوقف حين يكون المؤشر فوقه، ولا يتقلب مع تقليل الحركة.
               </small>
             </div>
-          )}
+          }
 
           <div className="studio-field">
             عناصر القائمة

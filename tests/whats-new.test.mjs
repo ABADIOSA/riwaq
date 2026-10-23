@@ -126,6 +126,6 @@ test("settings search folds Arabic and wants every word", () => {
   assert.ok(!matchesWords(playback, "خطوة صلاة"));
   assert.ok(matchesWords(playback, "  "));
   const studio = source("src/components/SettingsStudio.jsx");
-  assert.equal((studio.match(/matchesWords\(/g) || []).length, 3);
+  assert.equal((studio.match(/matchesWords\(/g) || []).length, 2);
   assert.doesNotMatch(studio, /\.includes\(search\.toLowerCase\(\)\)/);
 });

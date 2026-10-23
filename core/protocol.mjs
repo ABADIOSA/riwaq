@@ -62,6 +62,8 @@ export const DEFAULT_SETTINGS = {
   autoplay: false,
   layout: "cinematic",
   interfaceStyle: "riwaq",
+  sidebarCollapsed: false,
+  showShowcase: false,
   sessionBudget: 90,
   sessionMood: "any",
   taste: cleanTaste({}),
@@ -439,7 +441,8 @@ export function continueWatching(progress) {
     .sort((a, b) => b.updated - a.updated);
 }
 export function safeSettings(input, current = DEFAULT_SETTINGS) {
-  const next = { ...current };
+  // Old backups/settings keep their preferences but use the supported shell.
+  const next = { ...current, interfaceStyle: "riwaq" };
   for (const k of [
     "hideCam",
     "hardwareDecoding",
@@ -478,6 +481,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "stremioBannerHidden",
     "quietInterface",
     "showSession",
+    "showShowcase",
+    "sidebarCollapsed",
     "skipOnline",
     "simpleColor",
     "rtxUpscale",
@@ -533,7 +538,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.serverUrl = webUrl(input.serverUrl).toString().replace(/\/$/, "");
   for (const [key, values] of Object.entries({
     layout: ["cinematic", "sidebar", "topbar"],
-    interfaceStyle: ["riwaq", "classic"],
+    interfaceStyle: ["riwaq"],
     settingsMode: ["simple", "advanced"],
     sessionBudget: [30, 60, 90, 120, 180],
     sessionMood: ["any", "light", "thrill", "wonder", "depth"],

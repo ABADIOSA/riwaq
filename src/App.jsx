@@ -523,7 +523,10 @@ export default function App() {
   ]);
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.code === "KeyK" || e.key.toLowerCase() === "k")
+      ) {
         e.preventDefault();
         searchRef.current?.focus();
       }
@@ -833,7 +836,7 @@ export default function App() {
   // The interface language (core/i18n.mjs): set before anything renders,
   // and the whole page is drawn again when it changes.
   const uiLanguage = useInterfaceLanguage(state.settings.uiLanguage);
-  const riwaqExperience = state.settings.interfaceStyle !== "classic";
+
   const barShown = win.frame !== "native" && !win.fullscreen;
   // The artwork glow follows what is on screen: an open title, else the hero.
   // Riwaq's interface shows no hero, so its glow rests on the open title
@@ -841,7 +844,7 @@ export default function App() {
   const ambientArt =
     appearance.ambient === "artwork"
       ? imgUrl(selected?.meta?.background) ||
-        (riwaqExperience ? "" : imgUrl(hero?.background))
+        (state.settings.showShowcase ? imgUrl(hero?.background) : "")
       : "";
   const searchControl = (
     <form
@@ -865,7 +868,6 @@ export default function App() {
         placeholder="ابحث عن فيلم أو مسلسل…"
         aria-label="البحث عن فيلم أو مسلسل"
       />
-      <kbd>Ctrl K</kbd>
     </form>
   );
   const quickActions = (
@@ -879,15 +881,6 @@ export default function App() {
         }}
       />
       <NotificationCenter />
-      <IconButton title="التنزيلات" onClick={() => setOfflineOpen(true)}>
-        <Download size={20} />
-      </IconButton>
-      <IconButton
-        title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
-        onClick={() => act("localVideo")}
-      >
-        <FolderOpen size={20} />
-      </IconButton>{" "}
     </>
   );
   return (
@@ -903,7 +896,7 @@ export default function App() {
         style={{
           ...themeVariables(appearance),
         }}
-        className={`app ${riwaqExperience ? "experience-riwaq" : "experience-classic"} ${themeClasses(appearance)} theme-${state.settings.accent} layout-${state.settings.layout || "cinematic"} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
+        className={`app experience-riwaq ${state.settings.sidebarCollapsed ? "sidebar-collapsed" : ""} ${themeClasses(appearance)} theme-${state.settings.accent} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
         onMouseDown={(e) => {
           if (
             !state.settings.dragAnywhere ||
@@ -939,141 +932,29 @@ export default function App() {
           items={shownRows.flatMap((r) => r.metas).concat(favorites)}
           blocked={player.active || welcomeOpen}
         />
-        {riwaqExperience ? (
-          <RiwaqNav
-            view={view}
-            navigate={navigate}
-            appearance={appearance}
-            profile={activeProfile}
-            user={state.user}
-            onProfiles={() => setProfilesOpen(true)}
-            quiet={!!state.settings.quietInterface}
-            onAccount={() => setAccount(true)}
-            isLocked={isLocked}
-            updateAvailable={state.update?.available}
-            search={searchControl}
-            actions={quickActions}
-          />
-        ) : (
-          <aside className="sidebar">
-            <div className="brand">
-              {appearance.logoStyle === "image" ? (
-                <img
-                  className="brand-image"
-                  src={appearance.logoImage}
-                  alt="رِواق"
-                />
-              ) : (
-                <>
-                  <span className="brand-mark">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                  <div className="brand-name">
-                    <b>رِواق</b>
-                    <small>RIWAQ</small>
-                  </div>
-                </>
-              )}
-            </div>
-            <span className="nav-label">مساحتك السينمائية</span>
-            <nav>
-              {[
-                [Home, "home", "الرئيسية"],
-                [Compass, "discover", "اكتشف"],
-                [Library, "library", "مكتبتي"],
-                [Folders, "collections", "المجموعات"],
-                [Music2, "music", "موسيقى"],
-                [Tv, "live", "بث مباشر"],
-                [Puzzle, "addons", "الإضافات"],
-              ]
-                .filter(
-                  ([, id]) => !appearance.navHidden.includes(id) || view === id,
-                )
-                .map(([Icon, id, label]) => (
-                  <button
-                    key={id}
-                    className={
-                      view === id || (view === "folder" && folderFrom === id)
-                        ? "nav-item active"
-                        : "nav-item"
-                    }
-                    onClick={() => navigate(id)}
-                  >
-                    <Icon size={20} />
-                    <span>{label}</span>
-                    {isLocked(id === "collections" ? "library" : id) && (
-                      <Lock size={13} className="nav-lock" />
-                    )}
-                    {id === "library" && favorites.length > 0 && (
-                      <small>{favorites.length}</small>
-                    )}
-                    {id === "addons" && <small>{state.addons.length}</small>}
-                    {id === "collections" && state.collections?.length > 0 && (
-                      <small>{state.collections.length}</small>
-                    )}
-                  </button>
-                ))}
-            </nav>
-            <div className="sidebar-note">
-              <span className="status-dot" /> إضافاتك. اختياراتك. تجربتك.
-              <p>متوافق مع إضافات ستريميو</p>
-            </div>
-            <div className="sidebar-bottom">
-              <button
-                className={view === "settings" ? "nav-item active" : "nav-item"}
-                onClick={() => navigate("settings")}
-              >
-                <Settings size={20} />
-                الإعدادات
-                {state.update?.available && (
-                  <small className="update-dot" title="يتوفر إصدار جديد">
-                    جديد
-                  </small>
-                )}
-              </button>
-              {!state.settings.quietInterface && (
-                <button
-                  className="profile-button"
-                  onClick={() => setProfilesOpen(true)}
-                  title="تبديل الملف الشخصي"
-                >
-                  <Users size={17} />
-                  <span>{activeProfile?.name || "المشاهد"}</span>
-                  {state.profiles?.list?.length > 1 && (
-                    <small>{state.profiles.list.length}</small>
-                  )}
-                </button>
-              )}
-              {!state.settings.quietInterface && (
-                <button
-                  className="account-button"
-                  onClick={() => setAccount(true)}
-                >
-                  <span className="avatar">
-                    {state.user ? (
-                      (state.user.name ||
-                        state.user.email ||
-                        "R")[0].toUpperCase()
-                    ) : (
-                      <LogIn size={19} />
-                    )}
-                  </span>
-                  <span>
-                    <b>{state.user?.name || "حساب ستريميو"}</b>
-                    <small>
-                      {state.user
-                        ? "متصل • الإضافات مستوردة"
-                        : "اربط حسابك وانقل إضافاتك"}
-                    </small>
-                  </span>
-                  <ChevronLeft size={16} />
-                </button>
-              )}
-            </div>
-          </aside>
-        )}
+        <RiwaqNav
+          view={view}
+          folderFrom={folderFrom}
+          navigate={navigate}
+          appearance={appearance}
+          profile={activeProfile}
+          user={state.user}
+          onProfiles={() => setProfilesOpen(true)}
+          quiet={!!state.settings.quietInterface}
+          onAccount={() => setAccount(true)}
+          isLocked={isLocked}
+          updateAvailable={state.update?.available}
+          search={searchControl}
+          actions={quickActions}
+          collapsed={!!state.settings.sidebarCollapsed}
+          onCollapse={() =>
+            update("settings", {
+              sidebarCollapsed: !state.settings.sidebarCollapsed,
+            })
+          }
+          onDownloads={() => setOfflineOpen(true)}
+          onLocalVideo={() => act("localVideo")}
+        />
         <main
           className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""}`}
         >
@@ -1112,15 +993,6 @@ export default function App() {
                 </button>
               </div>
             )}
-          {!riwaqExperience && (
-            <header className={`topbar ${scrolled ? "scrolled" : ""}`}>
-              <div className="topbar-title">
-                <span className="tiny-dot" /> تجربة مشاهدة، على ذوقك
-              </div>
-              {searchControl}
-              {quickActions}
-            </header>
-          )}
           {selected && (
             <Details
               key={`${selected.meta.type}:${selected.meta.id}`}
@@ -1143,9 +1015,7 @@ export default function App() {
           {["home", "discover", "search"].includes(view) && (
             <>
               {view === "home" &&
-                !riwaqExperience &&
-                state.settings.showHero !== false &&
-                homeSections.includes("hero") &&
+                state.settings.showShowcase === true &&
                 hero && (
                   <HomeHero
                     items={heroList}
@@ -1160,7 +1030,6 @@ export default function App() {
                   />
                 )}
               {view === "home" &&
-                riwaqExperience &&
                 ready &&
                 state.settings.showSession !== false && (
                   <SessionHome
@@ -1213,7 +1082,9 @@ export default function App() {
                     </button>
                   </div>
                 )}
-              <div className="page-body">
+              <div
+                className={`page-body ${view === "home" && state.settings.showSession === false ? "without-session" : ""}`}
+              >
                 {view !== "home" && (
                   <div className="page-heading">
                     <div>
@@ -1760,6 +1631,10 @@ export default function App() {
             state={state}
             notice={notice}
             onClose={() => setOfflineOpen(false)}
+            onLocalVideo={() => {
+              setOfflineOpen(false);
+              act("localVideo");
+            }}
           />
         )}
         {torrentSetup && (

@@ -166,9 +166,8 @@ test("main opens only re-checked music addresses, from the main window", () => {
   assert.match(handler, /if \(!url\) throw/);
   assert.match(source("electron/preload.cjs"), /"musicOpen"/);
   assert.doesNotMatch(source("core/hud.mjs"), /musicOpen/);
-  // The room is reachable in both interfaces and can be hidden.
+  // The room stays reachable in the unified shell and can be hidden.
   assert.ok(HIDEABLE_NAV.some(([id]) => id === "music"));
-  assert.match(source("src/App.jsx"), /\[Music2, "music", "موسيقى"\]/);
   assert.match(
     source("src/components/RiwaqNav.jsx"),
     /\[Music2, "music", "موسيقى"\]/,

@@ -1,5 +1,13 @@
 /** English for the appearance, services, account, updates and other settings pages (core/i18n.mjs). */
 export default {
+  "العرض الرئيسي": "Main showcase",
+  "اعرض اقتراحات بارزة أعلى الصفحة الرئيسية.":
+    "Show featured titles at the top of Home.",
+  "فتح التنقل": "Open navigation",
+  "إغلاق التنقل": "Close navigation",
+  "مساحات رِواق": "Riwaq spaces",
+  "طي القائمة": "Collapse sidebar",
+  "توسيع القائمة": "Expand sidebar",
   "استوديو المظهر": "Appearance studio",
   الافتراضي: "Default",
   ألوانك: "Your colours",

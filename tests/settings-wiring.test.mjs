@@ -92,13 +92,9 @@ test("look options from before Riwaq's interface work in it too", () => {
   const nav = read("src/components/RiwaqNav.jsx");
   assert.match(nav, /appearance\.logoStyle !== "name"/);
   assert.match(nav, /appearance\.logoStyle !== "mark"/);
-  // The hero exists only in the classic interface, so its home section and
-  // the hero glow are not offered in Riwaq's.
   const studio = read("src/components/SettingsStudio.jsx");
-  assert.match(
-    studio,
-    /const offered = \(id\) => !\(riwaqHome && id === "hero"\)/,
-  );
+  assert.match(studio, /const offered = \(id\) => id !== "hero"/);
   const app = read("src/App.jsx");
-  assert.match(app, /riwaqExperience \? "" : imgUrl\(hero\?\.background\)/);
+  assert.match(app, /state.settings.showShowcase === true/);
+  assert.doesNotMatch(app, /experience-classic|riwaqExperience/);
 });

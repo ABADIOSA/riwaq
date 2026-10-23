@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 // Actual Electron renderer and IPC; isolated profile and a local Stremio addon.
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -74,7 +75,8 @@ const child = spawn(
   [".", `--remote-debugging-port=${port}`],
   { env, windowsHide: false, stdio: "ignore" },
 );
-let socket,
+let browser,
+  socket,
   id = 0,
   evaluate,
   send;
@@ -139,12 +141,18 @@ try {
     evaluate(
       `window.riwaq.call(${JSON.stringify(method)},${JSON.stringify(args)})`,
     );
-  const click = (selector) =>
-    evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const { chromium } = createRequire(import.meta.url)(
+    process.env.RIWAQ_PLAYWRIGHT || "playwright",
+  );
+  browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+  const page = browser
+    .contexts()[0]
+    .pages()
+    .find((p) => p.url() === target.url);
+  assert.ok(page, "Playwright controls the main renderer, not the HUD");
+  const click = (selector) => page.locator(selector).first().click();
   const textClick = (text, selector = "button") =>
-    evaluate(
-      `[...document.querySelectorAll(${JSON.stringify(selector)})].find(b=>b.textContent.includes(${JSON.stringify(text)})).click()`,
-    );
+    page.locator(selector).filter({ hasText: text }).first().click();
   const screenshot = async (name) => {
     await pause(500);
     const r = await send("Page.captureScreenshot", { format: "png" });
@@ -156,6 +164,20 @@ try {
     "new navigation",
   );
   const initial = await call("init");
+  if (initial.onboarding.required) {
+    await wait(
+      () => evaluate("!!document.querySelector('dialog.first-run[open]')"),
+      "first-run dialog",
+    );
+    await textClick("الدخول مباشرة", "dialog.first-run button");
+    await wait(
+      async () =>
+        !(await call("init")).onboarding.required &&
+        !(await evaluate("!!document.querySelector('dialog.first-run[open]')")),
+      "first run skipped through UI",
+    );
+    assert.equal((await call("usageState")).enabled, false);
+  }
   await call("install", { url: base + "/manifest.json" });
   for (const addon of initial.addons)
     if (addon.enabled)
@@ -233,10 +255,12 @@ try {
       ),
     "mystery recommendation first",
   );
-  assert.ok(
-    await evaluate(
-      "document.querySelector('.taste-reason').textContent.includes('غموض')",
-    ),
+  await wait(
+    () =>
+      evaluate(
+        "document.querySelector('.taste-reason').textContent.includes('غموض')",
+      ),
+    "genre reason updates after preference save",
   );
   await textClick("إغلاق التخصيص", ".taste-customize");
   for (const [width, height] of [
@@ -337,6 +361,7 @@ try {
   );
   assert.ok((await call("init")).settings.taste.genres.includes("mystery"));
   await textClick("اضبط ذوقك", ".taste-customize");
+  await click(".taste-manage summary");
   await textClick("ابدأ ذوقي", ".taste-manage > button");
   await textClick("نعم، امسحها", ".taste-reset button");
   await wait(
@@ -388,19 +413,16 @@ try {
     "title opens",
   );
   await click(".riwaq-wordmark");
-  await click("[aria-label='مساحات وأدوات أخرى']");
-  assert.equal(
-    await evaluate("!!document.querySelector('#riwaq-tools')"),
-    true,
-  );
-  await send("Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key: "Escape",
-    code: "Escape",
-  });
+  await click(".riwaq-collapse");
   await wait(
-    () => evaluate("!document.querySelector('#riwaq-tools')"),
-    "tools escape",
+    () => evaluate("!!document.querySelector('.app.sidebar-collapsed')"),
+    "sidebar collapses",
+  );
+  assert.equal((await call("init")).settings.sidebarCollapsed, true);
+  await click(".riwaq-collapse");
+  await wait(
+    () => evaluate("!document.querySelector('.app.sidebar-collapsed')"),
+    "sidebar expands",
   );
   await click("[aria-label='الإعدادات']");
   await wait(
@@ -423,23 +445,20 @@ try {
     await evaluate("document.documentElement.scrollWidth<=innerWidth+1"),
     "small settings no overflow",
   );
+  const advancedSettings = page.getByRole("button", {
+    name: "إعدادات متقدمة",
+    exact: true,
+  });
+  if (await advancedSettings.isVisible()) await advancedSettings.click();
   await textClick("الواجهة", ".studio-index-pages button");
-  await textClick("التخطيط السابق", ".layout-choices button");
-  await wait(
-    () =>
-      evaluate(
-        "!!document.querySelector('.sidebar') && !document.querySelector('.riwaq-masthead')",
-      ),
-    "classic fallback",
+  assert.equal(
+    await evaluate(
+      "[...document.querySelectorAll('.layout-choices button')].some(b=>b.textContent.includes('التخطيط السابق'))",
+    ),
+    false,
   );
-  await textClick("جلسة رِواق", ".layout-choices button");
-  await wait(
-    () =>
-      evaluate(
-        "!!document.querySelector('.riwaq-masthead') && !document.querySelector('.sidebar')",
-      ),
-    "new interface restored",
-  );
+  await call("settings", { interfaceStyle: "classic" });
+  assert.equal((await call("init")).settings.interfaceStyle, "riwaq");
   await click(".riwaq-wordmark");
   await textClick("60", ".session-budgets button");
   await wait(
@@ -464,9 +483,9 @@ try {
       "replacement changes selection",
       "queue saves via real IPC",
       "title navigation",
-      "tools close with Escape",
+      "sidebar collapse and expand save through IPC",
       "settings reachable",
-      "classic fallback and new design switch",
+      "legacy shell normalizes to the supported sidebar",
       "budget persists after reload",
       "taste genre ranking, reasons, like, hide, undo, reset and reload persistence through IPC",
       "hidden taste titles excluded from generated sessions",
@@ -490,6 +509,7 @@ try {
 } finally {
   if (evaluate)
     await evaluate("setTimeout(()=>window.close(),50);true").catch(() => {});
+  await browser?.close().catch(() => {});
   socket?.close();
   server.closeAllConnections();
   server.close();

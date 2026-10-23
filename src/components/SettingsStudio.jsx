@@ -146,10 +146,8 @@ function HomeEditor({ state, update, notice }) {
       .catch(() => setPlan([]));
   }, [state.addons.map((a) => `${a.key}:${a.enabled}`).join("|")]);
   const visible = visibleHomeSections(s.homeSections, s.homeSeen);
-  // Riwaq's interface opens home with the session and has no big hero, so
-  // the hero is not offered there; it keeps its place for the classic one.
-  const riwaqHome = s.interfaceStyle !== "classic";
-  const offered = (id) => !(riwaqHome && id === "hero");
+  // Showcase visibility has its own switch, independent of section order.
+  const offered = (id) => id !== "hero";
   const shown = visible.filter(offered);
   const sections = [
     ...shown,
@@ -298,11 +296,7 @@ function HomeEditor({ state, update, notice }) {
       </section>
       <section className="settings-card">
         <h2>أقسام الرئيسية</h2>
-        <p>
-          رتّب الأقسام كما تحب، وأخفِ ما لا تحتاجه.
-          {riwaqHome &&
-            " في واجهة رِواق تبدأ الرئيسية بـ«جلسة اليوم»، والواجهة الكبيرة تظهر في التخطيط السابق فقط."}
-        </p>
+        <p>رتّب الأقسام كما تحب، وأخفِ ما لا تحتاجه.</p>
         <ol className="home-editor">
           {sections.map((id) => {
             const on = visible.includes(id);
@@ -905,132 +899,67 @@ export default function SettingsStudio({
         className="studio-layout"
         style={{ display: advanced ? undefined : "none" }}
       >
-        {state.settings.interfaceStyle !== "classic" ? (
-          <nav className="studio-index" aria-label="أقسام الإعدادات">
-            <label className="settings-search">
-              <Search size={17} />
-              <input
-                aria-label="البحث في الإعدادات"
-                placeholder="ما الذي تريد ضبطه؟"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-            <div className="studio-index-groups">
-              {GROUPS.map((group) => (
+        <nav className="studio-index" aria-label="أقسام الإعدادات">
+          <label className="settings-search">
+            <Search size={17} />
+            <input
+              aria-label="البحث في الإعدادات"
+              placeholder="ما الذي تريد ضبطه؟"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </label>
+          <div className="studio-index-groups">
+            {GROUPS.map((group) => (
+              <button
+                key={group.id}
+                className={
+                  group.pages.some(([id]) => id === tab) ? "selected" : ""
+                }
+                onClick={() => {
+                  setTab(group.pages[0][0]);
+                  setSearch("");
+                }}
+              >
+                <group.Icon size={21} />
+                <b>{group.title}</b>
+                <small>
+                  {arabicCount(group.pages.length, {
+                    one: "قسم واحد",
+                    two: "قسمان",
+                    few: "{n} أقسام",
+                    other: "{n} قسماً",
+                  })}
+                </small>
+              </button>
+            ))}
+          </div>
+          <div className="studio-index-pages">
+            {GROUPS.flatMap((group) => group.pages)
+              .filter(([id], i, list) =>
+                search
+                  ? matchesWords(pageWords(list[i]), search)
+                  : (
+                      GROUPS.find((g) => g.pages.some(([p]) => p === tab)) ||
+                      GROUPS[0]
+                    ).pages.some(([p]) => p === id),
+              )
+              .map(([id, title, , Icon]) => (
                 <button
-                  key={group.id}
-                  className={
-                    group.pages.some(([id]) => id === tab) ? "selected" : ""
-                  }
+                  key={id}
+                  className={tab === id ? "selected" : ""}
                   onClick={() => {
-                    setTab(group.pages[0][0]);
+                    setTab(id);
                     setSearch("");
                   }}
                 >
-                  <group.Icon size={21} />
-                  <b>{group.title}</b>
-                  <small>
-                    {arabicCount(group.pages.length, {
-                      one: "قسم واحد",
-                      two: "قسمان",
-                      few: "{n} أقسام",
-                      other: "{n} قسماً",
-                    })}
-                  </small>
+                  <Icon size={15} />
+                  {title}
                 </button>
               ))}
-            </div>
-            <div className="studio-index-pages">
-              {GROUPS.flatMap((group) => group.pages)
-                .filter(([id], i, list) =>
-                  search
-                    ? matchesWords(pageWords(list[i]), search)
-                    : (
-                        GROUPS.find((g) => g.pages.some(([p]) => p === tab)) ||
-                        GROUPS[0]
-                      ).pages.some(([p]) => p === id),
-                )
-                .map(([id, title, , Icon]) => (
-                  <button
-                    key={id}
-                    className={tab === id ? "selected" : ""}
-                    onClick={() => {
-                      setTab(id);
-                      setSearch("");
-                    }}
-                  >
-                    <Icon size={15} />
-                    {title}
-                  </button>
-                ))}
-            </div>
-          </nav>
-        ) : (
-          <aside className="studio-nav">
-            <label className="settings-search">
-              <Search size={17} />
-              <input
-                aria-label="البحث في الإعدادات"
-                placeholder="ابحث في الإعدادات…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-            {GROUPS.map((group) => {
-              const pages = group.pages.filter(
-                (page) => !search || matchesWords(pageWords(page), search),
-              );
-              if (!pages.length) return null;
-              const expanded = !!search || open.has(group.id);
-              const holdsTab = group.pages.some(([id]) => id === tab);
-              return (
-                <div
-                  key={group.id}
-                  className={`settings-group ${expanded ? "open" : ""}`}
-                >
-                  <button
-                    className={`settings-group-head ${holdsTab ? "holds" : ""}`}
-                    aria-expanded={expanded}
-                    onClick={() =>
-                      setOpen((was) => {
-                        const next = new Set(was);
-                        next.has(group.id)
-                          ? next.delete(group.id)
-                          : next.add(group.id);
-                        return next;
-                      })
-                    }
-                  >
-                    <group.Icon size={18} />
-                    <b>{group.title}</b>
-                    <ChevronLeft size={15} className="settings-chevron" />
-                  </button>
-                  {expanded &&
-                    pages.map(([id, title, , Icon]) => (
-                      <button
-                        key={id}
-                        className={`settings-page ${id === tab && !search ? "selected" : ""}`}
-                        onClick={() => {
-                          setTab(id);
-                          setSearch("");
-                          setOpen((was) => new Set([...was, group.id]));
-                        }}
-                      >
-                        <Icon size={17} />
-                        {title}
-                      </button>
-                    ))}
-                </div>
-              );
-            })}
-            <div className="privacy-note">
-              <ShieldCheck size={20} />
-              <b>مفاتيحك تبقى لك</b>
-              <p>يحفظ ويندوز مفاتيح الخدمات والجلسات مشفرة على جهازك.</p>
-            </div>
-          </aside>
-        )}
+          </div>
+        </nav>
+
         <div className="studio-content">
           {visible.length === 0 && (
             <div className="settings-card settings-empty">
@@ -1144,6 +1073,11 @@ export default function SettingsStudio({
                   <UsageSettings notice={notice} />
                   <section className="settings-card">
                     <h2>السلوك</h2>
+                    {toggle(
+                      "showShowcase",
+                      "العرض الرئيسي",
+                      "اعرض اقتراحات بارزة أعلى الصفحة الرئيسية.",
+                    )}
                     {toggle(
                       "showSession",
                       "إظهار جلسة اليوم",

@@ -92,6 +92,20 @@ export default function QuickSettings({
         </div>
         <div className="setting-row">
           <div>
+            <b>العرض الرئيسي</b>
+            <p>اعرض اقتراحات بارزة أعلى الصفحة الرئيسية.</p>
+          </div>
+          <button
+            className={`toggle ${s.showShowcase ? "on" : ""}`}
+            aria-label="العرض الرئيسي"
+            aria-pressed={!!s.showShowcase}
+            onClick={() => save("showShowcase", !s.showShowcase)}
+          >
+            <span />
+          </button>
+        </div>
+        <div className="setting-row">
+          <div>
             <b>إظهار جلسة اليوم</b>
             <p>عند إخفائها تبدأ الرئيسية مباشرة بصفوف الأفلام والمسلسلات.</p>
           </div>
