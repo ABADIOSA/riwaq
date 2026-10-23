@@ -1,5 +1,4 @@
-/* A separate composition for Riwaq: a masthead, a session desk and a timeline.
-   The previous layouts remain available through interfaceStyle: classic. */
+/* The unified Riwaq shell: mirrored navigation, masthead and optional session. */
 .app.experience-riwaq {
   --session-gutter: clamp(24px, 3.8vw, 76px);
 }
@@ -59,6 +58,12 @@
   border-top: 1px solid var(--line);
   padding-top: 24px;
   margin-top: 28px;
+}
+/* No orphan separator where the hidden session used to meet the first row. */
+.app.experience-riwaq .without-session > .rail:first-child {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
 }
 .riwaq-masthead {
   position: fixed;
@@ -875,68 +880,223 @@
   animation: none;
 }
 
-/* Shared navigation/search/action band, mirrored by the document direction. */
-.app.experience-riwaq .riwaq-masthead > .search-box {
-  width: min(100%, 390px);
+/* One navigation shell: logical edges follow Arabic and English. */
+.app.experience-riwaq {
+  --session-gutter: clamp(16px, 2vw, 32px);
+  --nav-width: 212px;
+  --masthead-height: 68px;
+  --window-offset: 0px;
+}
+.app.experience-riwaq.chrome-bar {
+  --window-offset: 36px;
+}
+.app.experience-riwaq.sidebar-collapsed {
+  --nav-width: 68px;
+}
+.app.experience-riwaq .content {
+  margin: 0;
+  margin-inline-start: var(--nav-width);
+  padding-top: calc(var(--masthead-height) + var(--window-offset));
+}
+.app.experience-riwaq .riwaq-masthead {
+  top: var(--window-offset);
+  height: var(--masthead-height);
+  grid-template-columns: minmax(110px, 1fr) minmax(160px, 520px) minmax(
+      110px,
+      1fr
+    );
+  padding-inline: 20px;
+  gap: 16px;
+}
+.riwaq-masthead > .search-box {
+  width: 100%;
   min-width: 0;
   margin: 0;
-  justify-self: center;
 }
 .riwaq-masthead .search-box input {
   min-width: 0;
 }
 .riwaq-masthead .riwaq-utilities {
-  gap: 4px;
+  justify-self: end;
+  gap: 8px;
 }
 .riwaq-masthead .prayer-chip small {
   display: none;
 }
-.riwaq-masthead .riwaq-tools-panel {
-  max-width: calc(100vw - 32px);
+.riwaq-masthead .riwaq-wordmark b {
+  font-size: 25px;
 }
-@media (max-width: 1100px) {
-  .riwaq-masthead {
-    padding-inline: 20px;
-    gap: 12px;
-  }
-  .riwaq-wordmark b {
-    font-size: 26px;
-  }
-  .riwaq-wordmark b > span {
-    display: none;
-  }
-  .riwaq-wordmark {
-    min-width: 80px;
-    gap: 8px;
-  }
-  .riwaq-masthead .search-box kbd {
-    display: none;
-  }
-  .riwaq-masthead .prayer-chip b {
-    display: none;
-  }
+.riwaq-masthead .riwaq-wordmark b > span {
+  display: none;
 }
-@media (max-width: 900px) {
-  .riwaq-masthead {
-    grid-template-columns: auto 1fr auto;
-    height: 122px;
-    padding-block: 8px;
-    row-gap: 8px;
+.riwaq-sidebar {
+  position: fixed;
+  inset-inline-start: 0;
+  top: calc(var(--masthead-height) + var(--window-offset));
+  bottom: 0;
+  width: var(--nav-width);
+  z-index: 36;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  background: var(--bg);
+  border-inline-end: 1px solid var(--line);
+}
+.riwaq-sidebar .riwaq-destinations {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  height: auto;
+  min-height: 44px;
+  overflow-y: auto;
+  flex: 1;
+}
+.riwaq-sidebar .riwaq-destination {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  text-align: start;
+  flex-shrink: 0;
+  color: var(--text);
+}
+.riwaq-sidebar .riwaq-destination svg {
+  flex-shrink: 0;
+}
+.riwaq-sidebar .riwaq-destination > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.riwaq-sidebar .riwaq-destination.selected {
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+.riwaq-sidebar .riwaq-destination.selected::after {
+  display: none;
+}
+.riwaq-sidebar .riwaq-destination.selected::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  position: absolute;
+  inset-inline-start: 3px;
+}
+.riwaq-destination:focus-visible,
+.riwaq-drawer-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.riwaq-sidebar .riwaq-destination:hover {
+  background: var(--accent-soft);
+}
+.riwaq-sidebar .nav-lock {
+  margin-inline-start: auto;
+}
+.riwaq-nav-extra {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.riwaq-sidebar-bottom {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.riwaq-sidebar-update {
+  display: block;
+  font-size: 11px;
+  color: var(--accent);
+  padding-inline: 12px;
+}
+.riwaq-sidebar.is-collapsed .riwaq-destination > span,
+.riwaq-sidebar.is-collapsed .nav-lock,
+.riwaq-sidebar.is-collapsed .riwaq-sidebar-update {
+  display: none;
+}
+.riwaq-sidebar.is-collapsed .riwaq-destination {
+  justify-content: center;
+  padding-inline: 8px;
+}
+.riwaq-drawer-trigger {
+  display: none;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+}
+.riwaq-nav-dialog {
+  padding: 0;
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: var(--bg);
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  width: 280px;
+  height: 600px;
+  margin-block: 12px;
+  margin-inline-start: 12px;
+}
+.riwaq-nav-dialog::backdrop {
+  background: #0009;
+}
+.riwaq-nav-dialog .riwaq-sidebar {
+  position: static;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+@media (max-width: 760px) {
+  .app.experience-riwaq {
+    --nav-width: 0px;
+    --masthead-height: 116px;
   }
-  .riwaq-destinations {
-    justify-content: center;
-    min-height: 44px;
+  .app.experience-riwaq.sidebar-collapsed {
+    --nav-width: 0px;
+  }
+  .app.experience-riwaq .riwaq-masthead {
+    grid-template-columns: 44px auto 1fr;
+    grid-template-rows: 44px 44px;
+    gap: 6px 8px;
+    padding: 8px 12px;
+  }
+  .riwaq-drawer-trigger {
+    display: flex;
+  }
+  .riwaq-masthead .riwaq-wordmark {
+    min-width: 70px;
+  }
+  .riwaq-masthead .riwaq-monogram {
+    display: none;
   }
   .app.experience-riwaq .riwaq-masthead > .search-box {
     grid-row: 2;
     grid-column: 1 / -1;
     width: 100%;
   }
-  .app.experience-riwaq .content {
-    padding-top: 122px;
+  .riwaq-masthead .riwaq-utilities {
+    grid-column: 3;
+    grid-row: 1;
+    gap: 2px;
   }
-  .app.experience-riwaq.chrome-bar .content {
-    padding-top: 158px;
+  .riwaq-masthead .prayer-chip span,
+  .riwaq-masthead .prayer-chip b {
+    display: none;
+  }
+  .riwaq-masthead .prayer-pop {
+    position: fixed;
+    top: calc(60px + var(--window-offset));
+    inset-inline-end: 12px;
+    max-width: calc(100vw - 24px);
   }
 }
 @media (max-width: 600px) {
@@ -952,54 +1112,8 @@
     font-size: 36px;
     line-height: 1.3;
   }
-  .riwaq-masthead .prayer-pop {
-    position: fixed;
-    top: 60px;
-    inset-inline-end: 12px;
-    max-width: calc(100vw - 24px);
-  }
-  .chrome-bar .riwaq-masthead .prayer-pop {
-    top: 96px;
-  }
-  .riwaq-masthead {
-    grid-template-columns: auto 1fr;
-    height: 164px;
-    padding-inline: 12px;
-  }
-  .riwaq-utilities {
-    justify-self: end;
-    grid-column: 2;
-    grid-row: 1;
-  }
-  .riwaq-destinations {
-    grid-row: 2;
-    grid-column: 1 / -1;
-  }
-  .app.experience-riwaq .riwaq-masthead > .search-box {
-    grid-row: 3;
-  }
-  .riwaq-masthead .prayer-chip span {
-    display: none;
-  }
-  .riwaq-masthead .riwaq-utilities {
-    gap: 0;
-  }
-  .riwaq-masthead .riwaq-utilities button {
-    padding-inline: 7px;
-  }
-  .riwaq-wordmark {
-    min-width: 65px;
-  }
-  .riwaq-monogram {
-    display: none;
-  }
-  .app.experience-riwaq .content {
-    padding-top: 164px;
-  }
-  .app.experience-riwaq.chrome-bar .content {
-    padding-top: 200px;
-  }
 }
+
 .poster-actions {
   position: fixed;
   z-index: 500;

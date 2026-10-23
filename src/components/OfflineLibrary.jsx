@@ -11,7 +11,12 @@ const LABELS = {
   interrupted: "توقف عند إغلاق التطبيق",
   error: "تعذر التنزيل؛ جرّب مصدرًا آخر",
 };
-export default function OfflineLibrary({ state, onClose, notice }) {
+export default function OfflineLibrary({
+  state,
+  onClose,
+  notice,
+  onLocalVideo,
+}) {
   const profileId = state.profiles?.active;
   const [items, setItems] = useState([]),
     [busy, setBusy] = useState(false);
@@ -46,6 +51,11 @@ export default function OfflineLibrary({ state, onClose, notice }) {
   return (
     <Modal className="offline-library" onClose={onClose}>
       <h2>التنزيلات</h2>
+      {!isWeb && (
+        <button className="secondary" onClick={onLocalVideo}>
+          فتح ملف فيديو (أو اسحبه إلى النافذة)
+        </button>
+      )}
       <p>
         نزّل مباشرة من قائمة المصادر أو أثناء المشاهدة. يستمر التنزيل بعد إغلاق
         المشغل؛ عند إغلاق التطبيق يتوقف ويمكن استئنافه من هنا. إذا لم يدعم

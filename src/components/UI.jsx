@@ -96,10 +96,13 @@ export const Poster = memo(function Poster({ meta, onOpen, progress }) {
         openActions ? (e) => openActions(e, meta, progress?.videoId) : undefined
       }
       onKeyDown={(e) => {
-        if (
-          openActions &&
-          (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))
-        )
+        // Retire Shift+F10 as requested, including Chromium's native
+        // contextmenu default. The dedicated Menu key remains accessible.
+        if (openActions && e.shiftKey && e.key === "F10") {
+          e.preventDefault();
+          return;
+        }
+        if (openActions && e.key === "ContextMenu")
           openActions(e, meta, progress?.videoId);
       }}
       aria-haspopup={openActions ? "menu" : undefined}

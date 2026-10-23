@@ -210,7 +210,8 @@ function fixture(metas) {
   });
 }
 
-test("the overview loads followed series and skips the ones that fail", async () => {
+test("the overview loads followed series and skips the ones that fail", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: NOW });
   const good = show("tt5");
   const c = fixture({ tt5: good });
   c.favorite({ id: "tt5", type: "series", name: "مسلسل" });
