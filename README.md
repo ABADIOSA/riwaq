@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.1"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
+  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.50.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-15191e">
   <a href="https://abadiosa.github.io/riwaq/"><img alt="Web" src="https://img.shields.io/badge/web-abadiosa.github.io%2Friwaq-15191e"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-15191e"></a>
@@ -30,16 +30,19 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.49.1-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.49.1-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.50.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.50.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.1)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
+الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.50.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.49.1 · تجريبي
+### الجديد في 0.50.0 · تجريبي
 
-- نسخة ويندوز تعرّف TheIntroDB باسم رِواق ورقم إصداره، لمساعدة مزوّد الخدمة على متابعة التوافق والتواصل قبل التغييرات.
-- ترويسة التعريف تحمل اسم التطبيق وإصداره فقط؛ تفعيل تخطي المقدمات ومفاتيحك وخيارات الخصوصية تبقى كما اخترتها.
+- زر أيمن على البوستر أو Shift+F10 للإضافة مباشرة إلى المكتبة والمجموعات وطابور المشاهدة، دون فتح التفاصيل.
+- اسحب صفوف البوسترات بالفأرة للتصفح، مع استمرار دعم الأسهم واللمس.
+- شريط علوي موحد للبحث والتنقل والأدوات، مع أيقونة الرئيسية وتحسين النوافذ الصغيرة.
+- خيار حفظ آخر مستوى صوت لكل ملف شخصي من إعدادات المشاهدة ← الصوت، مع فصل أوضح لمؤشر النسبة.
+- إصلاح فقدان ضغطة الاستئناف السريعة بـ Space، وإغلاق قائمة البوستر أثناء تحديث الصفحة، وحفظ إعدادات الويب قبل إعادة التحميل.
 
 الإصدارات السابقة في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -106,16 +109,19 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.49.1-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.49.1-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.50.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.50.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.49.1), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
+Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.50.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.49.1 · Beta
+### What's new in 0.50.0 · Beta
 
-- The Windows app identifies itself and its version to TheIntroDB, helping the provider track compatibility and contact maintainers before changes.
-- The identifying header contains only the app name and version; intro-skipping consent, saved keys and privacy choices remain unchanged.
+- Right-click a poster or press Shift+F10 to add directly to your library, collections or watching queue without opening details.
+- Drag poster rows with your mouse while keeping arrow and touch navigation.
+- Unified search, navigation and tools in one top bar, with a Home icon and improved compact layouts.
+- Optionally remember each profile's last volume in Watching > Audio, with clearer spacing around the volume readout.
+- Fix a lost quick Space resume tap, poster menus closing during background updates, and web settings reverting on immediate reload.
 
 Earlier releases are in the [changelog](docs/CHANGELOG.md).
 
