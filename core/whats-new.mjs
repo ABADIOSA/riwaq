@@ -7,6 +7,27 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.50.0",
+    title: "تصفح أسرع وتحكم أوضح",
+    items: [
+      "زر أيمن على البوستر أو Shift+F10 للإضافة مباشرة إلى المكتبة والمجموعات وطابور المشاهدة، دون فتح التفاصيل.",
+      "اسحب صفوف البوسترات بالفأرة للتصفح، مع استمرار دعم الأسهم واللمس.",
+      "شريط علوي موحد للبحث والتنقل والأدوات، مع أيقونة الرئيسية وتحسين النوافذ الصغيرة.",
+      "خيار حفظ آخر مستوى صوت لكل ملف شخصي من إعدادات المشاهدة ← الصوت، مع فصل أوضح لمؤشر النسبة.",
+      "إصلاح فقدان ضغطة الاستئناف السريعة بـ Space، وإغلاق قائمة البوستر أثناء تحديث الصفحة، وحفظ إعدادات الويب قبل إعادة التحميل.",
+    ],
+    en: {
+      title: "Faster browsing and clearer controls",
+      items: [
+        "Right-click a poster or press Shift+F10 to add directly to your library, collections or watching queue without opening details.",
+        "Drag poster rows with your mouse while keeping arrow and touch navigation.",
+        "Unified search, navigation and tools in one top bar, with a Home icon and improved compact layouts.",
+        "Optionally remember each profile's last volume in Watching > Audio, with clearer spacing around the volume readout.",
+        "Fix a lost quick Space resume tap, poster menus closing during background updates, and web settings reverting on immediate reload.",
+      ],
+    },
+  },
+  {
     version: "0.49.1",
     title: "تعريف إصدار رِواق لدى TheIntroDB",
     items: [
