@@ -41,8 +41,6 @@ export default function PosterActions({
       anchor,
       x: event.clientX || rect.left,
       y: event.clientY || rect.top,
-      scrollX: window.scrollX,
-      scrollY: window.scrollY,
     });
   }, []);
   const close = (focus = false) => {
@@ -75,15 +73,6 @@ export default function PosterActions({
       if (!panel.current?.contains(event.target)) close();
     };
     const dismiss = (event) => {
-      // Focusing/scrolling a poster can leave a queued scroll event from before
-      // the menu opened. Only a subsequent movement should dismiss it.
-      if (
-        event.type === "scroll" &&
-        event.target === document &&
-        window.scrollX === menu.scrollX &&
-        window.scrollY === menu.scrollY
-      )
-        return;
       if (!panel.current?.contains(event.target)) close();
     };
     const key = (event) => {
@@ -94,12 +83,16 @@ export default function PosterActions({
       } else if (event.key === "Tab") close(true);
     };
     window.addEventListener("pointerdown", outside);
-    window.addEventListener("scroll", dismiss, true);
+    // Catalog hydration, scroll anchoring and focus can dispatch scroll after
+    // opening. Dismiss on viewer scrolling instead, not background layout work.
+    window.addEventListener("wheel", dismiss, { passive: true });
+    window.addEventListener("touchmove", dismiss, { passive: true });
     window.addEventListener("resize", dismiss);
     window.addEventListener("keydown", key, true);
     return () => {
       window.removeEventListener("pointerdown", outside);
-      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("wheel", dismiss);
+      window.removeEventListener("touchmove", dismiss);
       window.removeEventListener("resize", dismiss);
       window.removeEventListener("keydown", key, true);
     };

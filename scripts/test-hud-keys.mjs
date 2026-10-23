@@ -177,6 +177,25 @@ try {
     "- the volume slider keeps its arrows, the player every other key",
   );
 
+  // A delayed pause notification may arrive during the next resume keypress.
+  await page.evaluate(() => (window.__calls.length = 0));
+  await page.keyboard.down("Space");
+  await page.evaluate(() => {
+    window.__player = { ...window.__player, pause: true };
+    window.__emit("player", window.__player);
+  });
+  await page.waitForTimeout(400);
+  await page.keyboard.up("Space");
+  assert.deepEqual(
+    await sent(),
+    ["key:SPACE"],
+    "late pause preserves resume tap without acceleration",
+  );
+  await page.evaluate(() => {
+    window.__player = { ...window.__player, pause: false };
+    window.__emit("player", window.__player);
+  });
+
   await press("Home");
   await page.waitForTimeout(80);
   assert.equal(await slider.getAttribute("aria-valuenow"), "0");

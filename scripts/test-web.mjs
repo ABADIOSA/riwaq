@@ -673,6 +673,8 @@ try {
     (await call("init")).queue.some((q) => q.videoId === "webfix:last-train"),
   );
   await quickPoster.click({ button: "right" });
+  // Background layout/scroll anchoring must not dismiss an open menu.
+  await page.evaluate(() => window.scrollBy(0, 12));
   await page
     .getByRole("menuitem", { name: "أضف لمجموعة", exact: true })
     .click();
@@ -700,6 +702,10 @@ try {
     await quickPoster.evaluate((el) => document.activeElement === el),
     true,
   );
+  await quickPoster.click({ button: "right" });
+  await page.mouse.move(12, 200);
+  await page.mouse.wheel(0, 120);
+  await page.locator(".poster-actions").waitFor({ state: "detached" });
   await quickPoster.click({ button: "right" });
   await page.locator(".riwaq-wordmark").click();
   assert.equal(await page.locator(".poster-actions").count(), 0);

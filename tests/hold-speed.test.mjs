@@ -71,3 +71,22 @@ test("disabled hold (live or paused) remains one short-press action without chan
   gesture.up();
   assert.deepEqual(calls, ["tap"]);
 });
+
+test("a late pause preserves a pending resume tap but cancels speed acceleration", () => {
+  const { gesture, calls, run } = fixture();
+  gesture.down();
+  gesture.pause();
+  run();
+  gesture.up();
+  assert.deepEqual(calls, ["tap"]);
+  gesture.down({ previous: 1.5 });
+  run();
+  gesture.pause();
+  gesture.up();
+  assert.deepEqual(calls, ["tap", 2, 1.5]);
+  gesture.down();
+  gesture.pause();
+  gesture.cancel(false);
+  gesture.up();
+  assert.deepEqual(calls, ["tap", 2, 1.5]);
+});

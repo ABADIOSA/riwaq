@@ -54,7 +54,8 @@ export function useSpaceHold({
     gesture.current.cancel(false);
   }, [player.videoId, player.active]);
   useEffect(() => {
-    if (!enabled || player.pause) gesture.current.cancel();
+    if (!enabled) gesture.current.cancel();
+    else if (player.pause) gesture.current.pause();
   }, [enabled, player.pause]);
   return {
     holding,
