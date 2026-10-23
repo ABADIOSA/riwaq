@@ -1,23 +1,23 @@
-## رِواق 0.50.0 · تجريبي / Beta
+## رِواق 0.51.0 · تجريبي / Beta
 
-- زر أيمن على البوستر أو Shift+F10 للإضافة مباشرة إلى المكتبة والمجموعات وطابور المشاهدة، دون فتح التفاصيل.
-- اسحب صفوف البوسترات بالفأرة للتصفح، مع استمرار دعم الأسهم واللمس.
-- شريط علوي موحد للبحث والتنقل والأدوات، مع أيقونة الرئيسية وتحسين النوافذ الصغيرة.
-- خيار حفظ آخر مستوى صوت لكل ملف شخصي من إعدادات المشاهدة ← الصوت، مع فصل أوضح لمؤشر النسبة.
-- إصلاح فقدان ضغطة الاستئناف السريعة بـ Space، وإغلاق قائمة البوستر أثناء تحديث الصفحة، وحفظ إعدادات الويب قبل إعادة التحميل.
+- قائمة جانبية قابلة للطي: الرئيسية واكتشف والمكتبة والمجموعات والتنزيلات والإضافات، يمينًا للعربية ويسارًا للإنجليزية.
+- شريط علوي أبسط للبحث والصلاة والإشعارات، مع قائمة حوارية للنوافذ الضيقة وهوامش أقل للمحتوى.
+- خيار مستقل للعرض الرئيسي فوق خيار جلسة اليوم؛ فعّله من الإعدادات، مع حفظ اختيارك لكل ملف شخصي.
+- إخفاء جلسة اليوم يزيل الفاصل والفراغ المتبقيين؛ فتح ملف الفيديو متاح من التنزيلات والقائمة الثانوية.
+- إزالة اختصار Shift+F10 لقائمة البوستر؛ الزر الأيمن ومفتاح القائمة المخصص يعملان، والبحث بـCtrl+K يدعم لوحة المفاتيح العربية.
 
 ### English
 
-- Right-click a poster or press Shift+F10 to add directly to your library, collections or watching queue without opening details.
-- Drag poster rows with your mouse while keeping arrow and touch navigation.
-- Unified search, navigation and tools in one top bar, with a Home icon and improved compact layouts.
-- Optionally remember each profile's last volume in Watching > Audio, with clearer spacing around the volume readout.
-- Fix a lost quick Space resume tap, poster menus closing during background updates, and web settings reverting on immediate reload.
+- A collapsible sidebar for Home, Discover, Library, Collections, Downloads and Addons: right in Arabic and left in English.
+- A simpler search, prayer and notification header, with a modal navigation drawer for compact windows and smaller content margins.
+- An independent Main showcase switch above Today's session. Enable it in Settings and keep your choice per profile.
+- Hiding Today's session removes its orphan divider and spacing. Open local video from Downloads or the secondary navigation.
+- Shift+F10 no longer opens poster actions; right-click and the dedicated Menu key work. Ctrl+K search now supports Arabic keyboard layouts.
 
-التطبيق مجاني بالكامل. حفظ الصوت اختياري ومعطل افتراضياً. لا تغيير للموافقة على مشاركة الاستخدام أو تشفير الحسابات.
+العرض الرئيسي معطل افتراضيًا؛ تخصيص البطاقات والألوان مستقل عن تخطيط التنقل الموحد. التطبيق مجاني بالكامل، ولا تغيير للتشفير أو موافقة مشاركة الاستخدام. يتضمن #108؛ تفاصيل مطابقة الاقتراحات وحدود التنفيذ في docs/USER-FIXES-2026-10-23.md.
 
-Free to use. Volume memory is optional and off by default. Usage-sharing consent and account encryption are unchanged.
+Main showcase is off by default. Card and color customization remain independent of the unified navigation shell. The app remains free, with encryption and usage-sharing consent unchanged. Includes #108; request coverage and limits are recorded in docs/USER-FIXES-2026-10-23.md.
 
-تحقق: 902 اختباراً وفحص Chromium وتحكم MPV الفعلي على ويندوز. HDR الحقيقي وحسابات المزودين الخارجية تحتاج اختباراً منفصلاً.
+تحقق المصدر: 904 اختبارات، التنسيق، بناء سطح المكتب والويب، واختبارات Chromium. فُحص تحكم MPV على ويندوز بعينة SDR؛ لا اعتماد HDR حقيقي أو حسابات مزودين خارجية أو تثبيت فعلي لكل مستخدمي الجهاز. ليس إصدار Stable.
 
-Validation: 902 tests, Chromium interaction checks and actual Windows MPV controls. Real HDR output and external provider accounts require separate validation.
+Source validation: 904 tests, formatting, desktop/web builds and Chromium interaction checks. Windows MPV controls were tested with an SDR fixture; this does not certify real HDR, external provider accounts or a real all-users installation. This is not a Stable release.
