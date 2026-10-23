@@ -10,6 +10,8 @@ import {
   Check,
 } from "lucide-react";
 import { WatchedContext } from "../lib/watched.js";
+import { attachDragScroll } from "../lib/drag-scroll.js";
+import { PosterActionsContext } from "../lib/poster-actions.js";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { titleKey } from "../../core/library.mjs";
 import { cardArt } from "../../core/ambient.mjs";
@@ -79,6 +81,7 @@ export function Modal({ children, onClose, className = "", labelledBy }) {
 // Cards and rows re-render only when their own props change: a playback
 // tick or a hero turn must not redraw thousands of posters.
 export const Poster = memo(function Poster({ meta, onOpen, progress }) {
+  const openActions = useContext(PosterActionsContext);
   const finished = useContext(WatchedContext);
   const seen = finished?.has(`${meta.type}:${meta.id}`);
   // The picture this card lends the artwork glow when the pointer rests here.
@@ -89,6 +92,17 @@ export const Poster = memo(function Poster({ meta, onOpen, progress }) {
       data-ambient={art.backdrop || undefined}
       data-ambient-poster={art.poster || undefined}
       onClick={() => onOpen(meta, progress?.videoId)}
+      onContextMenu={
+        openActions ? (e) => openActions(e, meta, progress?.videoId) : undefined
+      }
+      onKeyDown={(e) => {
+        if (
+          openActions &&
+          (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))
+        )
+          openActions(e, meta, progress?.videoId);
+      }}
+      aria-haspopup={openActions ? "menu" : undefined}
       aria-label={`تفاصيل ${meta.name}`}
     >
       <div className="poster-image">
@@ -173,12 +187,14 @@ export function useScrollRow(onNearEnd) {
     const el = ref.current;
     if (!el) return;
     measure();
+    const detachDrag = attachDragScroll(el);
     el.addEventListener("scroll", measure, { passive: true });
     const resize = new ResizeObserver(measure);
     resize.observe(el);
     const mutate = new MutationObserver(measure);
     mutate.observe(el, { childList: true });
     return () => {
+      detachDrag();
       el.removeEventListener("scroll", measure);
       resize.disconnect();
       mutate.disconnect();

@@ -59,6 +59,7 @@ import { PrayerChip } from "./components/Prayer.jsx";
 import { CountdownRail } from "./components/Countdown.jsx";
 import HomeHero from "./components/HomeHero.jsx";
 import RiwaqNav from "./components/RiwaqNav.jsx";
+import PosterActions from "./components/PosterActions.jsx";
 import SessionHome from "./components/SessionHome.jsx";
 import MusicBar from "./components/MusicBar.jsx";
 import { LocalMusicBar } from "./components/LocalMusic.jsx";
@@ -84,7 +85,6 @@ import {
 } from "../core/smart-groups.mjs";
 import { arabicCount, CATALOGS } from "../core/arabic.mjs";
 import AmbientLayer from "./components/Ambient.jsx";
-import { WatchedContext } from "./lib/watched.js";
 import Account from "./components/Account.jsx";
 import PlayerView from "./components/PlayerView.jsx";
 import PlayerPanel from "./components/PlayerPanel.jsx";
@@ -843,8 +843,60 @@ export default function App() {
       ? imgUrl(selected?.meta?.background) ||
         (riwaqExperience ? "" : imgUrl(hero?.background))
       : "";
+  const searchControl = (
+    <form
+      className="search-box"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (search.trim()) {
+          setQuery(search.trim());
+          setFilter("");
+          setGroup("all");
+          navigate("search");
+          setCatalog("");
+        }
+      }}
+    >
+      <Search size={17} />
+      <input
+        ref={searchRef}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="ابحث عن فيلم أو مسلسل…"
+        aria-label="البحث عن فيلم أو مسلسل"
+      />
+      <kbd>Ctrl K</kbd>
+    </form>
+  );
+  const quickActions = (
+    <>
+      {" "}
+      <PrayerChip
+        settings={state.settings}
+        onSettings={(tab) => {
+          setSettingsTab(tab);
+          navigate("settings");
+        }}
+      />
+      <NotificationCenter />
+      <IconButton title="التنزيلات" onClick={() => setOfflineOpen(true)}>
+        <Download size={20} />
+      </IconButton>
+      <IconButton
+        title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
+        onClick={() => act("localVideo")}
+      >
+        <FolderOpen size={20} />
+      </IconButton>{" "}
+    </>
+  );
   return (
-    <WatchedContext.Provider value={finished}>
+    <PosterActions
+      state={state}
+      update={update}
+      notice={notice}
+      watched={finished}
+    >
       <div
         key={uiLanguage}
         lang={uiLanguage}
@@ -899,6 +951,8 @@ export default function App() {
             onAccount={() => setAccount(true)}
             isLocked={isLocked}
             updateAvailable={state.update?.available}
+            search={searchControl}
+            actions={quickActions}
           />
         ) : (
           <aside className="sidebar">
@@ -1058,54 +1112,15 @@ export default function App() {
                 </button>
               </div>
             )}
-          <header className={`topbar ${scrolled ? "scrolled" : ""}`}>
-            <div className="topbar-title">
-              <span className="tiny-dot" />{" "}
-              {riwaqExperience
-                ? "أهلاً بك في مساحتك."
-                : "تجربة مشاهدة، على ذوقك"}
-            </div>
-            <form
-              className="search-box"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (search.trim()) {
-                  setQuery(search.trim());
-                  setFilter("");
-                  setGroup("all");
-                  navigate("search");
-                  setCatalog("");
-                }
-              }}
-            >
-              <Search size={17} />
-              <input
-                ref={searchRef}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="ابحث عن فيلم أو مسلسل…"
-                aria-label="البحث عن فيلم أو مسلسل"
-              />
-              <kbd>Ctrl K</kbd>
-            </form>
-            <PrayerChip
-              settings={state.settings}
-              onSettings={(tab) => {
-                setSettingsTab(tab);
-                navigate("settings");
-              }}
-            />
-            <NotificationCenter />
-            <IconButton title="التنزيلات" onClick={() => setOfflineOpen(true)}>
-              <Download size={20} />
-            </IconButton>
-            <IconButton
-              title="فتح ملف فيديو (أو اسحبه إلى النافذة)"
-              onClick={() => act("localVideo")}
-            >
-              <FolderOpen size={20} />
-            </IconButton>
-          </header>
+          {!riwaqExperience && (
+            <header className={`topbar ${scrolled ? "scrolled" : ""}`}>
+              <div className="topbar-title">
+                <span className="tiny-dot" /> تجربة مشاهدة، على ذوقك
+              </div>
+              {searchControl}
+              {quickActions}
+            </header>
+          )}
           {selected && (
             <Details
               key={`${selected.meta.type}:${selected.meta.id}`}
@@ -1821,7 +1836,7 @@ export default function App() {
           />
         )}
       </div>
-    </WatchedContext.Provider>
+    </PosterActions>
   );
 }
 /** One addon catalog on home, discover or search; redrawn only when its row changes. */

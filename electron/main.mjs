@@ -1827,7 +1827,7 @@ const methods = {
   },
   removeAddons: (a) => client.removeAddons({ keys: a?.keys }),
   settings: async (a) => {
-    const state = client.settings(a);
+    const state = client.settings(a, player?.state);
     // Sound and picture changes reach a running viewing where MPV allows it.
     player?.applyTuning(client.state.settings);
     torrentHost?.configure(client.state.settings);
@@ -2884,6 +2884,7 @@ app
         applyZoom();
       });
       player = new Player({
+        onVolume: (volume) => client.recordVolume(volume),
         host: videoHost,
         inputConf: join(root, "assets", "player-input.conf"),
         settingsNow: () => client.state.settings,

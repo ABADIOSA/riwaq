@@ -194,6 +194,7 @@ try {
     }
     throw new Error(message);
   };
+  await call("settings", { rememberVolume: true });
   for (const separate of [false, true]) {
     const streams = await call("streams", {
       type: "movie",
@@ -230,6 +231,11 @@ try {
         "Win32 finds MPV's actual window",
       );
     assert.equal((await snapshot()).player.separate, separate);
+    assert.equal(
+      Math.round((await snapshot()).player.volume),
+      separate ? 150 : 100,
+      "MPV restores the previous viewing volume",
+    );
     // Activate our isolated test app through Windows before testing its
     // controls. A remote host's foreground browser is outside this test.
     await nativeHudClick(app, hud, hud.locator(".hud-title"));
@@ -388,6 +394,11 @@ try {
       "slider arrow changes volume once, without seeking",
     );
     await nativeHudClick(app, hud, hud.locator(".hud-title"), 0.5);
+    assert.equal(
+      (await snapshot()).player.pause,
+      true,
+      "title click preserves paused playback before Space",
+    );
     await nativeHudKey(app, 32);
     await waitFor(
       async () => !(await snapshot()).player.pause,
@@ -411,6 +422,12 @@ try {
       async () => !(await hud.locator(".player-side").count()),
       "C opens and Escape closes the panel while HUD owns focus",
     );
+    await call("playerCommand", { action: "volume", value: 150 });
+    await waitFor(
+      async () => (await snapshot()).player.volume === 150,
+      "MPV applies boosted volume",
+    );
+    assert.equal((await call("init")).settings.lastVolume, 150);
     await hud.screenshot({
       path: join(
         output,

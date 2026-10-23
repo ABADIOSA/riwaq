@@ -106,7 +106,7 @@ try {
   for (let i = 0; i < 160; i++) {
     loaded = await evaluate(
       offlineMode
-        ? `!!document.querySelector('.profile-button')`
+        ? `!!document.querySelector('.app .search-box input') && !!document.querySelector('.app .content') && !!document.querySelector('.riwaq-masthead, .sidebar')`
         : `!!document.querySelector('.hero, .session-home') && document.querySelectorAll('.poster-card').length > 0`,
     );
     if (loaded) break;

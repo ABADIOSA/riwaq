@@ -59,8 +59,11 @@ test("audio filters are labelled, so a change replaces rather than stacks", () =
 });
 
 test("the sound's start-up options: ceiling, filters, downmix and output", () => {
-  assert.deepEqual(audioArgs({}), ["--volume-max=150"]);
-  assert.deepEqual(audioArgs({ volumeMax: 999 }), ["--volume-max=150"]);
+  assert.deepEqual(audioArgs({}), ["--volume-max=150", "--volume=100"]);
+  assert.deepEqual(audioArgs({ volumeMax: 999 }), [
+    "--volume-max=150",
+    "--volume=100",
+  ]);
   const args = audioArgs({
     volumeMax: 300,
     audioDownmix: true,
@@ -68,11 +71,12 @@ test("the sound's start-up options: ceiling, filters, downmix and output", () =>
   });
   assert.deepEqual(args, [
     "--volume-max=300",
+    "--volume=100",
     "--audio-channels=stereo",
     "--audio-swresample-o=clev=1.0",
     "--audio-device=wasapi/{0.0.0.00000000}.{abc-123}",
   ]);
-  assert.equal(audioArgs({ audioDevice: "auto" }).length, 1);
+  assert.equal(audioArgs({ audioDevice: "auto" }).length, 2);
 });
 
 test("an audio device name is printable and carries no quotes", () => {

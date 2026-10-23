@@ -36,6 +36,13 @@ export function holdSpeed({
         }, 350);
     },
     up: () => finish(true, true),
+    pause() {
+      if (!press) return;
+      // A delayed pause update can land between resume keydown and keyup.
+      // Stop acceleration while keeping an unconsumed tap available.
+      if (press.active) finish();
+      else clear(press.timer);
+    },
     cancel: (restore = true) => finish(restore),
   };
 }

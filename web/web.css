@@ -132,6 +132,7 @@ html.web-fullscreen
   cursor: pointer;
 }
 html:has(.theater) .web-pill,
+html:has(.poster-actions) .web-pill,
 html:has(.music-bar) .web-pill,
 html:has(.local-music-bar) .web-pill {
   display: none;

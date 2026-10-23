@@ -1,3 +1,4 @@
+import { initialVolume } from "../core/player-tuning.mjs";
 /**
  * The web edition's player: an HTML5 <video> standing in for MPV.
  *
@@ -144,6 +145,7 @@ export class WebPlayer {
   constructor({
     onState = () => {},
     onProgress = () => {},
+    onVolume,
     onEnded = () => {},
     onEvent = () => {},
     onLoaded,
@@ -155,6 +157,7 @@ export class WebPlayer {
   } = {}) {
     this.onState = onState;
     this.onProgress = onProgress;
+    this.onVolume = onVolume;
     this.onEnded = onEnded;
     this.onEvent = onEvent;
     this.onLoaded = onLoaded;
@@ -243,7 +246,7 @@ export class WebPlayer {
       position: start,
       duration: 0,
       pause: false,
-      volume: this.volume ?? 100,
+      volume: initialVolume(settings, 100),
       muted: false,
       speed: 1,
       tracks: [],
@@ -409,6 +412,7 @@ export class WebPlayer {
       this.state.volume = Math.round(video.volume * 100);
       this.state.muted = video.muted;
       this.volume = this.state.volume;
+      this.onVolume?.(this.state.volume);
       this.emit();
     });
     on("ratechange", () => {

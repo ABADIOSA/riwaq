@@ -1,5 +1,9 @@
 /** English for the player settings pages and shaders (core/i18n.mjs). */
 export default {
+  "حفظ مستوى الصوت الأخير": "Remember last volume level",
+  "يستعيد آخر مستوى صوت لهذا الملف الشخصي. عند التعطيل يبدأ كل فيديو على 100%. الويب يدعم حتى 100% فقط.":
+    "Restores this profile's last volume. When off, each video starts at 100%. Web playback supports up to 100%.",
+
   "ملف MPV السريع: معالجة أخف لأجهزة قديمة وطاقة أقل.":
     "MPV's fast profile: lighter processing for older devices and less power.",
   متوازن: "Balanced",

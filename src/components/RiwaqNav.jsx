@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ArrowUpLeft,
+  Home,
   Compass,
   Folders,
   Library,
@@ -25,6 +25,8 @@ export default function RiwaqNav({
   onAccount,
   isLocked,
   updateAvailable,
+  search,
+  actions,
 }) {
   const [more, setMore] = useState(false);
   const menu = useRef(null),
@@ -84,10 +86,8 @@ export default function RiwaqNav({
       </button>
       <nav className="riwaq-destinations" aria-label="التنقل الرئيسي">
         {[
-          [ArrowUpLeft, "home", "الرئيسية"],
+          [Home, "home", "الرئيسية"],
           [Compass, "discover", "اكتشف"],
-          [Library, "library", "مكتبتي"],
-          [Music2, "music", "موسيقى"],
         ]
           .filter(([, id]) => !appearance.navHidden.includes(id) || id === view)
           .map(([Icon, id, label]) => (
@@ -96,6 +96,7 @@ export default function RiwaqNav({
               className={`riwaq-destination ${view === id ? "selected" : ""}`}
               aria-current={view === id ? "page" : undefined}
               onClick={() => go(id)}
+              title={label}
             >
               <Icon size={17} />
               <span>{label}</span>
@@ -103,17 +104,9 @@ export default function RiwaqNav({
             </button>
           ))}
       </nav>
+      {search}
       <div className="riwaq-utilities">
-        {!quiet && (
-          <button
-            className="riwaq-tool profile-button"
-            onClick={onProfiles}
-            title="تبديل الملف الشخصي"
-          >
-            <Users size={17} />
-            <span>{profile?.name || "المشاهد"}</span>
-          </button>
-        )}
+        {actions}
         <button
           className="riwaq-tool"
           onClick={() => go("settings")}
@@ -138,6 +131,37 @@ export default function RiwaqNav({
             <div className="riwaq-tools-panel" id="riwaq-tools">
               <p>بقية مساحتك</p>
               <div>
+                {[
+                  [Library, "library", "مكتبتي"],
+                  [Music2, "music", "موسيقى"],
+                ]
+                  .filter(
+                    ([, id]) =>
+                      !appearance.navHidden.includes(id) || view === id,
+                  )
+                  .map(([Icon, id, label]) => (
+                    <button
+                      key={id}
+                      onClick={() => go(id)}
+                      aria-current={view === id ? "page" : undefined}
+                    >
+                      <Icon />
+                      <b>{label}</b>
+                      {isLocked("library") && <Lock size={12} />}
+                    </button>
+                  ))}
+                {!quiet && (
+                  <button
+                    onClick={() => {
+                      setMore(false);
+                      onProfiles();
+                    }}
+                  >
+                    <Users />
+                    <b>{profile?.name || "المشاهد"}</b>
+                    <small>تبديل الملف الشخصي</small>
+                  </button>
+                )}
                 {(!appearance.navHidden.includes("collections") ||
                   view === "collections") && (
                   <button onClick={() => go("collections")}>

@@ -212,6 +212,7 @@ export async function startBridge({ version, store }) {
   // When a viewing's saved position last went to the page (onProgress).
   let progressShown = 0;
   const player = new WebPlayer({
+    onVolume: (volume) => client.recordVolume(volume),
     settingsNow: () => client.state.settings,
     skipPrefs: () => skipPreferences(client.state.settings, nowPlaying?.series),
     server: serverUp,
@@ -1021,8 +1022,11 @@ export async function startBridge({ version, store }) {
     },
     removeAddons: (a) => client.removeAddons({ keys: a?.keys }),
     settings: async (a) => {
-      const state = client.settings(a);
+      const state = client.settings(a, player?.state);
       player.applyCueStyle();
+      // A successful settings response must survive an immediate reload,
+      // including on browsers where encryption/IndexedDB writes are slower.
+      await store.settled();
       return state;
     },
     providerSave: (a) => client.dataHub.save(a),

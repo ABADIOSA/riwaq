@@ -1,3 +1,4 @@
+import { VOLUME_MAX } from "./player-tuning.mjs";
 import { UsagePulse } from "./usage.mjs";
 import { FirstRun } from "./onboarding.mjs";
 import {
@@ -602,10 +603,28 @@ export class Client {
     this.persist();
     return this.publicState();
   }
-  settings(input) {
+  settings(input, playback) {
+    if (
+      input?.rememberVolume === true &&
+      !this.state.settings.rememberVolume &&
+      playback?.active &&
+      Number.isFinite(playback.volume)
+    )
+      input = { ...input, lastVolume: playback.volume };
     this.state.settings = safeSettings(input, this.state.settings);
     this.persist();
     return this.publicState();
+  }
+  /** Only actual player volume changes are saved; coalesce drag/key bursts. */
+  recordVolume(volume) {
+    if (!this.state.settings.rememberVolume || !Number.isFinite(volume)) return;
+    const value = Math.max(
+      0,
+      Math.min(Math.max(...VOLUME_MAX), Math.round(volume)),
+    );
+    if (this.state.settings.lastVolume === value) return;
+    this.state.settings.lastVolume = value;
+    this.persistProgress();
   }
   tasteEdit(input) {
     this.profiles.gate("library");
