@@ -7,6 +7,27 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.51.0",
+    title: "وجهاتك أقرب، ورئيسية على ذوقك",
+    items: [
+      "قائمة جانبية قابلة للطي: الرئيسية واكتشف والمكتبة والمجموعات والتنزيلات والإضافات، يمينًا للعربية ويسارًا للإنجليزية.",
+      "شريط علوي أبسط للبحث والصلاة والإشعارات، مع قائمة حوارية للنوافذ الضيقة وهوامش أقل للمحتوى.",
+      "خيار مستقل للعرض الرئيسي فوق خيار جلسة اليوم؛ فعّله من الإعدادات، مع حفظ اختيارك لكل ملف شخصي.",
+      "إخفاء جلسة اليوم يزيل الفاصل والفراغ المتبقيين؛ فتح ملف الفيديو متاح من التنزيلات والقائمة الثانوية.",
+      "إزالة اختصار Shift+F10 لقائمة البوستر؛ الزر الأيمن ومفتاح القائمة المخصص يعملان، والبحث بـCtrl+K يدعم لوحة المفاتيح العربية.",
+    ],
+    en: {
+      title: "Closer destinations and a Home of your own",
+      items: [
+        "A collapsible sidebar for Home, Discover, Library, Collections, Downloads and Addons: right in Arabic and left in English.",
+        "A simpler search, prayer and notification header, with a modal navigation drawer for compact windows and smaller content margins.",
+        "An independent Main showcase switch above Today's session. Enable it in Settings and keep your choice per profile.",
+        "Hiding Today's session removes its orphan divider and spacing. Open local video from Downloads or the secondary navigation.",
+        "Shift+F10 no longer opens poster actions; right-click and the dedicated Menu key work. Ctrl+K search now supports Arabic keyboard layouts.",
+      ],
+    },
+  },
+  {
     version: "0.50.0",
     title: "تصفح أسرع وتحكم أوضح",
     items: [

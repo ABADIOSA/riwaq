@@ -1,5 +1,13 @@
 # Verification — Riwaq
 
+## 2026-10-24 — 0.51.0 beta release preparation
+
+- Prepared from main `c21aa6f`, the merge of #108. A clean release checkout keeps the five private Admin Setup edits and the separate licensing work out of the public package. Version, lockfile, Arabic/English in-app highlights, README, release notes and changelog agree on 0.51.0. No new feature or dependency is introduced by release preparation.
+- **904 Node tests pass**, zero failures/skips. Prettier and desktop/web production builds pass; Vite's existing large-chunk warning remains. The complete Chromium web smoke passes on this version, including mirrored/compact navigation, showcase persistence, hidden-session divider, retired Shift+F10, right-click/Menu key actions, real video, encrypted account sync and opt-in-only local usage aggregation.
+- Real Windows Electron/MPV controls pass again on 0.51.0: embedded and separate-window subtitle/audio panels and tracks, seek, paused reload, Stop, Space, frozen-HUD fallback and F8 recovery. First-run setup is skipped through its actual UI without enabling usage sharing. The media fixture is SDR; this is not certification of real HDR/Dolby Vision, every GPU, live provider OAuth or an all-users installation/UAC.
+- Local evidence: `.cache/release-tests.log`, `.cache/release-format.log`, `.cache/release-build*.log`, `.cache/release-web.log`, `.cache/release-native.log`, `.cache/web-smoke/` and `.cache/player-hud-test/` in the release checkout. CI must still build and sign the distributable installer and portable package from the merged release commit. Public download/signature/package checks are a separate publication step, not inferred from these source checks.
+- [Complete user-request coverage and remaining limits](docs/USER-FIXES-2026-10-23.md). Earlier MIT rights, third-party notices, free access, account encryption and usage consent are unchanged. The release remains Beta; it is not a declaration of Stable or a legal-compliance approval.
+
 ## 2026-10-22 — #104 feedback candidate (unpublished)
 
 - Based on main `02c6807`. Reviewed all 15 public issues and their comments, including the latest poster-context-menu request. [Request matrix and limits](docs/USER-FIXES-2026-10-22.md). Adds optional per-profile volume memory, separated volume readout, mouse-drag rails, unified responsive navigation with a Home icon, and poster library/collection/queue actions. Existing privacy, encryption, account sync, MPV window ownership and free access remain intact.
