@@ -1,5 +1,32 @@
 // Download labels must work without fetching metadata again, including
 // old records that only kept a conventional series:season:episode ID.
+/** Predictable download refusals without exposing the source to the page. */
+export function downloadCapability(
+  stream,
+  { live = false, local = false } = {},
+) {
+  if (live) return { supported: false, reason: "البث المباشر لا يدعم التنزيل" };
+  if (local || !stream)
+    return { supported: false, reason: "اختر مصدر فيديو للتنزيل" };
+  if (stream.infoHash) return { supported: true, reason: "" };
+  try {
+    const url = new URL(stream.url);
+    if (
+      !["https:", "http:"].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      /\.(m3u8|mpd)$/i.test(url.pathname)
+    )
+      throw Error();
+    return { supported: true, reason: "" };
+  } catch {
+    return {
+      supported: false,
+      reason: "هذا المصدر يحتاج بثًا مباشرًا؛ اختر ملف فيديو أو تورنت للتنزيل",
+    };
+  }
+}
+
 const number = (value) => {
   if (
     !["number", "string"].includes(typeof value) ||

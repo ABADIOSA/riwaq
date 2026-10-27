@@ -36,16 +36,16 @@
   margin: 22px var(--session-gutter);
   border-radius: 7px;
 }
-.app.experience-riwaq .poster-image {
+.app.experience-riwaq.identity-classic .poster-image {
   border-radius: var(--poster-radius, 9px);
 }
-.app.experience-riwaq .poster-image::before {
+.app.experience-riwaq.identity-classic .poster-image::before {
   border-radius: var(--poster-radius, 9px);
 }
-.app.experience-riwaq .section-heading h2::before {
+.app.experience-riwaq.identity-classic .section-heading h2::before {
   display: none;
 }
-.app.experience-riwaq .section-heading h2 {
+.app.experience-riwaq.identity-classic .section-heading h2 {
   font-family: var(--font);
   font-size: 23px;
   font-weight: 650;

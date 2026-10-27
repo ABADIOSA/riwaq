@@ -731,11 +731,10 @@ test("the player menu is HTML in the controls, never a native menu", async () =>
     );
   }
   const menu = read("src/components/PlayerMenu.jsx");
-  assert.match(menu, /call\("playbackMenu"\)/);
-  assert.match(
-    menu,
-    /request\("playbackAction", \{ action, videoId: options\.videoId \}\)/,
-  );
+  // Actual component keyboard/focus and once-per-open snapshot behavior is
+  // covered by scripts/test-downloads-quality.mjs, including parent ticks.
+  // downloads-quality.test.mjs exercises the actual main handlers, including
+  // stale same-video sessions, profile changes, and opaque-ID reveal.
   // It closes on any press elsewhere, and the theater hides the native
   // picture under it like any HTML dialog.
   assert.match(menu, /addEventListener\("pointerdown", down, true\)/);

@@ -9,6 +9,7 @@ import React, {
   Suspense,
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useMemo,
   useCallback,
@@ -53,6 +54,7 @@ import {
   ScrollRow,
 } from "./components/UI.jsx";
 import Details from "./components/Details.jsx";
+import CatalogBrowser from "./components/CatalogBrowser.jsx";
 import { ExploreModal, PeopleRow } from "./components/Credits.jsx";
 import AiSearchRow from "./components/AiSearch.jsx";
 import { PrayerChip } from "./components/Prayer.jsx";
@@ -153,6 +155,7 @@ export default function App() {
     // Discover's section (core/discover.mjs), kept between visits.
     [discoverTab, setDiscoverTab] = useState("movies"),
     [catalog, setCatalog] = useState(""),
+    [catalogBrowser, setCatalogBrowser] = useState(null),
     [catalogSelection, setCatalogSelection] = useState({ key: "", values: {} }),
     [catalogFilters, setCatalogFilters] = useState([]),
     [addonCatalogs, setAddonCatalogs] = useState([]),
@@ -373,6 +376,11 @@ export default function App() {
   useEffect(() => setVideoPlaying(player.active), [player.active]);
   useEffect(() => {
     if (player.active) {
+      cancelAnimationFrame(titleFrame.current);
+      cancelAnimationFrame(catalogFrame.current);
+      restoreTitle.current = false;
+      catalogReturn.current = null;
+      setCatalogBrowser(null);
       setSelected(null);
       setAccount(false);
       setPlayerOpen(false);
@@ -411,6 +419,7 @@ export default function App() {
   }, [player.position, player.videoId, player.active]);
   useEffect(() => {
     setSelected(null);
+    setCatalogBrowser(null);
     setPlayerOpen(false);
     setView("home");
     setRows([]);
@@ -591,16 +600,65 @@ export default function App() {
   }, [ready, look.appIcon, look.colors.accent, look.colors.bg]);
   // A title opens on its own page over the current view, which stays mounted
   // underneath; going back returns to where the viewer was scrolled.
-  const scrollBefore = useRef(0);
+  const titleReturn = useRef(null);
+  const restoreTitle = useRef(false);
+  const titleFrame = useRef(0);
+  const catalogReturn = useRef(null);
+  const catalogFrame = useRef(0);
   const openTitle = (next) => {
-    if (!selected) scrollBefore.current = window.scrollY;
+    cancelAnimationFrame(titleFrame.current);
+    cancelAnimationFrame(catalogFrame.current);
+    if (!selected)
+      titleReturn.current = {
+        x: window.scrollX,
+        y: window.scrollY,
+        focus: document.activeElement,
+        profileId: state.profiles?.active,
+      };
+    restoreTitle.current = false;
     setSelected(next);
-    window.scrollTo(0, 0);
   };
   const closeTitle = () => {
+    restoreTitle.current = true;
     setSelected(null);
-    requestAnimationFrame(() => window.scrollTo(0, scrollBefore.current));
   };
+  // Details owns a viewport scroller. Preserve the mounted browsing layout,
+  // document offset and prior inline styles for exactly this viewing layer.
+  const titleActive = !!selected;
+  useLayoutEffect(() => {
+    if (!titleActive) return;
+    const root = document.documentElement;
+    const overflow = root.style.overflow;
+    const gutter = root.style.scrollbarGutter;
+    root.style.scrollbarGutter = "stable";
+    root.style.overflow = "hidden";
+    const background = [...document.querySelectorAll(".content > *")].filter(
+      (el) => !el.classList.contains("title-page"),
+    );
+    const inert = background.map((el) => [el, el.inert]);
+    for (const [el] of inert) el.inert = true;
+    return () => {
+      root.style.overflow = overflow;
+      root.style.scrollbarGutter = gutter;
+      for (const [el, was] of inert) el.inert = was;
+      const saved = titleReturn.current;
+      if (
+        restoreTitle.current &&
+        saved &&
+        saved.profileId === stateRef.current.profiles?.active
+      ) {
+        titleFrame.current = requestAnimationFrame(() => {
+          titleFrame.current = 0;
+          if (saved.profileId !== stateRef.current.profiles?.active) return;
+          if (saved.focus?.isConnected)
+            saved.focus.focus({ preventScroll: true });
+          window.scrollTo(saved.x, saved.y);
+        });
+      }
+      restoreTitle.current = false;
+      titleReturn.current = null;
+    };
+  }, [titleActive]);
   const open = (meta, videoId) => openTitle({ meta, videoId });
   // Stable handles for memoized rows and cards: they always call the
   // latest handler, so a re-render of the app does not redraw every card.
@@ -655,6 +713,11 @@ export default function App() {
       setUnlockRoom(room);
       return;
     }
+    cancelAnimationFrame(titleFrame.current);
+    cancelAnimationFrame(catalogFrame.current);
+    catalogReturn.current = null;
+    setCatalogBrowser(null);
+    restoreTitle.current = false;
     setSelected(null);
     setView(v);
     setCatalog("");
@@ -785,9 +848,39 @@ export default function App() {
   );
   const favorite = (meta) => update("favorite", meta);
   const more = (row) => {
-    setCatalog(row.key);
-    setFilter(row.type);
-    if (view !== "search") setView("discover");
+    cancelAnimationFrame(catalogFrame.current);
+    const list = row.rows || [row];
+    catalogReturn.current = {
+      focus: document.activeElement,
+      x: window.scrollX,
+      y: window.scrollY,
+      profileId: state.profiles?.active,
+    };
+    setCatalogBrowser({
+      name: row.name,
+      rows: list,
+      profileId: state.profiles?.active,
+      search: view === "search" ? query : "",
+      filters: Object.fromEntries(
+        list.map((r) => [
+          r.key,
+          catalogSelection.key === r.key ? { ...catalogSelection.values } : {},
+        ]),
+      ),
+    });
+  };
+  const closeCatalogBrowser = () => {
+    setCatalogBrowser(null);
+    const saved = catalogReturn.current;
+    catalogReturn.current = null;
+    if (saved?.profileId === state.profiles?.active)
+      catalogFrame.current = requestAnimationFrame(() => {
+        catalogFrame.current = 0;
+        if (saved.profileId !== stateRef.current.profiles?.active) return;
+        if (saved.focus?.isConnected)
+          saved.focus.focus({ preventScroll: true });
+        window.scrollTo(saved.x, saved.y);
+      });
   };
   latest.current.favorite = favorite;
   latest.current.more = more;
@@ -953,7 +1046,6 @@ export default function App() {
             })
           }
           onDownloads={() => setOfflineOpen(true)}
-          onLocalVideo={() => act("localVideo")}
         />
         <main
           className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""}`}
@@ -1012,6 +1104,15 @@ export default function App() {
               }}
             />
           )}
+          {catalogBrowser &&
+            catalogBrowser.profileId === state.profiles?.active && (
+              <CatalogBrowser
+                selection={catalogBrowser}
+                onClose={closeCatalogBrowser}
+                onOpen={openStable}
+                suspended={!!selected}
+              />
+            )}
           {["home", "discover", "search"].includes(view) && (
             <>
               {view === "home" &&

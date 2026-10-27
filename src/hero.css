@@ -1,5 +1,12 @@
-/* The home hero: crossfading artwork, the title as its own logo, arrows on
-   both sides and dots that fill while the next title waits. */
+/* The home hero: artwork, title logo and footer navigation. */
+.hero {
+  touch-action: pan-y pinch-zoom;
+}
+.hero.is-dragging,
+.hero.is-dragging * {
+  cursor: grabbing;
+  user-select: none;
+}
 .topbar {
   position: relative;
   z-index: 18;
@@ -74,16 +81,12 @@
   max-width: min(460px, 72%);
 }
 
-/* Arrows: previous on the right, next on the left (the page is RTL). */
-.hero.has-arrows .hero-content {
-  padding-inline-start: 74px;
-}
+/* Adjacent controls follow the interface's reading direction. */
 .hero-arrow {
-  position: absolute;
-  top: 50%;
-  z-index: 2;
-  width: 44px;
-  height: 44px;
+  position: static;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -92,18 +95,11 @@
   background: #0b0d1066;
   color: #fff;
   backdrop-filter: blur(10px);
-  transform: translateY(-50%);
   opacity: 0.6;
   transition:
     opacity 0.2s,
     background 0.2s,
     transform 0.2s;
-}
-.hero-arrow.prev {
-  inset-inline-start: 16px;
-}
-.hero-arrow.next {
-  inset-inline-end: 16px;
 }
 .hero:hover .hero-arrow,
 .hero-arrow:focus-visible {
@@ -113,7 +109,7 @@
   background: var(--accent);
   border-color: transparent;
   color: var(--accent-ink, #101215);
-  transform: translateY(-50%) scale(1.06);
+  transform: scale(1.06);
 }
 .hero-arrow:focus-visible {
   outline: 2px solid var(--accent);
@@ -132,10 +128,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .hero-toggle {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -143,6 +141,30 @@
   border: 1px solid #ffffff20;
   background: #0b0d1055;
   color: #cfd3d8;
+}
+@media (max-width: 600px) {
+  .hero-content {
+    width: 100%;
+    padding-inline: 24px;
+    padding-top: 64px;
+  }
+  .hero-content .button-row {
+    flex-wrap: wrap;
+  }
+  .hero-footer {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .hero-controls {
+    gap: 8px;
+  }
+  .hero-line {
+    width: 24px;
+  }
+}
+.reduced-motion .hero-arrow,
+.reduced-motion .hero-pages button {
+  transition: none;
 }
 .hero-toggle:hover {
   color: var(--accent);

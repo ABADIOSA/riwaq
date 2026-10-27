@@ -29,6 +29,35 @@ function client(options = {}) {
   });
   return c;
 }
+
+test("explicit catalog retry bypasses only failed cache entries and preserves successful pages", async () => {
+  let calls = 0;
+  const c = client({
+    request: async () => {
+      calls++;
+      if (calls === 1) throw Error("temporarily offline");
+      return { metas: [{ id: "tt1", name: "Recovered" }] };
+    },
+  });
+  const addon = {
+    transportUrl: "https://fixture.invalid/manifest.json",
+    enabled: true,
+    manifest,
+  };
+  c.state.addons = [addon];
+  const key = c.catalogPlan()[0].key;
+  const args = { catalogKey: key, type: "movie", skip: 20 };
+  assert.equal((await c.catalog(args)).failures.length, 1);
+  assert.equal((await c.catalog(args)).failures.length, 1);
+  assert.equal(calls, 1);
+  assert.equal(
+    (await c.catalog({ ...args, retryFailed: true })).rows[0]?.metas[0].name,
+    "Recovered",
+  );
+  assert.equal(calls, 2);
+  await c.catalog({ ...args, retryFailed: true });
+  assert.equal(calls, 2, "Retry must retain a successful cached page");
+});
 test("real HTTP addon pipeline: install, catalog, metadata, streams and subtitles", async (t) => {
   const server = createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");

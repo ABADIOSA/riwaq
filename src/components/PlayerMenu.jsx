@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { call } from "../lib/api.js";
+import "../downloads-quality.css";
 
 /**
  * The player's right-click menu, drawn in the page that holds the controls
@@ -9,24 +10,18 @@ import { call } from "../lib/api.js";
  * Riwaq until it closes. Main says which items apply to this viewing and runs
  * a chosen one only for the same viewing (playbackMenu/playbackAction).
  */
-export default function PlayerMenu({
-  at,
-  onClose,
-  onPause,
-  onPanel,
-  onStop,
-  onError,
-  request = call,
-}) {
+export default function PlayerMenu({ at, onClose, onError, request = call }) {
   const [options, setOptions] = useState(null);
   const [place, setPlace] = useState(at);
   const box = useRef(null);
   const close = useRef(onClose);
+  const requestAtOpen = useRef(request);
   close.current = onClose;
 
   useEffect(() => {
     let live = true;
-    call("playbackMenu")
+    requestAtOpen
+      .current("playbackMenu")
       .then((found) => {
         if (!live) return;
         if (found) setOptions(found);
@@ -35,6 +30,15 @@ export default function PlayerMenu({
       .catch(() => live && close.current());
     return () => {
       live = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (options) box.current?.querySelector("button:not(:disabled)")?.focus();
+  }, [options]);
+  useEffect(() => {
+    const previous = document.activeElement;
+    return () => {
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, []);
   // A press anywhere else, Escape, or the window losing focus closes it.
@@ -71,7 +75,12 @@ export default function PlayerMenu({
   // The theater passes its own helper, which shows a refusal as a notice.
   const run = (action) =>
     Promise.resolve(
-      request("playbackAction", { action, videoId: options.videoId }),
+      request("playbackAction", {
+        action,
+        videoId: options.videoId,
+        sessionId: options.sessionId,
+        profileId: options.profileId,
+      }),
     ).catch((e) => onError?.(e.message));
   const pick = (fn) => (e) => {
     e.stopPropagation();
@@ -91,36 +100,51 @@ export default function PlayerMenu({
       onClick={keep}
       onDoubleClick={keep}
       onWheel={keep}
+      onKeyDown={(e) => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const buttons = [
+          ...box.current.querySelectorAll("button:not(:disabled)"),
+        ];
+        const at = buttons.indexOf(document.activeElement);
+        const next =
+          e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? buttons.length - 1
+              : (at + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) %
+                buttons.length;
+        buttons[next]?.focus();
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
       }}
     >
-      <button role="menuitem" onClick={pick(onPause)}>
-        {options.paused ? "استئناف المشاهدة" : "إيقاف مؤقت"}
-      </button>
-      <button role="menuitem" onClick={pick(onPanel)}>
-        الترجمة والصوت
-      </button>
       <button role="menuitem" onClick={pick(() => run("screenshot"))}>
         التقط لقطة شاشة
       </button>
       {options.torrent && (
         <button role="menuitem" onClick={pick(() => run("copyMagnet"))}>
-          نسخ رابط التورنت
+          نسخ رابط المغناطيس
         </button>
       )}
       <button
         role="menuitem"
         disabled={!options.download}
+        aria-describedby={
+          !options.download ? "download-unavailable" : undefined
+        }
         onClick={pick(() => run("download"))}
       >
-        تنزيل الفيديو للمشاهدة لاحقًا
+        تنزيل الفيديو
       </button>
-      <hr />
-      <button role="menuitem" onClick={pick(onStop)}>
-        إيقاف المشاهدة
-      </button>
+      {!options.download && (
+        <p className="download-unavailable" id="download-unavailable">
+          {options.downloadReason}
+        </p>
+      )}
     </div>
   );
 }

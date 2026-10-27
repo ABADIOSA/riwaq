@@ -41,7 +41,7 @@ function loadPlaywright() {
 }
 const { chromium } = loadPlaywright();
 
-const site = resolve("dist-web");
+const site = resolve(process.env.RIWAQ_WEB_DIST || "dist-web");
 if (!existsSync(join(site, "index.html")))
   throw new Error("Build the site first: npm run build:web");
 const output = resolve(".cache/web-smoke");
@@ -134,9 +134,54 @@ const seriesFixture = () => ({
   ],
 });
 const SRT = `1\n00:00:00,500 --> 00:00:30,000\nترجمة تجريبية من الإضافة\n\n`;
+let qualityFailure = true;
 const addon = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   const url = decodeURIComponent(req.url);
+  if (url === "/quality/manifest.json") {
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        id: "riwaq.quality-fixture",
+        name: "Quality catalog",
+        version: "1.0.0",
+        resources: ["catalog"],
+        types: ["movie"],
+        catalogs: [
+          {
+            id: "quality",
+            type: "movie",
+            name: "Latest",
+            extra: [{ name: "skip" }],
+          },
+        ],
+      }),
+    );
+    return;
+  }
+  if (url.startsWith("/quality/catalog/")) {
+    catalogRequests.push(url);
+    const skip = Number(/skip=(\d+)/.exec(url)?.[1] || 0);
+    if (skip === 60 && qualityFailure) {
+      qualityFailure = false;
+      res.writeHead(503);
+      res.end();
+      return;
+    }
+    // A valid provider can repeat a page before returning new titles.
+    const offset = skip === 20 ? 0 : skip;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        metas: Array.from({ length: skip >= 60 ? 0 : 20 }, (_, i) => ({
+          ...metas()[i % titles.length],
+          id: "webfix:quality-" + (i + offset),
+          name: "Quality movie " + (i + offset),
+        })),
+      }),
+    );
+    return;
+  }
   if (url.startsWith("/poster/")) {
     res.setHeader("Content-Type", "image/svg+xml");
     res.end(
@@ -480,6 +525,17 @@ try {
   assert.equal(await page.locator("dialog.first-run[open]").count(), 0);
   assert.ok(after.addons.some((a) => a.id === "riwaq.web-fixture"));
   step("after a reload the encrypted store opens with the addon in it");
+  {
+    const { qualityChecks } = await import("./quality110-checks.mjs");
+    await qualityChecks({
+      page,
+      call,
+      base,
+      catalogRequests,
+      site,
+      baseline: process.env.RIWAQ_QUALITY110 === "baseline",
+    });
+  }
   assert.equal(
     await page
       .locator('.riwaq-destinations [aria-current="page"]')

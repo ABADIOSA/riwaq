@@ -10,12 +10,13 @@ import {
 } from "lucide-react";
 import { imgUrl, typeName } from "../lib/helpers.js";
 import { TitleLogo, preloadLogos } from "./TitleLogo.jsx";
+import { attachHeroSwipe } from "../lib/drag-scroll.js";
 
 export const HERO_SECONDS = 9;
 
 /**
  * The home page's featured titles: the work's logo instead of its typed
- * name, arrows on both sides, dots with the time left, the arrow keys, and
+ * name, footer navigation, dots with the time left, the arrow keys, and
  * an optional slow turn to the next title that waits while the pointer or
  * the keyboard is on it. The page is right to left, so "next" is on the left.
  */
@@ -34,13 +35,36 @@ function HomeHero({
   const at = count ? ((index % count) + count) % count : 0;
   const hero = items[at];
   const mode = settings.titleLogos || "arabic";
-  const [held, setHeld] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [visible, setVisible] = useState(() => !document.hidden);
   const [stopped, setStopped] = useState(false);
   const box = useRef(null);
   const auto =
     settings.heroAutoplay !== false && !settings.reduceMotion && count > 1;
-  const turning = auto && running && !held && !stopped;
-  const go = (step) => setIndex((((at + step) % count) + count) % count);
+  const turning =
+    auto && running && visible && !hovered && !focused && !dragging && !stopped;
+  const go = (step) => {
+    if (count > 1) setIndex((((at + step) % count) + count) % count);
+  };
+  const navigate = useRef(go);
+  navigate.current = go;
+
+  useEffect(() => {
+    if (count < 2 || !box.current) return;
+    return attachHeroSwipe(
+      box.current,
+      (step) => navigate.current(step),
+      setDragging,
+    );
+  }, [count]);
+
+  useEffect(() => {
+    const visibility = () => setVisible(!document.hidden);
+    document.addEventListener("visibilitychange", visibility);
+    return () => document.removeEventListener("visibilitychange", visibility);
+  }, []);
 
   useEffect(() => {
     preloadLogos(items, mode);
@@ -61,19 +85,20 @@ function HomeHero({
   return (
     <section
       ref={box}
-      className={`hero ${count > 1 ? "has-arrows" : ""} ${turning ? "turning" : ""}`}
+      className={`hero ${turning ? "turning" : ""}`}
       aria-roledescription="carousel"
       aria-label="أعمال مختارة"
-      onMouseEnter={() => setHeld(true)}
-      onMouseLeave={() => setHeld(false)}
-      onFocus={() => setHeld(true)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
       onBlur={(e) => {
-        if (!box.current?.contains(e.relatedTarget)) setHeld(false);
+        if (!box.current?.contains(e.relatedTarget)) setFocused(false);
       }}
       onKeyDown={(e) => {
         if (count < 2 || e.target.closest("input,textarea,select")) return;
-        if (e.key === "ArrowLeft") go(1);
-        else if (e.key === "ArrowRight") go(-1);
+        const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+        if (e.key === "ArrowLeft") go(rtl ? 1 : -1);
+        else if (e.key === "ArrowRight") go(rtl ? -1 : 1);
         else return;
         e.preventDefault();
       }}
@@ -124,26 +149,6 @@ function HomeHero({
           </button>
         </div>
       </div>
-      {count > 1 && (
-        <>
-          <button
-            className="hero-arrow prev"
-            aria-label="العمل السابق"
-            title="السابق"
-            onClick={() => go(-1)}
-          >
-            <ChevronRight size={22} />
-          </button>
-          <button
-            className="hero-arrow next"
-            aria-label="العمل التالي"
-            title="التالي"
-            onClick={() => go(1)}
-          >
-            <ChevronLeft size={22} />
-          </button>
-        </>
-      )}
       <div className="hero-footer">
         <span>
           {fromRiwaq ? "مختارات رِواق" : "اختيارات من إضافاتك"}{" "}
@@ -153,6 +158,28 @@ function HomeHero({
           </span>
         </span>
         <div className="hero-controls">
+          {count > 1 && (
+            <>
+              <button
+                type="button"
+                className="hero-arrow prev"
+                aria-label="العمل السابق"
+                title="السابق"
+                onClick={() => go(-1)}
+              >
+                <ChevronRight size={18} />
+              </button>
+              <button
+                type="button"
+                className="hero-arrow next"
+                aria-label="العمل التالي"
+                title="التالي"
+                onClick={() => go(1)}
+              >
+                <ChevronLeft size={18} />
+              </button>
+            </>
+          )}
           {auto && (
             <button
               className="hero-toggle"

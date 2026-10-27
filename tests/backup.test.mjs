@@ -12,6 +12,27 @@ import {
 } from "../core/backup.mjs";
 
 const PASS = "عبارة-مرور-طويلة";
+test("interface identities remain independent per profile through restart and encrypted backup", () => {
+  const first = client();
+  const c = first.instance;
+  c.settings({ appearance: { identity: "classic" } });
+  const created = c.profiles.create({ name: "Quality guest" });
+  const guest = created.profiles.list.find(
+    (p) => p.name === "Quality guest",
+  ).id;
+  c.profiles.switch({ id: guest });
+  c.settings({ appearance: { identity: "riwaq" } });
+  const reopened = client(first.saved()).instance;
+  assert.equal(reopened.state.settings.appearance.identity, "riwaq");
+  reopened.profiles.switch({ id: "default" });
+  assert.equal(reopened.state.settings.appearance.identity, "classic");
+  const { text } = reopened.exportBackup({ passphrase: PASS });
+  const restored = client().instance;
+  restored.restoreBackup({ text, passphrase: PASS });
+  assert.equal(restored.state.settings.appearance.identity, "classic");
+  restored.profiles.switch({ id: guest });
+  assert.equal(restored.state.settings.appearance.identity, "riwaq");
+});
 const manifest = (id) => ({
   id,
   name: id,

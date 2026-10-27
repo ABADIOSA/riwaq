@@ -1,0 +1,42 @@
+.catalog-browser {
+  width: min(1200px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overscroll-behavior: contain;
+  background: var(--bg);
+  color: var(--text);
+}
+.catalog-browser .modal-inner {
+  padding: 32px;
+}
+.catalog-browser-heading {
+  padding-inline-end: 40px;
+  margin-bottom: 20px;
+}
+.catalog-browser-heading h1 {
+  margin: 10px 0;
+  font-size: clamp(22px, 3vw, 32px);
+}
+.catalog-browser-heading p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+.catalog-browser .poster-grid {
+  margin-block: 20px;
+}
+.catalog-browser-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.catalog-browser-filters span {
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 5px 9px;
+  border-radius: 8px;
+}
+@media (max-width: 600px) {
+  .catalog-browser .modal-inner {
+    padding: 22px 14px;
+  }
+}

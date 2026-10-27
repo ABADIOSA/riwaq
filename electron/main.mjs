@@ -32,6 +32,7 @@ import { randomBytes } from "node:crypto";
 import { Client, fetchText } from "../core/client.mjs";
 import { PlaybackRequest } from "../core/playback-request.mjs";
 import { OfflineLibrary } from "./offline.mjs";
+import { downloadCapability } from "../core/offline-media.mjs";
 import {
   automaticSubtitle,
   cuesAround,
@@ -223,6 +224,8 @@ function startOffline() {
     stream = client.streams.get(current?.key);
   if (!player.state.active || !stream || !current || player.state.live)
     throw new Error("ابدأ مشاهدة مصدر فيديو قبل تنزيله");
+  const capability = downloadCapability(stream, { live: player.state.live });
+  if (!capability.supported) throw Error(capability.reason);
   const result = offline.start({
     profileId: client.profiles.store.active,
     stream,
@@ -245,18 +248,25 @@ function startOffline() {
 function playbackMenu() {
   if (!player?.state.active || !window || window.isDestroyed()) return null;
   const stream = client.streams.get(nowPlaying?.key);
+  const capability = downloadCapability(stream, { live: player.state.live });
   return {
     videoId: player.videoId,
+    sessionId: player.startToken,
+    profileId: client.profiles.store.active,
     paused: !!player.state.pause,
     torrent: !!stream?.infoHash,
-    download: !!stream && !player.state.live,
+    download: capability.supported,
+    downloadReason: capability.reason,
   };
 }
-async function playbackAction({ action, videoId } = {}) {
+async function playbackAction({ action, videoId, sessionId, profileId } = {}) {
   if (
     !player?.state.active ||
     typeof videoId !== "string" ||
-    player.videoId !== videoId
+    player.videoId !== videoId ||
+    !Number.isSafeInteger(sessionId) ||
+    player.startToken !== sessionId ||
+    client.profiles.store.active !== profileId
   )
     throw new Error("انتهت هذه المشاهدة");
   const stream = client.streams.get(nowPlaying?.key);
@@ -268,7 +278,7 @@ async function playbackAction({ action, videoId } = {}) {
     if (!stream?.infoHash) throw new Error("هذا المصدر ليس تورنت");
     client.profiles.gate("library");
     clipboard.writeText(magnetOf(stream));
-    emit("notice", "نُسخ رابط التورنت");
+    emit("notice", "نُسخ رابط المغناطيس");
     return true;
   }
   if (action === "download") return startOffline();
@@ -2042,6 +2052,7 @@ const methods = {
     // A wrong PIN must be refused before playback is touched. Then save the
     // outgoing viewer's last position before replacing their bucket.
     client.profiles.check({ ...a, intent: "switch" });
+    offline?.cancelArtwork();
     playbackRequest.cancel();
     stopLocalMusic();
     await player.stop();
@@ -2053,6 +2064,7 @@ const methods = {
   profilePin: (a) => client.profiles.setPin(a),
   profileUnlock: (a) => client.profiles.unlock(a?.pin),
   profileLock: () => {
+    offline?.cancelArtwork();
     playbackRequest.cancel();
     stopLocalMusic();
     return client.profiles.lock();
@@ -2289,36 +2301,43 @@ const methods = {
   offlineList: (a) => offline.list(a?.profileId),
   offlineCancel: (a) => offline.cancel(a?.profileId, a?.id),
   offlineRemove: (a) => offline.remove(a?.profileId, a?.id),
+  offlineArtwork: (a) => offline.artwork(a?.profileId, a?.id),
+  offlineReveal: (a) =>
+    offline.useFile(a?.profileId, a?.id, ({ path }) => {
+      shell.showItemInFolder(path);
+      return { revealed: true };
+    }),
   offlinePlay: async (a) => {
     const request = playbackRequest.begin();
     const profile = a?.profileId;
-    const { path, item } = await offline.file(profile, a?.id);
-    if (!playbackRequest.owns(request)) return { cancelled: true };
-    if (profile !== client.profiles.store.active)
-      throw new Error("تغير الملف الشخصي؛ افتح التنزيلات مجددًا");
-    await player.stop();
-    if (!playbackRequest.owns(request)) return { cancelled: true };
-    offline.profile(profile);
-    nowPlaying = null;
-    offline.playing = item.id;
-    const saved = client.state.progress[`${item.meta.type}:${item.videoId}`];
-    try {
-      return await player.start({
-        executable: executable(),
-        settings: client.state.settings,
-        url: path,
-        local: true,
-        meta: item.meta,
-        videoId: item.videoId,
-        start: saved && !saved.completed ? saved.position : 0,
-        inputConf: hotkeyFile(),
-        screenshotDir: screenshotDir(),
-        logFile: mpvLogFile(),
-      });
-    } catch (error) {
-      offline.playing = "";
-      throw error;
-    }
+    return offline.useFile(profile, a?.id, async ({ path, item }) => {
+      if (!playbackRequest.owns(request)) return { cancelled: true };
+      if (profile !== client.profiles.store.active)
+        throw new Error("تغير الملف الشخصي؛ افتح التنزيلات مجددًا");
+      await player.stop();
+      if (!playbackRequest.owns(request)) return { cancelled: true };
+      offline.profile(profile);
+      nowPlaying = null;
+      offline.playing = item.id;
+      const saved = client.state.progress[`${item.meta.type}:${item.videoId}`];
+      try {
+        return await player.start({
+          executable: executable(),
+          settings: client.state.settings,
+          url: path,
+          local: true,
+          meta: item.meta,
+          videoId: item.videoId,
+          start: saved && !saved.completed ? saved.position : 0,
+          inputConf: hotkeyFile(),
+          screenshotDir: screenshotDir(),
+          logFile: mpvLogFile(),
+        });
+      } catch (error) {
+        offline.playing = "";
+        throw error;
+      }
+    });
   },
   // This PC's audio outputs as MPV names them, for the Audio page.
   audioDevices: () => listAudioDevices(),
@@ -2748,6 +2767,21 @@ app
       offline = new OfflineLibrary(client, {
         root: join(app.getPath("userData"), "offline"),
         resolveSource: offlineSource,
+        thumbnail: (bytes) => {
+          const image = nativeImage.createFromBuffer(bytes);
+          if (image.isEmpty()) return null;
+          const { width, height } = image.getSize();
+          if (width * height > 16000000) return null;
+          const scaled =
+            Math.max(width, height) > 320
+              ? image.resize(
+                  width >= height
+                    ? { width: 320, quality: "good" }
+                    : { height: 320, quality: "good" },
+                )
+              : image;
+          return scaled.toJPEG(80);
+        },
       });
     } catch (error) {
       dialog.showErrorBox("Riwaq", error.message);
