@@ -36,12 +36,6 @@
 
 الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.51.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### تحسينات قيد المراجعة
-
-توجد على فرع `codex/quality-110` تحسينات لم تُنشر بعد: تمرير مستقل لصفحة التفاصيل مع استعادة موضع التصفح، إصلاح هوية رِواق المقوّسة، أسهم وسحب للعرض الرئيسي، و«عرض الكل» للكتالوجات المجمّعة والفردية. التنزيلات تعرض صورًا محفوظة محليًا وأزرار تشغيل وإظهار الملف وحذف مؤكد. قائمة الفيديو تختصر الإجراءات وتربطها بجلسة التشغيل الحالية. [النتائج والحدود](docs/QUALITY-2026-10-25.md).
-
-تبقى التنزيلات في التخزين الخاص بالتطبيق؛ فتح فيديو محلي متاح داخل التنزيلات والسحب والإفلات. نسخ رابط المغناطيس لا يعني توفير رابط ملف تورنت مستقل.
-
 ### الجديد في 0.51.0 · تجريبي
 
 - قائمة جانبية قابلة للطي: الرئيسية واكتشف والمكتبة والمجموعات والتنزيلات والإضافات، يمينًا للعربية ويسارًا للإنجليزية.
@@ -120,12 +114,6 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
 Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.51.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
-
-### Changes under review
-
-The unpublished `codex/quality-110` branch isolates Details scrolling and restores browsing context, repairs Riwaq's arched identity, adds showcase gestures and grouped/individual See all browsing, and improves download cards with cached artwork, Reveal and confirmed deletion. The shorter video menu keeps a snapshot of the current playback session. [Evidence and limits](docs/QUALITY-2026-10-25.md).
-
-Downloads stay in private managed storage. Local video opening remains inside Downloads and through drag/drop. Copy magnet link does not imply a separate torrent-file URL.
 
 ### What's new in 0.51.0 · Beta
 

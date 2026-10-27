@@ -349,6 +349,40 @@ export async function qualityChecks({
             );
           },
         );
+        if (view === "home")
+          await check(
+            "A: " + language + " music bars leave the end of Details visible",
+            async () => {
+              // Stand-ins carry the real bars' classes and typical heights;
+              // the page pads .content for them, and Details scrolls itself.
+              for (const [name, height] of [
+                ["music-bar", 62],
+                ["local-music-bar", 110],
+              ]) {
+                const { end, bar } = await page.evaluate(
+                  ({ name, height }) => {
+                    const bar = document.createElement("div");
+                    bar.className = name;
+                    bar.style.height = height + "px";
+                    document.querySelector(".app").append(bar);
+                    const details = document.querySelector(".title-page");
+                    details.scrollTop = details.scrollHeight;
+                    const end = Math.round(
+                      details.lastElementChild.getBoundingClientRect().bottom,
+                    );
+                    const top = Math.round(bar.getBoundingClientRect().top);
+                    bar.remove();
+                    return { end, bar: top };
+                  },
+                  { name, height },
+                );
+                assert(
+                  end <= bar,
+                  `${name} covers ${end - bar}px of the end of Details`,
+                );
+              }
+            },
+          );
         await close();
         await check(
           "A: " + language + " " + view + " returns focus and scroll",

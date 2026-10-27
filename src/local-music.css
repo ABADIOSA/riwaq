@@ -259,7 +259,8 @@
 .local-music-bar input {
   accent-color: var(--accent);
 }
-.app:has(.local-music-bar) .content {
+.app:has(.local-music-bar) .content,
+.app:has(.local-music-bar) .title-page {
   padding-bottom: 150px;
 }
 .local-music-bar .spinning {

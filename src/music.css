@@ -426,8 +426,10 @@
     display: none;
   }
 }
-/* With the player bar up, the end of the page stays clear of it. */
-.app:has(.music-bar) .content {
+/* With the player bar up, the end of the page stays clear of it. A title
+   page scrolls on its own (title.css), so it needs the same room. */
+.app:has(.music-bar) .content,
+.app:has(.music-bar) .title-page {
   padding-bottom: 96px;
 }
 .theme-song-official {
