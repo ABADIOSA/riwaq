@@ -48,14 +48,25 @@ const SmartShelf = memo(function SmartShelf({ group, onOpen, onMore }) {
         </div>
         <div className="rail-tools">
           {arrows}
-          {(row || group.rows.length === 1) && (
+          {
             <button
               className="text-button"
-              onClick={() => onMore(row || group.rows[0])}
+              onClick={() =>
+                onMore(
+                  row ||
+                    (group.rows.length === 1
+                      ? group.rows[0]
+                      : {
+                          name: group.name,
+                          rows: group.rows,
+                          groupId: group.id,
+                        }),
+                )
+              }
             >
               عرض الكل <ChevronLeft size={16} />
             </button>
-          )}
+          }
         </div>
       </div>
       {group.rows.length > 1 && (

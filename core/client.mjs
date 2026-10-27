@@ -1351,9 +1351,16 @@ export class Client {
    * A failure can be remembered for a while (failFor), so one dead addon does
    * not cost its full timeout again on every screen that lists catalogs.
    */
-  async cached(url, { ttl = 180000, failFor = 0, timeout, headers } = {}) {
+  async cached(
+    url,
+    { ttl = 180000, failFor = 0, timeout, headers, retryFailed = false } = {},
+  ) {
     const cached = this.cache.get(url);
-    if (cached?.failed && Date.now() - cached.at < cached.failFor)
+    if (
+      cached?.failed &&
+      !retryFailed &&
+      Date.now() - cached.at < cached.failFor
+    )
       throw new Error(cached.message);
     if (cached && !cached.failed && Date.now() - cached.at < ttl)
       return cached.data;
@@ -1480,7 +1487,7 @@ export class Client {
    * One of Riwaq's own rows: a TMDB chart or discover query matched to IMDb
    * IDs with the viewer's key, or a Cinemeta catalog without one.
    */
-  async feedCatalog(key, { page = 1, skip = 0 } = {}) {
+  async feedCatalog(key, { page = 1, skip = 0, retryFailed = false } = {}) {
     const tmdb = this.tmdbActive();
     const row = feedRow(key, { tmdb }) || discoverRow(key, { tmdb });
     if (!row) return { rows: [], failures: [] };
@@ -1509,6 +1516,7 @@ export class Client {
         ttl: 600000,
         failFor: 120000,
         timeout: 10000,
+        retryFailed,
       });
       const metas = this.adultFilter(
         (data.metas || [])
@@ -1530,6 +1538,7 @@ export class Client {
       return this.feedCatalog(args.catalogKey, {
         page: Number.isInteger(args.page) && args.page > 0 ? args.page : 1,
         skip: Number(args.skip) || 0,
+        retryFailed: args.retryFailed === true,
       });
     const tasks = this.catalogTasks(args);
     const results = new Array(tasks.length),
@@ -1538,7 +1547,12 @@ export class Client {
       try {
         const data = await this.cached(
           resourceUrl(addon.transportUrl, "catalog", cat.type, cat.id, extras),
-          { ttl: 600000, failFor: 120000, timeout: 10000 },
+          {
+            ttl: 600000,
+            failFor: 120000,
+            timeout: 10000,
+            retryFailed: args.retryFailed === true,
+          },
         );
         const metas = this.adultFilter(
           (data.metas || [])

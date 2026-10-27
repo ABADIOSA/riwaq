@@ -16,7 +16,7 @@ import {
 } from "../../core/taste.mjs";
 import { titleKey } from "../../core/library.mjs";
 import { arabicCount, EXCLUDED, LIKES } from "../../core/arabic.mjs";
-import { Poster, ScrollRow } from "./UI.jsx";
+import { Poster, ScrollRow, RowArrows, useScrollRow } from "./UI.jsx";
 
 export function TasteFeedback({ meta, state, update }) {
   const [busy, setBusy] = useState(false);
@@ -108,6 +108,7 @@ export default function TasteDiscovery({
     [pool, taste, watched, type, maxMinutes],
   );
   const hidden = taste.feedback.filter((f) => f.value === "hide");
+  const row = useScrollRow();
   const liked = taste.feedback.filter((f) => f.value === "like");
   const configured = taste.genres.length || liked.length;
   const save = async (action) => {
@@ -135,17 +136,20 @@ export default function TasteDiscovery({
               : "ابدأ بالأنواع التي تحبها. كل اختيار يجعل البوصلة أقرب لك."}
           </p>
         </div>
-        <button
-          className="secondary taste-customize"
-          aria-expanded={editing}
-          onClick={() => {
-            setEditing(!editing);
-            setConfirmReset(false);
-          }}
-        >
-          <SlidersHorizontal size={17} />
-          {editing ? "إغلاق التخصيص" : "اضبط ذوقك"}
-        </button>
+        <div className="taste-heading-tools">
+          <RowArrows row={row} />
+          <button
+            className="secondary taste-customize"
+            aria-expanded={editing}
+            onClick={() => {
+              setEditing(!editing);
+              setConfirmReset(false);
+            }}
+          >
+            <SlidersHorizontal size={17} />
+            {editing ? "إغلاق التخصيص" : "اضبط ذوقك"}
+          </button>
+        </div>
       </header>
       {editing && (
         <div className="taste-controls">
@@ -308,7 +312,7 @@ export default function TasteDiscovery({
         </p>
       )}
       {picks.length ? (
-        <ScrollRow className="taste-row">
+        <ScrollRow className="taste-row" row={row} arrows={false}>
           {picks.map((pick) => (
             <article
               className="taste-pick"

@@ -1,6 +1,8 @@
 # Architecture
 
-Proposed PR #83 follow-up: main's PlaybackRequest owns work before MPV starts; Player retains its separate start token once a process is opening. Stop or a newer request revokes each phase at its own boundaries. The native context menu is main-owned and HUD may request it through a narrow IPC method.
+Main's PlaybackRequest owns work before MPV starts; Player retains its separate start token once a process is opening. Stop or a newer request revokes each phase at its own boundaries. The context menu is HTML in the HUD or theater; main issues its profile/video/session snapshot and rejects stale actions through narrow IPC methods. It does not open a blocking native menu.
+
+Details owns a viewport scroller over the mounted, inert browsing view. Explicit Back restores its saved focus/offset; destination changes discard the saved layer. See all browses actual constituent catalog keys, retaining per-row filters and provider page offsets; unique card count is not a pagination cursor. Download Reveal and artwork use owned opaque IDs; private media paths and source credentials stay in main. Profile removal drains pending artwork commits before file cleanup.
 
 OfflineLibrary writes only validated private IDs under userData/offline. Records are per profile, outside publicState, backups and account payloads. Full file downloads stream to .part, then rename and persist readiness; torrent downloads own a separate utility-process host. Renderers receive metadata, byte counts and opaque IDs only. Basic settings do not mount advanced pages; quiet navigation is a validated per-profile presentation setting. See [request audit and limits](REVIEW-PR-83.md).
 

@@ -12,7 +12,6 @@ import {
   Lock,
   Music2,
   Download,
-  FolderOpen,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
@@ -35,7 +34,6 @@ export default function RiwaqNav({
   collapsed,
   onCollapse,
   onDownloads,
-  onLocalVideo,
 }) {
   const [narrow, setNarrow] = useState(
     () => matchMedia("(max-width: 760px)").matches,
@@ -129,12 +127,6 @@ export default function RiwaqNav({
               ([, id]) => !appearance.navHidden.includes(id) || view === id,
             )
             .map(([Icon, id, label]) => item(Icon, id, label))}
-          {item(
-            FolderOpen,
-            "localVideo",
-            "فتح ملف فيديو (أو اسحبه إلى النافذة)",
-            () => action(onLocalVideo),
-          )}
         </div>
       </nav>
       <div className="riwaq-sidebar-bottom">

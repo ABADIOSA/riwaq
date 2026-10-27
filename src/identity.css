@@ -103,6 +103,7 @@
 
 /* The mashrabiya lattice behind the sidebar and the hero. */
 .identity-riwaq .sidebar::before,
+.identity-riwaq .riwaq-sidebar::before,
 .identity-riwaq .hero::before,
 .identity-riwaq .title-hero::before {
   content: "";

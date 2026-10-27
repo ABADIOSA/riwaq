@@ -21,6 +21,8 @@ import owner from "./en/owner.mjs";
 import engine046 from "./en/engine046.mjs";
 import feedback094 from "./en/feedback094.mjs";
 import onboarding from "./en/onboarding.mjs";
+import downloadsQuality from "./en/downloads-quality.mjs";
+import quality110 from "./en/quality110.mjs";
 
 export default {
   ...core,
@@ -41,6 +43,8 @@ export default {
   ...engine046,
   ...feedback094,
   ...onboarding,
+  ...downloadsQuality,
+  ...quality110,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",

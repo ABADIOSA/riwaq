@@ -130,7 +130,7 @@ const addonRows = [
   { key: "a4", name: "Empty", provider: "X", type: "movie", metas: [] },
 ];
 
-test("addon catalogs fold into Riwaq's sections without any addon name", () => {
+test("addon catalogs keep Riwaq headings and their real browsing identities", () => {
   assert.equal(addonSection(addonRows[0]), "arabic");
   assert.equal(addonSection(addonRows[2]), "sports");
   const arabic = blendedSection(addonRows, "arabic", new Set(["series:tt2"]));
@@ -143,7 +143,10 @@ test("addon catalogs fold into Riwaq's sections without any addon name", () => {
   );
   const sports = blendedSection(addonRows, "sports");
   assert.equal(sports[0].name, "رياضة");
-  const text = JSON.stringify([...arabic, ...sports]);
+  const text = JSON.stringify(
+    [...arabic, ...sports].map(({ name, subtitle }) => ({ name, subtitle })),
+  );
+  assert.equal(arabic[0].rows[0], addonRows[0]);
   for (const leak of ["Akwam", "Cima", "Sports", "Arabic Movies", "a1", "a2"])
     assert.ok(!text.includes(leak), leak);
   assert.ok([...arabic, ...sports].every((r) => r.key.startsWith("blend:")));

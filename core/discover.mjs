@@ -523,6 +523,8 @@ export function blendedSection(addonRows = [], tab, shownIds = new Set()) {
       type: kind === "other" ? "" : kind,
       metas,
       blended: true,
+      // Keep the actual constituents for browsing; blend:* is no endpoint.
+      rows,
     });
   }
   return out;

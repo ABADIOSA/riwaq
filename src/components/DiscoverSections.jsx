@@ -74,6 +74,7 @@ export default function DiscoverSections({
           subtitle={row.subtitle}
           metas={row.metas}
           onOpen={onOpen}
+          onMore={() => onMore(row)}
         />
       ))}
       {!loading && !mine.length && !blended.length && (

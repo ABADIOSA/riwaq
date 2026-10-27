@@ -9,6 +9,8 @@ const allowed = new Set([
   "offlineCancel",
   "offlineRemove",
   "offlinePlay",
+  "offlineReveal",
+  "offlineArtwork",
   "ownerState",
   "ownerOpen",
   "ownerActivate",

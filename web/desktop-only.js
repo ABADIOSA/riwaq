@@ -20,6 +20,8 @@ export const DESKTOP_ONLY = {
   offlineCancel: "التنزيل والمشاهدة دون إنترنت متاحان في تطبيق ويندوز.",
   offlineRemove: "التنزيل والمشاهدة دون إنترنت متاحان في تطبيق ويندوز.",
   offlinePlay: "التنزيل والمشاهدة دون إنترنت متاحان في تطبيق ويندوز.",
+  offlineReveal: "التنزيل والمشاهدة دون إنترنت متاحان في تطبيق ويندوز.",
+  offlineArtwork: "التنزيل والمشاهدة دون إنترنت متاحان في تطبيق ويندوز.",
   choosePlayer: `اختيار MPV ${DESKTOP}؛ الموقع يشغّل الفيديو بمشغّل المتصفح.`,
   chooseShader: `مرشّحات GLSL تعمل داخل MPV و${DESKTOP}.`,
   chooseShaderFolder: `مرشّحات GLSL تعمل داخل MPV و${DESKTOP}.`,

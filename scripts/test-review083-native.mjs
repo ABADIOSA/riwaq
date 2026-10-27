@@ -52,7 +52,8 @@ const bootstrap = join(out, "bootstrap.mjs"),
 writeFileSync(
   bootstrap,
   `
-import {app} from "electron";import {TorrentHost} from ${JSON.stringify(pathToFileURL(resolve("electron/torrent.mjs")).href)};
+import {app,shell} from "electron";import {TorrentHost} from ${JSON.stringify(pathToFileURL(resolve("electron/torrent.mjs")).href)};
+globalThis.reviewRevealed=[];shell.showItemInFolder=(path)=>globalThis.reviewRevealed.push(path);
 import childProcess from "node:child_process";import {syncBuiltinESMExports} from "node:module";
 import fs from "node:fs";
 import koffi from "koffi";
@@ -269,15 +270,27 @@ try {
     assert.equal((await player()).pause, false, "the closing click paused");
     await hud.mouse.click(x, y, { button: "right" });
     await wait(async () => !!(await hud.$(".player-menu")), "menu reopens");
-    await hud.click(
-      '.player-menu [role=menuitem]:has-text("تنزيل الفيديو للمشاهدة لاحقًا")',
-    );
+    await hud.click('.player-menu [role=menuitem]:has-text("تنزيل الفيديو")');
     const p = (await call("init")).profiles.active;
     let downloaded;
     await wait(async () => {
       downloaded = (await call("offlineList", { profileId: p })).items[0];
       return downloaded?.status === "ready";
     }, "download completes through real HTTP and disk");
+    const playingPid = await app.evaluate(() => globalThis.reviewMpv);
+    await call("offlineReveal", { profileId: p, id: downloaded.id });
+    assert.equal(
+      await app.evaluate(
+        ({}, id) => globalThis.reviewRevealed.at(-1).endsWith(id + ".media"),
+        downloaded.id,
+      ),
+      true,
+    );
+    assert.equal(
+      await app.evaluate(() => globalThis.reviewMpv),
+      playingPid,
+      "Reveal must not restart or replace MPV",
+    );
     await call("stop");
     online = false;
     await call("offlinePlay", { profileId: p, id: downloaded.id });
@@ -355,6 +368,8 @@ try {
       await call("playbackAction", {
         action: "download",
         videoId: options.videoId,
+        sessionId: options.sessionId,
+        profileId: options.profileId,
       });
       let item;
       await wait(async () => {

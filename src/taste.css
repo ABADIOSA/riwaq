@@ -22,6 +22,23 @@
   font-size: 30px;
   margin: 12px 0 6px;
 }
+.taste-heading-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+/* The compass always uses its requested heading controls, including when
+   other catalog rows use the optional edge-arrow appearance. */
+.taste-heading-tools .rail-arrows {
+  display: flex;
+}
+@media (max-width: 600px) {
+  .taste-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 .taste-heading p,
 .taste-note,
 .taste-privacy {

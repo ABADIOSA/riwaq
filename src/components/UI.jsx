@@ -1,4 +1,11 @@
-import React, { memo, useState, useEffect, useRef, useContext } from "react";
+import React, {
+  memo,
+  useState,
+  useEffect,
+  useRef,
+  useContext,
+  useCallback,
+} from "react";
 import {
   LoaderCircle,
   Film,
@@ -163,12 +170,15 @@ export const Poster = memo(function Poster({ meta, onOpen, progress }) {
  * ends; a rail can draw the same in its heading instead.
  */
 export function useScrollRow(onNearEnd) {
-  const ref = useRef(null);
+  const [element, setElement] = useState(null);
+  // React calls the ref again when a late or replacement row mounts. Bind
+  // listeners to that node rather than only the node present on first render.
+  const ref = useCallback((node) => setElement(node), []);
   const nearEnd = useRef(onNearEnd);
   nearEnd.current = onNearEnd;
   const [edges, setEdges] = useState({ start: true, end: true });
   const measure = () => {
-    const el = ref.current;
+    const el = element;
     if (!el) return;
     const max = el.scrollWidth - el.clientWidth;
     const pos = Math.abs(el.scrollLeft);
@@ -187,8 +197,13 @@ export function useScrollRow(onNearEnd) {
     );
   };
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    const el = element;
+    if (!el) {
+      setEdges((was) =>
+        was.start && was.end ? was : { start: true, end: true },
+      );
+      return;
+    }
     measure();
     const detachDrag = attachDragScroll(el);
     el.addEventListener("scroll", measure, { passive: true });
@@ -202,9 +217,9 @@ export function useScrollRow(onNearEnd) {
       resize.disconnect();
       mutate.disconnect();
     };
-  }, []);
+  }, [element]);
   const move = (forward) => {
-    const el = ref.current;
+    const el = element;
     if (!el) return;
     const rtl = getComputedStyle(el).direction === "rtl";
     const step = Math.max(el.clientWidth * 0.85, 160);
@@ -217,7 +232,7 @@ export function useScrollRow(onNearEnd) {
 }
 
 /** A row's two arrows, beside its "See all" (appearance rowArrows: header). */
-function RowArrows({ row }) {
+export function RowArrows({ row }) {
   if (row.edges.start && row.edges.end) return null;
   return (
     <div className="rail-arrows">
@@ -256,6 +271,7 @@ export function ScrollRow({
   children,
   onNearEnd,
   row: shared,
+  arrows = true,
   ...rest
 }) {
   const own = useScrollRow(shared ? undefined : onNearEnd);
@@ -264,7 +280,7 @@ export function ScrollRow({
     <div
       className={`scroll-row-wrap ${edges.start ? "" : "can-back"} ${edges.end ? "" : "can-forward"}`}
     >
-      {!edges.start && (
+      {arrows && !edges.start && (
         <button
           type="button"
           className="scroll-arrow scroll-back"
@@ -278,7 +294,7 @@ export function ScrollRow({
       <Tag ref={ref} className={`scroll-row ${className}`} {...rest}>
         {children}
       </Tag>
-      {!edges.end && (
+      {arrows && !edges.end && (
         <button
           type="button"
           className="scroll-arrow scroll-forward"

@@ -1,0 +1,77 @@
+.offline-library .download-card {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 18px;
+  padding: 16px;
+}
+.download-art {
+  width: 82px;
+  aspect-ratio: 2 / 3;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg-raised, #202126);
+  color: var(--muted);
+}
+.download-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.download-info {
+  min-width: 0;
+}
+.download-status {
+  display: block;
+  margin-block-start: 6px;
+  color: var(--muted);
+}
+.download-info .offline-size {
+  margin-block: 7px;
+  font-size: 12px;
+}
+.download-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.download-actions .icon-button {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.download-local {
+  margin-block: 16px;
+}
+.download-local summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.download-local button {
+  margin-block-start: 10px;
+}
+.download-confirm {
+  width: min(450px, calc(100vw - 32px));
+}
+.download-confirm b {
+  overflow-wrap: anywhere;
+}
+.player-menu .download-unavailable {
+  max-width: 270px;
+  margin: 0;
+  padding: 0 12px 9px;
+  color: #c6c9d0;
+  line-height: 1.5;
+}
+@media (max-width: 480px) {
+  .offline-library .download-card {
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+  .download-art {
+    width: 60px;
+  }
+}

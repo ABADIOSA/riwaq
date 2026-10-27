@@ -1,4 +1,12 @@
-import { mkdir, open, rename, rm, lstat } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  rename,
+  rm,
+  lstat,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { cleanMedia } from "../core/library.mjs";
@@ -6,6 +14,54 @@ import { offlineEpisode } from "../core/offline-media.mjs";
 
 const ID = /^[a-f0-9]{32}$/;
 const MAX_BYTES = 500 * 1024 ** 3;
+const POSTER_BYTES = 128 * 1024;
+const IMAGE_INPUT_BYTES = 2 * 1024 ** 2;
+async function posterBytes(url, request, signal) {
+  let target = new URL(url);
+  for (let redirects = 0; redirects < 4; redirects++) {
+    if (target.protocol !== "https:" || target.username || target.password)
+      return null;
+    const response = await request(target.href, {
+      signal,
+      redirect: "manual",
+      credentials: "omit",
+    });
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const next = response.headers.get("location");
+      await response.body?.cancel();
+      if (!next) return null;
+      target = new URL(next, target);
+      continue;
+    }
+    if (
+      !response.ok ||
+      !/^image\/(jpeg|png|webp)(;|$)/i.test(
+        response.headers.get("content-type") || "",
+      ) ||
+      Number(response.headers.get("content-length")) > IMAGE_INPUT_BYTES
+    ) {
+      await response.body?.cancel();
+      return null;
+    }
+    const reader = response.body?.getReader();
+    if (!reader) return null;
+    let size = 0;
+    const chunks = [];
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.length;
+        if (size > IMAGE_INPUT_BYTES) return null;
+        chunks.push(value);
+      }
+      return Buffer.concat(chunks);
+    } finally {
+      await reader.cancel().catch(() => {});
+    }
+  }
+  return null;
+}
 async function removeFile(path) {
   for (let attempt = 0; ; attempt++) {
     try {
@@ -191,14 +247,27 @@ export async function downloadFile({
 export class OfflineLibrary {
   constructor(
     client,
-    { root, resolveSource, request = fetch, deleteFile = removeFile },
+    {
+      root,
+      resolveSource,
+      request = fetch,
+      deleteFile = removeFile,
+      thumbnail,
+    },
   ) {
     this.client = client;
     this.root = root;
     this.resolveSource = resolveSource;
     this.request = request;
     this.deleteFile = deleteFile;
+    this.thumbnail = thumbnail;
+    this.artworkQueue = Promise.resolve();
+    this.artworkJobs = new Map();
+    this.artworkAttempted = new Set();
+    this.artworkAbort = new AbortController();
     this.removing = new Set();
+    this.using = new Set();
+    this.deleting = new Set();
     this.job = null;
     this.playing = "";
     client.state.offline ||= {};
@@ -244,18 +313,104 @@ export class OfflineLibrary {
     if (!ID.test(id)) throw Error("التنزيل غير صالح");
     return join(this.root, id + (partial ? ".part" : ".media"));
   }
+  posterPath(id) {
+    this.path(id);
+    return join(this.root, `${id}.poster.jpg`);
+  }
+  /** One bounded image request at a time; only local JPEG bytes cross IPC. */
+  async artwork(profileId, id) {
+    const generation = this.artworkAbort;
+    const owned = () => {
+      const profile = this.profile(profileId);
+      const item = this.bag(profile).find((x) => x.id === id);
+      if (!item || this.deleting.has(id) || generation.signal.aborted)
+        throw Error("التنزيل غير متاح");
+      return item;
+    };
+    const item = owned();
+    const local = async () => {
+      const path = this.posterPath(id);
+      const info = await lstat(path).catch(() => null);
+      if (!info?.isFile() || info.size > POSTER_BYTES) return null;
+      const bytes = await readFile(path).catch(() => null);
+      owned();
+      return bytes?.length <= POSTER_BYTES &&
+        bytes[0] === 255 &&
+        bytes[1] === 216
+        ? `data:image/jpeg;base64,${bytes.toString("base64")}`
+        : null;
+    };
+    const cached = await local();
+    owned();
+    if (cached || !this.thumbnail || !item.meta.poster)
+      return { image: cached };
+    if (!this.artworkJobs.has(id) && !this.artworkAttempted.has(id)) {
+      this.artworkAttempted.add(id);
+      const job = this.artworkQueue
+        .catch(() => {})
+        .then(async () => {
+          let temp;
+          try {
+            owned();
+            const bytes = await posterBytes(
+              item.meta.poster,
+              this.request,
+              AbortSignal.any([generation.signal, AbortSignal.timeout(8000)]),
+            );
+            owned();
+            if (!bytes) return;
+            const jpeg = this.thumbnail(bytes);
+            if (
+              !Buffer.isBuffer(jpeg) ||
+              jpeg.length > POSTER_BYTES ||
+              jpeg[0] !== 255 ||
+              jpeg[1] !== 216
+            )
+              return;
+            await mkdir(this.root, { recursive: true });
+            owned();
+            temp = `${this.posterPath(id)}.tmp`;
+            await rm(temp, { force: true });
+            owned();
+            await writeFile(temp, jpeg, { flag: "wx" });
+            owned();
+            await rename(temp, this.posterPath(id));
+          } catch {
+            // Artwork failure does not turn an otherwise usable video into an error.
+          } finally {
+            if (temp) await rm(temp, { force: true }).catch(() => {});
+          }
+        });
+      this.artworkJobs.set(id, job);
+      this.artworkQueue = job;
+      job.finally(() => this.artworkJobs.delete(id));
+    }
+    await this.artworkJobs.get(id);
+    owned();
+    return { image: await local() };
+  }
+  cancelArtwork() {
+    this.artworkAbort.abort();
+    this.artworkAbort = new AbortController();
+    this.artworkAttempted.clear();
+  }
   list(profileId) {
     const p = this.profile(profileId);
     return {
       items: this.bag(p).map((x) => ({
         id: x.id,
-        meta: x.meta,
+        meta: Object.fromEntries(
+          Object.entries(x.meta).filter(
+            ([key]) => !["poster", "background"].includes(key),
+          ),
+        ),
         videoId: x.videoId,
         episode: x.episode,
         at: x.at,
         status: x.status,
         bytes: this.job?.id === x.id ? this.job.bytes : x.bytes || 0,
         total: this.job?.id === x.id ? this.job.total : x.total || 0,
+        playing: this.playing === x.id || this.using.has(x.id),
       })),
       busy: !!this.job,
     };
@@ -369,6 +524,7 @@ export class OfflineLibrary {
         }
       }
     })();
+    this.artwork(profileId, record.id).catch(() => {});
     return this.list(profileId);
   }
   resume(profileId, id, settings) {
@@ -399,24 +555,77 @@ export class OfflineLibrary {
     const profile = this.profile(profileId),
       item = this.bag(profile).find((x) => x.id === id);
     if (item?.status !== "ready") throw Error("التنزيل غير جاهز للمشاهدة");
+    if (this.deleting.has(id))
+      throw Error("جارٍ حذف التنزيل؛ انتظر انتهاء العملية");
     const path = this.path(id),
       info = await lstat(path).catch(() => null);
     if (!info?.isFile() || info.size !== item.bytes)
       throw Error("ملف التنزيل غير موجود أو غير مكتمل");
+    this.profile(profileId);
+    if (this.deleting.has(id) || !this.bag(profile).includes(item))
+      throw Error("التنزيل غير متاح");
     return { path, item };
+  }
+  /** Keep deletion out of the lookup → stop → start/reveal IO window. */
+  async useFile(profileId, id, action) {
+    this.profile(profileId);
+    if (this.deleting.has(id) || this.using.has(id))
+      throw Error("التنزيل قيد الاستخدام؛ حاول مجددًا");
+    this.using.add(id);
+    try {
+      const file = await this.file(profileId, id);
+      this.profile(profileId);
+      return await action(file);
+    } finally {
+      this.using.delete(id);
+    }
   }
   async remove(profileId, id) {
     const profile = this.profile(profileId),
-      bag = this.bag(profile),
-      item = bag.find((x) => x.id === id);
+      item = this.bag(profile).find((x) => x.id === id);
     if (!item) return this.list(profileId);
-    if (id === this.playing) throw Error("أوقف مشاهدة التنزيل قبل حذفه");
-    await this.cancel(profileId, id);
-    await removeFile(this.path(id));
-    await removeFile(this.path(id, true));
-    this.client.state.offline[profile] = bag.filter((x) => x.id !== id);
-    this.persist();
-    return this.list(profileId);
+    const check = () => {
+      this.profile(profileId);
+      if (id === this.playing || this.using.has(id))
+        throw Error("أوقف مشاهدة التنزيل قبل حذفه");
+    };
+    check();
+    if (this.deleting.has(id))
+      throw Error("جارٍ حذف التنزيل؛ انتظر انتهاء العملية");
+    this.deleting.add(id);
+    const erase = async (path) => {
+      try {
+        await this.deleteFile(path);
+      } catch {
+        throw Error(
+          "تعذر حذف التنزيل؛ أغلق البرامج التي تستخدم الملف ثم حاول مجددًا",
+        );
+      }
+    };
+    try {
+      await this.cancel(profileId, id);
+      check();
+      await erase(`${this.posterPath(id)}.tmp`);
+      await erase(this.posterPath(id));
+      check();
+      await erase(this.path(id, true));
+      check();
+      await erase(this.path(id));
+      this.client.state.offline[profile] = this.bag(profile).filter(
+        (x) => x.id !== id,
+      );
+      try {
+        this.persist();
+      } catch {
+        throw Error(
+          "حُذفت الملفات، لكن تعذر حفظ قائمة التنزيلات. أعد فتح التنزيلات للتحقق.",
+        );
+      }
+      this.artworkAttempted.delete(id);
+      return this.list(profileId);
+    } finally {
+      this.deleting.delete(id);
+    }
   }
   /**
    * A removed profile's downloads go with it: its download stops and its
@@ -427,7 +636,11 @@ export class OfflineLibrary {
     if (this.removing.has(profileId))
       throw Error("جارٍ حذف تنزيلات هذا الملف الشخصي؛ انتظر انتهاء العملية");
     this.removing.add(profileId);
+    this.cancelArtwork();
     try {
+      // A rename already submitted to the OS cannot be aborted. Let that
+      // commit finish before cleanup, so it cannot recreate a deleted poster.
+      await this.artworkQueue;
       if (this.job?.profile === profileId) {
         this.job.abort.abort();
         await this.job.done;
@@ -435,13 +648,19 @@ export class OfflineLibrary {
       const bag = this.client.state.offline?.[profileId];
       for (const item of Array.isArray(bag) ? [...bag] : []) {
         if (!ID.test(item?.id)) throw Error("التنزيل غير صالح");
-        if (item.id === this.playing)
+        if (
+          item.id === this.playing ||
+          this.using.has(item.id) ||
+          this.deleting.has(item.id)
+        )
           throw Error("أوقف مشاهدة التنزيل قبل حذفه");
         try {
           // Delete the partial first: a locked partial must not destroy an
           // otherwise playable complete copy or drop its owning record.
           await this.deleteFile(this.path(item.id, true));
           await this.deleteFile(this.path(item.id));
+          await this.deleteFile(this.posterPath(item.id));
+          await this.deleteFile(`${this.posterPath(item.id)}.tmp`);
         } catch {
           throw Error(
             "تعذر حذف بعض التنزيلات؛ أغلق البرامج التي تستخدم الملفات ثم حاول حذف الملف الشخصي مجددًا",
@@ -450,6 +669,7 @@ export class OfflineLibrary {
         this.client.state.offline[profileId] = this.bag(profileId).filter(
           (x) => x.id !== item.id,
         );
+        this.artworkAttempted.delete(item.id);
       }
       delete this.client.state.offline?.[profileId];
     } finally {
@@ -460,8 +680,10 @@ export class OfflineLibrary {
     }
   }
   async stop() {
+    this.cancelArtwork();
     if (this.job) this.job.pause = true;
     this.job?.abort.abort();
     await this.job?.done;
+    await this.artworkQueue;
   }
 }

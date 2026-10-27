@@ -118,6 +118,10 @@ export default function Details({
   onOpenTitle,
   onSettings,
 }) {
+  const pageRef = useRef(null);
+  useEffect(() => {
+    pageRef.current?.focus({ preventScroll: true });
+  }, []);
   const [meta, setMeta] = useState(selection.meta),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
@@ -1026,6 +1030,8 @@ export default function Details({
   );
   return (
     <article
+      ref={pageRef}
+      tabIndex={-1}
       className={`title-page ${pageTheme ? `themed theme-${pageTheme.source}` : ""}`}
       style={pageTheme?.vars}
     >
