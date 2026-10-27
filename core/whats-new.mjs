@@ -7,6 +7,27 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.52.0",
+    title: "تصفح أهدأ وتنزيلات أوضح",
+    items: [
+      "صفحة العمل تتمرر وحدها: التمرير فيها لا يحرك الرئيسية أو اكتشف خلفها، والرجوع يعيدك إلى مكانك.",
+      "«عرض الكل» متاح دائمًا حتى في «الكل»، ويفتح كتالوجات القسم كاملة مع تبويب لكل كتالوج وزر لتحميل المزيد.",
+      "أسهم العرض الرئيسي في أسفله بجانب إيقاف التدوير، ويقلَّب بالسحب أو اللمس؛ أسهم بوصلة الذوق مثل بقية الصفوف، وعادت أقواس هوية رِواق.",
+      "التنزيلات بصورة العمل وحجمه، وأيقونات للتشغيل وإظهار الملف في المستكشف والحذف بعد تأكيد؛ فتح فيديو من جهازك صار خيارًا داخل التنزيلات.",
+      "قائمة الفيديو أقصر: لقطة شاشة ونسخ رابط المغناطيس وتنزيل الفيديو، والتحكم المباشر باقٍ على الشاشة. والسحب يعمل في الصفوف التي تظهر متأخرة.",
+    ],
+    en: {
+      title: "Calmer browsing and clearer downloads",
+      items: [
+        "Title pages scroll on their own: scrolling there never moves Home or Discover behind them, and Back returns you to the same place.",
+        "See all is always there, even on All, and opens the section's catalogs in full, with a tab per catalog and Load more.",
+        "The showcase keeps its arrows in the footer beside Stop rotating and turns with a mouse or touch swipe. The Taste compass uses the same arrows as other rows, and Riwaq's arches are back.",
+        "Downloads show the title's artwork and size, with icons to play, show the file in Explorer and delete after confirming. Opening a video from your device is now an option inside Downloads.",
+        "A shorter video menu: screenshot, copy magnet link and download video, with direct controls kept on screen. Dragging also works in rows that load late.",
+      ],
+    },
+  },
+  {
     version: "0.51.0",
     title: "وجهاتك أقرب، ورئيسية على ذوقك",
     items: [

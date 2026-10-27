@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.51.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
+  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.52.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-15191e">
   <a href="https://abadiosa.github.io/riwaq/"><img alt="Web" src="https://img.shields.io/badge/web-abadiosa.github.io%2Friwaq-15191e"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-15191e"></a>
@@ -30,19 +30,19 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.51.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.51.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.52.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.52.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.51.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
+الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.52.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.51.0 · تجريبي
+### الجديد في 0.52.0 · تجريبي
 
-- قائمة جانبية قابلة للطي: الرئيسية واكتشف والمكتبة والمجموعات والتنزيلات والإضافات، يمينًا للعربية ويسارًا للإنجليزية.
-- شريط علوي أبسط للبحث والصلاة والإشعارات، مع قائمة حوارية للنوافذ الضيقة وهوامش أقل للمحتوى.
-- خيار مستقل للعرض الرئيسي فوق خيار جلسة اليوم؛ فعّله من الإعدادات، مع حفظ اختيارك لكل ملف شخصي.
-- إخفاء جلسة اليوم يزيل الفاصل والفراغ المتبقيين؛ فتح ملف الفيديو متاح من التنزيلات والقائمة الثانوية.
-- إزالة اختصار Shift+F10 لقائمة البوستر؛ الزر الأيمن ومفتاح القائمة المخصص يعملان، والبحث بـCtrl+K يدعم لوحة المفاتيح العربية.
+- صفحة العمل تتمرر وحدها: التمرير فيها لا يحرك الرئيسية أو اكتشف خلفها، والرجوع يعيدك إلى مكانك.
+- «عرض الكل» متاح دائمًا حتى في «الكل»، ويفتح كتالوجات القسم كاملة مع تبويب لكل كتالوج وزر لتحميل المزيد.
+- أسهم العرض الرئيسي في أسفله بجانب إيقاف التدوير، ويقلَّب بالسحب أو اللمس؛ أسهم بوصلة الذوق مثل بقية الصفوف، وعادت أقواس هوية رِواق.
+- التنزيلات بصورة العمل وحجمه، وأيقونات للتشغيل وإظهار الملف في المستكشف والحذف بعد تأكيد؛ فتح فيديو من جهازك صار خيارًا داخل التنزيلات.
+- قائمة الفيديو أقصر: لقطة شاشة ونسخ رابط المغناطيس وتنزيل الفيديو، والتحكم المباشر باقٍ على الشاشة. والسحب يعمل في الصفوف التي تظهر متأخرة.
 
 الإصدارات السابقة في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -109,19 +109,19 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.51.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.51.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.52.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.52.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.51.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
+Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.52.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.51.0 · Beta
+### What's new in 0.52.0 · Beta
 
-- A collapsible sidebar for Home, Discover, Library, Collections, Downloads and Addons: right in Arabic and left in English.
-- A simpler search, prayer and notification header, with a modal navigation drawer for compact windows and smaller content margins.
-- An independent Main showcase switch above Today's session. Enable it in Settings and keep your choice per profile.
-- Hiding Today's session removes its orphan divider and spacing. Open local video from Downloads or the secondary navigation.
-- Shift+F10 no longer opens poster actions; right-click and the dedicated Menu key work. Ctrl+K search now supports Arabic keyboard layouts.
+- Title pages scroll on their own: scrolling there never moves Home or Discover behind them, and Back returns you to the same place.
+- See all is always there, even on All, and opens the section's catalogs in full, with a tab per catalog and Load more.
+- The showcase keeps its arrows in the footer beside Stop rotating and turns with a mouse or touch swipe. The Taste compass uses the same arrows as other rows, and Riwaq's arches are back.
+- Downloads show the title's artwork and size, with icons to play, show the file in Explorer and delete after confirming. Opening a video from your device is now an option inside Downloads.
+- A shorter video menu: screenshot, copy magnet link and download video, with direct controls kept on screen. Dragging also works in rows that load late.
 
 Earlier releases are in the [changelog](docs/CHANGELOG.md).
 

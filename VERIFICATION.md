@@ -1,5 +1,11 @@
 # Verification — Riwaq
 
+## 2026-10-27 — 0.52.0 beta release preparation
+
+- Prepared on #119's branch (`codex/quality-110`, based on main `d79fec3`) after Claude's review. The review added one fix: a title page scrolls on its own since this change, outside `.content`'s bottom padding, so the Spotify and local music bars covered its end (measured in Chromium against the built CSS: 36 px and 88 px; none on main). `.title-page` now takes the same padding; a Chromium quality check failed before (38 px, Arabic and English) and passes after, and `tests/title-page.test.mjs` keeps the rules together. README dropped its "under review" section; CLAUDE.md records the PR's behaviour. Version, lockfile, Arabic/English in-app highlights, README, release notes and changelog agree on 0.52.0.
+- Run on Linux by Claude on the release branch: **921 Node tests pass**, zero failures/skips; Prettier and desktop/web production builds pass. The complete Chromium web smoke passes with **21 #110 quality checks**; `scripts/test-quality-carousels.mjs` (36) and `scripts/test-downloads-quality.mjs` (28) pass, as does `scripts/test-hud-keys.mjs`. The stand-in music bars use the real classes with typical heights (62 and 110 px), not a playing bar.
+- Not run here: Windows. Codex's Windows Electron/MPV run (embedded and separate HUD, tracks, seek, Stop, F8, real HTTP download/offline playback, Reveal, profile-cleanup failure) was on #119 before the CSS fix and was not repeated. The release workflow still runs `npm test` on Windows and builds and signs the packages. No real HDR/Dolby Vision, live provider account, touch hardware or all-users installation was exercised. #111's exact row was not reproduced: portrait rows drag in Chromium on main and on this branch. [Request coverage and limits](docs/QUALITY-2026-10-25.md).
+
 ## 2026-10-24 — 0.51.0 beta release preparation
 
 - Prepared from main `c21aa6f`, the merge of #108. A clean release checkout keeps the five private Admin Setup edits and the separate licensing work out of the public package. Version, lockfile, Arabic/English in-app highlights, README, release notes and changelog agree on 0.51.0. No new feature or dependency is introduced by release preparation.
