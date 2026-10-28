@@ -1,10 +1,12 @@
 # Verification — Riwaq
 
-## 2026-10-28 — interface rebuild by journey (unreleased branch)
+## 2026-10-28 — 0.53.0 beta: interface rebuild by journey
 
 - Branch `claude/new-session-zcr5p9` from main `3cf5281`. See all is a page of the content area (#112), Home brings resuming and titles up, the player menu says why it has no torrent link (#113), and row images never start a native drag (#111, not reproduced). [Research](docs/UI-RESEARCH-2026-10-28.md), [design and parity map](docs/UI-DESIGN-2026-10-28.md), [full record](docs/UI-VERIFICATION-2026-10-28.md).
 - Run on Linux by Claude: **932 Node tests pass**; Prettier and both production builds pass; `scripts/test-ui-browse.mjs` 39/39; the web smoke's 22 #110 quality checks pass, then it stops at the second device's `setViewportSize`, where main also stops in this Chromium 153 build (CI pins Playwright 1.56.1); `test-downloads-quality` 28/28, `test-quality-carousels` 36/36, `test-hud-keys` pass.
-- Not run: anything on Windows (Electron, MPV, HUD, F8, packages); `test-session-ui.mjs` was updated for the new Home defaults but not run. No release, version bump or deployment.
+- Not run: anything on Windows (Electron, MPV, HUD, F8, packages); `test-session-ui.mjs` was updated for the new Home defaults but not run.
+- CI on #120's head passed the complete web smoke (including the account-sync steps this environment could not finish) and the HUD keyboard.
+- Released as 0.53.0 Beta at the owner's request: version, lockfile, Arabic/English in-app highlights, README, release notes, changelog and the packaged-smoke path agree on 0.53.0. The release workflow runs `npm test` on Windows and builds and signs the packages; Windows MPV/HUD checks were still not run by hand.
 
 ## 2026-10-27 — 0.52.0 beta release preparation
 

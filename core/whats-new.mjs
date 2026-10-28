@@ -7,6 +7,25 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.53.0",
+    title: "تصفح أوسع، ورئيسية تبدأ بالمشاهدة",
+    items: [
+      "«عرض الكل» صار صفحة داخل التطبيق بشبكة واسعة تملأ المساحة، مع تبويب لكل كتالوج وفلاتره، وتحميل تلقائي كلما نزلت، والرجوع يعيدك لنفس الصف.",
+      "الرئيسية تبدأ بما تشاهده: «نكمل الحكاية» أولًا، وجلسة اليوم شريط مختصر يتوسع بزر «عرض أوسع»، وبوصلة الذوق مطوية حتى تحتاجها.",
+      "قائمة الفيديو توضح أن مصدر التورنت بلا ملف تورنت منفصل، فرابط المغناطيس هو ما يُنسخ.",
+      "الصور داخل الصفوف لا تتحول إلى سحب صورة عندما تسحب الصف بالفأرة.",
+    ],
+    en: {
+      title: "Wider browsing, and a Home that starts with watching",
+      items: [
+        "See all is a page inside the app again: a wide grid that fills the space, a tab and filters per catalog, more titles as you scroll, and Back returns you to the same row.",
+        "Home starts with something to watch: Continue watching first, Today's session as a compact band that Show full widens, and the Taste compass folded until you need it.",
+        "The video menu explains that a torrent source has no separate torrent file, so the magnet link is what gets copied.",
+        "Pictures in rows no longer turn into image drags when you drag a row with the mouse.",
+      ],
+    },
+  },
+  {
     version: "0.52.0",
     title: "تصفح أهدأ وتنزيلات أوضح",
     items: [
