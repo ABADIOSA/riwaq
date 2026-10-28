@@ -1,0 +1,39 @@
+/*
+ * Riwaq's semantic tokens (docs/UI-DESIGN-2026-10-28.md). They name the
+ * viewer's own appearance values (core/appearance.mjs themeVariables and
+ * the card sizes in studio.css) by what they are for; they add no colour.
+ * Rebuilt surfaces use these names; older stylesheets keep their own rules.
+ */
+.app {
+  --surface: var(--bg);
+  --surface-raised: var(--panel);
+  --text-strong: var(--text);
+  --text-muted: var(--muted);
+  --border: var(--line);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --page-gutter: var(--session-gutter, 24px);
+  --grid-gap: var(--gap, 16px);
+  --control-height: 40px;
+  --focus-ring: 2px solid var(--accent);
+  --focus-offset: 3px;
+  --elev-1: 0 6px 18px #0003;
+  --elev-2: 0 18px 48px #0006;
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+}
+.app.reduced-motion {
+  --motion-fast: 0ms;
+  --motion-base: 0ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
+}

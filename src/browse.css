@@ -1,0 +1,102 @@
+/*
+ * "See all" as a page of the content area (BrowsePage.jsx). It takes the
+ * title page's place, between the masthead and the sidebar, over the view
+ * it was opened from, which stays mounted, hidden and inert underneath.
+ * Imported by main.jsx after the shared sheets, so the order of the built
+ * CSS cannot let a general rule (.modal, .page-body) win over this one.
+ */
+.content.browse-open
+  > :not(.browse-page):not(.title-page):not(.topbar):not(.update-banner) {
+  visibility: hidden;
+  pointer-events: none;
+}
+.browse-page {
+  position: fixed;
+  inset-block-start: calc(
+    var(--masthead-height, 68px) + var(--window-offset, 0px)
+  );
+  inset-block-end: 0;
+  inset-inline-start: var(--nav-width, 0px);
+  inset-inline-end: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  color: var(--text-strong);
+  /* Under a title opened from the grid (title.css: 20). */
+  z-index: 19;
+  outline: none;
+}
+.app.experience-riwaq .browse-page .browse-body {
+  padding: var(--space-5) var(--page-gutter) var(--space-7);
+}
+.browse-back {
+  min-height: var(--control-height);
+  margin-bottom: var(--space-4);
+}
+.browse-back:focus-visible,
+.browse-tabs button:focus-visible,
+.browse-filters select:focus-visible,
+.browse-page .load-more:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+.browse-heading {
+  margin: 0 0 var(--space-4);
+}
+.browse-heading h1 {
+  margin: var(--space-2) 0;
+  overflow-wrap: anywhere;
+}
+.browse-tabs button {
+  min-height: var(--control-height);
+  max-width: 320px;
+}
+.browse-tabs button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browse-tabs button small,
+.browse-tabs button > small {
+  margin-inline-start: var(--space-2);
+  color: var(--text-muted);
+}
+.browse-filters {
+  margin-top: var(--space-3);
+}
+.browse-coverage {
+  margin: var(--space-4) 0 var(--space-5);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+/* The grid takes the whole page body; columns follow the viewer's card
+   size (--card-width) and density gap. */
+.browse-page .browse-grid {
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(var(--card-width, 162px), 42vw), 1fr)
+  );
+  gap: var(--space-6) var(--grid-gap);
+}
+.browse-warning {
+  margin-top: var(--space-5);
+}
+.browse-sentinel {
+  height: 1px;
+}
+.browse-page .load-more {
+  min-height: var(--control-height);
+  margin-top: var(--space-5);
+}
+.app:has(.music-bar) .browse-page {
+  padding-bottom: 96px;
+}
+.app:has(.local-music-bar) .browse-page {
+  padding-bottom: 150px;
+}
+@media (max-width: 760px) {
+  .app.experience-riwaq .browse-page .browse-body {
+    padding: var(--space-4) var(--space-4) var(--space-6);
+  }
+}

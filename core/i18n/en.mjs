@@ -23,6 +23,7 @@ import feedback094 from "./en/feedback094.mjs";
 import onboarding from "./en/onboarding.mjs";
 import downloadsQuality from "./en/downloads-quality.mjs";
 import quality110 from "./en/quality110.mjs";
+import uiRebuild from "./en/ui-rebuild.mjs";
 
 export default {
   ...core,
@@ -45,6 +46,7 @@ export default {
   ...onboarding,
   ...downloadsQuality,
   ...quality110,
+  ...uiRebuild,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",

@@ -24,7 +24,12 @@ export async function qualityChecks({
     } catch (e) {
       results.push({ name, pass: false, error: e.message });
       console.log("Quality check failed: " + name + ": " + e.message);
-      if (await page.locator(".catalog-browser[open]").count())
+      await page
+        .screenshot({
+          path: join(output, "failed-" + results.length + ".png"),
+        })
+        .catch(() => {});
+      if (await page.locator(".browse-page").count())
         await page.keyboard.press("Escape");
     }
   };
@@ -68,8 +73,15 @@ export async function qualityChecks({
       await button.scrollIntoViewIfNeeded();
       const y = await page.evaluate(() => scrollY);
       await button.click();
-      const browser = page.locator(".catalog-browser[open]");
+      // #112: a page of the content area, never a dialog over it.
+      const browser = page.locator(".browse-page");
       await browser.waitFor();
+      assert.equal(await page.locator("dialog[open]").count(), 0);
+      assert.equal(
+        await browser.evaluate((el) => el === document.activeElement),
+        true,
+        "The page takes focus when it opens",
+      );
       assert.deepEqual(
         await browser
           .locator(".poster-card strong")
@@ -77,51 +89,74 @@ export async function qualityChecks({
           .then((a) => a.slice(0, 3)),
         ["القطار الأخير", "Quality movie 0", "الساعة الزرقاء"],
       );
-      await browser.locator(".load-more").click();
+      // More pages come from the button or, at the end of the grid, by
+      // themselves: either way each provider page is asked once, a repeated
+      // page moves on, and the planted 503 keeps what had arrived.
+      const quality = (skip) =>
+        catalogRequests.filter(
+          (r) => r.includes("/quality/catalog/") && r.includes("skip=" + skip),
+        ).length;
+      const loadMore = browser.locator(".load-more:not(:disabled)");
+      for (let n = 0; n < 40 && !quality(60); n++) {
+        if (await loadMore.isVisible()) await loadMore.click();
+        else await page.waitForTimeout(100);
+      }
+      await browser.getByRole("alert").waitFor();
+      assert.equal(quality(20), 1);
+      assert.equal(quality(40), 1);
+      assert.equal(quality(60), 1);
+      assert(
+        (await browser.locator(".poster-grid").textContent()).includes(
+          "Quality movie 40",
+        ),
+      );
+      assert.equal(await browser.locator(".poster-card").count(), 57);
+      assert.equal(await browser.locator(".load-more").count(), 0);
       await browser
-        .locator(".load-more:not(:disabled)")
-        .waitFor({ timeout: 1800 });
-      await browser.locator(".load-more").click();
-      await page.waitForFunction(() =>
-        document
-          .querySelector(".catalog-browser .poster-grid")
-          ?.textContent.includes("Quality movie 40"),
+        .getByRole("alert")
+        .getByRole("button", { name: "إعادة المحاولة" })
+        .click();
+      await browser.getByRole("alert").waitFor({ state: "detached" });
+      await browser.locator(".load-more").waitFor({ state: "detached" });
+      assert.equal(
+        quality(60),
+        2,
+        "Explicit retry must reach the same failed provider page",
       );
-      assert(
-        catalogRequests.some(
-          (r) => r.includes("/quality/catalog/") && r.includes("skip=20"),
-        ),
-      );
-      assert(
-        catalogRequests.some(
-          (r) => r.includes("/quality/catalog/") && r.includes("skip=40"),
-        ),
-      );
+      assert.equal(await browser.locator(".poster-card").count(), 57);
       await browser
         .getByRole("tab", { name: /Latest · Quality catalog/ })
         .click();
       assert.equal(await browser.locator(".poster-card").count(), 40);
-      await browser.locator(".load-more").click();
-      await browser.getByRole("alert").waitFor();
-      await browser.locator(".load-more").click();
-      await browser.getByRole("alert").waitFor({ state: "detached" });
-      await browser.locator(".load-more").waitFor({ state: "detached" });
-      assert.equal(
-        catalogRequests.filter(
-          (r) => r.includes("/quality/catalog/") && r.includes("skip=60"),
-        ).length,
-        2,
-        "Explicit retry must reach the same failed provider page",
-      );
-      await browser.getByRole("tab", { name: "الكل", exact: true }).click();
-      const entry = browser.locator(".poster-card").first();
+      await browser.getByRole("tab", { name: /^الكل/ }).click();
+      // Details from a scrolled grid, then Back to the same card and offset.
+      const entry = browser.locator(".poster-card").nth(14);
+      await entry.scrollIntoViewIfNeeded();
+      const offset = await browser.evaluate((el) => el.scrollTop);
+      assert(offset > 0, "the page scrolls on its own");
+      assert.equal(await page.evaluate(() => scrollY), y);
       await entry.click();
       await page.locator(".title-page .back-button").waitFor();
-      assert.equal(await page.locator(".catalog-browser[open]").count(), 0);
+      assert.equal(await browser.isVisible(), false);
+      assert.equal(await browser.evaluate((el) => el.inert), true);
       await close();
       await browser.waitFor();
+      await page.waitForFunction(
+        () =>
+          document.activeElement ===
+          document.querySelectorAll(".browse-page .poster-card")[14],
+      );
+      assert.equal(await browser.evaluate((el) => el.scrollTop), offset);
+      assert.equal(await page.evaluate(() => scrollY), y);
       await page.keyboard.press("Escape");
       await browser.waitFor({ state: "detached" });
+      assert.equal(
+        await page.evaluate(() =>
+          [...document.querySelectorAll(".content > *")].some((el) => el.inert),
+        ),
+        false,
+        "Nothing stays inert after Back",
+      );
       assert.equal(
         await button.evaluate((el) => el === document.activeElement),
         true,
@@ -135,9 +170,9 @@ export async function qualityChecks({
         const tab = group.locator(".smart-chips [role=tab]").nth(2);
         await tab.click();
         await group.locator(".rail-tools .text-button").click();
-        const browser = page.locator(".catalog-browser[open]");
+        const browser = page.locator(".browse-page");
         await browser.waitFor();
-        assert.equal(await browser.locator(".filter-tabs").count(), 0);
+        assert.equal(await browser.locator(".browse-tabs").count(), 0);
         assert.equal(await browser.locator("h1").innerText(), "Latest");
         assert.equal(await browser.locator(".poster-card").count(), 20);
         await page.keyboard.press("Escape");
@@ -146,15 +181,54 @@ export async function qualityChecks({
       },
     );
     await check(
+      "E: a catalog's declared filters change its real requests on the page",
+      async () => {
+        await page
+          .locator(".smart-shelf.group-movies .rail-tools .text-button")
+          .click();
+        const browser = page.locator(".browse-page");
+        await browser.waitFor();
+        await browser
+          .getByRole("tab", { name: /أعمال تجريبية · Riwaq web fixture/ })
+          .click();
+        const language = browser.getByLabel("language", { exact: true });
+        await language.waitFor();
+        // A required filter offers no "All"; an optional one does.
+        assert.deepEqual(
+          await browser
+            .getByLabel("sort", { exact: true })
+            .locator("option")
+            .allTextContents(),
+          ["Popular", "Rating"],
+        );
+        const asked = catalogRequests.length;
+        await language.selectOption("English");
+        await browser
+          .getByText("لا توجد نتائج لهذا الاختيار.", { exact: true })
+          .waitFor();
+        assert(
+          catalogRequests
+            .slice(asked)
+            .some(
+              (r) =>
+                r.includes("/catalog/movie/webfix/") &&
+                r.includes("language=English") &&
+                r.includes("sort=Popular"),
+            ),
+        );
+        await language.selectOption("");
+        await browser.locator(".poster-card").first().waitFor();
+        await page.keyboard.press("Escape");
+        await browser.waitFor({ state: "detached" });
+      },
+    );
+    await check(
       "E: explicit navigation dismisses a suspended catalog",
       async () => {
         await page
           .locator(".smart-shelf.group-movies .rail-tools .text-button")
           .click();
-        await page
-          .locator(".catalog-browser[open] .poster-card")
-          .first()
-          .click();
+        await page.locator(".browse-page .poster-card").first().click();
         await page.locator(".title-page").waitFor();
         await page
           .locator(".riwaq-sidebar")
@@ -162,7 +236,7 @@ export async function qualityChecks({
           .click();
         await page.locator(".title-page").waitFor({ state: "detached" });
         assert.equal(
-          await page.locator(".catalog-browser").count(),
+          await page.locator(".browse-page").count(),
           0,
           "Changing destination must not reopen the suspended catalog",
         );
@@ -175,10 +249,7 @@ export async function qualityChecks({
         await page
           .locator(".smart-shelf.group-movies .rail-tools .text-button")
           .click();
-        await page
-          .locator(".catalog-browser[open] .poster-card")
-          .first()
-          .click();
+        await page.locator(".browse-page .poster-card").first().click();
         await page.locator(".title-page").waitFor();
         const sources = await call("streams", {
           type: "movie",
@@ -197,7 +268,7 @@ export async function qualityChecks({
           await page.locator(".theater video.riwaq-video").waitFor();
           await page.locator(".title-page").waitFor({ state: "detached" });
           assert.equal(
-            await page.locator(".catalog-browser").count(),
+            await page.locator(".browse-page").count(),
             0,
             "Playback takeover must not reopen the previous catalog",
           );
@@ -493,7 +564,7 @@ export async function qualityChecks({
           await page
             .locator(".smart-shelf.group-movies .rail-tools .text-button")
             .click();
-          const catalog = page.locator(".catalog-browser[open]");
+          const catalog = page.locator(".browse-page");
           await catalog.waitFor();
           for (const width of [1440, 980, 740, 390]) {
             await page.setViewportSize({
@@ -506,6 +577,18 @@ export async function qualityChecks({
               ),
               true,
             );
+            // Not only no overflow: the grid uses the content column (#112).
+            const fill = await catalog.evaluate((el) => {
+              const body = el.querySelector(".browse-body");
+              const grid = el.querySelector(".poster-grid");
+              const cs = getComputedStyle(body);
+              const inner =
+                body.clientWidth -
+                parseFloat(cs.paddingLeft) -
+                parseFloat(cs.paddingRight);
+              return grid.getBoundingClientRect().width / inner;
+            });
+            assert(fill > 0.98, `grid fills ${fill} of the page body`);
             await page.screenshot({
               path: join(output, `catalog-${language}-${width}.png`),
             });

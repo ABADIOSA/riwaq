@@ -21,6 +21,9 @@ import "./ltr.css";
 import "./notifications.css";
 import "./review083.css";
 import "./first-run.css";
+// Rebuilt surfaces: semantic tokens, then See all (after the shared sheets).
+import "./tokens.css";
+import "./browse.css";
 import { watchErrors } from "./lib/diagnostics.js";
 
 // Recent interface errors for the diagnostic report (Settings → النظام).
