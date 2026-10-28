@@ -155,18 +155,35 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
       );
     }
   };
+  // A compact band by default, so the catalogues stay near the top; the
+  // full builder with its preview when the viewer widens it (per profile).
+  const expanded = state.settings.sessionExpanded === true;
   return (
-    <section className="session-home" aria-label="جلسة رِواق">
+    <section
+      className={`session-home ${expanded ? "" : "is-compact"}`}
+      aria-label="جلسة رِواق"
+    >
       <div className="session-heading">
         <div>
           <span className="session-kicker">جلسة اليوم</span>
           <h1>وقتك له حكاية.</h1>
           <p>جلسة على مقاسك، من الأشياء التي تحبها.</p>
         </div>
-        <span className="session-edition">
-          <i />
-          جلسة رِواق<span>اختيار أقل. مشاهدة أكثر.</span>
-        </span>
+        <div className="session-heading-tools">
+          {expanded && (
+            <span className="session-edition">
+              <i />
+              جلسة رِواق<span>اختيار أقل. مشاهدة أكثر.</span>
+            </span>
+          )}
+          <button
+            className="text-button session-size"
+            aria-expanded={expanded}
+            onClick={() => update("settings", { sessionExpanded: !expanded })}
+          >
+            {expanded ? "عرض مختصر" : "عرض أوسع"}
+          </button>
+        </div>
       </div>
       <div className="session-workspace">
         <div className="session-builder">
@@ -231,39 +248,41 @@ export default function SessionHome({ state, rows, onOpen, update, notice }) {
             </span>
           </div>
         </div>
-        <div className="session-preview">
-          <div className="session-preview-top">
-            <span>مساحتك الشخصية</span>
-            <span>RIWAQ SELECTS ↙</span>
+        {expanded && (
+          <div className="session-preview">
+            <div className="session-preview-top">
+              <span>مساحتك الشخصية</span>
+              <span>RIWAQ SELECTS ↙</span>
+            </div>
+            <div className="session-poster-stack" aria-hidden="true">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className={`session-stack-${i}`}>
+                  {peek[i] && (
+                    <img
+                      src={imgUrl(peek[i].meta.poster)}
+                      alt=""
+                      onError={(e) => {
+                        e.currentTarget.style.visibility = "hidden";
+                      }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="session-preview-caption">
+              <span>أنت تختار الإيقاع.</span>
+              <h2>ونرتّب الحكاية.</h2>
+              <p>
+                {seedPool.length
+                  ? "نكمل عملاً بدأته، أو نفتح باباً لاكتشاف جديد. وستعرف لماذا اخترنا كل عمل."
+                  : "احفظ بعض الأعمال أو انتظر تحميل فهارسك، ثم نرتّب لك أول جلسة."}
+              </p>
+            </div>
+            <span className="session-preview-orbit" aria-hidden="true">
+              ر
+            </span>
           </div>
-          <div className="session-poster-stack" aria-hidden="true">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className={`session-stack-${i}`}>
-                {peek[i] && (
-                  <img
-                    src={imgUrl(peek[i].meta.poster)}
-                    alt=""
-                    onError={(e) => {
-                      e.currentTarget.style.visibility = "hidden";
-                    }}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="session-preview-caption">
-            <span>أنت تختار الإيقاع.</span>
-            <h2>ونرتّب الحكاية.</h2>
-            <p>
-              {seedPool.length
-                ? "نكمل عملاً بدأته، أو نفتح باباً لاكتشاف جديد. وستعرف لماذا اخترنا كل عمل."
-                : "احفظ بعض الأعمال أو انتظر تحميل فهارسك، ثم نرتّب لك أول جلسة."}
-            </p>
-          </div>
-          <span className="session-preview-orbit" aria-hidden="true">
-            ر
-          </span>
-        </div>
+        )}
       </div>
       {busy && (
         <p className="session-status" role="status">

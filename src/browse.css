@@ -1,0 +1,57 @@
+/*
+ * "See all" as a page of the content area (BrowsePage.jsx). It takes the
+ * title page's place, between the masthead and the sidebar, over the view
+ * it was opened from, which stays mounted, hidden and inert underneath.
+ * Everything inside uses the shared rules (.page-body, .back-button,
+ * .page-heading, .filter-tabs, .poster-grid, .load-more, .inline-warning).
+ * Imported by main.jsx after the shared sheets, so the order of the built
+ * CSS cannot let a general rule (.modal, .page-body) win over this one.
+ */
+.content.browse-open
+  > :not(.browse-page):not(.title-page):not(.topbar):not(.update-banner) {
+  visibility: hidden;
+  pointer-events: none;
+}
+.browse-page {
+  position: fixed;
+  inset-block-start: calc(
+    var(--masthead-height, 68px) + var(--window-offset, 0px)
+  );
+  inset-block-end: 0;
+  inset-inline-start: var(--nav-width, 0px);
+  inset-inline-end: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  color: var(--text-strong);
+  /* Under a title opened from the grid (title.css: 20). */
+  z-index: 19;
+  outline: none;
+}
+.app.experience-riwaq .browse-page .browse-body {
+  padding-block: var(--space-5) var(--space-7);
+}
+/* The back button above already spaces the heading from the top. */
+.browse-heading {
+  margin-top: 0;
+}
+.browse-heading h1 {
+  overflow-wrap: anywhere;
+}
+/* Loaded, never a provider's total: the same muted 12px as a page
+   heading's line. */
+.browse-coverage {
+  margin: var(--space-4) 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.browse-sentinel {
+  height: 1px;
+}
+.app:has(.music-bar) .browse-page {
+  padding-bottom: 96px;
+}
+.app:has(.local-music-bar) .browse-page {
+  padding-bottom: 150px;
+}

@@ -58,7 +58,8 @@
 .download-confirm b {
   overflow-wrap: anywhere;
 }
-.player-menu .download-unavailable {
+.player-menu .download-unavailable,
+.player-menu .menu-note {
   max-width: 270px;
   margin: 0;
   padding: 0 12px 9px;

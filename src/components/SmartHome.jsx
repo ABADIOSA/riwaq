@@ -4,7 +4,9 @@ import { blendRows, groupRows } from "../../core/smart-groups.mjs";
 import { arabicCount, CATALOGS } from "../../core/arabic.mjs";
 import { Rail, ScrollRow } from "./UI.jsx";
 
-const rowLabel = (row) => (row.name === "Popular" ? "الأكثر شعبية" : row.name);
+/** A catalog's name as rows show it (BrowsePage.jsx shares it). */
+export const rowLabel = (row) =>
+  row.name === "Popular" ? "الأكثر شعبية" : row.name;
 
 /**
  * Riwaq's sections on home (core/smart-groups.mjs): one shelf per group of

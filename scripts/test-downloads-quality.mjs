@@ -248,6 +248,21 @@ try {
           lang === "ar" ? /نسخ رابط المغناطيس/ : /Copy magnet link/,
         );
         assert.match(text, lang === "ar" ? /تنزيل الفيديو/ : /Download video/);
+        // #113: no second item copies the same magnet; the menu says why
+        // there is no separate torrent file, and the item points to it.
+        const note = page.locator(".player-menu .menu-note");
+        assert.match(
+          await note.innerText(),
+          lang === "ar" ? /ملف تورنت منفصل/ : /no separate torrent file/,
+        );
+        assert.equal(
+          await page
+            .getByRole("menuitem", {
+              name: lang === "ar" ? "نسخ رابط المغناطيس" : "Copy magnet link",
+            })
+            .getAttribute("aria-describedby"),
+          await note.getAttribute("id"),
+        );
       },
     );
     await check(

@@ -1159,3 +1159,105 @@
   opacity: 0.55;
   cursor: default;
 }
+/* Today's session as a compact band (the default, SessionHome.jsx): one
+   row of durations, moods and the build button under a smaller heading.
+   «عرض أوسع» brings back the full builder and its preview. */
+.session-heading-tools {
+  display: flex;
+  align-items: end;
+  gap: var(--space-4, 16px);
+}
+.session-size {
+  white-space: nowrap;
+}
+.session-home.is-compact {
+  padding-top: var(--space-4, 16px);
+}
+.session-home.is-compact .session-heading {
+  align-items: center;
+  margin-bottom: var(--space-3, 12px);
+}
+.session-home.is-compact .session-heading h1 {
+  font-size: clamp(24px, 2.2vw, 32px);
+  line-height: 1.4;
+  letter-spacing: -0.5px;
+}
+.session-home.is-compact .session-heading p {
+  font-size: 12px;
+}
+.session-home.is-compact .session-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+.session-home.is-compact .session-builder {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "time mood build"
+    "budgets moods build";
+  align-items: center;
+  gap: var(--space-2, 8px) var(--space-5, 24px);
+  padding: var(--space-4, 16px) var(--space-5, 24px);
+}
+.session-home.is-compact .session-step {
+  grid-area: time;
+  margin: 0;
+}
+.session-home.is-compact .session-step.mood-step {
+  grid-area: mood;
+}
+.session-home.is-compact .session-step > span,
+.session-home.is-compact .session-step > svg,
+.session-home.is-compact .session-step p,
+.session-home.is-compact .session-build-row > span {
+  display: none;
+}
+.session-home.is-compact .session-step h2 {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.session-home.is-compact .session-budgets {
+  grid-area: budgets;
+  grid-template-columns: repeat(5, minmax(52px, auto));
+  gap: 6px;
+  margin: 0;
+}
+.session-home.is-compact .session-budgets button {
+  padding: 8px 6px;
+}
+.session-home.is-compact .session-budgets b {
+  font-size: 17px;
+}
+.session-home.is-compact .session-budgets span {
+  margin-top: 4px;
+}
+.session-home.is-compact .session-moods {
+  grid-area: moods;
+}
+.session-home.is-compact .session-build-row {
+  grid-area: build;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+/* Below Continue watching, the band is one more section of the page. */
+.app.experience-riwaq .page-body > .session-home {
+  padding-inline: 0;
+  border-top: 1px solid var(--line);
+  margin-top: 28px;
+}
+@media (max-width: 1150px) {
+  .session-home.is-compact .session-builder {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "time" "budgets" "mood" "moods" "build";
+  }
+}
+@media (max-width: 600px) {
+  .session-home.is-compact .session-budgets {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  .session-heading-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

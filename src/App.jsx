@@ -54,7 +54,7 @@ import {
   ScrollRow,
 } from "./components/UI.jsx";
 import Details from "./components/Details.jsx";
-import CatalogBrowser from "./components/CatalogBrowser.jsx";
+import BrowsePage from "./components/BrowsePage.jsx";
 import { ExploreModal, PeopleRow } from "./components/Credits.jsx";
 import AiSearchRow from "./components/AiSearch.jsx";
 import { PrayerChip } from "./components/Prayer.jsx";
@@ -622,18 +622,26 @@ export default function App() {
     restoreTitle.current = true;
     setSelected(null);
   };
-  // Details owns a viewport scroller. Preserve the mounted browsing layout,
-  // document offset and prior inline styles for exactly this viewing layer.
+  // Details and See all each own a viewport scroller over the mounted
+  // browsing layout. One effect holds the document offset, prior inline
+  // styles and inertness for whichever layers are open, so closing one layer
+  // under another (a lock closes See all under Details) never leaves the
+  // view behind inert or the page scrollable.
   const titleActive = !!selected;
+  // See all belongs to the profile that opened it.
+  const browseOpen =
+    !!catalogBrowser && catalogBrowser.profileId === state.profiles?.active;
+  const layers = `${titleActive ? "title" : ""}|${browseOpen ? "browse" : ""}`;
   useLayoutEffect(() => {
-    if (!titleActive) return;
+    if (layers === "|") return;
     const root = document.documentElement;
     const overflow = root.style.overflow;
     const gutter = root.style.scrollbarGutter;
     root.style.scrollbarGutter = "stable";
     root.style.overflow = "hidden";
+    const top = titleActive ? "title-page" : "browse-page";
     const background = [...document.querySelectorAll(".content > *")].filter(
-      (el) => !el.classList.contains("title-page"),
+      (el) => !el.classList.contains(top),
     );
     const inert = background.map((el) => [el, el.inert]);
     for (const [el] of inert) el.inert = true;
@@ -641,6 +649,12 @@ export default function App() {
       root.style.overflow = overflow;
       root.style.scrollbarGutter = gutter;
       for (const [el, was] of inert) el.inert = was;
+    };
+  }, [layers]);
+  // Back from Details returns focus and the offset saved when it opened.
+  useLayoutEffect(() => {
+    if (!titleActive) return;
+    return () => {
       const saved = titleReturn.current;
       if (
         restoreTitle.current &&
@@ -659,6 +673,17 @@ export default function App() {
       titleReturn.current = null;
     };
   }, [titleActive]);
+  // Locking the profile closes a page opened before the lock.
+  const wasUnlocked = useRef(state.profiles?.unlocked);
+  useEffect(() => {
+    const was = wasUnlocked.current;
+    wasUnlocked.current = state.profiles?.unlocked;
+    if (was === true && state.profiles?.unlocked === false) {
+      cancelAnimationFrame(catalogFrame.current);
+      catalogReturn.current = null;
+      setCatalogBrowser(null);
+    }
+  }, [state.profiles?.unlocked]);
   const open = (meta, videoId) => openTitle({ meta, videoId });
   // Stable handles for memoized rows and cards: they always call the
   // latest handler, so a re-render of the app does not redraw every card.
@@ -847,9 +872,14 @@ export default function App() {
     [heroItems, heroItems.length ? null : hero],
   );
   const favorite = (meta) => update("favorite", meta);
+  // "See all" opens a page over the current view (BrowsePage.jsx). The
+  // catalogs come as loaded, before hidden finished titles are taken out,
+  // so each provider's next page starts where its last one ended.
   const more = (row) => {
     cancelAnimationFrame(catalogFrame.current);
-    const list = row.rows || [row];
+    const list = (row.rows || [row]).map(
+      (r) => rows.find((loaded) => loaded.key === r.key) || r,
+    );
     catalogReturn.current = {
       focus: document.activeElement,
       x: window.scrollX,
@@ -860,6 +890,7 @@ export default function App() {
       name: row.name,
       rows: list,
       profileId: state.profiles?.active,
+      fromSearch: view === "search",
       search: view === "search" ? query : "",
       filters: Object.fromEntries(
         list.map((r) => [
@@ -939,6 +970,22 @@ export default function App() {
       ? imgUrl(selected?.meta?.background) ||
         (state.settings.showShowcase ? imgUrl(hero?.background) : "")
       : "";
+  // Resuming comes first: with titles to continue, Today's session follows
+  // that row instead of standing above everything (docs/UI-DESIGN-2026-10-28.md).
+  const continueFirst =
+    view === "home" &&
+    homeSections.includes("continue") &&
+    uniqueProgress.length > 0;
+  const sessionBand = ready && state.settings.showSession !== false && (
+    <SessionHome
+      key={state.profiles?.active || "default"}
+      state={state}
+      rows={shownRows}
+      onOpen={openStable}
+      update={update}
+      notice={notice}
+    />
+  );
   const searchControl = (
     <form
       className="search-box"
@@ -1048,7 +1095,7 @@ export default function App() {
           onDownloads={() => setOfflineOpen(true)}
         />
         <main
-          className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""}`}
+          className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""} ${browseOpen ? "browse-open" : ""}`}
         >
           {!player.active &&
             view !== "settings" &&
@@ -1104,15 +1151,15 @@ export default function App() {
               }}
             />
           )}
-          {catalogBrowser &&
-            catalogBrowser.profileId === state.profiles?.active && (
-              <CatalogBrowser
-                selection={catalogBrowser}
-                onClose={closeCatalogBrowser}
-                onOpen={openStable}
-                suspended={!!selected}
-              />
-            )}
+          {browseOpen && (
+            <BrowsePage
+              selection={catalogBrowser}
+              onClose={closeCatalogBrowser}
+              onOpen={openStable}
+              suspended={!!selected}
+              watched={catalogBrowser.fromSearch ? null : watched}
+            />
+          )}
           {["home", "discover", "search"].includes(view) && (
             <>
               {view === "home" &&
@@ -1130,18 +1177,7 @@ export default function App() {
                     fromRiwaq={feedRows.length > 0}
                   />
                 )}
-              {view === "home" &&
-                ready &&
-                state.settings.showSession !== false && (
-                  <SessionHome
-                    key={state.profiles?.active || "default"}
-                    state={state}
-                    rows={shownRows}
-                    onOpen={openStable}
-                    update={update}
-                    notice={notice}
-                  />
-                )}
+              {view === "home" && !continueFirst && sessionBand}
               {view === "home" &&
                 !state.user &&
                 !loading &&
@@ -1184,7 +1220,7 @@ export default function App() {
                   </div>
                 )}
               <div
-                className={`page-body ${view === "home" && state.settings.showSession === false ? "without-session" : ""}`}
+                className={`page-body ${view === "home" && (state.settings.showSession === false || continueFirst) ? "without-session" : ""}`}
               >
                 {view !== "home" && (
                   <div className="page-heading">
@@ -1384,7 +1420,10 @@ export default function App() {
                                 onRemove={dismissStable}
                               />
                             )}
+                            {id === "continue" && continueFirst && sessionBand}
                             {id === "taste" && ready && (
+                              // Folded as on Discover: its editor opens on
+                              // request, so browsing is never behind a form.
                               <TasteDiscovery
                                 key={state.profiles?.active}
                                 rows={shownRows}
@@ -1393,6 +1432,7 @@ export default function App() {
                                 onOpen={openStable}
                                 watched={finished}
                                 loading={loading}
+                                collapsed
                               />
                             )}
                             {id === "suggestions" && (
