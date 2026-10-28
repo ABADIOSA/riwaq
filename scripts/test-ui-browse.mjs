@@ -107,6 +107,9 @@ const CATALOGS = {
 const failedOnce = new Set();
 const catalogRequests = [];
 let base;
+// A short WebM recorded by Chromium itself, for a real continue-watching
+// record (Home's order with history).
+let video = Buffer.alloc(0);
 const metaFor = (catalog, i) => {
   const c = CATALOGS[catalog];
   const id = `uifix:${catalog}-${i}`;
@@ -195,11 +198,15 @@ const addon = createServer((req, res) => {
     const m = metaFor(meta[2], Number(meta[3]));
     return json({ meta: m.type === "series" ? seriesMeta(m) : m });
   }
+  if (url === "/video.webm") {
+    res.setHeader("Content-Type", "video/webm");
+    return res.end(video);
+  }
   if (url.startsWith("/stream/"))
     return json({
       streams: [
         {
-          url: `${base}/video.mp4`,
+          url: `${base}/video.webm`,
           name: "Fixture",
           title: "Fixture 1080p WEB-DL",
         },
@@ -359,32 +366,86 @@ const dragRows = async (where) => {
         return { i, cls: el.className };
       }),
   );
+  // Forward then back (the reading direction decides which way is
+  // forward), then a short click on a card still opens it.
+  const drag = async (el, dx) => {
+    const box = await el.boundingBox();
+    const y = box.y + Math.min(box.height / 2, 120);
+    const x = box.x + box.width / 2;
+    const before = await el.evaluate((n) => n.scrollLeft);
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    for (let s = 1; s <= 8; s++) await page.mouse.move(x + (s * dx) / 8, y);
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+    return Math.abs((await el.evaluate((n) => n.scrollLeft)) - before);
+  };
   for (const row of rows.slice(0, 6)) {
     const el = page.locator(`[data-drag-probe="${row.i}"]`);
     await el.scrollIntoViewIfNeeded();
-    const box = await el.boundingBox();
-    if (!box) continue;
-    const before = await el.evaluate((n) => n.scrollLeft);
-    const y = box.y + Math.min(box.height / 2, 120);
-    const x = box.x + box.width / 2;
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    for (let s = 1; s <= 8; s++) await page.mouse.move(x + s * 25, y);
-    await page.mouse.up();
-    await page.waitForTimeout(120);
-    const after = await el.evaluate((n) => n.scrollLeft);
-    const opened = await page.locator(".title-page").count();
+    if (!(await el.boundingBox())) continue;
+    const rtl = await el.evaluate(
+      (n) => getComputedStyle(n).direction === "rtl",
+    );
+    const forward = await drag(el, rtl ? 200 : -200);
+    const openedByDrag = !!(await page.locator(".title-page").count());
+    if (openedByDrag) await page.locator(".title-page .back-button").click();
+    const back = await drag(el, rtl ? -200 : 200);
+    const card = el.locator(".poster-card").first();
+    let click = null;
+    if (await card.count()) {
+      await card.click();
+      click = await page
+        .locator(".title-page")
+        .waitFor({ timeout: 4000 })
+        .then(() => true)
+        .catch(() => false);
+      if (click) {
+        await page.locator(".title-page .back-button").click();
+        await page.locator(".title-page").waitFor({ state: "detached" });
+      }
+    }
     report.drag.push({
       where,
       cls: row.cls,
-      moved: Math.abs(after - before),
-      opened: !!opened,
+      moved: Math.min(forward, back),
+      opened: openedByDrag,
+      click,
     });
-    if (opened) await page.locator(".title-page .back-button").click();
   }
 };
 
 try {
+  const recorder = await context.newPage();
+  await recorder.goto(`${base}/manifest.json`);
+  const recorded = await recorder.evaluate(async () => {
+    const canvas = Object.assign(document.createElement("canvas"), {
+      width: 160,
+      height: 90,
+    });
+    const g = canvas.getContext("2d");
+    const rec = new MediaRecorder(canvas.captureStream(15), {
+      mimeType: "video/webm;codecs=vp8",
+    });
+    const chunks = [];
+    rec.ondataavailable = (e) => chunks.push(e.data);
+    let frame = 0;
+    const timer = setInterval(() => {
+      g.fillStyle = `hsl(${frame++ * 9}, 60%, 40%)`;
+      g.fillRect(0, 0, 160, 90);
+    }, 66);
+    rec.start(500);
+    await new Promise((r) => setTimeout(r, 14000));
+    rec.stop();
+    clearInterval(timer);
+    await new Promise((r) => (rec.onstop = r));
+    const bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+    let text = "";
+    for (const b of bytes) text += String.fromCharCode(b);
+    return btoa(text);
+  });
+  video = Buffer.from(recorded, "base64");
+  await recorder.close();
   await page.goto(siteUrl);
   await page.waitForFunction(() => window.riwaq?.platform === "web");
   await call("onboardingComplete");
@@ -414,6 +475,7 @@ try {
       const tag = `${lang}-${viewport.width}`;
       await check(`${tag}: Home has no horizontal page overflow`, async () => {
         await home();
+        await page.evaluate(() => scrollTo(0, 0));
         await settle();
         await shot(`home-${tag}`);
         await shot(`home-${tag}-full`, viewport.width === 1440);
@@ -439,6 +501,12 @@ try {
                   top: Math.round(el.getBoundingClientRect().top + scrollY),
                 })),
             ),
+            firstShelf: await page.evaluate(() =>
+              Math.round(
+                document.querySelector(".smart-shelf")?.getBoundingClientRect()
+                  .top + scrollY,
+              ),
+            ),
             firstPoster: await page.evaluate(() =>
               Math.round(
                 document.querySelector(".poster-card")?.getBoundingClientRect()
@@ -446,6 +514,14 @@ try {
               ),
             ),
           });
+        // Without history, titles reach the first screen and the first
+        // catalog shelf moves up (0.52.0 at 1440×900: first titles at
+        // 1,496 px and the first shelf at 2,230 px, behind two set-up forms).
+        if (strict && viewport.width === 1440) {
+          const { firstShelf, firstPoster } = report.homeOrder.at(-1);
+          assert(firstPoster < 900, `first titles at ${firstPoster}px`);
+          assert(firstShelf < 1500, `first shelf at ${firstShelf}px`);
+        }
       });
       await check(
         `${tag}: See all for a group's All fills the content area`,
@@ -529,13 +605,117 @@ try {
   await language("ar");
   await page.setViewportSize({ width: 1440, height: 900 });
   await check(
+    "Home with history: resuming comes before the session",
+    async () => {
+      const meta = await call("metadata", {
+        type: "movie",
+        id: "uifix:popular-1",
+      });
+      const sources = await call("streams", { type: "movie", id: meta.id });
+      await call("play", {
+        key: sources.streams[0].key,
+        meta,
+        videoId: meta.id,
+      });
+      await page.waitForFunction(
+        () => document.querySelector("video.riwaq-video")?.currentTime > 0.3,
+      );
+      await call("playerCommand", { action: "seek", value: 11.5 });
+      await page.waitForFunction(
+        () => document.querySelector("video.riwaq-video")?.currentTime > 10.5,
+        null,
+        { timeout: 20000 },
+      );
+      await call("playerCommand", { action: "pause" });
+      await call("stop");
+      await page.waitForFunction(() => !document.querySelector(".theater"));
+      await page.reload();
+      await page.locator(".app").waitFor();
+      await home();
+      await page.evaluate(() => scrollTo(0, 0));
+      await settle();
+      await shot("home-ar-1440-history");
+      const order = await page.evaluate(() =>
+        [...document.querySelectorAll(".content > *, .page-body > *")]
+          .filter((el) => el.matches(".session-home, .rail, .taste-discovery"))
+          .map((el) =>
+            el.matches(".session-home")
+              ? "session"
+              : el.matches(".taste-discovery")
+                ? "taste"
+                : el.querySelector("h2")?.textContent || "rail",
+          ),
+      );
+      report.homeOrder.push({ lang: "ar", history: true, order });
+      if (strict) {
+        assert.equal(order[0], "نكمل الحكاية؟", JSON.stringify(order));
+        assert.equal(order[1], "session", JSON.stringify(order));
+      }
+    },
+  );
+  await check(
+    "Today's session widens and narrows, remembered per profile",
+    async () => {
+      await home();
+      const session = page.locator(".session-home");
+      assert.equal(await session.locator(".session-preview").count(), 0);
+      await session.getByRole("button", { name: "عرض أوسع" }).click();
+      await session.locator(".session-preview").waitFor();
+      assert.equal((await call("init")).settings.sessionExpanded, true);
+      await page.reload();
+      await page.locator(".session-home .session-preview").waitFor();
+      await shot("home-ar-1440-session-full");
+      await page
+        .locator(".session-home")
+        .getByRole("button", { name: "عرض مختصر" })
+        .click();
+      await page
+        .locator(".session-home .session-preview")
+        .waitFor({ state: "detached" });
+      assert.equal((await call("init")).settings.sessionExpanded, false);
+    },
+  );
+  await check(
     "rows: mouse drag moves every horizontal row on Home",
     async () => {
       await home();
       await dragRows("home");
+      // A chip replaces the shelf's row element (a late, replaced ref).
+      await page.locator(".smart-shelf .smart-chips [role=tab]").nth(1).click();
+      await dragRows("home, after a chip replaced the row");
+      await page.locator(".smart-shelf .smart-chips [role=tab]").nth(0).click();
       await discover();
       await dragRows("discover");
-      const stuck = report.drag.filter((d) => d.moved < 20 || d.opened);
+      await language("en");
+      await home();
+      await dragRows("home, English");
+      await language("ar");
+      // The See all grid keeps the wheel's vertical scrolling, on its own
+      // scroller, with the page underneath unmoved.
+      await home();
+      await page
+        .locator(".smart-shelf .rail-tools .text-button")
+        .first()
+        .click();
+      const grid = page.locator(".browse-page .poster-grid");
+      await grid.waitFor();
+      const y = await page.evaluate(() => scrollY);
+      const box = await grid.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + 100);
+      await page.mouse.wheel(0, 900);
+      await page.waitForTimeout(300);
+      const scrolled = await page
+        .locator(".browse-page")
+        .evaluate((el) => el.scrollTop);
+      report.drag.push({ where: "see all grid wheel", moved: scrolled });
+      if (strict) {
+        assert(scrolled > 200, `See all grid scrolled ${scrolled}px`);
+        assert.equal(await page.evaluate(() => scrollY), y);
+      }
+      await page.keyboard.press("Escape");
+      const stuck = report.drag.filter(
+        (d) => d.moved < 20 || d.opened || d.click === false,
+      );
       if (strict) assert.deepEqual(stuck, [], JSON.stringify(stuck));
     },
   );

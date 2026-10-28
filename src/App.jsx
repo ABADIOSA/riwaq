@@ -967,6 +967,22 @@ export default function App() {
       ? imgUrl(selected?.meta?.background) ||
         (state.settings.showShowcase ? imgUrl(hero?.background) : "")
       : "";
+  // Resuming comes first: with titles to continue, Today's session follows
+  // that row instead of standing above everything (docs/UI-DESIGN-2026-10-28.md).
+  const continueFirst =
+    view === "home" &&
+    homeSections.includes("continue") &&
+    uniqueProgress.length > 0;
+  const sessionBand = ready && state.settings.showSession !== false && (
+    <SessionHome
+      key={state.profiles?.active || "default"}
+      state={state}
+      rows={shownRows}
+      onOpen={openStable}
+      update={update}
+      notice={notice}
+    />
+  );
   const searchControl = (
     <form
       className="search-box"
@@ -1159,18 +1175,7 @@ export default function App() {
                     fromRiwaq={feedRows.length > 0}
                   />
                 )}
-              {view === "home" &&
-                ready &&
-                state.settings.showSession !== false && (
-                  <SessionHome
-                    key={state.profiles?.active || "default"}
-                    state={state}
-                    rows={shownRows}
-                    onOpen={openStable}
-                    update={update}
-                    notice={notice}
-                  />
-                )}
+              {view === "home" && !continueFirst && sessionBand}
               {view === "home" &&
                 !state.user &&
                 !loading &&
@@ -1213,7 +1218,7 @@ export default function App() {
                   </div>
                 )}
               <div
-                className={`page-body ${view === "home" && state.settings.showSession === false ? "without-session" : ""}`}
+                className={`page-body ${view === "home" && (state.settings.showSession === false || continueFirst) ? "without-session" : ""}`}
               >
                 {view !== "home" && (
                   <div className="page-heading">
@@ -1413,7 +1418,10 @@ export default function App() {
                                 onRemove={dismissStable}
                               />
                             )}
+                            {id === "continue" && continueFirst && sessionBand}
                             {id === "taste" && ready && (
+                              // Folded as on Discover: its editor opens on
+                              // request, so browsing is never behind a form.
                               <TasteDiscovery
                                 key={state.profiles?.active}
                                 rows={shownRows}
@@ -1422,6 +1430,7 @@ export default function App() {
                                 onOpen={openStable}
                                 watched={finished}
                                 loading={loading}
+                                collapsed
                               />
                             )}
                             {id === "suggestions" && (

@@ -131,6 +131,8 @@ export const DEFAULT_SETTINGS = {
   settingsMode: "simple",
   quietInterface: false,
   showSession: true,
+  // Today's session opens as a compact band unless the viewer widened it.
+  sessionExpanded: false,
   audioDevice: "auto",
   // A connection speed cap in Mbps (0 for none); heavier streams rank lower.
   bandwidthCap: 0,
@@ -481,6 +483,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "stremioBannerHidden",
     "quietInterface",
     "showSession",
+    "sessionExpanded",
     "showShowcase",
     "sidebarCollapsed",
     "skipOnline",

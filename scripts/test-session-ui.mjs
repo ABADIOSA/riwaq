@@ -196,6 +196,8 @@ try {
       "catalogs",
     ],
     autoFullscreen: false,
+    // The full builder with its preview (the default is the compact band).
+    sessionExpanded: true,
   });
   for (const meta of metas()) await call("favorite", meta);
   const seeded = await call("init");
@@ -243,6 +245,8 @@ try {
     () => evaluate("document.querySelectorAll('.taste-pick').length===5"),
     "taste fixture shelf",
   );
+  // Home's taste compass starts folded; its editor opens on request.
+  await textClick("اضبط ذوقك", ".taste-customize");
   await textClick("غموض", ".taste-genre-chips button");
   await wait(
     async () => (await call("init")).settings.taste.genres.includes("mystery"),
