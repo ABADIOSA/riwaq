@@ -126,20 +126,29 @@ export default function PlayerMenu({ at, onClose, onError, request = call }) {
         التقط لقطة شاشة
       </button>
       {options.torrent && (
-        // Riwaq holds a torrent as its info hash and trackers: there is no
-        // separate .torrent file or link to offer beside the magnet (#113).
+        // A torrent's two links (#113): the address it plays from on this
+        // computer, for another player, and its magnet, to share. Main keeps
+        // both and writes the clipboard itself.
         <>
           <button
             role="menuitem"
-            aria-describedby="magnet-note"
-            onClick={pick(() => run("copyMagnet"))}
+            disabled={!options.torrentLink}
+            title="رابط تشغيل على هذا الجهاز لمشغّل آخر مثل VLC"
+            aria-describedby={
+              !options.torrentLink ? "torrent-link-unavailable" : undefined
+            }
+            onClick={pick(() => run("copyTorrentLink"))}
           >
+            نسخ رابط التورنت
+          </button>
+          {!options.torrentLink && (
+            <p className="menu-note" id="torrent-link-unavailable">
+              رابط التورنت يتوفر حين يعمل من محرك على هذا الجهاز
+            </p>
+          )}
+          <button role="menuitem" onClick={pick(() => run("copyMagnet"))}>
             نسخ رابط المغناطيس
           </button>
-          <p className="menu-note" id="magnet-note">
-            لا يوفّر هذا المصدر ملف تورنت منفصلاً؛ رابط المغناطيس يحمل معرّفه
-            ومتتبّعاته.
-          </p>
         </>
       )}
       <button
