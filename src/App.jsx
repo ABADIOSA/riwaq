@@ -628,7 +628,10 @@ export default function App() {
   // under another (a lock closes See all under Details) never leaves the
   // view behind inert or the page scrollable.
   const titleActive = !!selected;
-  const layers = `${titleActive ? "title" : ""}|${catalogBrowser ? "browse" : ""}`;
+  // See all belongs to the profile that opened it.
+  const browseOpen =
+    !!catalogBrowser && catalogBrowser.profileId === state.profiles?.active;
+  const layers = `${titleActive ? "title" : ""}|${browseOpen ? "browse" : ""}`;
   useLayoutEffect(() => {
     if (layers === "|") return;
     const root = document.documentElement;
@@ -1092,7 +1095,7 @@ export default function App() {
           onDownloads={() => setOfflineOpen(true)}
         />
         <main
-          className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""} ${catalogBrowser ? "browse-open" : ""}`}
+          className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""} ${browseOpen ? "browse-open" : ""}`}
         >
           {!player.active &&
             view !== "settings" &&
@@ -1148,16 +1151,15 @@ export default function App() {
               }}
             />
           )}
-          {catalogBrowser &&
-            catalogBrowser.profileId === state.profiles?.active && (
-              <BrowsePage
-                selection={catalogBrowser}
-                onClose={closeCatalogBrowser}
-                onOpen={openStable}
-                suspended={!!selected}
-                watched={catalogBrowser.fromSearch ? null : watched}
-              />
-            )}
+          {browseOpen && (
+            <BrowsePage
+              selection={catalogBrowser}
+              onClose={closeCatalogBrowser}
+              onOpen={openStable}
+              suspended={!!selected}
+              watched={catalogBrowser.fromSearch ? null : watched}
+            />
+          )}
           {["home", "discover", "search"].includes(view) && (
             <>
               {view === "home" &&
