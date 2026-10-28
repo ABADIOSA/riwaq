@@ -96,6 +96,7 @@ import {
   SERVICE_DOWNLOAD,
   chooseEngine,
   torrentDead,
+  localTorrentLink,
   magnetOf,
 } from "../core/torrent-engine.mjs";
 import { ShaderStore } from "./shaders.mjs";
@@ -255,9 +256,22 @@ function playbackMenu() {
     profileId: client.profiles.store.active,
     paused: !!player.state.pause,
     torrent: !!stream?.infoHash,
+    torrentLink:
+      !!stream?.infoHash &&
+      !!localTorrentLink(player.source?.url, torrentEngines()),
     download: capability.supported,
     downloadReason: capability.reason,
   };
+}
+// Where torrents play from on this computer: the viewer's Stremio Service,
+// the built-in engine and TorrServer. Seek previews count them as remote;
+// the menu copies a torrent's address only at one of them.
+function torrentEngines() {
+  return [
+    client.state.settings.serverUrl,
+    torrentHost?.origin,
+    torrServer?.origin,
+  ].filter(Boolean);
 }
 async function playbackAction({ action, videoId, sessionId, profileId } = {}) {
   if (
@@ -271,9 +285,24 @@ async function playbackAction({ action, videoId, sessionId, profileId } = {}) {
     throw new Error("انتهت هذه المشاهدة");
   const stream = client.streams.get(nowPlaying?.key);
   if (action === "screenshot") return player.command({ action: "screenshot" });
-  // Only a torrent's magnet link is copied. A direct address can carry the
-  // viewer's credentials (a Jellyfin/Emby copy's api_key, a debrid key in
-  // an addon's path) and stays in main like every stream URL.
+  // A torrent gives two links: the address it plays from on this computer,
+  // for another player such as VLC, and its magnet. A direct address can
+  // carry the viewer's credentials (a Jellyfin/Emby copy's api_key, a debrid
+  // key in an addon's path) and stays in main like every stream URL:
+  // localTorrentLink accepts only a torrent engine's own address.
+  if (action === "copyTorrentLink") {
+    if (!stream?.infoHash) throw new Error("هذا المصدر ليس تورنت");
+    client.profiles.gate("library");
+    const link = localTorrentLink(player.source?.url, torrentEngines());
+    if (!link)
+      throw new Error("رابط التورنت يتوفر حين يعمل من محرك على هذا الجهاز");
+    clipboard.writeText(link);
+    emit(
+      "notice",
+      "نُسخ رابط التورنت؛ يعمل في مشغّل آخر على هذا الجهاز ما دام التورنت شغّالًا في رِواق.",
+    );
+    return true;
+  }
   if (action === "copyMagnet") {
     if (!stream?.infoHash) throw new Error("هذا المصدر ليس تورنت");
     client.profiles.gate("library");
@@ -1193,11 +1222,7 @@ async function trickplay(a) {
   if (thumbnails.source !== player.source) thumbnails.reset(player.source);
   const mode = client.state.settings.seekThumbnails || "local";
   // Torrents from either engine are remote, however local their address.
-  const serverUrl = [
-    client.state.settings.serverUrl,
-    torrentHost?.origin,
-    torrServer?.origin,
-  ].filter(Boolean);
+  const serverUrl = torrentEngines();
   // The HUD says why there is no picture (issue #89); nothing is fetched.
   if (previewBlocked(player.source, mode, serverUrl)) return { blocked: true };
   return thumbnails.frame({

@@ -179,6 +179,42 @@ export function magnetOf(stream) {
   return `magnet:?${params.join("&")}`;
 }
 
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const originOf = (address) => {
+  try {
+    return new URL(String(address)).origin;
+  } catch {
+    return "";
+  }
+};
+/**
+ * A torrent viewing's "torrent link" (#113): the address MPV plays it from,
+ * for another player on this computer. Only a plain http address on this
+ * computer, without credentials, at the origin of one of the torrent engines
+ * (the viewer's Stremio Service, the built-in engine, TorrServer). Any other
+ * address is refused (""), since a direct stream can carry a debrid key or a
+ * home server's token.
+ */
+export function localTorrentLink(address, engines = []) {
+  let url;
+  try {
+    url = new URL(String(address || ""));
+  } catch {
+    return "";
+  }
+  if (
+    url.protocol !== "http:" ||
+    !LOOPBACK.has(url.hostname) ||
+    url.username ||
+    url.password
+  )
+    return "";
+  const origins = (Array.isArray(engines) ? engines : [])
+    .map(originOf)
+    .filter((origin) => origin && origin !== "null");
+  return origins.includes(url.origin) ? url.href : "";
+}
+
 const VIDEO = /\.(mkv|mp4|m4v|avi|mov|wmv|webm|ts|m2ts|mpg|mpeg|flv|ogv)$/i;
 
 /** A file's own name from an addon's behaviorHints.filename, or "". */

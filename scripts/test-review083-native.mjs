@@ -256,7 +256,7 @@ try {
       "right-click opens the HUD's HTML menu",
     );
     // A direct address can carry credentials (a home server's api_key, a
-    // debrid key in an addon's path): only a torrent's magnet is offered.
+    // debrid key in an addon's path): only a torrent's links are offered.
     assert.equal(
       await hud.$$eval(".player-menu [role=menuitem]", (items) =>
         items.some((x) => /نسخ رابط/.test(x.textContent)),

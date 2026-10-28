@@ -60,6 +60,7 @@ window.__menu = {
   sessionId: 4,
   paused: false,
   torrent: true,
+  torrentLink: true,
   download: true,
 };
 window.__request = async (method, args) => {

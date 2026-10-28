@@ -87,6 +87,20 @@ The See all grid scrolls vertically with the wheel (900 px) without moving the p
 
 The menu has three items; under the magnet item a note reads «لا يوفّر هذا المصدر ملف تورنت منفصلاً؛ رابط المغناطيس يحمل معرّفه ومتتبّعاته.» / "This source has no separate torrent file; the magnet link carries its hash and trackers." The four-item menu the reporter asked for is **not implemented**: no stream gives Riwaq a separate `.torrent` file, and two items would copy the same magnet. Screen: [menu](ui-rebuild-2026-10-28/menu-after-ar.png).
 
+### Follow-up after 0.53.0: #113 exactly
+
+The owner said #113 was not done as asked, and chose what "Copy torrent link" copies: the address the torrent plays from on this computer. The menu is now **Take a screenshot · Copy torrent link · Copy magnet link · Download video**, and the note is gone. Screens: [Arabic](ui-rebuild-2026-10-28/menu-links-ar.png), [English](ui-rebuild-2026-10-28/menu-links-en.png).
+
+- **Copy torrent link** copies the address MPV plays. `localTorrentLink` (`core/torrent-engine.mjs`) accepts only plain `http:` on 127.0.0.1, localhost or [::1], without credentials, at the origin of the viewer's Stremio Service, the built-in engine or TorrServer (`torrentEngines()`, the list seek previews already used).
+- **What it refuses:** debrid and home-server addresses, a loopback address on another port, credentials, `https:`, another host on the engine's port, and an engine that has stopped. With no such address, the item stays in the menu, disabled, with a note tied by `aria-describedby`.
+- **How long the link works:** in another player on the same computer, while Riwaq holds the torrent. The built-in engine keeps a released title for 3 minutes. The notice after copying says so. The link is not shareable; the magnet is the one to share.
+- **What stays in main:** main writes the clipboard. The renderer only gets a `torrentLink` flag.
+- **Results:**
+  - `npm test`: 934 pass. That adds `tests/player-menu-links.test.mjs`, which replaces `player-menu-note`, and one more main-menu test in `tests/downloads-quality.test.mjs`.
+  - `test-downloads-quality`: 30/30. The four labels are checked in order in Arabic and English, along with the tooltip, the disabled item with its reason, and the keyboard path to the torrent link.
+  - `npm run check`, `npm run build` and `npm run build:web` pass.
+- **Not run:** a real torrent in Windows MPV with VLC opening the copied address.
+
 ## Measurements
 
 `scripts/measure-ui-browse.mjs`, 7 alternating runs per build, same machine, fixture and production web build; medians [min–max]. Coarse harness timings, not Windows startup, FPS or process memory.

@@ -8,6 +8,7 @@ import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { OfflineLibrary } from "../electron/offline.mjs";
 import { downloadCapability } from "../core/offline-media.mjs";
+import { localTorrentLink } from "../core/torrent-engine.mjs";
 
 const id = "a".repeat(32),
   otherId = "b".repeat(32);
@@ -124,14 +125,21 @@ async function mainPlayback() {
     state: { active: true },
     videoId: "film",
     startToken: 2,
+    source: {
+      url: `http://127.0.0.1:52011/${"d".repeat(32)}/${"c".repeat(40)}/0`,
+    },
     command: (a) => calls.push(a),
   };
   const context = {
     downloadCapability,
+    localTorrentLink,
     player,
+    torrentHost: { origin: "http://127.0.0.1:52011" },
+    torrServer: null,
     window: { isDestroyed: () => false },
     nowPlaying: { key: "k", id: "film" },
     client: {
+      state: { settings: { serverUrl: "http://127.0.0.1:11470" } },
       streams: new Map([["k", { infoHash: "c".repeat(40) }]]),
       profiles: { store: { active: "p" }, gate() {} },
     },
@@ -295,13 +303,21 @@ test("reveal resolves an owned completed opaque ID in main without starting play
   }
 });
 
-test("menu actions copy only a magnet and reject previous profile or incomplete identities", async () => {
-  const { context, calls } = await mainPlayback();
+test("menu actions copy a torrent's engine link or magnet and reject previous profile or incomplete identities", async () => {
+  const { context, calls, player } = await mainPlayback();
   const menu = context.playbackMenu();
+  assert.equal(menu.torrent, true);
+  assert.equal(menu.torrentLink, true);
+  await context.playbackAction({ ...menu, action: "copyTorrentLink" });
   await context.playbackAction({ ...menu, action: "copyMagnet" });
-  assert.deepEqual(calls, ["magnet:?xt=urn:btih:fixture"]);
+  assert.deepEqual(calls, [player.source.url, "magnet:?xt=urn:btih:fixture"]);
   context.client.profiles.store.active = "other";
-  for (const action of ["copyMagnet", "download", "screenshot"])
+  for (const action of [
+    "copyTorrentLink",
+    "copyMagnet",
+    "download",
+    "screenshot",
+  ])
     await assert.rejects(
       context.playbackAction({ ...menu, action }),
       /انتهت هذه المشاهدة/,
@@ -311,7 +327,39 @@ test("menu actions copy only a magnet and reject previous profile or incomplete 
     context.playbackAction({ action: "screenshot", videoId: "film" }),
     /انتهت هذه المشاهدة/,
   );
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
+});
+
+test("the torrent link is never another address, and goes with its engine", async () => {
+  const { context, calls, player } = await mainPlayback();
+  // A torrent stream whose address is not an engine's: nothing is copied.
+  player.source = {
+    url: "http://127.0.0.1:8096/Videos/1/stream?api_key=secret",
+  };
+  let menu = context.playbackMenu();
+  assert.equal(menu.torrentLink, false);
+  await assert.rejects(
+    context.playbackAction({ ...menu, action: "copyTorrentLink" }),
+    /رابط التورنت يتوفر/,
+  );
+  // The engine stopped: its old address is not copied either.
+  player.source = { url: `http://127.0.0.1:52011/${"d".repeat(32)}/x/0` };
+  context.torrentHost = null;
+  menu = context.playbackMenu();
+  assert.equal(menu.torrentLink, false);
+  await assert.rejects(
+    context.playbackAction({ ...menu, action: "copyTorrentLink" }),
+    /رابط التورنت يتوفر/,
+  );
+  // A direct stream is not a torrent.
+  context.client.streams.set("k", { url: "https://debrid.example/secret.mkv" });
+  menu = context.playbackMenu();
+  assert.equal(menu.torrentLink, false);
+  await assert.rejects(
+    context.playbackAction({ ...menu, action: "copyTorrentLink" }),
+    /ليس تورنت/,
+  );
+  assert.deepEqual(calls, []);
 });
 
 test("download capability explains known live/local/manifest/credential-form refusals", () => {

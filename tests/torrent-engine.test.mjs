@@ -686,10 +686,12 @@ test("main, the web bridge and the interface route torrents through the rules", 
     main,
     /if \(previousTorrent && previousTorrent !== torrentHash\)/,
   );
+  // Seek previews and the menu's torrent link share one list of engines.
   assert.match(
     main,
-    /const serverUrl = \[\s*client\.state\.settings\.serverUrl,\s*torrentHost\?\.origin,\s*torrServer\?\.origin,\s*\]/,
+    /function torrentEngines\(\) \{\s*return \[\s*client\.state\.settings\.serverUrl,\s*torrentHost\?\.origin,\s*torrServer\?\.origin,\s*\]/,
   );
+  assert.match(main, /const serverUrl = torrentEngines\(\);/);
   assert.match(main, /\.then\(\(\) => torrentHost\?\.stop\(\)\)/);
   assert.match(main, /shell\.openExternal\(SERVICE_DOWNLOAD\)/);
   assert.match(main, /torrentHost\?\.configure\(client\.state\.settings\)/);

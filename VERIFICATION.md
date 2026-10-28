@@ -1,5 +1,12 @@
 # Verification — Riwaq
 
+## 2026-10-28 — after 0.53.0: the player menu exactly as #113 asks
+
+- The owner said #113 was not done as asked and chose what "Copy torrent link" copies: the address the torrent plays from on this computer, for another player such as VLC. The menu is Take a screenshot, Copy torrent link, Copy magnet link, Download video. Only a torrent engine's own loopback address is copied (`localTorrentLink`); debrid and home-server addresses never are. [Record](docs/UI-VERIFICATION-2026-10-28.md#follow-up-after-0530-113-exactly).
+- Run on Linux by Claude: 934 Node tests, Prettier, both production builds, and `test-downloads-quality` 30/30 (Arabic and English).
+- Not run: a real torrent on Windows with the copied address opened in VLC.
+- Released as 0.53.1 Beta at the owner's request. The version, lockfile, Arabic and English in-app highlights, README, release notes, changelog and packaged-smoke path all say 0.53.1. Also at the owner's request, `announcements/feed.json` gets one notice for every platform for 30 days, in Arabic and English, asking viewers who like Riwaq to star it on GitHub. Its only link is the repository page. It was built with `cleanAnnouncement`/`cleanFeed`, as the publisher does, and the test notice that expired on 21 October is dropped.
+
 ## 2026-10-28 — 0.53.0 beta: interface rebuild by journey
 
 - Branch `claude/new-session-zcr5p9` from main `3cf5281`. See all is a page of the content area (#112), Home brings resuming and titles up, the player menu says why it has no torrent link (#113), and row images never start a native drag (#111, not reproduced). [Research](docs/UI-RESEARCH-2026-10-28.md), [design and parity map](docs/UI-DESIGN-2026-10-28.md), [full record](docs/UI-VERIFICATION-2026-10-28.md).

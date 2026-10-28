@@ -239,29 +239,40 @@ try {
     await page.locator(".player-menu").waitFor();
     await page.screenshot({ path: join(output, `menu-${lang}.png`) });
     await check(
-      `${lang}: concise menu labels magnet accurately without redundant controls`,
+      `${lang}: the menu is exactly #113's four items, without redundant controls`,
       async () => {
-        const text = await page.locator(".player-menu").innerText();
-        assert.equal(await page.locator(".player-menu button").count(), 3);
-        assert.match(
-          text,
-          lang === "ar" ? /نسخ رابط المغناطيس/ : /Copy magnet link/,
+        const labels = await page
+          .locator(".player-menu button")
+          .evaluateAll((buttons) => buttons.map((b) => b.textContent.trim()));
+        assert.deepEqual(
+          labels,
+          lang === "ar"
+            ? [
+                "التقط لقطة شاشة",
+                "نسخ رابط التورنت",
+                "نسخ رابط المغناطيس",
+                "تنزيل الفيديو",
+              ]
+            : [
+                "Take a screenshot",
+                "Copy torrent link",
+                "Copy magnet link",
+                "Download video",
+              ],
         );
-        assert.match(text, lang === "ar" ? /تنزيل الفيديو/ : /Download video/);
-        // #113: no second item copies the same magnet; the menu says why
-        // there is no separate torrent file, and the item points to it.
-        const note = page.locator(".player-menu .menu-note");
-        assert.match(
-          await note.innerText(),
-          lang === "ar" ? /ملف تورنت منفصل/ : /no separate torrent file/,
-        );
+        assert.equal(await page.locator(".player-menu .menu-note").count(), 0);
         assert.equal(
+          await page.locator(".player-menu button:disabled").count(),
+          0,
+        );
+        // The torrent link says what it is for, in the interface language.
+        assert.match(
           await page
             .getByRole("menuitem", {
-              name: lang === "ar" ? "نسخ رابط المغناطيس" : "Copy magnet link",
+              name: lang === "ar" ? "نسخ رابط التورنت" : "Copy torrent link",
             })
-            .getAttribute("aria-describedby"),
-          await note.getAttribute("id"),
+            .getAttribute("title"),
+          lang === "ar" ? /VLC/ : /another player such as VLC/,
         );
       },
     );
@@ -297,11 +308,43 @@ try {
           window.__calls.find((x) => x.method === "playbackAction"),
         );
         assert.deepEqual(action?.args, {
-          action: "copyMagnet",
+          action: "copyTorrentLink",
           videoId: "film",
           sessionId: 4,
           profileId: "p",
         });
+      },
+    );
+    await page.evaluate(() => {
+      window.__menu = { ...window.__menu, torrentLink: false };
+      window.__showMenu(true);
+    });
+    await page.locator(".player-menu").waitFor();
+    await check(
+      `${lang}: a torrent without a local link keeps the item and says why`,
+      async () => {
+        const item = page.getByRole("menuitem", {
+          name: lang === "ar" ? "نسخ رابط التورنت" : "Copy torrent link",
+        });
+        assert.equal(await item.isDisabled(), true);
+        const note = page.locator("#torrent-link-unavailable");
+        assert.equal(
+          await item.getAttribute("aria-describedby"),
+          "torrent-link-unavailable",
+        );
+        assert.match(
+          await note.innerText(),
+          lang === "ar" ? /محرك على هذا الجهاز/ : /engine on this computer/,
+        );
+        assert.equal(
+          await page
+            .getByRole("menuitem", {
+              name: lang === "ar" ? "نسخ رابط المغناطيس" : "Copy magnet link",
+            })
+            .isDisabled(),
+          false,
+        );
+        await page.keyboard.press("Escape");
       },
     );
     await page.evaluate(() => {
