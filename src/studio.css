@@ -790,6 +790,11 @@ body:has(.theater:not(.mini-theater)) {
   cursor: grabbing;
   user-select: none;
 }
+/* A press on a picture in a row stays the row's gesture: Chromium never
+   starts dragging the image itself (#111). */
+.scroll-row img {
+  -webkit-user-drag: none;
+}
 .volume-control:focus-visible {
   outline: 2px solid var(--volume-accent);
   outline-offset: 3px;

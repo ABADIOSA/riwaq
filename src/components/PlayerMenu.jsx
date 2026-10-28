@@ -126,9 +126,21 @@ export default function PlayerMenu({ at, onClose, onError, request = call }) {
         التقط لقطة شاشة
       </button>
       {options.torrent && (
-        <button role="menuitem" onClick={pick(() => run("copyMagnet"))}>
-          نسخ رابط المغناطيس
-        </button>
+        // Riwaq holds a torrent as its info hash and trackers: there is no
+        // separate .torrent file or link to offer beside the magnet (#113).
+        <>
+          <button
+            role="menuitem"
+            aria-describedby="magnet-note"
+            onClick={pick(() => run("copyMagnet"))}
+          >
+            نسخ رابط المغناطيس
+          </button>
+          <p className="menu-note" id="magnet-note">
+            لا يوفّر هذا المصدر ملف تورنت منفصلاً؛ رابط المغناطيس يحمل معرّفه
+            ومتتبّعاته.
+          </p>
+        </>
       )}
       <button
         role="menuitem"
