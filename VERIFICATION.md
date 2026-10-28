@@ -1,5 +1,11 @@
 # Verification — Riwaq
 
+## 2026-10-28 — interface rebuild by journey (unreleased branch)
+
+- Branch `claude/new-session-zcr5p9` from main `3cf5281`. See all is a page of the content area (#112), Home brings resuming and titles up, the player menu says why it has no torrent link (#113), and row images never start a native drag (#111, not reproduced). [Research](docs/UI-RESEARCH-2026-10-28.md), [design and parity map](docs/UI-DESIGN-2026-10-28.md), [full record](docs/UI-VERIFICATION-2026-10-28.md).
+- Run on Linux by Claude: **932 Node tests pass**; Prettier and both production builds pass; `scripts/test-ui-browse.mjs` 39/39; the web smoke's 22 #110 quality checks pass, then it stops at the second device's `setViewportSize`, where main also stops in this Chromium 153 build (CI pins Playwright 1.56.1); `test-downloads-quality` 28/28, `test-quality-carousels` 36/36, `test-hud-keys` pass.
+- Not run: anything on Windows (Electron, MPV, HUD, F8, packages); `test-session-ui.mjs` was updated for the new Home defaults but not run. No release, version bump or deployment.
+
 ## 2026-10-27 — 0.52.0 beta release preparation
 
 - Prepared on #119's branch (`codex/quality-110`, based on main `d79fec3`) after Claude's review. The review added one fix: a title page scrolls on its own since this change, outside `.content`'s bottom padding, so the Spotify and local music bars covered its end (measured in Chromium against the built CSS: 36 px and 88 px; none on main). `.title-page` now takes the same padding; a Chromium quality check failed before (38 px, Arabic and English) and passes after, and `tests/title-page.test.mjs` keeps the rules together. README dropped its "under review" section; CLAUDE.md records the PR's behaviour. Version, lockfile, Arabic/English in-app highlights, README, release notes and changelog agree on 0.52.0.

@@ -60,7 +60,10 @@ const report = {
   timings: {},
   homeOrder: [],
 };
+// UI_ONLY=<pattern> runs the checks whose names match (and the set-up).
+const only = process.env.UI_ONLY ? new RegExp(process.env.UI_ONLY) : null;
 const check = async (name, fn) => {
+  if (only && !only.test(name)) return;
   const started = performance.now();
   try {
     await fn();
@@ -71,8 +74,12 @@ const check = async (name, fn) => {
     });
     console.log(`✔ ${name}`);
   } catch (e) {
-    results.push({ name, pass: false, error: e.message.split("\n")[0] });
-    console.log(`✗ ${name}: ${e.message.split("\n")[0]}`);
+    const error = e.message.split("\n").slice(0, 4).join(" ");
+    results.push({ name, pass: false, error });
+    console.log(`✗ ${name}: ${error}`);
+    await page
+      .screenshot({ path: join(output, `failed-${results.length}.png`) })
+      .catch(() => {});
     await page.keyboard.press("Escape").catch(() => {});
   }
 };
@@ -525,6 +532,139 @@ try {
       if (strict) assert.deepEqual(stuck, [], JSON.stringify(stuck));
     },
   );
+  if (strict) {
+    const seeAll = page
+      .locator(".smart-shelf .rail-tools .text-button")
+      .first();
+    const focused = (selector, index = 0) =>
+      page.evaluate(
+        ([s, i]) => document.activeElement === document.querySelectorAll(s)[i],
+        [selector, index],
+      );
+    await check("keyboard only: See all, a title, and Back twice", async () => {
+      await home();
+      await seeAll.focus();
+      await page.keyboard.press("Enter");
+      await page.locator(".browse-page").waitFor();
+      assert.equal(await focused(".browse-page"), true);
+      await page.keyboard.press("Tab");
+      assert.equal(await focused(".browse-back"), true, "Back comes first");
+      // Back, the All tab and one tab per catalog, then the first title.
+      const tabs = await page.locator(".browse-tabs [role=tab]").count();
+      for (let n = 0; n < tabs + 1; n++) await page.keyboard.press("Tab");
+      assert.equal(await focused(".browse-page .poster-card"), true);
+      await page.keyboard.press("Enter");
+      await page.locator(".title-page").waitFor();
+      await page.keyboard.press("Escape");
+      await page.locator(".title-page").waitFor({ state: "detached" });
+      await page.waitForFunction(
+        () =>
+          document.activeElement ===
+          document.querySelector(".browse-page .poster-card"),
+      );
+      await page.keyboard.press("Escape");
+      await page.locator(".browse-page").waitFor({ state: "detached" });
+      await page.waitForFunction(
+        () =>
+          document.activeElement ===
+          document.querySelector(".smart-shelf .rail-tools .text-button"),
+      );
+    });
+    // Both go through the Profiles dialog, as a viewer does: the bridge
+    // hands a method's result to the interface that asked for it.
+    const profilesDialog = async () => {
+      await page
+        .locator(".riwaq-sidebar-bottom .riwaq-destination")
+        .first()
+        .click();
+      await page.locator(".profile-grid").waitFor();
+    };
+    await check("a profile switch closes See all for good", async () => {
+      await call("profileCreate", { name: "Second" });
+      await page.reload();
+      await page.locator(".app").waitFor();
+      await home();
+      await seeAll.click();
+      await page.locator(".browse-page").waitFor();
+      await profilesDialog();
+      await page.locator(".profile-card:not(.current) .profile-pick").click();
+      await page.locator(".browse-page").waitFor({ state: "detached" });
+      await page.locator(".profile-card:not(.current) .profile-pick").click();
+      await page.keyboard.press("Escape");
+      await page.locator(".smart-shelf .poster-card").first().waitFor();
+      assert.equal(await page.locator(".browse-page").count(), 0);
+      const state = await call("init");
+      await call("profileRemove", {
+        id: state.profiles.list.find((p) => p.id !== state.profiles.active).id,
+      });
+      await page.reload();
+      await page.locator(".app").waitFor();
+    });
+    await check("locking the profile closes See all", async () => {
+      await home();
+      await profilesDialog();
+      await page
+        .locator(".profile-card.current")
+        .getByRole("button", { name: "رمز حماية" })
+        .click();
+      await page.getByLabel(/الرمز الجديد/).fill("2468");
+      await page.getByRole("button", { name: "حفظ", exact: true }).click();
+      await page.getByRole("button", { name: "إعادة القفل الآن" }).waitFor();
+      await page.keyboard.press("Escape");
+      await seeAll.click();
+      await page.locator(".browse-page").waitFor();
+      await profilesDialog();
+      await page.getByRole("button", { name: "إعادة القفل الآن" }).click();
+      await page.locator(".browse-page").waitFor({ state: "detached" });
+      await page.keyboard.press("Escape");
+      const id = (await call("init")).profiles.active;
+      await call("profileUnlock", { pin: "2468" });
+      await call("profilePin", { id, pin: null, current: "2468" });
+      await page.reload();
+      await page.locator(".app").waitFor();
+    });
+    await check(
+      "200% zoom and reduced motion keep the page usable",
+      async () => {
+        // A 1440×900 window at 200% zoom lays out as 720×450 CSS pixels.
+        await page.setViewportSize({ width: 720, height: 450 });
+        await page.emulateMedia({ reducedMotion: "reduce" });
+        await home();
+        await page.evaluate(() => scrollTo(0, 0));
+        await seeAll.scrollIntoViewIfNeeded();
+        await seeAll.click();
+        const browse = page.locator(".browse-page");
+        await browse.waitFor();
+        await settle();
+        await shot("seeall-ar-zoom200");
+        const back = await page.locator(".browse-back").boundingBox();
+        assert(back.y >= 0 && back.x >= 0 && back.x + back.width <= 720);
+        assert.equal(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth + 1,
+          ),
+          true,
+        );
+        assert.equal(
+          await browse.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+          true,
+        );
+        assert.equal(
+          await page.evaluate(() =>
+            parseFloat(
+              getComputedStyle(document.querySelector(".app")).getPropertyValue(
+                "--motion-base",
+              ),
+            ),
+          ),
+          0,
+        );
+        await page.keyboard.press("Escape");
+        await page.emulateMedia({ reducedMotion: "no-preference" });
+        await page.setViewportSize({ width: 1440, height: 900 });
+      },
+    );
+  }
 } finally {
   report.problems = problems;
   writeFileSync(join(output, "report.json"), JSON.stringify(report, null, 2));
