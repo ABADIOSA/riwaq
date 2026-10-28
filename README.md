@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.53.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
+  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.53.1"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-15191e">
   <a href="https://abadiosa.github.io/riwaq/"><img alt="Web" src="https://img.shields.io/badge/web-abadiosa.github.io%2Friwaq-15191e"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-15191e"></a>
@@ -30,18 +30,17 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.53.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.53.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.53.1-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.53.1-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.53.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
+الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.53.1)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.53.0 · تجريبي
+### الجديد في 0.53.1 · تجريبي
 
-- «عرض الكل» صار صفحة داخل التطبيق بشبكة واسعة تملأ المساحة، مع تبويب لكل كتالوج وفلاتره، وتحميل تلقائي كلما نزلت، والرجوع يعيدك لنفس الصف.
-- الرئيسية تبدأ بما تشاهده: «نكمل الحكاية» أولًا، وجلسة اليوم شريط مختصر يتوسع بزر «عرض أوسع»، وبوصلة الذوق مطوية حتى تحتاجها.
-- قائمة الفيديو توضح أن مصدر التورنت بلا ملف تورنت منفصل، فرابط المغناطيس هو ما يُنسخ.
-- الصور داخل الصفوف لا تتحول إلى سحب صورة عندما تسحب الصف بالفأرة.
+- قائمة الفيديو صارت بالضبط كما طُلب في #113: لقطة شاشة، ونسخ رابط التورنت، ونسخ رابط المغناطيس، وتنزيل الفيديو.
+- «نسخ رابط التورنت» ينسخ رابط التشغيل على جهازك، فتفتح نفس الحلقة في VLC أو أي مشغّل ثاني ما دام التورنت شغّال في رِواق. و«نسخ رابط المغناطيس» هو اللي تشاركه.
+- روابط debrid وJellyfin/Emby ما تُنسخ أبدًا: الرابط يُنسخ فقط من محرك التورنت على جهازك.
 
 الإصدارات السابقة في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -108,18 +107,17 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.53.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.53.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.53.1-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.53.1-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.53.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
+Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.53.1), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.53.0 · Beta
+### What's new in 0.53.1 · Beta
 
-- See all is a page inside the app again: a wide grid that fills the space, a tab and filters per catalog, more titles as you scroll, and Back returns you to the same row.
-- Home starts with something to watch: Continue watching first, Today's session as a compact band that Show full widens, and the Taste compass folded until you need it.
-- The video menu explains that a torrent source has no separate torrent file, so the magnet link is what gets copied.
-- Pictures in rows no longer turn into image drags when you drag a row with the mouse.
+- The video menu is exactly what #113 asked for: Take a screenshot, Copy torrent link, Copy magnet link, Download video.
+- Copy torrent link copies the address the torrent plays from on your computer, so you can open the same episode in VLC or another player while it plays in Riwaq. Copy magnet link is the one to share.
+- Debrid and Jellyfin/Emby addresses are never copied: only the torrent engine's own address on your computer is.
 
 Earlier releases are in the [changelog](docs/CHANGELOG.md).
 

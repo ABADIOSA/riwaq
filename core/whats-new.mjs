@@ -7,6 +7,23 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.53.1",
+    title: "قائمة الفيديو كما طلبتموها",
+    items: [
+      "قائمة الفيديو صارت بالضبط كما طُلب في #113: لقطة شاشة، ونسخ رابط التورنت، ونسخ رابط المغناطيس، وتنزيل الفيديو.",
+      "«نسخ رابط التورنت» ينسخ رابط التشغيل على جهازك، فتفتح نفس الحلقة في VLC أو أي مشغّل ثاني ما دام التورنت شغّال في رِواق. و«نسخ رابط المغناطيس» هو اللي تشاركه.",
+      "روابط debrid وJellyfin/Emby ما تُنسخ أبدًا: الرابط يُنسخ فقط من محرك التورنت على جهازك.",
+    ],
+    en: {
+      title: "The video menu as you asked for it",
+      items: [
+        "The video menu is exactly what #113 asked for: Take a screenshot, Copy torrent link, Copy magnet link, Download video.",
+        "Copy torrent link copies the address the torrent plays from on your computer, so you can open the same episode in VLC or another player while it plays in Riwaq. Copy magnet link is the one to share.",
+        "Debrid and Jellyfin/Emby addresses are never copied: only the torrent engine's own address on your computer is.",
+      ],
+    },
+  },
+  {
     version: "0.53.0",
     title: "تصفح أوسع، ورئيسية تبدأ بالمشاهدة",
     items: [

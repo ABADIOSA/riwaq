@@ -1,21 +1,21 @@
-## رِواق 0.53.0 · تجريبي / Beta
+## رِواق 0.53.1 · تجريبي / Beta
 
-- «عرض الكل» صار صفحة داخل التطبيق بشبكة واسعة تملأ المساحة، مع تبويب لكل كتالوج وفلاتره، وتحميل تلقائي كلما نزلت، والرجوع يعيدك لنفس الصف.
-- الرئيسية تبدأ بما تشاهده: «نكمل الحكاية» أولًا، وجلسة اليوم شريط مختصر يتوسع بزر «عرض أوسع»، وبوصلة الذوق مطوية حتى تحتاجها.
-- قائمة الفيديو توضح أن مصدر التورنت بلا ملف تورنت منفصل، فرابط المغناطيس هو ما يُنسخ.
-- الصور داخل الصفوف لا تتحول إلى سحب صورة عندما تسحب الصف بالفأرة.
+- قائمة الفيديو صارت بالضبط كما طُلب في #113: لقطة شاشة، ونسخ رابط التورنت، ونسخ رابط المغناطيس، وتنزيل الفيديو.
+- «نسخ رابط التورنت» ينسخ رابط التشغيل على جهازك، فتفتح نفس الحلقة في VLC أو أي مشغّل ثاني ما دام التورنت شغّال في رِواق. و«نسخ رابط المغناطيس» هو اللي تشاركه.
+- روابط debrid وJellyfin/Emby ما تُنسخ أبدًا: الرابط يُنسخ فقط من محرك التورنت على جهازك.
 
 ### English
 
-- See all is a page inside the app again: a wide grid that fills the space, a tab and filters per catalog, more titles as you scroll, and Back returns you to the same row.
-- Home starts with something to watch: Continue watching first, Today's session as a compact band that Show full widens, and the Taste compass folded until you need it.
-- The video menu explains that a torrent source has no separate torrent file, so the magnet link is what gets copied.
-- Pictures in rows no longer turn into image drags when you drag a row with the mouse.
+- The video menu is exactly what #113 asked for: Take a screenshot, Copy torrent link, Copy magnet link, Download video.
+- Copy torrent link copies the address the torrent plays from on your computer, so you can open the same episode in VLC or another player while it plays in Riwaq. Copy magnet link is the one to share.
+- Debrid and Jellyfin/Emby addresses are never copied: only the torrent engine's own address on your computer is.
 
-«نسخ رابط التورنت» المطلوب في #113 غير موجود عن قصد: المصادر لا تحمل ملف ‎.torrent‎ منفصلًا، والزر القديم كان ينسخ نفس رابط المغناطيس. لم نستطع إعادة إنتاج #111 على هذه النسخة أو السابقة؛ منع سحب الصور حماية إضافية فقط. جلسة اليوم وبوصلة الذوق باقيتان بكل إعداداتهما. التطبيق مجاني بالكامل، ولا تغيير للتشفير أو موافقة مشاركة الاستخدام. يتضمن #120 للبلاغين #112 و#113؛ البحث والتصميم والتحقق في docs/UI-RESEARCH-2026-10-28.md وdocs/UI-DESIGN-2026-10-28.md وdocs/UI-VERIFICATION-2026-10-28.md.
+«نسخ رابط التورنت» ينسخ عنوان التشغيل على هذا الجهاز (خدمة Stremio أو المحرك المدمج أو TorrServer)، ويعمل في مشغّل آخر على نفس الجهاز ما دام التورنت شغّالًا في رِواق؛ ما يصلح للمشاركة، وللمشاركة رابط المغناطيس. أي عنوان آخر ما يُنسخ، والزر يتعطل مع سبب إذا ما فيه عنوان من محرك على الجهاز. رِواق ما يخترع ملف ‎.torrent‎. يكمل #113. التطبيق مجاني بالكامل، ولا تغيير للتشفير أو موافقة مشاركة الاستخدام.
 
-The "Copy torrent link" asked for in #113 is left out on purpose: sources carry no separate .torrent file, and the old item copied the same magnet link. #111 could not be reproduced on this or the previous version; the image-drag guard is hardening only. Today's session and the Taste compass keep every setting. The app remains free, with encryption and usage-sharing consent unchanged. Includes #120 for issues #112 and #113; research, design and verification are in docs/UI-RESEARCH-2026-10-28.md, docs/UI-DESIGN-2026-10-28.md and docs/UI-VERIFICATION-2026-10-28.md.
+"Copy torrent link" copies the address the torrent plays from on this computer (Stremio Service, the built-in engine or TorrServer). It works in another player on the same computer while the torrent plays in Riwaq; it is not for sharing, which is what the magnet link is for. No other address is ever copied, and the item is disabled with a reason when there is no engine address on this computer. Riwaq does not invent a .torrent file. Completes #113. The app remains free, with encryption and usage-sharing consent unchanged.
 
-تحقق المصدر: 932 اختبارًا، التنسيق، بناء سطح المكتب والويب، واختبار Chromium الكامل مع 22 فحص جودة، و39 فحصًا لرحلة التصفح، و64 فحص مكونات، ولوحة مفاتيح المشغّل. لم تُشغَّل فحوص MPV الفعلية على ويندوز لهذا التغيير؛ مسار الإصدار يشغّل الاختبارات على ويندوز ويبني الحزم ويوقّعها. لا اعتماد HDR حقيقي أو حسابات مزودين خارجية. ليس إصدار Stable.
+تحقق المصدر: 934 اختبارًا، والتنسيق، وبناء سطح المكتب والويب، و30 فحصًا في Chromium لقائمة المشغّل والتنزيلات بالعربية والإنجليزية، واختبار الموقع الكامل في CI. لم يُجرَّب تورنت حقيقي على ويندوز مع فتح الرابط المنسوخ في VLC؛ مسار الإصدار يشغّل الاختبارات على ويندوز ويبني الحزم ويوقّعها. ليس إصدار Stable.
 
-Source validation: 932 tests, formatting, desktop/web builds, the full Chromium smoke with 22 quality checks, 39 browsing-journey checks, 64 component checks and the player keyboard. Real Windows MPV checks were not run for this change; the release workflow runs the tests on Windows and builds and signs the packages. This does not certify real HDR or external provider accounts. This is not a Stable release.
+Source validation: 934 tests, formatting, desktop/web builds, 30 Chromium checks of the player menu and downloads in Arabic and English, and the full site smoke in CI. A real torrent on Windows with the copied address opened in VLC was not tried; the release workflow runs the tests on Windows and builds and signs the packages. This is not a Stable release.
+
+إذا أعجبك رِواق، ضع له نجمة ⭐ على GitHub ليصل إلى ناس أكثر. If you like Riwaq, give it a ⭐ on GitHub so it reaches more people.
