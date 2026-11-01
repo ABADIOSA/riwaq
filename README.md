@@ -66,12 +66,13 @@
 
 1. افتح **حساب ستريميو** وسجّل دخولك من صفحة ستريميو الرسمية، فيستورد رِواق إضافاتك ومكتبتك ومواضع مشاهدتك. أو أضف روابط `manifest.json` بنفسك.
 2. اختر عملاً، ثم الحلقة والمصدر. الفيديو يشتغل داخل رِواق.
-3. من **الإعدادات ← إعدادات متقدمة ← مزوّدو البيانات الوصفية** أضف مفاتيحك (TMDB وغيره) لو تبغى أوصافاً عربية وصوراً أكثر.
-4. من **الإعدادات ← إعدادات متقدمة ← الحسابات والربط** اربط Trakt أو Simkl أو AniList، أو أنشئ حساب رِواق.
-5. مصادر التورنت تحتاج محركاً: **المحرك المدمج** من **الإعدادات ← محرك P2P**، أو **Stremio Service** شغّال على جهازك. الروابط المباشرة ما تحتاج شي.
+3. من **الإعدادات ← المصادر والمكتبة ← مزوّدو البيانات الوصفية** أضف مفاتيحك (TMDB وغيره) لو تبغى أوصافاً عربية وصوراً أكثر.
+4. من **الإعدادات ← الحسابات والربط ← الخدمات المرتبطة** اربط Trakt أو Simkl أو AniList، ومن **حساب رِواق** أنشئ حسابك.
+5. مصادر التورنت تحتاج محركاً: **المحرك المدمج** من **الإعدادات ← المصادر والمكتبة ← محرك P2P**، أو **Stremio Service** شغّال على جهازك. الروابط المباشرة ما تحتاج شي.
 
 ### الخصوصية والحدود
 
+- [سياسة الخصوصية](PRIVACY.ar.md) ([English](PRIVACY.md)) تشرح ما يبقى على جهازك وما يُرسل ولمن. تجدها أيضاً في **الإعدادات ← النظام والتشخيص ← الخصوصية**.
 - مفاتيحك وحساباتك تنحفظ مشفّرة على جهازك. رِواق ما يطلب كلمات مرور المنصات، وما يرسل سجل مشاهدتك إلا للمنصات اللي تفعّل التسجيل فيها.
 - صندوق الإشعارات يقرأ ملف الإشعارات العام من GitHub عند فتح رِواق وكل 15 دقيقة، بدون أي بيانات عنك. تقدر توقفه من نافذة الإشعارات.
 - إحصاءات استخدام اختيارية ومعطلة افتراضياً، ترسل معرّف جهاز عشوائياً والإصدار ونوع التطبيق فقط. لا تُرسل سجل المشاهدة أو الحساب، والموافقة لا تتزامن. [التفاصيل والتفعيل للأدمن](docs/ADMIN.md#usage-dashboard).
@@ -141,15 +142,16 @@ Earlier releases are in the [changelog](docs/CHANGELOG.md).
 
 ### Getting started
 
-1. For English, open **Settings → Basic settings → Interface language** and choose English.
+1. For English, open **Settings → Appearance & interface → Interface language** and choose English.
 2. Open **Stremio account** and sign in on Stremio's own page. Riwaq imports your addons, library and progress, or you can add `manifest.json` links yourself.
 3. Pick a title, then an episode and a source. The video plays inside Riwaq.
-4. In **Settings → Advanced settings → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
-5. In **Settings → Advanced settings → Accounts & linking**, connect Trakt, Simkl or AniList, or create a Riwaq account.
-6. Torrent sources need an engine: the **built-in engine** in **Settings → P2P engine**, or **Stremio Service** running on your PC. Direct links need neither.
+4. In **Settings → Sources & library → Metadata providers**, add keys such as TMDB for Arabic descriptions and more artwork.
+5. In **Settings → Accounts & linking → Linked services**, connect Trakt, Simkl or AniList; **Riwaq account** creates an account.
+6. Torrent sources need an engine: the **built-in engine** in **Settings → Sources & library → P2P engine**, or **Stremio Service** running on your PC. Direct links need neither.
 
 ### Privacy and limits
 
+- The [privacy policy](PRIVACY.md) ([العربية](PRIVACY.ar.md)) explains what stays on your device, what is sent and to whom. It is also in **Settings → System & diagnostics → Privacy**.
 - Keys and accounts are stored encrypted on your machine. Riwaq never asks for platform passwords. It sends your viewing history only to platforms where you turn tracking on.
 - The notification inbox reads Riwaq's public notice file from GitHub when Riwaq opens and every 15 minutes, sending nothing about you. You can turn it off in the notifications window.
 - Optional usage counts are off by default. They send a random device identifier, app version and platform only; no viewing history or account. Consent never syncs. [Admin setup and limits](docs/ADMIN.md#usage-dashboard).

@@ -1,5 +1,13 @@
 # Verification — Riwaq
 
+## 2026-11-01 — engineering overhaul (unreleased): #127, #126, #125, #124, #122, #111, privacy
+
+- Branch `claude/fervent-pasteur-gzqpy4` from main `c6f7fb5`. [Traceability, decisions and limits](docs/OVERHAUL-2026-11-01.md).
+- Run on Linux by Claude: **954 Node tests pass** (934 at baseline), Prettier, both production builds. Chromium: the new `scripts/test-ui-overhaul.mjs` 17/17 (six settings rooms in Arabic and English with no Arabic on English pages, Link Trakt/Simkl/AniList, light/dark/system with a live OS switch and ≥ 4.5:1 text, equal showcase gutters at 1920–390 px, adjacent row arrows at 1440/740/390 in both `rowArrows` modes, vertical dragging over See all, a row and Discover's grid); `test-ui-browse` 39/39; the complete web smoke (26 steps, accounts and usage opt-in/out included); `test-hud-keys`, `test-quality-carousels`, `test-downloads-quality`.
+- The web smoke's second-device resize fails in this environment on main's own build and script too ("restore it to normal state first" after picture-in-picture); the script now restores that window through CDP for that error only.
+- Timings, main's build against this branch's, five alternating runs (`measure-ui-browse`): cold start 288 → 291 ms, Discover 108 → 123, Home 136 → 131, See all 277 → 252, Details 136 → 141, Back 141 → 112 (medians; ranges overlap), heap 7.42 → 7.49 MB, DOM nodes 4093 both, bundle +17 KB JS and +8 KB CSS. Home re-entry crosses the 50 ms long-task threshold intermittently in every build here, including one without the new light stylesheet.
+- Not run: anything on Windows (Electron 44.9.3, MPV, HUD, F8, DPAPI, the light title bar, packages, installer); `test-review083-native.mjs` and `test-session-ui.mjs` were updated for the six rooms but not run; real accounts; TheIntroDB's live spec (blocked here).
+
 ## 2026-10-28 — after 0.53.0: the player menu exactly as #113 asks
 
 - The owner said #113 was not done as asked and chose what "Copy torrent link" copies: the address the torrent plays from on this computer, for another player such as VLC. The menu is Take a screenshot, Copy torrent link, Copy magnet link, Download video. Only a torrent engine's own loopback address is copied (`localTorrentLink`); debrid and home-server addresses never are. [Record](docs/UI-VERIFICATION-2026-10-28.md#follow-up-after-0530-113-exactly).

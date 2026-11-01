@@ -1,5 +1,33 @@
 # سجل رِواق — Riwaq changelog
 
+## غير منشور بعد / Unreleased
+
+لم يُحدَّد رقم الإصدار؛ ينشره المالك متى أراد. The release number is the owner's to choose.
+
+- الإعدادات صارت ست غرف واضحة: المظهر والواجهة، المشغل والتشغيل، المصادر والمكتبة، التنزيلات والملفات، الحسابات والربط، النظام والتشخيص. لا «أساسية» ولا «متقدمة»، وكل خيار في مكان واحد (#127).
+- وضع فاتح «أبيض نقي»، مع داكن وحسب النظام. لون ثيمك يتعمّق ليُقرأ على الأبيض، والوضع يتبع ويندوز مباشرة (#126).
+- العرض الرئيسي بنفس المسافة من الأعلى والجانبين (#125).
+- أزرار الربط تقرأ بالإنجليزية «Link Trakt» وغيرها (#124).
+- أسهم التنقل زوج متجاور في كل صف: طاقم التمثيل والسلسلة والعد التنازلي والحلقات والتبويبات (#122).
+- السحب بالفأرة لأعلى ولأسفل فوق شبكات البوسترات وصفوفها (#111).
+- سياسة خصوصية بالعربية والإنجليزية، وصفحة «الخصوصية» في الإعدادات.
+- بقايا التورنت بعد إغلاق مفاجئ تُحذف عند التشغيل التالي (#123).
+- Electron 44.9.3 وVite 8.3.5 مع إصلاحات أمنية.
+
+### English
+
+- Settings are six clear rooms: Appearance & interface, Player & playback, Sources & library, Downloads & files, Accounts & linking, System & diagnostics. No basic or advanced split; every option lives in one place (#127).
+- A Pure White light mode, alongside dark and the system's choice. Your theme's accent deepens to read on white, and the mode follows Windows live (#126).
+- The showcase sits the same distance from the top and both sides (#125).
+- Link buttons read "Link Trakt" and so on in English (#124).
+- Row arrows are one adjacent pair in every row: cast, series, countdowns, episodes and tabs (#122).
+- Drag up and down with the mouse over poster grids and rows (#111).
+- A privacy policy in Arabic and English, and a Privacy page in Settings.
+- Torrent pieces left by a crash are removed at the next start (#123).
+- Electron 44.9.3 and Vite 8.3.5 with security fixes.
+
+Details and evidence: [docs/OVERHAUL-2026-11-01.md](OVERHAUL-2026-11-01.md).
+
 ## رِواق 0.53.1 · تجريبي / Beta
 
 - قائمة الفيديو صارت بالضبط كما طُلب في #113: لقطة شاشة، ونسخ رابط التورنت، ونسخ رابط المغناطيس، وتنزيل الفيديو.
