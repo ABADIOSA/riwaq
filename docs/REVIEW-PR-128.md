@@ -83,6 +83,7 @@ Host: Windows x64, Node v24.19.0, npm 11.17.0; isolated Playwright 1.58.2 and Ch
 | `npm audit --json` | 19 nodes: 4 high, 15 moderate; no critical | `audit-final.json` |
 | `node scripts/test-admin.mjs` | Fails in both main and PR | `admin-main.log`, `admin-native.log`: hardcoded `codex/` workspace expectation |
 | `node scripts/test-music-ui.mjs` | Fails in both main and PR | `music-main.log`, `music-ui.log`: obsolete masthead navigation selector |
+| `RIWAQ_SMOKE=1` with fresh `RIWAQ_DATA_DIR` (actual process exit awaited) | Fails at stale prerequisite in both main and PR | `smoke-final-stderr.log`, `smoke-main-stderr.log`: `Timeout: live catalogs`; predicate requires `.hero` although showcase defaults off, and the failure screenshot still shows first-run setup. Local deterministic native gates above pass. |
 
 The first restricted-sandbox test run could not use local networking; it was stopped and superseded by unrestricted passes. A native-module rebuild collided with that old process's loaded binary, then entered an upstream source-build fallback. The final environment was restored with a clean locked install and direct pinned prebuild, avoiding those extra build dependencies. Initial native-gate harness failures (legacy null/absent appearance, lazy settings, Playwright's default media emulation, and the not-yet-navigated HUD) were corrected without changing the application's contracts.
 
@@ -105,9 +106,23 @@ Owner confirmation remains necessary for legal operator identity/jurisdiction, p
 
 ## 7. Performance, stress and visual evidence
 
-`measure-ui-browse.mjs ../riwaq-main/dist-web dist-web 5` alternates five runs per build against one local fixture. The exported evidence contains exact medians/ranges and bundle sizes in `performance.json`; these are headless browsing timings, not native FPS or whole-app startup claims. Earlier measurements showed overlapping timing ranges, equal DOM nodes and a small heap/bundle increase; use the final exported table for the recorded values.
+`measure-ui-browse.mjs ../riwaq-main/dist-web dist-web 5` alternates five runs per build against one local fixture. These are headless browsing timings, not native FPS or whole-app startup claims. Ranges overlap and do not establish a meaningful performance regression or improvement. No measured journey had a median long task. Final medians (full ranges/raw samples in `performance.json`):
+
+| Measure | Main | Corrected PR |
+|---|---:|---:|
+| Cold page reload to titles | 234 ms | 237 ms |
+| Discover | 61 ms | 70 ms |
+| Home | 104 ms | 103 ms |
+| See all | 153 ms | 157 ms |
+| Details | 76 ms | 73 ms |
+| Back | 72 ms | 68 ms |
+| Renderer heap after collection | 7,409,436 bytes | 7,447,788 bytes |
+| DOM nodes | 4,312 | 4,312 |
+| JS / CSS bytes | 2,229,554 / 200,982 | 2,245,999 / 211,813 |
 
 The native stress harness exercises 12 complete local SDR sessions, six starts canceled immediately, 30 navigation changes and ten settings reopens; it checks that no owned MPV process remains. Immediate cancellation returns the existing “could not connect to player” error in both main and PR even though Stop prevents late playback. This is a pre-existing P2 follow-up, not a passing cancellation-result contract. Main-process RSS samples and session timings are retained; they do not establish absence of a memory leak or performance improvement.
+
+All 12 normal sessions and resource-cleanup assertions pass on both builds. Main RSS was 137,297,920 → 134,807,552 bytes; PR was 137,756,672 → 137,572,352 bytes. Both ended with zero owned MPV processes. Each returned six connection-error replies for the six immediate cancellations. The baseline harness explicitly enters its old Advanced settings panel; the PR has the unified rooms.
 
 Screenshots were captured at desktop/compact/phone widths in both languages, with zoom/reduced-motion checks. Main/PR dark Home/Details/See all comparisons and light Home/Details/Settings/Library/See all, connection, privacy and arrow screenshots were visually inspected. The Details contrast defect was found by that inspection rather than geometry assertions alone. Fixture art/text differs from live providers. Physical multi-monitor scaling, real screen-reader use, real HDR/Dolby Vision/RTX/GPU shader output, provider credentials and public-peer availability remain unverified.
 
@@ -117,6 +132,7 @@ Screenshots were captured at desktop/compact/phone widths in both languages, wit
 |---|---|---|
 | P2, pre-existing | Immediate playback cancellation can reject with a connection error despite safe cleanup, on main and PR. | Separate player-lifecycle fix with a deliberate canceled-result contract. No late playback or owned MPV leak was observed. |
 | P3, pre-existing test infrastructure | Admin branch-name and music navigation smoke assumptions are stale on both branches. | Repair those harnesses in their own scope; retain current failures as evidence. |
+| P3, pre-existing test infrastructure | Legacy native smoke requires a default-disabled hero and leaves fresh onboarding open; main and PR time out at that predicate. | Modernize its setup/prerequisites; do not count it as a native smoke pass or infer a catalog-service outage from this timeout. Offline fixture-based native/portable gates provide the local evidence. |
 | Non-blocking verification limit | Hardware-specific output, physical touch/accessibility, multi-monitor DPI and real provider accounts. | Owner/device-specific acceptance before claiming those configurations. |
 | Owner/policy | Identity, jurisdiction, private contact; new main policy URLs publish only after merge. | Owner confirmation and publication check; no invented legal promises. |
 | Dependency maintenance | Two advisory roots remain, with reachability/compatibility limits above. | Track upstream compatible fixes; do not apply audit-force downgrades. |
