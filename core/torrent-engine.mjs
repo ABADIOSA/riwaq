@@ -51,7 +51,7 @@ export const cacheBytes = (choice) =>
  * guide, and anywhere else (the HUD) it reads as an instruction.
  */
 export const NEEDS_ENGINE =
-  "مصادر التورنت تحتاج محرك تورنت: فعّل المحرك المدمج أو شغّل Stremio Service من الإعدادات ← محرك P2P.";
+  "مصادر التورنت تحتاج محرك تورنت: فعّل المحرك المدمج أو شغّل Stremio Service من الإعدادات ← المصادر والمكتبة ← محرك P2P.";
 
 /** Stremio Service's official releases (Stremio's own GitHub organisation). */
 export const SERVICE_DOWNLOAD =

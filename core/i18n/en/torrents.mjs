@@ -25,8 +25,8 @@ export default {
   "نتحقق كل ثلاث ثوانٍ، ونكمل التشغيل أول ما يرد.":
     "We check every three seconds and continue playback as soon as it answers.",
   "صفحة التنزيل الرسمية": "Official download page",
-  "Stremio Service ما يرد للحين. إذا ثبّته وشغّلته وما زال ما يرد، تأكد من عنوانه في الإعدادات ← خادم البث.":
-    "Stremio Service isn't answering yet. If you installed and ran it and it still doesn't answer, check its address in Settings → Streaming server.",
+  "Stremio Service ما يرد للحين. إذا ثبّته وشغّلته وما زال ما يرد، تأكد من عنوانه في الإعدادات ← المصادر والمكتبة ← خادم البث.":
+    "Stremio Service isn't answering yet. If you installed and ran it and it still doesn't answer, check its address in Settings → Sources & library → Streaming server.",
   "إعدادات محرك P2P": "P2P engine settings",
   "أختار مصدراً مباشراً": "I'll choose a direct source",
   "اسألني أول مرة": "Ask me the first time",
@@ -63,8 +63,8 @@ export default {
   "امسح أجزاء التورنت": "Clear torrent pieces",
   "ما عندك Stremio Service؟ نزّله من صفحة إصداراته الرسمية، أو استخدم المحرك المدمج من صفحة «محرك P2P».":
     "Don't have Stremio Service? Download it from its official releases page, or use the built-in engine from the “P2P engine” page.",
-  "مصادر التورنت تحتاج محرك تورنت: فعّل المحرك المدمج أو شغّل Stremio Service من الإعدادات ← محرك P2P.":
-    "Torrent sources need a torrent engine: turn on the built-in engine or run Stremio Service from Settings → P2P engine.",
+  "مصادر التورنت تحتاج محرك تورنت: فعّل المحرك المدمج أو شغّل Stremio Service من الإعدادات ← المصادر والمكتبة ← محرك P2P.":
+    "Torrent sources need a torrent engine: turn on the built-in engine or run Stremio Service from Settings → Sources & library → P2P engine.",
   "مجلد ذاكرة التورنت غير محدد": "The torrent cache folder isn't set",
   "محرك التورنت متوقف": "The torrent engine is stopped",
   "محرك التورنت لا يستجيب": "The torrent engine isn't responding",

@@ -42,6 +42,24 @@ function loadPlaywright() {
 const { chromium } = loadPlaywright();
 
 const site = resolve(process.env.RIWAQ_WEB_DIST || "dist-web");
+// Newer headless Chromium leaves a second browser's window in a state that
+// refuses setViewportSize ("restore it to normal state first"); the same
+// failure happens on main's build, so the window is put back to normal
+// through CDP and resized again. Any other error still fails the run.
+async function resizeTab(tab, size) {
+  try {
+    await tab.setViewportSize(size);
+  } catch (error) {
+    if (!/restore it to normal state/.test(error.message)) throw error;
+    const cdp = await tab.context().newCDPSession(tab);
+    const { windowId } = await cdp.send("Browser.getWindowForTarget");
+    await cdp.send("Browser.setWindowBounds", {
+      windowId,
+      bounds: { windowState: "normal" },
+    });
+    await tab.setViewportSize(size);
+  }
+}
 if (!existsSync(join(site, "index.html")))
   throw new Error("Build the site first: npm run build:web");
 const output = resolve(".cache/web-smoke");
@@ -1331,7 +1349,7 @@ try {
   );
   await pc.call("playerCommand", { action: "pause" });
   await pc.call("playerCommand", { action: "pip" });
-  await pc.tab.setViewportSize({ width: 980, height: 680 });
+  await resizeTab(pc.tab, { width: 980, height: 680 });
   await phone.call("settings", { seekStep: 15 });
   await phone.call("accountSync");
   const deferred = await pc.call("accountSync");
