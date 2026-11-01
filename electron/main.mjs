@@ -24,7 +24,7 @@ import {
   copyFileSync,
   statSync,
 } from "node:fs";
-import { rm } from "node:fs/promises";
+import { lstat, readdir, rm } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
@@ -104,6 +104,7 @@ import {
   torrentDead,
   localTorrentLink,
   magnetOf,
+  validHash,
 } from "../core/torrent-engine.mjs";
 import { ShaderStore } from "./shaders.mjs";
 import { shaderOptions } from "../core/shaders.mjs";
@@ -335,6 +336,30 @@ function torrents() {
     log: (error) => logError("torrent", error),
   });
   return torrentHost;
+}
+/**
+ * Pieces an earlier session left behind (issue #123): the engine deletes
+ * them when a viewing ends and when it closes, but a crash or a forced
+ * shutdown skips that, and the engine only sweeps again the next time a
+ * torrent plays. With "delete after viewing", start-up removes them before
+ * the engine is first asked for. Only info-hash folders directly inside
+ * torrent-cache are touched (never a link, never offline downloads, which
+ * live in userData/offline and offline-torrent-cache).
+ */
+async function sweepTorrentCache() {
+  if ((client.state.settings.torrentCache || "viewing") !== "viewing") return;
+  const dir = join(app.getPath("userData"), "torrent-cache");
+  for (const name of await readdir(dir).catch(() => [])) {
+    // Once anything asked for the engine, it owns the folder.
+    if (torrentHost) return;
+    if (!validHash(name)) continue;
+    const path = join(dir, name);
+    const info = await lstat(path).catch(() => null);
+    if (!info?.isDirectory() || info.isSymbolicLink() || torrentHost) continue;
+    await rm(path, { recursive: true, force: true }).catch((error) =>
+      logError("torrent", error),
+    );
+  }
 }
 // TorrServer (core/torrserver.mjs), the fallback for a built-in torrent
 // that sends nothing, once the viewer downloaded it; and the info hash it is
@@ -2890,6 +2915,7 @@ app
       });
       await client.updates.restore();
       runningFrame = client.state.settings.windowFrame || "native";
+      sweepTorrentCache().catch(() => {});
       const look = drawnLook();
       // Windows switching between light and dark repaints the native bar.
       nativeTheme.on("updated", applyTitleOverlay);
