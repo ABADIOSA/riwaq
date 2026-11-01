@@ -1,5 +1,10 @@
 # Verification — Riwaq
 
+## 2026-11-01 — Riwaq 0.54.0 Beta release preparation (PR #128)
+
+- Prepared on PR #128's branch on top of the Codex-reviewed head `ed3a666` (corrective code `e6451ff`), with the owner's authorization to merge and publish a Beta. Main and the merge base were still `c6f7fb5`; the PR was open, mergeable, without review threads, and its `check` run on `ed3a666` had passed. No v0.54.0 tag or release existed; the latest release was v0.53.1 (prerelease).
+- Version, lockfile, the Arabic and English in-app highlights, README, release notes, changelog and the packaged-smoke path agree on 0.54.0. Release results are recorded below once the workflow finishes.
+
 ## 2026-11-02 — independent PR #128 Windows review (unreleased)
 
 - Original PR `12e700f`, actual main/merge base `c6f7fb5`; corrective implementation `e6451ff`. [Full independent findings, acceptance matrix, commands and limits](docs/REVIEW-PR-128.md).

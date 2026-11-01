@@ -7,6 +7,29 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.54.0",
+    title: "رِواق أوضح، وأقرب لذوقك",
+    items: [
+      "الإعدادات صارت ست غرف واضحة بدل «أساسية» و«متقدمة»، وكل خيار له مكان واحد.",
+      "وضع فاتح «أبيض نقي»، مع داكن وحسب النظام، ويتبع ويندوز مباشرة. اختره من المظهر والواجهة ← السمة.",
+      "العرض الرئيسي بنفس المسافة من الأعلى والجانبين، وأسهم كل صف زوج متجاور جنب عنوانه.",
+      "اسحب بالفأرة لأعلى ولأسفل فوق شبكات البوسترات وصفوفها.",
+      "أزرار ربط الخدمات صحيحة بالإنجليزية، وبقايا التورنت بعد إغلاق مفاجئ تُحذف بأمان.",
+      "سياسة خصوصية بالعربية والإنجليزية في النظام والتشخيص ← الخصوصية.",
+    ],
+    en: {
+      title: "A clearer Riwaq, closer to your taste",
+      items: [
+        "Settings are six clear rooms instead of Basic and Advanced, and every option has one place.",
+        "A Pure White light mode alongside dark and System, which follows Windows live. Pick it in Appearance & interface → Theme.",
+        "The showcase sits the same distance from the top and sides, and each row's arrows are one pair beside its title.",
+        "Drag up and down with the mouse over poster grids and rows.",
+        "Service link buttons read correctly in English, and torrent pieces left by a crash are removed safely.",
+        "A privacy policy in Arabic and English under System & diagnostics → Privacy.",
+      ],
+    },
+  },
+  {
     version: "0.53.1",
     title: "قائمة الفيديو كما طلبتموها",
     items: [
