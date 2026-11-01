@@ -262,6 +262,11 @@ for (const lang of ["ar", "en"]) {
       await page.locator(".poster-card").first().click();
       await page.locator(".title-page").waitFor();
       await settle();
+      for (const sel of [".title-page .synopsis", ".title-page .hero-meta"])
+        assert.ok(
+          (await readable(sel)) >= 4.5,
+          `${sel} contrast on light page`,
+        );
       await shot(`light-details-${lang}`);
       await page.keyboard.press("Escape");
       await settingsPage();
@@ -505,8 +510,12 @@ await check(
     await go(".riwaq-destinations > button >> nth=1");
     await page.locator(".poster-card").first().waitFor();
     const picker = page.locator("select").first();
-    const options = await picker.locator("option").allTextContents();
-    await picker.selectOption({ index: Math.min(1, options.length - 1) });
+    // Cinemeta is installed by default but external requests are refused.
+    // Select this run's local catalog by its opaque key, not option order.
+    const catalogs = await call("catalogPlan", { discover: true });
+    const local = catalogs.find((catalog) => catalog.provider === "UI fixture");
+    assert.ok(local, "local fixture catalog is available");
+    await picker.selectOption(local.key);
     const grid = page.locator(".poster-grid").first();
     await grid.locator(".poster-card").first().waitFor();
     await grid.scrollIntoViewIfNeeded();

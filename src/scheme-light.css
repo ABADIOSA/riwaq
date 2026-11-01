@@ -159,6 +159,12 @@
 .app.scheme-light .theme-tile {
   color: var(--text);
 }
+/* Details fades its artwork into the page. Its old literal pale text
+   belongs to the dark palette, unlike the showcase over a dark scrim. */
+.app.scheme-light .title-page .synopsis,
+.app.scheme-light .title-page .hero-meta {
+  color: var(--muted);
+}
 .app.scheme-light .connect-banner-close:hover {
   color: var(--text);
 }

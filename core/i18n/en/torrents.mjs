@@ -1,5 +1,7 @@
 /** The built-in torrent engine and the Stremio Service guide (core/i18n.mjs). */
 export default {
+  "مجلد ذاكرة التورنت ليس مجلداً آمناً":
+    "The torrent cache folder is not a safe directory",
   "تورنت اتصالات سرعة تخزين مؤقت cache المحرك المدمج WebTorrent Stremio Service رفع مشاركة":
     "torrent connections speed cache built-in engine WebTorrent Stremio Service upload sharing",
   "مصادر التورنت": "Torrent sources",

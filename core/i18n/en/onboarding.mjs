@@ -5,8 +5,8 @@ export default {
   "المشاركة مفعّلة باختيارك": "Sharing is enabled by your choice",
   "المشاركة معطّلة": "Sharing is off",
   "التكرار والاحتفاظ والحذف": "Frequency, retention and deletion",
-  "يمكنك إيقاف المشاركة من الإعدادات الأساسية أو المظهر ← الواجهة. لا تنتقل الموافقة مع حساب رِواق أو النسخ الاحتياطية.":
-    "Turn sharing off in basic settings or Appearance → Interface. Consent never travels with your Riwaq account or backups.",
+  "يمكنك إيقاف المشاركة من الإعدادات ← النظام والتشخيص ← الخصوصية. لا تنتقل الموافقة مع حساب رِواق أو النسخ الاحتياطية.":
+    "Turn sharing off in Settings → System & diagnostics → Privacy. Consent never travels with your Riwaq account or backups.",
   "لحظة…": "One moment…",
   "أهلاً بك": "Welcome",
   "مصادرك وبياناتك": "Sources & metadata",

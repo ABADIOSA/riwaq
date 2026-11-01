@@ -18,7 +18,7 @@ The web edition is published on GitHub Pages (`abadiosa.github.io`). Every other
 ## 2. The short version
 
 - Riwaq works fully **without an account**. Your library, progress, profiles, settings and keys are stored **on your own device, encrypted**.
-- Riwaq shows **no ads**, runs **no analytics or tracking**, and sends **no crash reports**.
+- Riwaq shows **no ads**, runs **no advertising trackers or third-party analytics**, and sends **no crash reports**. Optional first-party device counts are described below.
 - A **Riwaq account** is optional and **end-to-end encrypted**: the service stores your data in a form it cannot read.
 - **Usage statistics are off until you turn them on**, and contain only a random device token, the platform and the app version.
 - **Addons and services you choose** (Stremio addons, TMDB, Trakt, Simkl, AniList, debrid services and others) are contacted directly from your device and follow their own privacy policies.
@@ -107,8 +107,8 @@ The web edition runs in your browser from GitHub Pages. GitHub, as host, receive
 
 - On-device encryption with Windows DPAPI or a non-extractable WebCrypto key, with no unencrypted fallback.
 - End-to-end encryption for accounts (scrypt-derived keys, AES-256-GCM); the service holds only hashes and wrapped keys.
-- Secrets (keys, tokens, addon addresses with credentials, live TV credentials) stay in the app's main process and are never shown to the interface or written to logs or diagnostics.
-- Requests to sensitive services refuse redirects; local torrent servers listen only on your own computer and require a random path token.
+- On the desktop, stored secrets (keys, tokens, addon addresses with credentials, live TV credentials) are handled in the main process and omitted from public interface state and diagnostics. In the web edition, the client and its usable secrets run within the site's browser origin; a non-extractable storage key does not protect them from malicious code running in that origin.
+- Requests to sensitive services refuse redirects. Riwaq's built-in torrent server listens only on your own computer and requires a random path token; the managed TorrServer uses loopback and authentication. A separately configured Stremio Service follows its own configuration.
 - Update packages are signed and verified before they run.
 
 No system is perfectly secure. If you find a security problem, please report it as described in section 12, without posting secrets or personal data publicly.

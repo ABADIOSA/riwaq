@@ -103,7 +103,7 @@ test("start-up sweeps only leftover info-hash folders of the torrent cache", () 
   assert.match(sweep, /info\.isSymbolicLink\(\)/);
   // Folder by folder, never the whole cache directory at once.
   assert.doesNotMatch(sweep, /rm\(dir/);
-  assert.match(main, /sweepTorrentCache\(\)\.catch\(\(\) => \{\}\);/);
+  assert.match(main, /await sweepTorrentCache\(\)\.catch\(/);
   // Downloads never share the viewing engine's folder.
   assert.match(
     main,

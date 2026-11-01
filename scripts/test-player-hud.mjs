@@ -278,9 +278,9 @@ try {
       hud,
       hud.getByTitle("المسار الصوتي", { exact: true }),
     );
-    assert.ok(
-      await hud.getByText("المسار الصوتي", { exact: true }).isVisible(),
-    );
+    // Native input and the IPC-driven React update settle asynchronously.
+    // Keep the visibility requirement without sampling it immediately.
+    await hud.getByText("المسار الصوتي", { exact: true }).waitFor();
     await nativeHudClick(
       app,
       hud,

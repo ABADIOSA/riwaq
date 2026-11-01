@@ -349,6 +349,9 @@ function torrents() {
 async function sweepTorrentCache() {
   if ((client.state.settings.torrentCache || "viewing") !== "viewing") return;
   const dir = join(app.getPath("userData"), "torrent-cache");
+  // Checking children is insufficient when their parent is a junction.
+  const rootInfo = await lstat(dir).catch(() => null);
+  if (!rootInfo?.isDirectory() || rootInfo.isSymbolicLink()) return;
   for (const name of await readdir(dir).catch(() => [])) {
     // Once anything asked for the engine, it owns the folder.
     if (torrentHost) return;
@@ -2125,6 +2128,7 @@ const methods = {
     await player.stop();
     const result = client.profiles.switch(a);
     applyZoom();
+    applyTitleOverlay();
     await applyPresence().catch(() => {});
     return result;
   },
@@ -2915,7 +2919,9 @@ app
       });
       await client.updates.restore();
       runningFrame = client.state.settings.windowFrame || "native";
-      sweepTorrentCache().catch(() => {});
+      // Finish deleting old pieces before the renderer can request a new
+      // engine. An rm already in flight cannot be stopped by torrentHost.
+      await sweepTorrentCache().catch((error) => logError("torrent", error));
       const look = drawnLook();
       // Windows switching between light and dark repaints the native bar.
       nativeTheme.on("updated", applyTitleOverlay);
