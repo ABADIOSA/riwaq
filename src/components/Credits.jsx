@@ -11,7 +11,15 @@ import {
   User,
 } from "lucide-react";
 import { call } from "../lib/api.js";
-import { Busy, Empty, Modal, Poster, ScrollRow } from "./UI.jsx";
+import {
+  Busy,
+  Empty,
+  Modal,
+  Poster,
+  RowHeading,
+  ScrollRow,
+  useScrollRow,
+} from "./UI.jsx";
 import { mapTiles } from "../../core/credits.mjs";
 import { arabicCount, ACTORS, AWARDS, WORKS } from "../../core/arabic.mjs";
 import { awardFamilies } from "../../core/awards.mjs";
@@ -75,14 +83,15 @@ function Face({ image, name, size = "" }) {
 /** The cast as a row of portraits under the synopsis. */
 export function CastRail({ credits, onExplore }) {
   const cast = credits?.cast || [];
+  const row = useScrollRow();
   if (!cast.length) return null;
   return (
     <section className="credits-cast" aria-label="طاقم التمثيل">
-      <div className="section-heading">
+      <RowHeading row={row}>
         <h2>طاقم التمثيل</h2>
         <span>{arabicCount(cast.length, ACTORS)}</span>
-      </div>
-      <ScrollRow className="credits-cast-row">
+      </RowHeading>
+      <ScrollRow className="credits-cast-row" row={row}>
         {cast.map((person, i) => (
           <button
             key={`${person.qid || person.tmdb || person.name}:${i}`}
@@ -248,14 +257,21 @@ export function CollectionRails({ credits, onOpenTitle }) {
   const collections = credits?.collections || [];
   if (!collections.length) return null;
   return collections.map((c) => (
-    <section key={c.qid} className="credits-collection">
-      <div className="section-heading">
+    <CollectionRail key={c.qid} c={c} onOpenTitle={onOpenTitle} />
+  ));
+}
+
+function CollectionRail({ c, onOpenTitle }) {
+  const row = useScrollRow();
+  return (
+    <section className="credits-collection">
+      <RowHeading row={row}>
         <h2>
           من نفس السلسلة · <span dir="auto">{c.name}</span>
         </h2>
         <span>{arabicCount(c.works.length, WORKS)}</span>
-      </div>
-      <ScrollRow className="poster-row">
+      </RowHeading>
+      <ScrollRow className="poster-row" row={row}>
         {c.works.map((work, i) => (
           <div
             key={work.id}
@@ -278,12 +294,13 @@ export function CollectionRails({ credits, onOpenTitle }) {
         ))}
       </ScrollRow>
     </section>
-  ));
+  );
 }
 
 /** People found by name in the search page; each opens the explore dialog. */
 export function PeopleRow({ query, onExplore }) {
   const [people, setPeople] = useState(null);
+  const row = useScrollRow();
   useEffect(() => {
     let live = true;
     setPeople(null);
@@ -297,11 +314,11 @@ export function PeopleRow({ query, onExplore }) {
   if (!people?.length) return null;
   return (
     <section className="credits-cast people-row" aria-label="أشخاص">
-      <div className="section-heading">
+      <RowHeading row={row}>
         <h2>أشخاص</h2>
         <span>من Wikidata</span>
-      </div>
-      <ScrollRow className="credits-cast-row">
+      </RowHeading>
+      <ScrollRow className="credits-cast-row" row={row}>
         {people.map((person) => (
           <button
             key={person.qid}

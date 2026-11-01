@@ -134,7 +134,7 @@ export default function TorrentSetup({ update, onRetry, onClose, onSettings }) {
           {service === "missing" && (
             <p className="subtle" role="status">
               Stremio Service ما يرد للحين. إذا ثبّته وشغّلته وما زال ما يرد،
-              تأكد من عنوانه في الإعدادات ← خادم البث.
+              تأكد من عنوانه في الإعدادات ← المصادر والمكتبة ← خادم البث.
             </p>
           )}
         </section>

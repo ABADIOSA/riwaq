@@ -795,6 +795,16 @@ body:has(.theater:not(.mini-theater)) {
 .scroll-row img {
   -webkit-user-drag: none;
 }
+/* Poster grids scroll up and down with the same gesture (issue #111,
+   attachGridDrag); cards keep the pointer until a drag starts. */
+.poster-grid img {
+  -webkit-user-drag: none;
+}
+.poster-grid.is-dragging,
+.poster-grid.is-dragging * {
+  cursor: grabbing;
+  user-select: none;
+}
 .volume-control:focus-visible {
   outline: 2px solid var(--volume-accent);
   outline-offset: 3px;

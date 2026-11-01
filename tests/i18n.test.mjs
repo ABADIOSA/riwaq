@@ -49,6 +49,27 @@ const UNSHOWN = {
     /^(---|===|\[|\(لا يحتوي|الحالة العامة:|وقت التقرير)/.test(s),
 };
 
+// Issue #124: the trackers' link buttons read "ربط Trakt" in English. The
+// button glued "ربط " to the name, and only "ربط" alone had an entry; the
+// scanner now reads a + chain whole, as the screen does.
+test("a sentence glued with + is checked whole (#124)", () => {
+  assert.deepEqual(
+    stringsOf('const a = "ربط " + name; const b = x + " عنوان";', "x.js")
+      .filter((s) => s.includes("{"))
+      .sort(),
+    ["{1} عنوان", "ربط {1}"].sort(),
+  );
+  // A chain without Arabic text, or without a value, is not a sentence.
+  assert.deepEqual(stringsOf('const c = t("ربط") + " " + n;', "x.js"), ["ربط"]);
+  for (const name of ["Trakt", "Simkl", "AniList", "Letterboxd"])
+    assert.equal(translate(`ربط ${name}`, "en"), `Link ${name}`);
+  assert.equal(
+    translate("استُورد 3 عنوان · لم تتم مطابقة 2 · تجاوز الحد 5", "en"),
+    "Imported 3 titles · 2 unmatched · 5 over the limit",
+  );
+  assert.doesNotMatch(read("src/components/SettingsStudio.jsx"), /"ربط " \+/);
+});
+
 test("messages from core, main and the web bridge have English", () => {
   const roots = ["core", "electron", "web"];
   const list = roots.flatMap((dir) =>

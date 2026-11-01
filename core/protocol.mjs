@@ -128,6 +128,8 @@ export const DEFAULT_SETTINGS = {
   volumeMax: 150,
   rememberVolume: false,
   lastVolume: 100,
+  // Retired with the basic/advanced split (issue #127): no screen reads it.
+  // Kept so older devices syncing through an account keep their value.
   settingsMode: "simple",
   quietInterface: false,
   showSession: true,

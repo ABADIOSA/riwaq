@@ -278,12 +278,14 @@ export default {
   "بانتظار إكمال الربط…": "Waiting for the link to complete…",
   "جاري الربط…": "Linking…",
   ربط: "Link",
+  // The link button of each tracker (issue #124: "ربط Trakt").
+  "ربط {name}": "Link {name}",
   "جاري المزامنة…": "Syncing…",
   "مزامنة القوائم": "Sync lists",
   "فصل الحساب": "Unlink account",
-  "استُورد {1} عنوان · لم تتم مطابقة {2}{3}":
-    "Imported {1} titles · {2} unmatched{3}",
-  "· تجاوز الحد": "· over the limit",
+  "استُورد {n} عنوان": "Imported {n} titles",
+  "لم تتم مطابقة {n}": "{n} unmatched",
+  "تجاوز الحد {n}": "{n} over the limit",
   "استيراد CSV": "Import CSV",
   "آخر مزامنة:": "Last sync:",
   "ينتهي رمز AniList في": "The AniList token expires on",

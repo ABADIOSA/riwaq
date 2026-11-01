@@ -62,7 +62,15 @@ import {
   filterSources,
 } from "../../core/source-view.mjs";
 import { resumePick } from "../../core/resume.mjs";
-import { IconButton, Busy, Empty, Modal, ScrollRow } from "./UI.jsx";
+import {
+  IconButton,
+  Busy,
+  Empty,
+  Modal,
+  RowArrows,
+  ScrollRow,
+  useScrollRow,
+} from "./UI.jsx";
 import { TitleLogo } from "./TitleLogo.jsx";
 import { dominantColor, titleTheme } from "../../core/title-theme.mjs";
 import {
@@ -79,7 +87,12 @@ import {
   toggleSpotifyTheme,
 } from "../lib/theme-spotify.js";
 import { themeNames } from "../../core/theme-song.mjs";
-import { luminance, resolveAppearance } from "../../core/appearance.mjs";
+import {
+  displayedAppearance,
+  isLight,
+  resolveAppearance,
+} from "../../core/appearance.mjs";
+import { useSystemDark } from "../lib/scheme.js";
 import {
   platformName,
   preferredPlatform,
@@ -119,6 +132,9 @@ export default function Details({
   onSettings,
 }) {
   const pageRef = useRef(null);
+  const systemDark = useSystemDark();
+  // The episode strip's arrows sit beside the season picker (issue #122).
+  const episodeRow = useScrollRow();
   useEffect(() => {
     pageRef.current?.focus({ preventScroll: true });
   }, []);
@@ -351,11 +367,14 @@ export default function Details({
       img.onload = img.onerror = null;
     };
   }, [artSource, themeMode]);
-  const look = resolveAppearance(state.settings);
+  const look = displayedAppearance(
+    resolveAppearance(state.settings),
+    systemDark,
+  );
   const pageTheme = titleTheme(meta, {
     mode: themeMode,
     rgb: artColor,
-    light: luminance(look.colors.bg) > 0.4,
+    light: isLight(look.colors),
     gradient: look.gradient,
   });
   const musicPlatform = preferredPlatform(state.settings.music);
@@ -1426,13 +1445,14 @@ export default function Details({
                     </option>
                   ))}
                 </select>
+                <RowArrows row={episodeRow} />
               </div>
               {jumpError && (
                 <p className="subtle" role="status">
                   {jumpError}
                 </p>
               )}
-              <ScrollRow className="episode-list">
+              <ScrollRow className="episode-list" row={episodeRow}>
                 {videos
                   .filter((v) => (v.season ?? 1) === season)
                   .map((v) => {

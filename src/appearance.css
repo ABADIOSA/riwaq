@@ -243,3 +243,7 @@
 .rowarrows-header .rail:has(.rail-arrows) .scroll-arrow {
   display: none;
 }
+/* Every other row (issue #122): the pair in its heading or at its end. */
+.rowarrows-header :is(.has-pair, .arrows-in-heading) > .scroll-arrow {
+  display: none;
+}

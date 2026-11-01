@@ -2,7 +2,7 @@ import React from "react";
 import { cardArt } from "../../core/ambient.mjs";
 import { Film, Sparkles, CalendarDays, Check, Tv } from "lucide-react";
 import { imgUrl } from "../lib/helpers.js";
-import { ScrollRow } from "./UI.jsx";
+import { RowHeading, ScrollRow, useScrollRow } from "./UI.jsx";
 import { groupByDay } from "../../core/episodes.mjs";
 import { arabicCount, EPISODES } from "../../core/arabic.mjs";
 import { loc } from "../lib/format.js";
@@ -31,16 +31,15 @@ function dayLabel(day) {
 
 /** The next episode of every series the viewer is keeping up with. */
 export function UpNextRail({ items, onOpen }) {
+  const row = useScrollRow();
   if (!items?.length) return null;
   return (
     <section className="rail">
-      <div className="section-heading">
-        <div>
-          <h2>الحلقات التالية</h2>
-          <span>من المسلسلات التي تتابعها</span>
-        </div>
-      </div>
-      <ScrollRow className="poster-row">
+      <RowHeading row={row}>
+        <h2>الحلقات التالية</h2>
+        <span>من المسلسلات التي تتابعها</span>
+      </RowHeading>
+      <ScrollRow className="poster-row" row={row}>
         {items.slice(0, 20).map((item) => (
           <button
             key={`${item.meta.type}:${item.meta.id}`}

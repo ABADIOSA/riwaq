@@ -470,7 +470,7 @@ const TORRENTS = {
   other: "{n} عمل",
 };
 const speed = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} م.ب/ث`;
-const size = (bytes) =>
+export const size = (bytes) =>
   bytes >= 1024 ** 3
     ? `${(bytes / 1024 ** 3).toFixed(1)} غيغابايت`
     : `${Math.round(bytes / 1024 / 1024)} م.ب`;

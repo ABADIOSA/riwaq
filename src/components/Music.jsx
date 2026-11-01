@@ -28,7 +28,7 @@ import { call } from "../lib/api.js";
 import { continueWatching } from "../../core/library.mjs";
 import { arabicCount, SONGS, WORKS } from "../../core/arabic.mjs";
 import { imgUrl } from "../lib/helpers.js";
-import { ScrollRow } from "./UI.jsx";
+import { RowHeading, ScrollRow, useScrollRow } from "./UI.jsx";
 import { LocalMusicRoom } from "./LocalMusic.jsx";
 
 /**
@@ -90,6 +90,7 @@ export default function MusicRoom({ state, update, act, notice, localMusic }) {
     ? music.items.filter((i) => i.platform === only)
     : music.items;
   // The music of what the viewer is watching and keeping.
+  const worksRow = useScrollRow();
   const works = useMemo(() => {
     const seen = new Set();
     return [
@@ -459,16 +460,14 @@ export default function MusicRoom({ state, update, act, notice, localMusic }) {
 
       {works.length > 0 && (
         <section className="music-works">
-          <div className="section-heading">
-            <div>
-              <h2>موسيقى أعمالك</h2>
-              <span>
-                {arabicCount(works.length, WORKS)} من اللي تكمله ومكتبتك · تنفتح
-                على {platformName(first)}
-              </span>
-            </div>
-          </div>
-          <ScrollRow className="music-works-row">
+          <RowHeading row={worksRow}>
+            <h2>موسيقى أعمالك</h2>
+            <span>
+              {arabicCount(works.length, WORKS)} من اللي تكمله ومكتبتك · تنفتح
+              على {platformName(first)}
+            </span>
+          </RowHeading>
+          <ScrollRow className="music-works-row" row={worksRow}>
             {works.map((meta) => (
               <button
                 key={`${meta.type}:${meta.id}`}

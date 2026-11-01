@@ -206,3 +206,15 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 360px;
 }
+
+/* The showcase sits the same distance from the top bar and from both
+   sides of the content column (issue #125: the sides were 28 px against
+   12 px on top, so it looked boxed in). One value for all three; the rows
+   below keep the page gutter. The classic cinematic layout stays edge to
+   edge. */
+.app {
+  --showcase-gutter: 12px;
+}
+.app:not(.layout-cinematic) .hero {
+  margin: var(--showcase-gutter) var(--showcase-gutter) 0;
+}

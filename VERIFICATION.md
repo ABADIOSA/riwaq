@@ -1,5 +1,27 @@
 # Verification — Riwaq
 
+## 2026-11-01 — Riwaq 0.54.0 Beta release preparation (PR #128)
+
+- Prepared on PR #128's branch on top of the Codex-reviewed head `ed3a666` (corrective code `e6451ff`), with the owner's authorization to merge and publish a Beta. Main and the merge base were still `c6f7fb5`; the PR was open, mergeable, without review threads, and its `check` run on `ed3a666` had passed. No v0.54.0 tag or release existed; the latest release was v0.53.1 (prerelease).
+- Version, lockfile, the Arabic and English in-app highlights, README, release notes, changelog and the packaged-smoke path agree on 0.54.0. Release results are recorded below once the workflow finishes.
+
+## 2026-11-02 — independent PR #128 Windows review (unreleased)
+
+- Original PR `12e700f`, actual main/merge base `c6f7fb5`; corrective implementation `e6451ff`. [Full independent findings, acceptance matrix, commands and limits](docs/REVIEW-PR-128.md).
+- **962 Node tests pass**, zero failures/skips; main independently passes 934 and original PR 954. Formatting and both builds pass. Chromium: web smoke 26 steps; browse 39/39; overhaul 17/17; carousel 36 named checks; downloads/menu 30; HUD keyboard passes.
+- Corrected root-junction cache deletion, startup cleanup/engine ordering, unsafe engine cache links, pale light-mode Details text (2.06:1 → 6.54:1 on Pure White), profile title-bar repaint, privacy platform claims and stale consent navigation. Added seven real filesystem/engine tests and one title-overlay regression. Real native acceptance visits all six rooms/44 pages in both languages and verifies legacy DPAPI state, profile separation, nativeTheme switching, restart and initial window background.
+- Actual Windows MPV/HUD embedded/separate paths, SendInput, tracks, seek, speed/volume, Stop, frozen-renderer/F8 recovery and native download/profile ownership gates pass. Pinned TorrServer passes a real local swarm. Local NSIS/portable packages build with no publishing; 150 extracted source/build/legal files match in each, ASARs/MPV match and Admin is absent. Actual portable playback with stalled layout passes; NSIS option test cancels before Install; isolated signed upgrade preserves DPAPI data.
+- Both main and PR reproduce stale ancillary Admin/music smoke failures and connection-error replies on immediate playback cancellation. The legacy `RIWAQ_SMOKE=1` gate requires a default-disabled hero and leaves fresh onboarding open, timing out at its “live catalogs” predicate on both builds; deterministic local native gates pass. Stop prevents late playback and no owned MPV remains after stress. These are documented follow-ups/limits, not hidden passes. Fresh audit remains 19 affected package nodes; reachability and compatible-patch limits are in the review.
+- READY FOR OWNER REVIEW with the stated limits; no merge/release/deployment, live-account mutation or version/license change. Real HDR/Dolby Vision/RTX, physical multi-DPI/touch/screen-reader configurations and live provider accounts are not certified. New privacy URLs on main need a post-merge publication check. Local passes are separate from final remote CI.
+
+## 2026-11-01 — engineering overhaul (unreleased): #127, #126, #125, #124, #122, #111, privacy
+
+- Branch `claude/fervent-pasteur-gzqpy4` from main `c6f7fb5`. [Traceability, decisions and limits](docs/OVERHAUL-2026-11-01.md).
+- Run on Linux by Claude: **954 Node tests pass** (934 at baseline), Prettier, both production builds. Chromium: the new `scripts/test-ui-overhaul.mjs` 17/17 (six settings rooms in Arabic and English with no Arabic on English pages, Link Trakt/Simkl/AniList, light/dark/system with a live OS switch and ≥ 4.5:1 text, equal showcase gutters at 1920–390 px, adjacent row arrows at 1440/740/390 in both `rowArrows` modes, vertical dragging over See all, a row and Discover's grid); `test-ui-browse` 39/39; the complete web smoke (26 steps, accounts and usage opt-in/out included); `test-hud-keys`, `test-quality-carousels`, `test-downloads-quality`.
+- The web smoke's second-device resize fails in this environment on main's own build and script too ("restore it to normal state first" after picture-in-picture); the script now restores that window through CDP for that error only.
+- Timings, main's build against this branch's, five alternating runs (`measure-ui-browse`): cold start 288 → 291 ms, Discover 108 → 123, Home 136 → 131, See all 277 → 252, Details 136 → 141, Back 141 → 112 (medians; ranges overlap), heap 7.42 → 7.49 MB, DOM nodes 4093 both, bundle +17 KB JS and +8 KB CSS. Home re-entry crosses the 50 ms long-task threshold intermittently in every build here, including one without the new light stylesheet.
+- Not run: anything on Windows (Electron 44.9.3, MPV, HUD, F8, DPAPI, the light title bar, packages, installer); `test-review083-native.mjs` and `test-session-ui.mjs` were updated for the six rooms but not run; real accounts; TheIntroDB's live spec (blocked here).
+
 ## 2026-10-28 — after 0.53.0: the player menu exactly as #113 asks
 
 - The owner said #113 was not done as asked and chose what "Copy torrent link" copies: the address the torrent plays from on this computer, for another player such as VLC. The menu is Take a screenshot, Copy torrent link, Copy magnet link, Download video. Only a torrent engine's own loopback address is copied (`localTorrentLink`); debrid and home-server addresses never are. [Record](docs/UI-VERIFICATION-2026-10-28.md#follow-up-after-0530-113-exactly).

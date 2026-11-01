@@ -3702,3 +3702,28 @@ em.tag-custom.has-text:not(.badge-outlined) {
   opacity: 0.45;
   cursor: default;
 }
+
+/* Row arrows as one adjacent pair (issue #122, appearance rowArrows:
+   header). A row under a heading shows them in the heading (RowHeading,
+   like rails); a row of tabs or chips with no heading gets the pair at its
+   own end. With rowArrows: edges, the arrows sit over both ends instead
+   (the root-class rules are in appearance.css). */
+.scroll-row-wrap.has-pair {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.scroll-row-wrap.has-pair > .scroll-row {
+  flex: 1;
+  min-width: 0;
+}
+.scroll-row-wrap.has-pair > .rail-arrows {
+  flex-shrink: 0;
+}
+/* Tabs carry their underline's padding: line the pair up with the buttons. */
+.scroll-row-wrap.has-pair:has(> .filter-tabs) {
+  align-items: flex-start;
+}
+.scroll-row-wrap.has-pair:has(> .filter-tabs) > .rail-arrows {
+  margin-top: 4px;
+}

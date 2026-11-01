@@ -45,6 +45,7 @@ import {
   prayerTimes,
 } from "../core/prayer.mjs";
 import { AI_PROVIDERS } from "../core/ai-search.mjs";
+import { PRIVACY_URLS } from "../core/privacy.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
 import { HUD_REQUESTS } from "../core/hud.mjs";
 import { parseStream } from "../core/stream-engine.mjs";
@@ -1154,6 +1155,7 @@ export async function startBridge({ version, store }) {
         discordApp: "https://discord.com/developers/applications",
         ...Object.fromEntries(DEBRID.map((d) => [d.id, d.url])),
         ...Object.fromEntries(AI_PROVIDERS.map((p) => [p.id, p.keys])),
+        ...PRIVACY_URLS,
       };
       if (id === "anilistActivate")
         urls.anilistActivate = client.integrations.anilistAuthorizeUrl();

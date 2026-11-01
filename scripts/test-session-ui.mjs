@@ -449,11 +449,6 @@ try {
     await evaluate("document.documentElement.scrollWidth<=innerWidth+1"),
     "small settings no overflow",
   );
-  const advancedSettings = page.getByRole("button", {
-    name: "إعدادات متقدمة",
-    exact: true,
-  });
-  if (await advancedSettings.isVisible()) await advancedSettings.click();
   await textClick("الواجهة", ".studio-index-pages button");
   assert.equal(
     await evaluate(

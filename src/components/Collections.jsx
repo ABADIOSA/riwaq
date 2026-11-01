@@ -22,7 +22,16 @@ import {
 } from "lucide-react";
 import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
-import { Busy, Empty, Modal, Poster, Rail, ScrollRow } from "./UI.jsx";
+import {
+  Busy,
+  Empty,
+  Modal,
+  Poster,
+  Rail,
+  RowHeading,
+  ScrollRow,
+  useScrollRow,
+} from "./UI.jsx";
 import {
   SHAPES,
   TMDB_PRESETS,
@@ -140,20 +149,29 @@ export function PinnedCollections({ state, onOpen }) {
   );
   if (!pinned.length) return null;
   return pinned.map((c) => (
-    <section key={c.id} className="rail pinned-collection">
-      <div className="section-heading">
-        <div>
-          <h2>
-            {c.emoji && <span className="pinned-emoji">{c.emoji}</span>}
-            <span dir="auto">{c.title}</span>
-          </h2>
-          <span>مجموعتك · {arabicCount(c.folders.length, FOLDERS)}</span>
-        </div>
-        <button className="text-button" onClick={() => onOpen(c.id)}>
-          عرض المجموعة
-        </button>
-      </div>
-      <ScrollRow className="folder-row">
+    <PinnedCollection key={c.id} c={c} onOpen={onOpen} />
+  ));
+}
+
+function PinnedCollection({ c, onOpen }) {
+  const row = useScrollRow();
+  return (
+    <section className="rail pinned-collection">
+      <RowHeading
+        row={row}
+        tools={
+          <button className="text-button" onClick={() => onOpen(c.id)}>
+            عرض المجموعة
+          </button>
+        }
+      >
+        <h2>
+          {c.emoji && <span className="pinned-emoji">{c.emoji}</span>}
+          <span dir="auto">{c.title}</span>
+        </h2>
+        <span>مجموعتك · {arabicCount(c.folders.length, FOLDERS)}</span>
+      </RowHeading>
+      <ScrollRow className="folder-row" row={row}>
         {c.folders.map((f) => (
           <button
             key={f.id}
@@ -166,7 +184,7 @@ export function PinnedCollections({ state, onOpen }) {
         ))}
       </ScrollRow>
     </section>
-  ));
+  );
 }
 
 /** The collections room: every collection, and one open collection. */

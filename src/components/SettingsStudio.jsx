@@ -1,9 +1,8 @@
-import UsageSettings from "./UsageSettings.jsx";
 import UpdatesCard from "./UpdatesCard.jsx";
 import OwnerTools from "./OwnerTools.jsx";
-import QuickSettings from "./QuickSettings.jsx";
 import AccountPage from "./settings/AccountPage.jsx";
 import { LanguageCard } from "./settings/LanguageCard.jsx";
+import { DownloadsPage, PrivacyPage } from "./settings/SystemPages.jsx";
 import DiagnosticsCard from "./DiagnosticsCard.jsx";
 import AppearanceStudio from "./AppearanceStudio.jsx";
 import {
@@ -105,6 +104,8 @@ import {
   MoonStar,
   UserRound,
   Crown,
+  HardDrive,
+  Users,
 } from "lucide-react";
 import { call, isWeb } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
@@ -464,32 +465,76 @@ function mpvKey(event) {
 }
 
 /**
- * Settings are grouped the way Harbor groups them: a group opens to its
- * pages. Each page is [id, title, search keywords, icon].
+ * Settings are six rooms (issue #127), each opening to its pages; there is
+ * no separate basic/advanced mode. Each page is [id, title, search
+ * keywords, icon]. A page lives in exactly one room, and every setting on
+ * a page is one the app reads (tests/settings-wiring.test.mjs).
  */
 const ALL_GROUPS = [
   {
-    id: "account",
-    title: "الحسابات والربط",
-    Icon: Link2,
+    id: "look",
+    title: "المظهر والواجهة",
+    Icon: Palette,
     pages: [
+      // The interface language sits with how Riwaq looks (issue #82: it was
+      // under watching, beside subtitles, and hard to find).
       [
-        "riwaqAccount",
-        "حساب رِواق",
-        "حساب تسجيل دخول مزامنة أجهزة موقع ويب اسم مستخدم كلمة مرور استرداد سحابة",
-        UserRound,
+        "language",
+        "لغة الواجهة",
+        "عربي لغة الواجهة English إنجليزي إنجليزية language",
+        Languages,
       ],
       [
-        "connections",
-        "الحسابات والربط",
-        "Trakt Letterboxd Simkl AniList أنمي Nuvio نوفيو مزامنة قوائم نقل مجموعات",
-        Link2,
+        "theme",
+        "السمة",
+        "ثيم ألوان تدرج ثيمات جاهزة فاتح داكن أبيض ليلي نهاري النظام",
+        SwatchBook,
+      ],
+      ["themes", "سماتك", "سمات محفوظة رمز مشاركة تصميم", Brush],
+      ["type", "الخطوط", "خط الخطوط", TypeIcon],
+      [
+        "interface",
+        "الواجهة",
+        "حجم الواجهة زوايا كثافة تخطيط قائمة حركة شاشة التوقف هوية",
+        PanelsTopLeft,
+      ],
+      [
+        "home",
+        "الرئيسية والعرض الرئيسي",
+        "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام مجموعات مثبتة العرض الرئيسي جلسة اليوم",
+        HomeIcon,
+      ],
+      [
+        "cards",
+        "بطاقات الملصقات",
+        "بطاقة ملصق حجم انحناء تقييمات عنوان",
+        LayoutGrid,
+      ],
+      [
+        "details",
+        "صفحات التفاصيل",
+        "خلفية حرق أسماء الحلقات جوائز تفاصيل",
+        FileText,
+      ],
+      ["awards", "أيقونات الجوائز", "جوائز أوسكار كأس غولدن غلوب إيمي", Trophy],
+      [
+        "ambience",
+        "الأجواء (Ambience)",
+        "خلفية صورة تعتيم توهج أجواء ثيم العمل ألوان العمل أغنية العمل موسيقى صوت",
+        Sun,
+      ],
+      ["logo", "الشعار والأيقونة", "شعار أيقونة شريط المهام صورة", Shapes],
+      [
+        "window",
+        "النافذة",
+        "شريط العنوان أزرار النافذة تمويه سحب النافذة",
+        AppWindow,
       ],
     ],
   },
   {
     id: "watching",
-    title: "المشاهدة",
+    title: "المشغل والتشغيل",
     Icon: MonitorPlay,
     pages: [
       [
@@ -511,10 +556,22 @@ const ALL_GROUPS = [
         Volume2,
       ],
       [
+        "subtitles",
+        "الترجمة والصوت",
+        "ترجمة لغة الترجمة لغة الصوت حجم توقيت مسارات صوت",
+        Subtitles,
+      ],
+      [
         "onscreen",
         "عناصر التحكم على الشاشة",
         "جودة البث شارة مؤقت النوم ملء الشاشة نافذة مستوى الصوت إيقاف مؤقت",
         MonitorCog,
+      ],
+      [
+        "playerLayout",
+        "تخطيط المشغل",
+        "أزرار المشغل شريط التحكم بسيط سينمائي",
+        Gamepad2,
       ],
       [
         "skipping",
@@ -522,12 +579,7 @@ const ALL_GROUPS = [
         "تخطي المقدمة الملخص شارة النهاية TheIntroDB AniSkip أنمي زر التخطي مفتاح",
         FastForward,
       ],
-      [
-        "subtitles",
-        "الترجمة والصوت",
-        "ترجمة لغة الترجمة لغة الصوت حجم توقيت مسارات صوت",
-        Subtitles,
-      ],
+      ["hotkeys", "اختصارات لوحة المفاتيح", "مفاتيح تخصيص تعارض MPV", Keyboard],
       [
         "prayer",
         "أوقات الصلاة",
@@ -541,18 +593,6 @@ const ALL_GROUPS = [
     title: "المصادر والمكتبة",
     Icon: Library,
     pages: [
-      [
-        "services",
-        "خدمات البث",
-        "Netflix شاهد OSN منصات Debrid Real-Debrid AllDebrid TorBox Premiumize اشتراك",
-        Tv,
-      ],
-      [
-        "homeServers",
-        "الخوادم المنزلية",
-        "Jellyfin Emby خادم نسختك مكتبة منزلية",
-        Server,
-      ],
       [
         "sources",
         "تفضيلات المصادر",
@@ -572,10 +612,18 @@ const ALL_GROUPS = [
         MousePointerClick,
       ],
       ["filters", "مرشحات البث", "مرشح جودة 4K HDR أتموس حجم مشاركين", Filter],
+      ["badges", "شارات البث", "شارات الصيغة دقة ترميز صوت", BadgeCheck],
+      [
+        "badgeRules",
+        "قواعد الشارات",
+        "قاعدة شارة نمط مجموعة إصدار",
+        ListChecks,
+      ],
+      ["badgePacks", "حزم الشارات", "حزمة استيراد تصدير JSON", Package],
       [
         "p2p",
         "محرك P2P",
-        "تورنت اتصالات سرعة تخزين مؤقت cache المحرك المدمج WebTorrent Stremio Service رفع مشاركة",
+        "تورنت اتصالات سرعة تخزين مؤقت cache المحرك المدمج WebTorrent Stremio Service رفع مشاركة TorrServer",
         Share2,
       ],
       [
@@ -585,22 +633,16 @@ const ALL_GROUPS = [
         ServerCog,
       ],
       [
-        "home",
-        "الرئيسية",
-        "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام مجموعات مثبتة",
-        HomeIcon,
+        "services",
+        "خدمات البث وDebrid",
+        "Netflix شاهد OSN منصات Debrid Real-Debrid AllDebrid TorBox Premiumize اشتراك",
+        Tv,
       ],
       [
-        "cards",
-        "بطاقات الملصقات",
-        "بطاقة ملصق حجم انحناء تقييمات عنوان",
-        LayoutGrid,
-      ],
-      [
-        "details",
-        "صفحات التفاصيل",
-        "خلفية حرق أسماء الحلقات جوائز تفاصيل",
-        FileText,
+        "homeServers",
+        "الخوادم المنزلية",
+        "Jellyfin Emby خادم نسختك مكتبة منزلية",
+        Server,
       ],
       [
         "data",
@@ -616,83 +658,55 @@ const ALL_GROUPS = [
       ],
       [
         "library",
-        "المكتبة",
+        "المكتبة والمحتوى",
         "إخفاء المشاهد البالغين محتوى للكبار مكتبة",
         BookMarked,
       ],
     ],
   },
   {
-    id: "look",
-    title: "المظهر",
-    Icon: Palette,
+    id: "files",
+    title: "التنزيلات والملفات",
+    Icon: Download,
     pages: [
-      // The interface language sits with how Riwaq looks (issue #82: it was
-      // under watching, beside subtitles, and hard to find).
       [
-        "language",
-        "لغة الواجهة",
-        "عربي لغة الواجهة English إنجليزي إنجليزية language",
-        Languages,
+        "downloads",
+        "التنزيلات والتخزين",
+        "تنزيل تنزيلات دون إنترنت أوفلاين مساحة تخزين لقطات الشاشة مجلد ذاكرة مؤقتة",
+        HardDrive,
       ],
-      ["theme", "السمة", "ثيم ألوان تدرج ثيمات جاهزة", SwatchBook],
-      ["themes", "سماتك", "سمات محفوظة رمز مشاركة تصميم", Brush],
-      ["logo", "الشعار والأيقونة", "شعار أيقونة شريط المهام صورة", Shapes],
-      ["type", "الخطوط", "خط الخطوط", TypeIcon],
-      [
-        "interface",
-        "الواجهة",
-        "حجم الواجهة زوايا كثافة تخطيط قائمة حركة شاشة التوقف",
-        PanelsTopLeft,
-      ],
-      [
-        "ambience",
-        "الأجواء (Ambience)",
-        "خلفية صورة تعتيم توهج أجواء ثيم العمل ألوان العمل أغنية العمل موسيقى صوت",
-        Sun,
-      ],
-      [
-        "window",
-        "النافذة",
-        "شريط العنوان أزرار النافذة تمويه سحب النافذة",
-        AppWindow,
-      ],
-      [
-        "playerLayout",
-        "تخطيط المشغل",
-        "أزرار المشغل شريط التحكم بسيط سينمائي",
-        Gamepad2,
-      ],
-      ["badges", "شارات البث", "شارات الصيغة دقة ترميز صوت", BadgeCheck],
-      [
-        "badgeRules",
-        "قواعد الشارات",
-        "قاعدة شارة نمط مجموعة إصدار",
-        ListChecks,
-      ],
-      ["badgePacks", "حزم الشارات", "حزمة استيراد تصدير JSON", Package],
-      ["awards", "أيقونات الجوائز", "جوائز أوسكار كأس غولدن غلوب إيمي", Trophy],
     ],
   },
   {
-    id: "devices",
-    title: "التحكم",
-    Icon: Keyboard,
+    id: "account",
+    title: "الحسابات والربط",
+    Icon: Link2,
     pages: [
-      ["hotkeys", "اختصارات لوحة المفاتيح", "مفاتيح تخصيص تعارض MPV", Keyboard],
+      [
+        "riwaqAccount",
+        "حساب رِواق",
+        "حساب تسجيل دخول مزامنة أجهزة موقع ويب اسم مستخدم كلمة مرور استرداد سحابة",
+        UserRound,
+      ],
+      [
+        "profiles",
+        "الملفات الشخصية",
+        "ملف شخصي ملفات رمز قفل أطفال واجهة هادئة",
+        Users,
+      ],
+      [
+        "connections",
+        "الخدمات المرتبطة",
+        "Trakt Letterboxd Simkl AniList أنمي Nuvio نوفيو مزامنة قوائم نقل مجموعات",
+        Link2,
+      ],
     ],
   },
   {
     id: "system",
-    title: "النظام",
-    Icon: SlidersHorizontal,
+    title: "النظام والتشخيص",
+    Icon: Cpu,
     pages: [
-      [
-        "presence",
-        "الحضور والإشعارات",
-        "Discord Telegram webhook حالة إشعار",
-        Bell,
-      ],
       [
         "backup",
         "النسخ الاحتياطي",
@@ -706,8 +720,20 @@ const ALL_GROUPS = [
         RefreshCw,
       ],
       [
+        "presence",
+        "الحضور والإشعارات",
+        "Discord Telegram webhook حالة إشعار",
+        Bell,
+      ],
+      [
+        "privacy",
+        "الخصوصية",
+        "خصوصية سياسة الخصوصية بيانات إحصاءات استخدام تتبع حذف",
+        ShieldCheck,
+      ],
+      [
         "system",
-        "الاتصال والتطبيق",
+        "الاتصال والتشخيص",
         "Stremio خدمة تشخيص فحص تقرير مشاكل أخطاء MPV إصدار",
         Cpu,
       ],
@@ -722,6 +748,9 @@ const WEB_HIDDEN = {
   audio: "playback",
   window: "interface",
   hotkeys: "playback",
+  // Downloads, the screenshots folder and the torrent cache are desktop
+  // features; the web edition has none of them.
+  downloads: "privacy",
 };
 const GROUPS = ALL_GROUPS.map((g) => ({
   ...g,
@@ -744,13 +773,13 @@ export default function SettingsStudio({
   initialTab = "theme",
   onNuvio,
   onProfiles,
+  onDownloads,
   onWelcome,
 }) {
   const [first] = useState(
     () => takeSettingsPage() || MOVED[initialTab] || initialTab,
   );
   const [tab, setTab] = useState(first),
-    [open, setOpen] = useState(() => new Set([groupOf(first)?.id || "look"])),
     [search, setSearch] = useState(""),
     [draft, setDraft] = useState(state.settings),
     [diag, setDiag] = useState(null);
@@ -778,19 +807,12 @@ export default function SettingsStudio({
     }
   };
   const s = state.settings;
-  const [advanced, setAdvanced] = useState(
-    () =>
-      s.settingsMode === "advanced" ||
-      !["theme", "appearance"].includes(initialTab),
-  );
   useEffect(() => {
     setDraft(s);
   }, [s]);
-  const visible = !advanced
-    ? []
-    : sections.filter((page) =>
-        search ? matchesWords(pageWords(page), search) : page[0] === tab,
-      );
+  const visible = sections.filter((page) =>
+    search ? matchesWords(pageWords(page), search) : page[0] === tab,
+  );
   const save = (key, value) => update("settings", { [key]: value });
   const toggle = (key, title, description) => (
     <div className="setting-row" key={key}>
@@ -863,42 +885,7 @@ export default function SettingsStudio({
           onChange={(o) => setOwnerDevice(!!(o?.owner || o?.remembered))}
         />
       )}
-      <div className="button-row settings-mode">
-        <button
-          className={!advanced ? "primary" : "secondary"}
-          onClick={() => {
-            setAdvanced(false);
-            save("settingsMode", "simple");
-          }}
-        >
-          إعدادات أساسية
-        </button>
-        <button
-          className={advanced ? "primary" : "secondary"}
-          onClick={() => {
-            setAdvanced(true);
-            save("settingsMode", "advanced");
-          }}
-        >
-          إعدادات متقدمة
-        </button>
-      </div>
-      {!advanced && (
-        <QuickSettings
-          notice={notice}
-          state={state}
-          update={update}
-          onProfiles={onProfiles}
-          onAdvanced={(id) => {
-            setTab(id);
-            setAdvanced(true);
-          }}
-        />
-      )}
-      <div
-        className="studio-layout"
-        style={{ display: advanced ? undefined : "none" }}
-      >
+      <div className="studio-layout">
         <nav className="studio-index" aria-label="أقسام الإعدادات">
           <label className="settings-search">
             <Search size={17} />
@@ -1070,19 +1057,8 @@ export default function SettingsStudio({
                     part="interface"
                   />
                   <ScreensaverCard state={state} update={update} />
-                  <UsageSettings notice={notice} />
                   <section className="settings-card">
                     <h2>السلوك</h2>
-                    {toggle(
-                      "showShowcase",
-                      "العرض الرئيسي",
-                      "اعرض اقتراحات بارزة أعلى الصفحة الرئيسية.",
-                    )}
-                    {toggle(
-                      "showSession",
-                      "إظهار جلسة اليوم",
-                      "عند إخفائها تبدأ الرئيسية مباشرة بصفوف الأفلام والمسلسلات.",
-                    )}
                     {toggle(
                       "reduceMotion",
                       "تقليل الحركة",
@@ -1092,8 +1068,47 @@ export default function SettingsStudio({
                 </>
               )}
               {id === "home" && (
-                <HomeEditor state={state} update={update} notice={notice} />
+                <>
+                  <AppearanceStudio state={state} update={update} part="home" />
+                  <section className="settings-card">
+                    <h2>جلسة اليوم</h2>
+                    {toggle(
+                      "showSession",
+                      "إظهار جلسة اليوم",
+                      "عند إخفائها تبدأ الرئيسية مباشرة بصفوف الأفلام والمسلسلات.",
+                    )}
+                  </section>
+                  <HomeEditor state={state} update={update} notice={notice} />
+                </>
               )}
+              {id === "downloads" && (
+                <DownloadsPage
+                  state={state}
+                  act={act}
+                  onDownloads={onDownloads}
+                  onSettings={setTab}
+                />
+              )}
+              {id === "profiles" && (
+                <section className="settings-card">
+                  <h2>الملفات الشخصية</h2>
+                  <p>
+                    لكل ملف مكتبته وتقدّمه وإعداداته، ويمكن قفله برمز. الإضافات
+                    ومفاتيح الخدمات والاختصارات مشتركة بين الملفات.
+                  </p>
+                  <div className="button-row">
+                    <button className="primary" onClick={onProfiles}>
+                      <Users size={16} /> إدارة الملفات الشخصية
+                    </button>
+                  </div>
+                  {toggle(
+                    "quietInterface",
+                    "واجهة هادئة",
+                    "إخفاء دعوات الربط وزر الحساب والملفات من التنقل. يمكنك فتح ملفاتك من هنا.",
+                  )}
+                </section>
+              )}
+              {id === "privacy" && <PrivacyPage act={act} notice={notice} />}
               {id === "data" && (
                 <>
                   <div className="feature-banner">
@@ -1197,11 +1212,6 @@ export default function SettingsStudio({
                       ["720", "720p · بيانات أقل"],
                     ])}
                     {toggle(
-                      "hideCam",
-                      "إخفاء تصوير السينما",
-                      "استبعاد المصادر التي تحمل CAM أو Telesync.",
-                    )}
-                    {toggle(
                       "playerOverlay",
                       "أدوات التحكم فوق الصورة",
                       "شريط تحكم عائم يختفي مع المؤشر، مثل مشغلات السينما. أطفئه إن لم يظهر على جهازك لتعود أدوات التحكم أسفل الصورة.",
@@ -1296,19 +1306,6 @@ export default function SettingsStudio({
                       [15, "15 ثانية"],
                     ])}
                   </section>
-                  <section className="settings-card">
-                    <h2>لقطات الشاشة</h2>
-                    <p>
-                      تُحفظ اللقطات بصيغة PNG داخل مجلد بيانات رِواق، ويفتح الزر
-                      المجلد مباشرة.
-                    </p>
-                    <button
-                      className="secondary small"
-                      onClick={() => act("openScreenshots")}
-                    >
-                      فتح مجلد اللقطات
-                    </button>
-                  </section>
                 </>
               )}
               {id === "sources" && (
@@ -1323,11 +1320,6 @@ export default function SettingsStudio({
                       ["strict", "صارم · يستبعد النسخ الأولية والمشبوهة"],
                       ["balanced", "متوازن · يبقي النسخ الأولية عند الحاجة"],
                       ["off", "مطفأ · لا يستبعد إلا الدعاية والعيّنات"],
-                    ])}
-                    {select("quality", "سقف الجودة", [
-                      ["2160", "4K · أعلى جودة"],
-                      ["1080", "1080p · متوازنة"],
-                      ["720", "720p · بيانات أقل"],
                     ])}
                     {toggle(
                       "hideCam",
@@ -1893,7 +1885,7 @@ function IntegrationCard({ integration: s, update, act, notice }) {
             className="primary"
             onClick={connect}
           >
-            {busy ? "جاري الربط…" : "ربط " + name}
+            {busy ? "جاري الربط…" : `ربط ${name}`}
           </button>
         ) : (
           <>
@@ -1930,8 +1922,16 @@ function IntegrationCard({ integration: s, update, act, notice }) {
                 const r = await act("letterboxdImport");
                 if (r) {
                   await update("init");
+                  // One part per fact, joined with " · ", so each part
+                  // translates on its own (core/i18n.mjs).
                   notice(
-                    `استُورد ${r.count} عنوان · لم تتم مطابقة ${r.unmatched}${r.remaining ? " · تجاوز الحد " + r.remaining : ""}`,
+                    [
+                      `استُورد ${r.count} عنوان`,
+                      `لم تتم مطابقة ${r.unmatched}`,
+                      r.remaining ? `تجاوز الحد ${r.remaining}` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
                   );
                 }
               } finally {

@@ -13,7 +13,7 @@ import {
   visibleHomeSections,
 } from "../../core/home.mjs";
 import { call } from "../lib/api.js";
-import { ScrollRow } from "./UI.jsx";
+import { RowHeading, ScrollRow, useScrollRow } from "./UI.jsx";
 import { loc } from "../lib/format.js";
 
 const offset = () => -new Date().getTimezoneOffset();
@@ -167,17 +167,16 @@ export function TitleCountdown({ meta, state, update, notice }) {
 /** The home page's pinned countdowns, ticking. */
 export function CountdownRail({ state, update, onOpen }) {
   const now = useTick();
+  const row = useScrollRow();
   const list = cleanCountdowns(state.settings.countdowns);
   if (!list.length) return null;
   return (
     <section className="rail countdown-rail">
-      <div className="section-heading">
-        <div>
-          <h2>العد التنازلي</h2>
-          <span>الأعمال اللي تنتظرها</span>
-        </div>
-      </div>
-      <ScrollRow className="countdown-row">
+      <RowHeading row={row}>
+        <h2>العد التنازلي</h2>
+        <span>الأعمال اللي تنتظرها</span>
+      </RowHeading>
+      <ScrollRow className="countdown-row" row={row}>
         {list.map((c) => {
           const day = c.localDay || c.day;
           const at = midnightOf(day, offset());

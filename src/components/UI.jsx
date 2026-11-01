@@ -263,7 +263,13 @@ export function RowArrows({ row }) {
  * moves most of a screen; an arrow hides at its end of the row, and both
  * hide when everything fits. Wheel, touchpad and keyboard focus still
  * scroll it. The page is right-to-left, so "next" moves toward the left.
- * A rail passes its own `row` (useScrollRow) to share it with its heading.
+ *
+ * Where the arrows sit follows appearance rowArrows (issue #122): with
+ * "header" (the default) they are one adjacent pair, never one at each
+ * end of the row. A row under a heading passes its own `row`
+ * (useScrollRow) and draws <RowArrows> in that heading, as rails do; a row
+ * with no heading (tabs, chips) gets the pair at its end. With "edges"
+ * the arrows sit over both ends instead.
  */
 export function ScrollRow({
   as: Tag = "div",
@@ -275,10 +281,12 @@ export function ScrollRow({
   ...rest
 }) {
   const own = useScrollRow(shared ? undefined : onNearEnd);
-  const { ref, edges, move } = shared || own;
+  const row = shared || own;
+  const { ref, edges, move } = row;
+  const pair = arrows && !shared;
   return (
     <div
-      className={`scroll-row-wrap ${edges.start ? "" : "can-back"} ${edges.end ? "" : "can-forward"}`}
+      className={`scroll-row-wrap ${edges.start ? "" : "can-back"} ${edges.end ? "" : "can-forward"} ${shared ? "arrows-in-heading" : ""} ${pair ? "has-pair" : ""}`}
     >
       {arrows && !edges.start && (
         <button
@@ -305,6 +313,24 @@ export function ScrollRow({
           <ChevronLeft size={22} />
         </button>
       )}
+      {pair && <RowArrows row={row} />}
+    </div>
+  );
+}
+
+/**
+ * A section heading whose row's arrows sit beside its tools (issue #122):
+ * the pair rails draw, for any row under a heading. `row` comes from
+ * useScrollRow and goes to the row's <ScrollRow row={row}>.
+ */
+export function RowHeading({ row, children, tools = null, className = "" }) {
+  return (
+    <div className={`section-heading ${className}`}>
+      <div>{children}</div>
+      <div className="rail-tools">
+        <RowArrows row={row} />
+        {tools}
+      </div>
     </div>
   );
 }

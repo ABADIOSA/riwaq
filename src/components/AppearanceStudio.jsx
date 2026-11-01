@@ -18,10 +18,14 @@ import {
   applyPreset,
   contrast,
   decodeTheme,
+  effectiveMode,
   encodeTheme,
+  isLight,
+  lightColors,
   resolveAppearance,
 } from "../../core/appearance.mjs";
 import { call } from "../lib/api.js";
+import { useSystemDark } from "../lib/scheme.js";
 
 /**
  * The appearance studio: presets, the viewer's own palette, type and scale,
@@ -62,9 +66,16 @@ export default function AppearanceStudio({ state, update, part = "" }) {
     setHistory((h) => h.slice(0, -1));
     commit(previous, { remember: false });
   };
+  const systemDark = useSystemDark();
+  // In light mode the gallery shows each preset as it would be drawn.
+  const lightNow = effectiveMode(draft, systemDark) === "light";
+  const tile = (colors) => (lightNow ? lightColors(colors) : colors);
   const code = encodeTheme(draft);
   const readable = contrast(draft.colors.text, draft.colors.bg);
   const mutedReadable = contrast(draft.colors.muted, draft.colors.panel);
+  // A choice row is a radiogroup inside a <div> field, never a <label>:
+  // a label activates its first control, so a click on the caption picked
+  // the first option, and the options lost their own names.
   const pick = (key, options, value, onPick) => (
     <div className="choice-row" role="radiogroup">
       {options.map(([id, label]) => (
@@ -109,8 +120,31 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               </button>
             </div>
           </div>
+          <div className="studio-field scheme-field">
+            الوضع
+            {pick(
+              "mode",
+              [
+                ["dark", "داكن"],
+                ["light", "فاتح"],
+                ["system", "حسب النظام"],
+              ],
+              draft.mode || "dark",
+              (mode) => change({ mode }),
+            )}
+            <small>
+              {draft.mode === "system"
+                ? systemDark
+                  ? "يتبع وضع ويندوز أو المتصفح، وهو الآن داكن."
+                  : "يتبع وضع ويندوز أو المتصفح، وهو الآن فاتح."
+                : "الفاتح «أبيض نقي» بخلفيات بيضاء ولون تمييز ثيمك بدرجة أعمق تُقرأ على الأبيض."}
+            </small>
+          </div>
           <div className="theme-gallery">
-            {PRESETS.map((p) => (
+            {PRESETS.map((preset) => ({
+              ...preset,
+              colors: tile(preset.colors),
+            })).map((p) => (
               <button
                 key={p.id}
                 className={`theme-tile ${draft.preset === p.id ? "selected" : ""}`}
@@ -159,6 +193,13 @@ export default function AppearanceStudio({ state, update, part = "" }) {
             غيّر أي لون فيصبح التصميم «مخصصاً». لون التمييز يظهر في الأزرار
             والعناصر المختارة وشريط التقدم.
           </p>
+          {lightNow && !isLight(draft.colors) && (
+            <p className="subtle">
+              هذه ألوان الوضع الداكن. الوضع الفاتح يأخذ منها لون التمييز فقط
+              ويعمّقه ليُقرأ على الأبيض؛ ولثيم فاتح كامل من ألوانك اختر خلفية
+              فاتحة.
+            </p>
+          )}
           <div className="color-grid">
             {COLOR_KEYS.map((key) => (
               <label key={key} className="color-field">
@@ -180,7 +221,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               القراءة. جرّب نصاً أفتح أو خلفية أغمق.
             </p>
           )}
-          <label className="studio-field">
+          <div className="studio-field">
             تدرّج لون التمييز
             {pick(
               "gradient",
@@ -193,7 +234,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               draft.gradient,
               (gradient) => change({ gradient }),
             )}
-          </label>
+          </div>
           <div
             className="accent-sample"
             style={{
@@ -274,7 +315,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               مقروءة.
             </small>
           </label>
-          <label className="studio-field">
+          <div className="studio-field">
             انحناء الزوايا
             {pick(
               "radius",
@@ -286,8 +327,8 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               draft.radius,
               (radius) => change({ radius }),
             )}
-          </label>
-          <label className="studio-field">
+          </div>
+          <div className="studio-field">
             كثافة العرض
             {pick(
               "density",
@@ -299,14 +340,14 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               draft.density,
               (density) => change({ density }),
             )}
-          </label>
+          </div>
         </section>
       )}
 
       {show("cards") && (
         <section className="settings-card">
           <h2>البطاقات</h2>
-          <label className="studio-field">
+          <div className="studio-field">
             أسلوب البطاقة
             {pick(
               "cardStyle",
@@ -318,8 +359,8 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               s.cardStyle || "glass",
               (cardStyle) => update("settings", { cardStyle }),
             )}
-          </label>
-          <label className="studio-field">
+          </div>
+          <div className="studio-field">
             حجم البطاقة
             {pick(
               "cardSize",
@@ -331,7 +372,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               s.cardSize || "comfortable",
               (cardSize) => update("settings", { cardSize }),
             )}
-          </label>
+          </div>
           <label className="studio-field">
             <span>
               انحناء البطاقة <b>{draft.posterRadius}</b>
@@ -346,7 +387,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               }
             />
           </label>
-          <label className="studio-field">
+          <div className="studio-field">
             عند المرور بالفأرة
             {pick(
               "posterHover",
@@ -359,8 +400,8 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               draft.posterHover,
               (posterHover) => change({ posterHover }),
             )}
-          </label>
-          <label className="studio-field">
+          </div>
+          <div className="studio-field">
             أسهم الصفوف
             {pick(
               "rowArrows",
@@ -371,7 +412,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               draft.rowArrows || "header",
               (rowArrows) => change({ rowArrows }),
             )}
-          </label>
+          </div>
           <label className="studio-toggle">
             <input
               type="checkbox"
@@ -433,10 +474,14 @@ export default function AppearanceStudio({ state, update, part = "" }) {
           </div>
         </section>
       )}
-      {show("interface") && (
+      {show("home") && (
         <section className="settings-card">
-          <h2>الصفحات والتنقل</h2>
-          <label className="studio-field">
+          <h2>العرض الرئيسي</h2>
+          <p>
+            الشريط البارز أعلى الرئيسية. مخفي حتى تختاره، ولا يشغّل صوتاً ولا
+            فيديو.
+          </p>
+          <div className="studio-field">
             العرض الرئيسي في الصفحة الرئيسية
             {pick(
               "hero",
@@ -455,7 +500,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
                 }
               },
             )}
-          </label>
+          </div>
 
           <div className="studio-field">
             اسم العمل في العرض الرئيسي وصفحة العمل
@@ -474,7 +519,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               إذا ما وُجد شعار يظهر الاسم مكتوباً.
             </small>
           </div>
-          {
+          {s.showShowcase === true && (
             <div className="studio-field">
               تقليب العرض الرئيسي
               {pick(
@@ -490,8 +535,13 @@ export default function AppearanceStudio({ state, update, part = "" }) {
                 يتوقف حين يكون المؤشر فوقه، ولا يتقلب مع تقليل الحركة.
               </small>
             </div>
-          }
+          )}
+        </section>
+      )}
 
+      {show("interface") && (
+        <section className="settings-card">
+          <h2>التنقل</h2>
           <div className="studio-field">
             عناصر القائمة
             <div className="choice-row">

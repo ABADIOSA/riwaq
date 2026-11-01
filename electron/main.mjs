@@ -13,6 +13,7 @@ import {
   nativeImage,
   protocol,
   utilityProcess,
+  nativeTheme,
 } from "electron";
 import {
   readFileSync,
@@ -23,7 +24,7 @@ import {
   copyFileSync,
   statSync,
 } from "node:fs";
-import { rm } from "node:fs/promises";
+import { lstat, readdir, rm } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
@@ -64,8 +65,13 @@ import {
   prayerTimes,
 } from "../core/prayer.mjs";
 import { AI_PROVIDERS } from "../core/ai-search.mjs";
+import { PRIVACY_URLS } from "../core/privacy.mjs";
 import { readBackupHeader } from "../core/backup.mjs";
-import { effectiveZoom, resolveAppearance } from "../core/appearance.mjs";
+import {
+  displayedAppearance,
+  effectiveZoom,
+  resolveAppearance,
+} from "../core/appearance.mjs";
 import {
   HUD_METHODS,
   HUD_REQUESTS,
@@ -98,6 +104,7 @@ import {
   torrentDead,
   localTorrentLink,
   magnetOf,
+  validHash,
 } from "../core/torrent-engine.mjs";
 import { ShaderStore } from "./shaders.mjs";
 import { shaderOptions } from "../core/shaders.mjs";
@@ -329,6 +336,33 @@ function torrents() {
     log: (error) => logError("torrent", error),
   });
   return torrentHost;
+}
+/**
+ * Pieces an earlier session left behind (issue #123): the engine deletes
+ * them when a viewing ends and when it closes, but a crash or a forced
+ * shutdown skips that, and the engine only sweeps again the next time a
+ * torrent plays. With "delete after viewing", start-up removes them before
+ * the engine is first asked for. Only info-hash folders directly inside
+ * torrent-cache are touched (never a link, never offline downloads, which
+ * live in userData/offline and offline-torrent-cache).
+ */
+async function sweepTorrentCache() {
+  if ((client.state.settings.torrentCache || "viewing") !== "viewing") return;
+  const dir = join(app.getPath("userData"), "torrent-cache");
+  // Checking children is insufficient when their parent is a junction.
+  const rootInfo = await lstat(dir).catch(() => null);
+  if (!rootInfo?.isDirectory() || rootInfo.isSymbolicLink()) return;
+  for (const name of await readdir(dir).catch(() => [])) {
+    // Once anything asked for the engine, it owns the folder.
+    if (torrentHost) return;
+    if (!validHash(name)) continue;
+    const path = join(dir, name);
+    const info = await lstat(path).catch(() => null);
+    if (!info?.isDirectory() || info.isSymbolicLink() || torrentHost) continue;
+    await rm(path, { recursive: true, force: true }).catch((error) =>
+      logError("torrent", error),
+    );
+  }
 }
 // TorrServer (core/torrserver.mjs), the fallback for a built-in torrent
 // that sends nothing, once the viewer downloaded it; and the info hash it is
@@ -854,10 +888,20 @@ const broadcast = () => {
 };
 // The frame the window was created with; a changed setting waits for a start.
 let runningFrame = "native";
+/**
+ * The colours as drawn: light, dark or Windows' own choice (issue #126).
+ * Chromium's prefers-color-scheme follows the same nativeTheme, so the page
+ * and the native bar agree.
+ */
+const drawnLook = () =>
+  displayedAppearance(
+    resolveAppearance(client.state.settings),
+    nativeTheme.shouldUseDarkColors,
+  );
 /** The hybrid bar's native buttons follow the current theme. */
 function applyTitleOverlay() {
   if (runningFrame !== "hybrid" || !window || window.isDestroyed()) return;
-  const look = resolveAppearance(client.state.settings);
+  const look = drawnLook();
   try {
     window.setTitleBarOverlay({
       color: look.colors.panel,
@@ -2037,6 +2081,7 @@ const methods = {
       discordApp: "https://discord.com/developers/applications",
       ...Object.fromEntries(DEBRID.map((d) => [d.id, d.url])),
       ...Object.fromEntries(AI_PROVIDERS.map((p) => [p.id, p.keys])),
+      ...PRIVACY_URLS,
     };
     // AniList's authorize page carries the viewer's own client ID.
     if (id === "anilistActivate")
@@ -2083,6 +2128,7 @@ const methods = {
     await player.stop();
     const result = client.profiles.switch(a);
     applyZoom();
+    applyTitleOverlay();
     await applyPresence().catch(() => {});
     return result;
   },
@@ -2873,7 +2919,12 @@ app
       });
       await client.updates.restore();
       runningFrame = client.state.settings.windowFrame || "native";
-      const look = resolveAppearance(client.state.settings);
+      // Finish deleting old pieces before the renderer can request a new
+      // engine. An rm already in flight cannot be stopped by torrentHost.
+      await sweepTorrentCache().catch((error) => logError("torrent", error));
+      const look = drawnLook();
+      // Windows switching between light and dark repaints the native bar.
+      nativeTheme.on("updated", applyTitleOverlay);
       syncLanguage();
       window = new BrowserWindow({
         ...(runningFrame === "hybrid"
@@ -2892,7 +2943,7 @@ app
         height: 960,
         minWidth: 980,
         minHeight: 680,
-        backgroundColor: "#101215",
+        backgroundColor: look.colors.bg,
         title: t("رِواق — Riwaq"),
         icon: join(root, "assets", "icon.png"),
         show: !process.env.RIWAQ_SMOKE,
@@ -3262,7 +3313,10 @@ app
   .catch((error) => {
     if (process.env.RIWAQ_SMOKE) console.error(error.message);
     else
-      dialog.showErrorBox("Riwaq", "تعذّر بدء التطبيق. " + cleanError(error));
+      dialog.showErrorBox(
+        "Riwaq",
+        `${t("تعذّر بدء التطبيق.")} ${cleanError(error)}`,
+      );
     app.exit(1);
   });
 function cleanError(error) {

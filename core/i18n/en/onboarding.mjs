@@ -5,8 +5,8 @@ export default {
   "المشاركة مفعّلة باختيارك": "Sharing is enabled by your choice",
   "المشاركة معطّلة": "Sharing is off",
   "التكرار والاحتفاظ والحذف": "Frequency, retention and deletion",
-  "يمكنك إيقاف المشاركة من الإعدادات الأساسية أو المظهر ← الواجهة. لا تنتقل الموافقة مع حساب رِواق أو النسخ الاحتياطية.":
-    "Turn sharing off in basic settings or Appearance → Interface. Consent never travels with your Riwaq account or backups.",
+  "يمكنك إيقاف المشاركة من الإعدادات ← النظام والتشخيص ← الخصوصية. لا تنتقل الموافقة مع حساب رِواق أو النسخ الاحتياطية.":
+    "Turn sharing off in Settings → System & diagnostics → Privacy. Consent never travels with your Riwaq account or backups.",
   "لحظة…": "One moment…",
   "أهلاً بك": "Welcome",
   "مصادرك وبياناتك": "Sources & metadata",
@@ -60,8 +60,8 @@ export default {
     "Do not enter your account password. Riwaq saves the key in its encrypted store and never includes it in usage statistics. The service's terms apply.",
   "ماذا عن المفاتيح الأخرى؟": "What about other keys?",
   "صفحة الخدمة": "Service website",
-  "أضف ما تحتاجه لاحقاً من الإعدادات ← مكتبة البيانات. المفاتيح ليست مطلوبة كلها، وقد تختلف حدود الخدمات وشروطها.":
-    "Add only what you need later in Settings → Data library. You do not need every key; service limits and terms vary.",
+  "أضف ما تحتاجه لاحقاً من الإعدادات ← المصادر والمكتبة ← مزوّدو البيانات الوصفية. المفاتيح ليست مطلوبة كلها، وقد تختلف حدود الخدمات وشروطها.":
+    "Add only what you need later in Settings → Sources & library → Metadata providers. You do not need every key; service limits and terms vary.",
   "معرفة الأجهزة النشطة والإصدارات المستخدمة تساعد المطوّر في تحسين رِواق. القرار لك؛ المتابعة لا تعني الموافقة.":
     "Active-device and version counts help the developer improve Riwaq. It is your choice; continuing does not mean consent.",
   "لا نجمع محتوى ما تشاهده، ولا مفاتيح الخدمات، ولا معرّفاً من عتاد جهازك. يمكنك تغيير قرارك لاحقاً من الإعدادات.":

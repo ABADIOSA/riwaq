@@ -24,10 +24,16 @@ import "./first-run.css";
 // Rebuilt surfaces: semantic tokens, then See all (after the shared sheets).
 import "./tokens.css";
 import "./browse.css";
+import "./scheme-light.css";
 import { watchErrors } from "./lib/diagnostics.js";
+import { savedScheme } from "./lib/scheme.js";
 
 // Recent interface errors for the diagnostic report (Settings → النظام).
 watchErrors();
+// The scheme this device drew last, until the app state arrives (#126).
+// The HUD's window is transparent over the picture and stays as it is.
+if (location.hash !== "#hud")
+  document.documentElement.dataset.scheme = savedScheme();
 // The same page runs the player HUD in its transparent window (#hud).
 createRoot(document.getElementById("root")).render(
   location.hash === "#hud" ? <Hud /> : <App />,

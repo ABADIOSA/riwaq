@@ -26,8 +26,10 @@
 import { createServer } from "node:http";
 import { createSocket } from "node:dgram";
 import { randomBytes } from "node:crypto";
+import { lstatSync } from "node:fs";
 import {
   mkdir,
+  lstat,
   readFile,
   readdir,
   rm,
@@ -146,6 +148,11 @@ export async function startEngine({
   if (!cacheDir) throw new Error("مجلد ذاكرة التورنت غير محدد");
   WebTorrent ||= (await import("webtorrent")).default;
   await mkdir(cacheDir, { recursive: true });
+  // Startup may have skipped this root because it is a junction. The
+  // engine must not follow it later when pruning or creating pieces.
+  const rootInfo = await lstat(cacheDir);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink())
+    throw new Error("مجلد ذاكرة التورنت ليس مجلداً آمناً");
   // The DHT starts warm from the nodes it knew when the engine last closed.
   const nodesFile = join(cacheDir, ".dht-nodes.json");
   const saved = cleanDhtNodes(
@@ -207,8 +214,8 @@ export async function startEngine({
     for (const name of names) {
       if (!validHash(name)) continue;
       const path = join(cacheDir, name);
-      const info = await stat(path).catch(() => null);
-      if (!info?.isDirectory()) continue;
+      const info = await lstat(path).catch(() => null);
+      if (!info?.isDirectory() || info.isSymbolicLink()) continue;
       listed.push({
         name,
         bytes: await folderBytes(path),
@@ -229,8 +236,18 @@ export async function startEngine({
       return entry;
     }
     const own = trackersOf(stream);
+    // A retained hash folder is untrusted filesystem input too. Refuse
+    // a link before WebTorrent can write pieces through it.
+    const piecePath = join(cacheDir, hash);
+    try {
+      const info = lstatSync(piecePath);
+      if (!info.isDirectory() || info.isSymbolicLink())
+        throw new Error("مجلد ذاكرة التورنت ليس مجلداً آمناً");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
     const torrent = client.add(magnetOf(stream), {
-      path: join(cacheDir, hash),
+      path: piecePath,
       deselect: true,
       strategy: "sequential",
       ...(extraTrackers
