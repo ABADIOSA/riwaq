@@ -1,5 +1,14 @@
 # Verification — Riwaq
 
+## 2026-11-02 — independent PR #128 Windows review (unreleased)
+
+- Original PR `12e700f`, actual main/merge base `c6f7fb5`; corrective implementation `e6451ff`. [Full independent findings, acceptance matrix, commands and limits](docs/REVIEW-PR-128.md).
+- **962 Node tests pass**, zero failures/skips; main independently passes 934 and original PR 954. Formatting and both builds pass. Chromium: web smoke 26 steps; browse 39/39; overhaul 17/17; carousel 36 named checks; downloads/menu 30; HUD keyboard passes.
+- Corrected root-junction cache deletion, startup cleanup/engine ordering, unsafe engine cache links, pale light-mode Details text (2.06:1 → 6.54:1 on Pure White), profile title-bar repaint, privacy platform claims and stale consent navigation. Added seven real filesystem/engine tests and one title-overlay regression. Real native acceptance visits all six rooms/44 pages in both languages and verifies legacy DPAPI state, profile separation, nativeTheme switching, restart and initial window background.
+- Actual Windows MPV/HUD embedded/separate paths, SendInput, tracks, seek, speed/volume, Stop, frozen-renderer/F8 recovery and native download/profile ownership gates pass. Pinned TorrServer passes a real local swarm. Local NSIS/portable packages build with no publishing; 150 extracted source/build/legal files match in each, ASARs/MPV match and Admin is absent. Actual portable playback with stalled layout passes; NSIS option test cancels before Install; isolated signed upgrade preserves DPAPI data.
+- Both main and PR reproduce stale ancillary Admin/music smoke failures and connection-error replies on immediate playback cancellation. Stop prevents late playback and no owned MPV remains after stress. These are documented pre-existing follow-ups, not hidden passes. Fresh audit remains 19 affected package nodes; reachability and compatible-patch limits are in the review.
+- READY FOR OWNER REVIEW with the stated limits; no merge/release/deployment, live-account mutation or version/license change. Real HDR/Dolby Vision/RTX, physical multi-DPI/touch/screen-reader configurations and live provider accounts are not certified. New privacy URLs on main need a post-merge publication check. Local passes are separate from final remote CI.
+
 ## 2026-11-01 — engineering overhaul (unreleased): #127, #126, #125, #124, #122, #111, privacy
 
 - Branch `claude/fervent-pasteur-gzqpy4` from main `c6f7fb5`. [Traceability, decisions and limits](docs/OVERHAUL-2026-11-01.md).
