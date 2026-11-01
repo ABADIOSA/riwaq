@@ -62,7 +62,15 @@ import {
   filterSources,
 } from "../../core/source-view.mjs";
 import { resumePick } from "../../core/resume.mjs";
-import { IconButton, Busy, Empty, Modal, ScrollRow } from "./UI.jsx";
+import {
+  IconButton,
+  Busy,
+  Empty,
+  Modal,
+  RowArrows,
+  ScrollRow,
+  useScrollRow,
+} from "./UI.jsx";
 import { TitleLogo } from "./TitleLogo.jsx";
 import { dominantColor, titleTheme } from "../../core/title-theme.mjs";
 import {
@@ -125,6 +133,8 @@ export default function Details({
 }) {
   const pageRef = useRef(null);
   const systemDark = useSystemDark();
+  // The episode strip's arrows sit beside the season picker (issue #122).
+  const episodeRow = useScrollRow();
   useEffect(() => {
     pageRef.current?.focus({ preventScroll: true });
   }, []);
@@ -1435,13 +1445,14 @@ export default function Details({
                     </option>
                   ))}
                 </select>
+                <RowArrows row={episodeRow} />
               </div>
               {jumpError && (
                 <p className="subtle" role="status">
                   {jumpError}
                 </p>
               )}
-              <ScrollRow className="episode-list">
+              <ScrollRow className="episode-list" row={episodeRow}>
                 {videos
                   .filter((v) => (v.season ?? 1) === season)
                   .map((v) => {

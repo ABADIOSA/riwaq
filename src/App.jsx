@@ -116,6 +116,7 @@ import ServiceRails from "./components/ServiceRails.jsx";
 import { drawAppIcon } from "./lib/app-icon.js";
 import { useInterfaceLanguage } from "./lib/language.js";
 import { rememberScheme, useSystemDark } from "./lib/scheme.js";
+import { attachGridDrag } from "./lib/drag-scroll.js";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -321,6 +322,8 @@ export default function App() {
     return result;
   };
   const localMusic = useLocalMusic(state, player.active, notice);
+  // Dragging up or down over any poster grid scrolls it (issue #111).
+  useEffect(() => attachGridDrag(document), []);
   useEffect(() => {
     let live = true;
     call("init")

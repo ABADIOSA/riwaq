@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useState } from "react";
 import { Link2, RefreshCw, Sparkles, X } from "lucide-react";
 import { call } from "../lib/api.js";
-import { Busy, Poster, ScrollRow } from "./UI.jsx";
+import { Busy, Poster, RowArrows, ScrollRow, useScrollRow } from "./UI.jsx";
 
 const KINDS = [
   ["movies", "أفلام"],
@@ -20,6 +20,7 @@ function TraktSuggestions({ trakt, onOpen, onSettings, notice }) {
   const [lists, setLists] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const row = useScrollRow();
   const load = (force = false) => {
     setLoading(true);
     setError("");
@@ -70,14 +71,17 @@ function TraktSuggestions({ trakt, onOpen, onSettings, notice }) {
                 : "حسب ما تشاهده وتقيّمه"}
             </span>
           </div>
-          <button
-            className="text-button"
-            title="اقتراحات جديدة"
-            disabled={loading}
-            onClick={() => load(true)}
-          >
-            <RefreshCw size={15} /> تحديث
-          </button>
+          <div className="rail-tools">
+            <RowArrows row={row} />
+            <button
+              className="text-button"
+              title="اقتراحات جديدة"
+              disabled={loading}
+              onClick={() => load(true)}
+            >
+              <RefreshCw size={15} /> تحديث
+            </button>
+          </div>
         </div>
         <div className="smart-chips" role="tablist" aria-label="نوع الاقتراحات">
           {KINDS.map(([id, label]) => (
@@ -102,7 +106,7 @@ function TraktSuggestions({ trakt, onOpen, onSettings, notice }) {
           ما عند تراكت اقتراحات بعد. قيّم أو شاهد أعمالاً أكثر وارجع لاحقاً.
         </p>
       ) : (
-        <ScrollRow className="poster-row">
+        <ScrollRow className="poster-row" row={row}>
           {metas.map((m) => (
             <div className="suggest-card" key={m.id}>
               <Poster meta={m} onOpen={onOpen} />
