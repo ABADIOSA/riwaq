@@ -626,11 +626,16 @@ try {
   );
   assert.equal(await page.locator(".hero").count(), 0);
   await page.locator('.riwaq-sidebar [aria-label="الإعدادات"]').click();
-  const showcaseToggle = page.getByRole("button", {
-    name: "العرض الرئيسي",
-    exact: true,
-  });
-  await showcaseToggle.click();
+  // Settings → Appearance → Home & showcase (issue #127): the showcase's
+  // own picker turns it on.
+  await page
+    .getByRole("textbox", { name: "البحث في الإعدادات" })
+    .fill("العرض الرئيسي");
+  await page
+    .locator(".studio-index-pages")
+    .getByRole("button", { name: "الرئيسية والعرض الرئيسي", exact: true })
+    .click();
+  await page.getByRole("radio", { name: "كامل", exact: true }).click();
   await page.waitForFunction(
     async () =>
       (await window.riwaq.call("init")).settings.showShowcase === true,
