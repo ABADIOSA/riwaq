@@ -79,7 +79,12 @@ import {
   toggleSpotifyTheme,
 } from "../lib/theme-spotify.js";
 import { themeNames } from "../../core/theme-song.mjs";
-import { luminance, resolveAppearance } from "../../core/appearance.mjs";
+import {
+  displayedAppearance,
+  isLight,
+  resolveAppearance,
+} from "../../core/appearance.mjs";
+import { useSystemDark } from "../lib/scheme.js";
 import {
   platformName,
   preferredPlatform,
@@ -119,6 +124,7 @@ export default function Details({
   onSettings,
 }) {
   const pageRef = useRef(null);
+  const systemDark = useSystemDark();
   useEffect(() => {
     pageRef.current?.focus({ preventScroll: true });
   }, []);
@@ -351,11 +357,14 @@ export default function Details({
       img.onload = img.onerror = null;
     };
   }, [artSource, themeMode]);
-  const look = resolveAppearance(state.settings);
+  const look = displayedAppearance(
+    resolveAppearance(state.settings),
+    systemDark,
+  );
   const pageTheme = titleTheme(meta, {
     mode: themeMode,
     rgb: artColor,
-    light: luminance(look.colors.bg) > 0.4,
+    light: isLight(look.colors),
     gradient: look.gradient,
   });
   const musicPlatform = preferredPlatform(state.settings.music);

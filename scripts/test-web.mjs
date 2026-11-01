@@ -1229,11 +1229,6 @@ try {
         tab.evaluate(([m, a]) => window.riwaq.call(m, a), [method, args]),
       openAccount: async () => {
         await tab.click('.riwaq-sidebar button[aria-label="الإعدادات"]');
-        const advanced = tab.getByRole("button", {
-          name: "إعدادات متقدمة",
-          exact: true,
-        });
-        await advanced.click();
         await tab.getByText("الحسابات والربط", { exact: true }).first().click();
         await tab.getByText("حساب رِواق", { exact: true }).first().click();
       },

@@ -24,6 +24,7 @@ import onboarding from "./en/onboarding.mjs";
 import downloadsQuality from "./en/downloads-quality.mjs";
 import quality110 from "./en/quality110.mjs";
 import uiRebuild from "./en/ui-rebuild.mjs";
+import settingsRooms from "./en/settings-rooms.mjs";
 
 export default {
   ...core,
@@ -47,6 +48,7 @@ export default {
   ...downloadsQuality,
   ...quality110,
   ...uiRebuild,
+  ...settingsRooms,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",

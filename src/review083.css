@@ -1,18 +1,3 @@
-.quick-settings {
-  max-width: 920px;
-  margin-inline: auto;
-}
-.quick-settings > h2 {
-  margin-block-start: 26px;
-}
-.quick-settings .setting-row input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-.settings-mode {
-  margin-block-end: 24px;
-}
 .offline-library {
   width: min(720px, calc(100vw - 32px));
 }
@@ -115,4 +100,40 @@
 }
 .net-check li.bad::before {
   background: #f87171;
+}
+
+/* Settings → Downloads & files and Privacy (issue #127): short lists of
+   facts, each with its icon at the start of the line. */
+.settings-facts {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 4px;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.settings-facts li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.settings-facts li > svg {
+  flex-shrink: 0;
+  margin-block-start: 3px;
+  color: var(--accent);
+}
+.privacy-card .settings-facts li::before {
+  content: "";
+  flex-shrink: 0;
+  inline-size: 6px;
+  block-size: 6px;
+  margin-block-start: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.settings-card h2 > svg {
+  vertical-align: -3px;
+  margin-inline-end: 6px;
 }

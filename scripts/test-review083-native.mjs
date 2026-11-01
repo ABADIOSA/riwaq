@@ -395,7 +395,15 @@ try {
       .getByRole("button", { name: "الإعدادات", exact: true })
       .first()
       .click();
-    await page.getByText("الأساسيات أولًا", { exact: true }).waitFor();
+    // Settings are six rooms (issue #127); the quiet interface sits on
+    // the profiles page under Accounts & linking.
+    await page
+      .getByRole("textbox", { name: "البحث في الإعدادات" })
+      .fill("واجهة هادئة");
+    await page
+      .locator(".studio-index-pages")
+      .getByRole("button", { name: "الملفات الشخصية", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "واجهة هادئة", exact: true })
       .click();
@@ -413,10 +421,7 @@ try {
       window.scrollTo(0, 0);
       document.querySelector(".content")?.scrollTo(0, 0);
     });
-    await page.screenshot({ path: join(out, "basic-ar-980.png") });
-    await page
-      .getByRole("button", { name: "إعدادات متقدمة", exact: true })
-      .click();
+    await page.screenshot({ path: join(out, "settings-ar-980.png") });
     await page.locator(".studio-index").waitFor();
     // The new CSS is scoped to new screens. Existing Arabic navigation
     // must render identically with these rules enabled and disabled.
@@ -426,9 +431,7 @@ try {
         for (let i = sheet.cssRules.length - 1; i >= 0; i--) {
           const rule = sheet.cssRules[i];
           if (
-            /\.(quick-settings|settings-mode|offline-library)\b/.test(
-              rule.selectorText || "",
-            )
+            /\.(settings-facts|offline-library)\b/.test(rule.selectorText || "")
           ) {
             window.reviewCSS.push({ sheet, i, text: rule.cssText });
             sheet.deleteRule(i);
@@ -454,10 +457,17 @@ try {
       "new screen CSS must not change the Arabic advanced navigation pixels",
     );
     await page
-      .getByRole("button", { name: "إعدادات أساسية", exact: true })
+      .getByRole("textbox", { name: "البحث في الإعدادات" })
+      .fill("لغة الواجهة");
+    await page
+      .locator(".studio-index-pages")
+      .getByRole("button", { name: "لغة الواجهة", exact: true })
       .click();
     await page.getByRole("radio", { name: "English", exact: true }).click();
-    await page.getByText("Essentials first", { exact: true }).waitFor();
+    await page
+      .getByText("Interface language", { exact: true })
+      .first()
+      .waitFor();
     await page.locator('button[title="Downloads"]').click();
     await page.getByText("Season 1 · Episode 1", { exact: true }).waitFor();
     await page.getByText("Season 1 · Episode 2", { exact: true }).waitFor();

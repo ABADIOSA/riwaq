@@ -6,6 +6,10 @@
 export default {
   riwaqAccount:
     "account sign in sign up sync devices website web username password recovery cloud",
+  profiles: "profiles profile pin lock kids quiet interface",
+  downloads:
+    "downloads download offline storage space screenshots folder torrent cache files",
+  privacy: "privacy policy data usage statistics telemetry tracking delete",
   connections:
     "accounts connections link anime lists sync import move collections",
   playback:

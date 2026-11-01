@@ -286,9 +286,6 @@ export async function qualityChecks({
           .getByRole("button", { name: "الإعدادات", exact: true })
           .click();
         await page
-          .getByRole("button", { name: "إعدادات متقدمة", exact: true })
-          .click();
-        await page
           .getByRole("textbox", { name: "البحث في الإعدادات" })
           .fill("الواجهة");
         await page

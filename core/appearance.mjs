@@ -216,6 +216,9 @@ export const DEFAULT_APPEARANCE = {
   // Riwaq's own look (arched cards, khatam stars, mashrabiya, Naskh
   // headings) or the classic rectangular one.
   identity: "riwaq",
+  // Dark (the palette as chosen, as before 0.54), light (Pure White) or
+  // whatever Windows or the browser uses (issue #126).
+  mode: "dark",
   preset: "riwaq",
   colors: { ...PRESETS[0].colors },
   gradient: "off",
@@ -329,6 +332,7 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
     next.posterHover,
   );
   next.identity = choose(input.identity, ["riwaq", "classic"], next.identity);
+  next.mode = choose(input.mode, MODES, next.mode);
   if (typeof input.posterTitles === "boolean")
     next.posterTitles = input.posterTitles;
   if (typeof input.posterWatched === "boolean")
@@ -468,6 +472,120 @@ export function contrast(a, b) {
   return (x + 0.05) / (y + 0.05);
 }
 
+// --- Light and dark (issue #126) -------------------------------------------
+
+export const MODES = ["dark", "light", "system"];
+
+/**
+ * Pure White: Riwaq's light neutrals. Not an inverted dark theme: white
+ * pages, a cool grey for panels so cards read as surfaces, near-black text
+ * and a grey that keeps 4.5:1 on every surface it sits on.
+ */
+export const PURE_WHITE = {
+  bg: "#FFFFFF",
+  panel: "#F4F5F7",
+  raised: "#E9EBEF",
+  text: "#15171A",
+  muted: "#585E67",
+  line: "#D9DCE1",
+};
+
+const hex = (rgb) =>
+  "#" +
+  rgb
+    .map((c) =>
+      Math.round(Math.max(0, Math.min(255, c)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")
+    .toUpperCase();
+
+function toHsl([r, g, b]) {
+  const [x, y, z] = [r / 255, g / 255, b / 255];
+  const max = Math.max(x, y, z),
+    min = Math.min(x, y, z);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  const h =
+    max === x
+      ? (y - z) / d + (y < z ? 6 : 0)
+      : max === y
+        ? (z - x) / d + 2
+        : (x - y) / d + 4;
+  return [h / 6, s, l];
+}
+function fromHsl([h, s, l]) {
+  if (!s) return [l, l, l].map((v) => v * 255);
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const part = (t) => {
+    t = (t + 1) % 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return [part(h + 1 / 3), part(h), part(h - 1 / 3)].map((v) => v * 255);
+}
+
+/**
+ * The colour deepened, hue kept, until it reaches `target` contrast on
+ * `against`: a preset's gold or teal is made for black and needs more
+ * weight on white. Lightness falls and colourful accents keep (or gain a
+ * little) saturation, so gold reads as gold rather than brown; a grey
+ * accent stays grey.
+ */
+export function deepenFor(color, against, target) {
+  if (contrast(color, against) >= target) return color.toUpperCase();
+  const [h, s, l] = toHsl(channels(color));
+  const sat = s < 0.12 ? s : Math.min(1, Math.max(s, 0.62));
+  for (let next = l; next >= 0.05; next -= 0.01) {
+    const out = hex(fromHsl([h, sat, next]));
+    if (contrast(out, against) >= target) return out;
+  }
+  return hex(fromHsl([h, sat, 0.05]));
+}
+
+/**
+ * The palette a light page uses: the viewer's own colours when they are
+ * already light (a custom light theme stays theirs), otherwise Pure White
+ * with the chosen accent and its gradient end deepened to read as text
+ * (4.5:1), so white button text reads on either end.
+ */
+export function lightColors(colors) {
+  if (luminance(colors.bg) > 0.4) return { ...colors };
+  return {
+    ...PURE_WHITE,
+    accent: deepenFor(colors.accent, PURE_WHITE.panel, 4.5),
+    // Button text sits on the whole gradient, so both ends read at 4.5:1.
+    accentEnd: deepenFor(colors.accentEnd, PURE_WHITE.panel, 4.5),
+  };
+}
+
+/** "dark" or "light": the mode itself, or the system's for "system". */
+export const effectiveMode = (appearance, systemDark = true) =>
+  appearance?.mode === "light" || (appearance?.mode === "system" && !systemDark)
+    ? "light"
+    : "dark";
+
+/**
+ * The appearance as drawn: light mode swaps in its palette; dark keeps the
+ * saved colours exactly as before. The saved appearance (what Settings
+ * edits, backups and shared codes carry) is never changed by this.
+ */
+export function displayedAppearance(appearance, systemDark = true) {
+  const a = safeAppearance(appearance);
+  return effectiveMode(a, systemDark) === "light"
+    ? { ...a, colors: lightColors(a.colors) }
+    : a;
+}
+
+/** Whether a palette is a light one (its page is bright). */
+export const isLight = (colors) => luminance(colors.bg) > 0.4;
+
 const DIRECTIONS = {
   horizontal: "90deg",
   vertical: "180deg",
@@ -519,7 +637,7 @@ export function themeVariables(input) {
       : {}),
     color: c.text,
     background: c.bg,
-    colorScheme: luminance(c.bg) > 0.4 ? "light" : "dark",
+    colorScheme: isLight(c) ? "light" : "dark",
   };
 }
 
@@ -531,6 +649,9 @@ export function themeClasses(input) {
   const a = safeAppearance(input);
   return [
     `identity-${a.identity}`,
+    // The stylesheet's light surfaces (src/scheme-light.css) key off the
+    // colours drawn, so a custom light palette gets them too.
+    isLight(a.colors) ? "scheme-light" : "scheme-dark",
     `radius-${a.radius}`,
     `density-${a.density}`,
     `hover-${a.posterHover}`,

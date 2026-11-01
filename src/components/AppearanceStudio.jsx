@@ -18,10 +18,14 @@ import {
   applyPreset,
   contrast,
   decodeTheme,
+  effectiveMode,
   encodeTheme,
+  isLight,
+  lightColors,
   resolveAppearance,
 } from "../../core/appearance.mjs";
 import { call } from "../lib/api.js";
+import { useSystemDark } from "../lib/scheme.js";
 
 /**
  * The appearance studio: presets, the viewer's own palette, type and scale,
@@ -62,6 +66,10 @@ export default function AppearanceStudio({ state, update, part = "" }) {
     setHistory((h) => h.slice(0, -1));
     commit(previous, { remember: false });
   };
+  const systemDark = useSystemDark();
+  // In light mode the gallery shows each preset as it would be drawn.
+  const lightNow = effectiveMode(draft, systemDark) === "light";
+  const tile = (colors) => (lightNow ? lightColors(colors) : colors);
   const code = encodeTheme(draft);
   const readable = contrast(draft.colors.text, draft.colors.bg);
   const mutedReadable = contrast(draft.colors.muted, draft.colors.panel);
@@ -109,8 +117,31 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               </button>
             </div>
           </div>
+          <div className="studio-field scheme-field">
+            الوضع
+            {pick(
+              "mode",
+              [
+                ["dark", "داكن"],
+                ["light", "فاتح"],
+                ["system", "حسب النظام"],
+              ],
+              draft.mode || "dark",
+              (mode) => change({ mode }),
+            )}
+            <small>
+              {draft.mode === "system"
+                ? systemDark
+                  ? "يتبع وضع ويندوز أو المتصفح، وهو الآن داكن."
+                  : "يتبع وضع ويندوز أو المتصفح، وهو الآن فاتح."
+                : "الفاتح «أبيض نقي» بخلفيات بيضاء ولون تمييز ثيمك بدرجة أعمق تُقرأ على الأبيض."}
+            </small>
+          </div>
           <div className="theme-gallery">
-            {PRESETS.map((p) => (
+            {PRESETS.map((preset) => ({
+              ...preset,
+              colors: tile(preset.colors),
+            })).map((p) => (
               <button
                 key={p.id}
                 className={`theme-tile ${draft.preset === p.id ? "selected" : ""}`}
@@ -159,6 +190,13 @@ export default function AppearanceStudio({ state, update, part = "" }) {
             غيّر أي لون فيصبح التصميم «مخصصاً». لون التمييز يظهر في الأزرار
             والعناصر المختارة وشريط التقدم.
           </p>
+          {lightNow && !isLight(draft.colors) && (
+            <p className="subtle">
+              هذه ألوان الوضع الداكن. الوضع الفاتح يأخذ منها لون التمييز فقط
+              ويعمّقه ليُقرأ على الأبيض؛ ولثيم فاتح كامل من ألوانك اختر خلفية
+              فاتحة.
+            </p>
+          )}
           <div className="color-grid">
             {COLOR_KEYS.map((key) => (
               <label key={key} className="color-field">
@@ -433,9 +471,13 @@ export default function AppearanceStudio({ state, update, part = "" }) {
           </div>
         </section>
       )}
-      {show("interface") && (
+      {show("home") && (
         <section className="settings-card">
-          <h2>الصفحات والتنقل</h2>
+          <h2>العرض الرئيسي</h2>
+          <p>
+            الشريط البارز أعلى الرئيسية. مخفي حتى تختاره، ولا يشغّل صوتاً ولا
+            فيديو.
+          </p>
           <label className="studio-field">
             العرض الرئيسي في الصفحة الرئيسية
             {pick(
@@ -474,7 +516,7 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               إذا ما وُجد شعار يظهر الاسم مكتوباً.
             </small>
           </div>
-          {
+          {s.showShowcase === true && (
             <div className="studio-field">
               تقليب العرض الرئيسي
               {pick(
@@ -490,8 +532,13 @@ export default function AppearanceStudio({ state, update, part = "" }) {
                 يتوقف حين يكون المؤشر فوقه، ولا يتقلب مع تقليل الحركة.
               </small>
             </div>
-          }
+          )}
+        </section>
+      )}
 
+      {show("interface") && (
+        <section className="settings-card">
+          <h2>التنقل</h2>
           <div className="studio-field">
             عناصر القائمة
             <div className="choice-row">

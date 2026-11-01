@@ -54,8 +54,40 @@ export function stringsOf(source, file = "x.jsx") {
     const clean = String(text).trim();
     if (clean && ARABIC.test(clean)) out.add(clean);
   };
+  // A sentence glued with + ("ربط " + name) reaches the screen whole, so
+  // its parts alone prove nothing (issue #124: "ربط Trakt" stayed Arabic
+  // in English although "ربط" had an entry). The chain becomes a pattern
+  // like a template literal's, with {1}, {2}… for the parts that are not
+  // text.
+  const inner = new WeakSet();
+  const chain = (node) => {
+    if (node.type === "BinaryExpression" && node.operator === "+") {
+      inner.add(node);
+      return [...chain(node.left), ...chain(node.right)];
+    }
+    if (node.type === "Literal" && typeof node.value === "string")
+      return [{ text: node.value }];
+    if (node.type === "TemplateLiteral" && node.expressions.length === 0)
+      return [
+        { text: node.quasis[0].value.cooked ?? node.quasis[0].value.raw },
+      ];
+    return [{ expr: true }];
+  };
   walk(ast, (node) => {
-    if (node.type === "JSXText") add(jsxText(node.value));
+    if (
+      node.type === "BinaryExpression" &&
+      node.operator === "+" &&
+      !inner.has(node)
+    ) {
+      const parts = chain(node);
+      if (
+        parts.some((p) => p.expr) &&
+        parts.some((p) => p.text && ARABIC.test(p.text))
+      ) {
+        let n = 0;
+        add(parts.map((p) => (p.expr ? `{${++n}}` : p.text)).join(""));
+      }
+    } else if (node.type === "JSXText") add(jsxText(node.value));
     else if (node.type === "Literal" && typeof node.value === "string")
       add(node.value);
     else if (node.type === "TemplateLiteral") {

@@ -1,0 +1,395 @@
+/*
+ * Light pages (issue #126). core/appearance.mjs puts `scheme-light` on the
+ * app root when the colours drawn are light (light mode, the system's light
+ * mode, or a custom light palette). Older stylesheets were drawn for dark
+ * themes only and name some surfaces, hairlines and status colours
+ * literally; here those take the palette's semantic values instead.
+ *
+ * Kept dark on purpose: anything drawn over a picture or the video (the
+ * hero and its controls, poster shades and badges, the theater and the
+ * player's panels, the HUD, the screensaver, the gallery viewer), where a
+ * dark scrim is what keeps white text readable.
+ */
+
+/* The first paint, before the app state names the scheme (src/main.jsx). */
+:root[data-scheme="light"] {
+  color: #15171a;
+  background: #ffffff;
+  color-scheme: light;
+}
+
+.app.scheme-light {
+  --shadow-soft: 0 1px 2px #1a1d2414, 0 6px 18px #1a1d2410;
+  --hairline: var(--line);
+  --ok: #157347;
+  --warn: #9a5b00;
+  --bad: #b42318;
+}
+
+/* --- Surfaces ------------------------------------------------------------ */
+.app.scheme-light .sidebar,
+.app.scheme-light .search-box,
+.app.scheme-light .addon-form,
+.app.scheme-light .addon-card,
+.app.scheme-light .settings-card,
+.app.scheme-light .theme-preview,
+.app.scheme-light .stream-quality,
+.app.scheme-light .channel-logo,
+.app.scheme-light .up-next-art,
+.app.scheme-light .calendar-poster,
+.app.scheme-light .explore-map-tiles,
+.app.scheme-light .sources-modal .streams > .section-heading {
+  background: var(--panel);
+  border-color: var(--line);
+}
+.app.scheme-light .studio-content .settings-card {
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: var(--shadow-soft);
+}
+.app.scheme-light .settings-card,
+.app.scheme-light .addon-card {
+  border: 1px solid var(--line);
+}
+.app.scheme-light .setting-row {
+  border-bottom-color: var(--line);
+  /* A rounded row draws its divider as a curve once the line shows. */
+  border-radius: 0;
+}
+.app.scheme-light .setting-row:last-child {
+  border: 0;
+}
+
+/* Fields. The plain element rule stays as weak as the dark one it
+   replaces, so a field styled by its component (a search inside a box)
+   keeps its own look. */
+:where(.app.scheme-light) :is(input, select, textarea) {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+.app.scheme-light .studio-field textarea,
+.app.scheme-light .owner-field textarea,
+.app.scheme-light .provider-card > input,
+.app.scheme-light .device-code,
+.app.scheme-light .layout-choices > button,
+.app.scheme-light .collection-create input,
+.app.scheme-light .collection-field input,
+.app.scheme-light .collection-field select,
+.app.scheme-light .catalog-picker select,
+.app.scheme-light .catalog-picker input,
+.app.scheme-light .nuvio-paste,
+.app.scheme-light .diagnose-preview .diagnose-text {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+.app.scheme-light input::placeholder,
+.app.scheme-light textarea::placeholder {
+  color: var(--muted);
+}
+.app.scheme-light .hotkey-key kbd {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+
+/* Buttons: the translucent white of dark themes vanishes on white. */
+.app.scheme-light .secondary {
+  background: #ffffff;
+  border-color: var(--line) !important;
+}
+.app.scheme-light .secondary:hover:not(:disabled) {
+  background: var(--raised);
+}
+.app.scheme-light .icon-button:hover:not(:disabled) {
+  color: var(--text);
+}
+.app.scheme-light .toggle:not(.on) {
+  background: #c3c8cf;
+}
+.app.scheme-light .toggle span {
+  background: #ffffff;
+  box-shadow: 0 1px 2px #0003;
+}
+.app.scheme-light .toggle.on span {
+  background: #ffffff;
+}
+.app.scheme-light .collection-tools button,
+.app.scheme-light .pick-tools button,
+.app.scheme-light .folder-sources li button,
+.app.scheme-light .folder-new button,
+.app.scheme-light .saved-theme-tools button {
+  background: #ffffffe6;
+  color: var(--text);
+  border-color: var(--line);
+}
+
+/* Dialogs, menus and notices */
+.app.scheme-light .modal {
+  border-color: var(--line);
+  box-shadow: 0 30px 90px #1a1d2433;
+}
+.app.scheme-light .modal::backdrop,
+.app.scheme-light .riwaq-nav-dialog::backdrop {
+  background: #1a1d2459;
+}
+.app.scheme-light .modal-close {
+  background: #ffffffd9;
+  color: var(--text);
+}
+.app.scheme-light .toast {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+  box-shadow: 0 12px 36px #1a1d2433;
+}
+.app.scheme-light .playback-choice-menu,
+.app.scheme-light .suggest-hide {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+  box-shadow: 0 12px 36px #1a1d2426;
+}
+.app.scheme-light .collection-index {
+  background: #ffffffe0;
+}
+
+/* --- Text on the page ---------------------------------------------------- */
+.app.scheme-light .theme-tile {
+  color: var(--text);
+}
+.app.scheme-light .connect-banner-close:hover {
+  color: var(--text);
+}
+.app.scheme-light .dock-room h3 {
+  color: var(--text);
+}
+.app.scheme-light .inline-warning,
+.app.scheme-light .service-status.warn,
+.app.scheme-light .kind.forced,
+.app.scheme-light .stream-info em.tag-hdr,
+.app.scheme-light .stream-info em.tag-arabic,
+.app.scheme-light .diagnose-summary.is-warn b,
+.app.scheme-light .diagnose-checks li.is-warn svg,
+.app.scheme-light .tags .health-slow,
+.app.scheme-light .tags .health-dupe {
+  color: var(--warn);
+}
+.app.scheme-light .service-status.bad,
+.app.scheme-light .stream-why em.minus,
+.app.scheme-light .live-source-stat .warn,
+.app.scheme-light .diagnose-summary.is-fail b,
+.app.scheme-light .diagnose-checks li.is-fail svg,
+.app.scheme-light .tags .health-gone,
+.app.scheme-light .tags .health-down,
+.app.scheme-light button.danger,
+.app.scheme-light .secondary.danger,
+.app.scheme-light .nuvio-folders li.none small {
+  color: var(--bad);
+}
+.app.scheme-light .service-mark.omdb {
+  color: #8a6a00;
+}
+.app.scheme-light .service-mark.trakt {
+  color: #c4262e;
+}
+.app.scheme-light .episode-rating {
+  color: #8a6a00;
+}
+
+/* --- Hairlines and tints ----------------------------------------------------
+ * Dark themes draw borders and subtle fills in translucent white, which
+ * disappear on white. On a light page the same elements take the palette's
+ * line and a faint tint of the text colour.
+ */
+.app.scheme-light {
+  --tint: color-mix(in srgb, var(--text) 5%, transparent);
+  --tint-strong: color-mix(in srgb, var(--text) 9%, transparent);
+}
+.app.scheme-light
+  :is(
+    .topbar,
+    .search-box,
+    .search-box kbd,
+    .filter-tabs button,
+    .empty,
+    .tags > span,
+    .diagnostics span,
+    .account-benefits,
+    .episode,
+    .stream,
+    .stream-info em,
+    .stream-why,
+    .dropped-list li,
+    .live-source,
+    .channel-card,
+    .epg,
+    .epg-ruler,
+    .epg-row,
+    .epg-channel-head,
+    .epg-channel,
+    .epg-scale span,
+    .epg-block,
+    .profile-button,
+    .profile-card,
+    .profile-edit,
+    .profile-edit fieldset,
+    .hotkey-row,
+    .update-notes,
+    .credit-face,
+    .credit-chip,
+    .scroll-arrow,
+    .rail-arrows button,
+    .discover-hint,
+    .whats-new-list section,
+    .shortcuts-columns kbd,
+    .addon-health-summary,
+    .torrent-setup-option,
+    .theme-tile,
+    .layout-symbol,
+    .poster-actions,
+    .sources-closed,
+    .title-facts dl > div,
+    .title-tabs button,
+    .gallery-item,
+    .gallery-skeleton,
+    .prayer-chip,
+    .prayer-pop,
+    .prayer-today li,
+    .countdown-card,
+    .backup-file,
+    .backup-summary div,
+    .calendar-entry,
+    .collection-create,
+    .collection-card,
+    .segmented,
+    .folder-tabs > button,
+    .folder-sources li,
+    .add-collection-list fieldset,
+    .add-check,
+    .nuvio-options button,
+    .nuvio-profiles button,
+    .nuvio-parts label,
+    .home-editor li,
+    .home-editor button,
+    .nuvio-plugins li,
+    .source-notes li,
+    .nuvio-folders,
+    .folder-siblings button,
+    .folder-source-tabs button,
+    .smart-chips button,
+    .suggest-invite,
+    .window-bar,
+    .count-badge,
+    .session-poster-stack > div,
+    .identity-sample i,
+    .hud-sample i
+  ) {
+  border-color: var(--line);
+}
+.app.scheme-light
+  :is(
+    .nav-item small,
+    .empty-icon,
+    .skeleton-title,
+    .count-badge,
+    .addon-logo,
+    .theme-preview > span,
+    .theme-preview i,
+    .diagnostics span,
+    .account-benefits,
+    .episode,
+    .stream,
+    .live-source,
+    .channel-card,
+    .channel-progress,
+    .epg-channel-head,
+    .epg-block,
+    .profile-button,
+    .profile-card,
+    .update-notes,
+    .credit-chip,
+    .shortcuts-columns kbd,
+    .diagnose-summary,
+    .torrent-setup-option,
+    .selected-episode-summary,
+    .rating-source,
+    .ratings-strip > span,
+    .badge-preview em,
+    .rule-earned em,
+    .rule-list em,
+    .title-facts dl > div,
+    .title-tabs button,
+    .gallery-item,
+    .gallery-skeleton,
+    .prayer-chip,
+    .prayer-today li,
+    .library-search,
+    .watch-row,
+    .watch-cover,
+    .calendar-entry,
+    .trakt-steps code,
+    .progress-line,
+    .update-progress-area progress::-webkit-progress-bar
+  ) {
+  background: var(--tint);
+}
+.app.scheme-light
+  :is(
+    .icon-button,
+    .nav-item,
+    .connect-banner-close,
+    .stream,
+    .channel-card,
+    .epg-block,
+    .profile-button,
+    .credit-person:not(:disabled),
+    .credit-crew:not(:disabled),
+    .studio-nav > button,
+    .settings-page,
+    .settings-group-head,
+    .icon-plain,
+    .watch-row,
+    .calendar-entry,
+    .add-folder
+  ):hover {
+  background: var(--tint-strong);
+}
+.app.scheme-light .search-box input {
+  background: transparent;
+}
+
+/* The title page's header fades into the page colour, so on a light page
+   its Back button sits on a light picture. */
+.app.scheme-light .back-button {
+  background: #ffffffd9;
+  color: var(--text);
+  border-color: var(--line);
+  box-shadow: 0 2px 10px #1a1d241f;
+}
+
+/* Banners drawn as dark gradients for dark themes. */
+.app.scheme-light .addon-sync {
+  background: linear-gradient(
+    100deg,
+    var(--panel),
+    color-mix(in srgb, var(--accent) 8%, var(--panel))
+  );
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--line));
+}
+.app.scheme-light .empty h3 {
+  color: var(--text);
+}
+.app.scheme-light .detail-backdrop:after {
+  background:
+    linear-gradient(0deg, var(--bg), transparent 95%),
+    linear-gradient(
+      270deg,
+      color-mix(in srgb, var(--bg) 88%, transparent),
+      transparent
+    );
+}
+.app.scheme-light .count-badge {
+  color: var(--muted);
+}

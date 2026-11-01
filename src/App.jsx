@@ -1,4 +1,6 @@
 import {
+  displayedAppearance,
+  isLight,
   resolveAppearance,
   themeClasses,
   themeVariables,
@@ -113,6 +115,7 @@ import Screensaver from "./components/Screensaver.jsx";
 import ServiceRails from "./components/ServiceRails.jsx";
 import { drawAppIcon } from "./lib/app-icon.js";
 import { useInterfaceLanguage } from "./lib/language.js";
+import { rememberScheme, useSystemDark } from "./lib/scheme.js";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -956,7 +959,17 @@ export default function App() {
       if (run === catalogRun.current) setPaging(false);
     }
   };
-  const appearance = resolveAppearance(state.settings);
+  // Light, dark or the system's (issue #126): the saved appearance as
+  // drawn; Settings still edit the saved one.
+  const systemDark = useSystemDark();
+  const appearance = displayedAppearance(
+    resolveAppearance(state.settings),
+    systemDark,
+  );
+  const drawnScheme = isLight(appearance.colors) ? "light" : "dark";
+  useEffect(() => {
+    if (ready) rememberScheme(drawnScheme);
+  }, [drawnScheme, ready]);
   // The interface language (core/i18n.mjs): set before anything renders,
   // and the whole page is drawn again when it changes.
   const uiLanguage = useInterfaceLanguage(state.settings.uiLanguage);
@@ -1672,6 +1685,8 @@ export default function App() {
                 key={settingsTab}
                 initialTab={settingsTab}
                 onNuvio={() => setNuvioOpen(true)}
+                onProfiles={() => setProfilesOpen(true)}
+                onDownloads={() => setOfflineOpen(true)}
                 onWelcome={() => setWelcomeRequested(true)}
                 state={state}
                 update={update}
