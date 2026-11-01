@@ -146,7 +146,13 @@ test("light overrides never touch surfaces drawn over pictures or video", () => 
     ".screensaver",
     ".gallery-viewer",
   ])
-    assert.ok(!css.includes(`.app.scheme-light ${kept}`), kept);
+    assert.doesNotMatch(
+      css,
+      new RegExp(
+        `\\.app\\.scheme-light ${kept.trim().replace(/[.]/g, "\\.")}(?![\\w-])`,
+      ),
+      kept,
+    );
   // The toggle's on state keeps the accent.
   assert.match(css, /\.toggle:not\(\.on\)/);
 });
