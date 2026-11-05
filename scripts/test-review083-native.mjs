@@ -209,6 +209,9 @@ try {
       async () => (await hud.locator(".volume-control").count()) > 0,
       "volume control",
     );
+    // The slider is folded until the pointer rests on the volume (#140).
+    await hud.hover(".volume-button");
+    await hud.waitForTimeout(300);
     const volume = hud.locator(".volume-control"),
       rect = await volume.boundingBox();
     await hud.mouse.move(rect.x + rect.width * 0.2, rect.y + rect.height / 2);

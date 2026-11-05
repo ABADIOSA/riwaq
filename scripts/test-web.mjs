@@ -674,7 +674,7 @@ try {
   step("Home keeps its name when Today's session and its heading are hidden");
 
   // The catalog reaches the interface: open Discover and find a poster.
-  await page.getByText("اكتشف", { exact: true }).first().click();
+  await page.locator('.riwaq-sidebar button[aria-label="اكتشف"]').click();
   await page.waitForSelector(`img[src*="/poster/last-train.svg"]`, {
     timeout: 20000,
   });
@@ -733,19 +733,26 @@ try {
           language === "ar" ? rail.x > width / 2 : rail.x < 1,
           "sidebar follows language direction",
         );
-        await page.locator(".riwaq-collapse").click();
-        await page.waitForFunction(() =>
-          document.querySelector(".app.sidebar-collapsed"),
-        );
+        // The wheel (the default navigation) starts compact; its button
+        // shows the names and makes it compact again.
         assert.ok(
-          (await page.locator(".riwaq-sidebar").boundingBox()).width < 80,
+          (await page.locator(".riwaq-sidebar").boundingBox()).width < 100,
+          "the wheel starts compact",
         );
         assert.ok(
           (await page.locator(".riwaq-sidebar [aria-label]").count()) >= 8,
         );
         await page.locator(".riwaq-collapse").click();
+        await page.waitForFunction(() =>
+          document.querySelector(".app.wheel-open"),
+        );
+        assert.ok(
+          (await page.locator(".riwaq-sidebar").boundingBox()).width > 200,
+          "the open wheel shows names",
+        );
+        await page.locator(".riwaq-collapse").click();
         await page.waitForFunction(
-          () => !document.querySelector(".app.sidebar-collapsed"),
+          () => !document.querySelector(".app.wheel-open"),
         );
       } else {
         await page.locator(".riwaq-drawer-trigger").click();
@@ -974,7 +981,7 @@ try {
   // here to verify the persisted choice without inventing a state event.
   await page.reload();
   await page.waitForSelector(".app");
-  await page.getByText("اكتشف", { exact: true }).first().click();
+  await page.locator('.riwaq-sidebar button[aria-label="اكتشف"]').click();
   await page.waitForSelector(".poster-card .rating", { state: "attached" });
   await page.waitForFunction(() =>
     [...document.querySelectorAll(".poster-card .rating")].every(
@@ -984,7 +991,7 @@ try {
   await call("settings", { showRatings: true });
   await page.reload();
   await page.waitForSelector(".app");
-  await page.getByText("اكتشف", { exact: true }).first().click();
+  await page.locator('.riwaq-sidebar button[aria-label="اكتشف"]').click();
   await page.waitForSelector(".poster-card .rating");
   await page.waitForFunction(() =>
     [...document.querySelectorAll(".poster-card .rating")].some(

@@ -551,26 +551,17 @@ export function OnScreenPage({ state, update }) {
         />
       </section>
       <section className="settings-card">
-        <h2>نافذة مستوى الصوت</h2>
+        <h2>مؤشر مستوى الصوت</h2>
+        {/* The large display over the picture is gone (issue #139): the
+            level shows in the bottom bar, or as a small pill at its corner
+            while the controls sleep. volumeOsdPosition stays in saved
+            settings, unread, for older devices that sync. */}
         <Toggle
           on={s.volumeOsd !== false}
-          title="نافذة مستوى الصوت أثناء المشاهدة"
-          text="تظهر لحظة تغيّر الصوت من لوحة المفاتيح أو العجلة وأدوات التحكم مخفية."
+          title="مؤشر صغير لمستوى الصوت"
+          text="يظهر لحظة تغيّر الصوت من لوحة المفاتيح أو العجلة وأدوات التحكم مخفية، صغيرًا عند مكان الصوت في الشريط السفلي دون أن يغطي الصورة."
           onChange={(volumeOsd) => set({ volumeOsd })}
         />
-        <Field title="موضع النافذة">
-          <Choices
-            label="موضع النافذة"
-            value={s.volumeOsdPosition || "center"}
-            options={[
-              ["center", "وسط"],
-              ["top", "أعلى"],
-              ["top-left", "أعلى اليسار"],
-              ["top-right", "أعلى اليمين"],
-            ]}
-            onPick={(volumeOsdPosition) => set({ volumeOsdPosition })}
-          />
-        </Field>
       </section>
     </>
   );

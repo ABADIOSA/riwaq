@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,6 +12,7 @@ import { resolveAppearance } from "../../core/appearance.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
 import { language, translate } from "../../core/i18n.mjs";
 import { call } from "../lib/api.js";
+import { lockScroll } from "../lib/scroll-lock.js";
 
 // Where the images came from, as a sentence names them.
 const SOURCE_LABELS = { الإضافة: "إضافة العمل" };
@@ -87,6 +88,13 @@ export default function ArtworkGallery({
     (i) => !lang || (lang === "none" ? !i.lang : i.lang === lang),
   );
   const current = items[viewing];
+  const viewer = useRef(null);
+  const open = !!current;
+  // The title page under the full-screen viewer stays still (issue #135).
+  useEffect(() => {
+    if (!open) return;
+    return lockScroll(viewer.current?.closest(".title-page"));
+  }, [open]);
   const step = (d) =>
     setViewing((i) =>
       items.length ? (i + d + items.length) % items.length : -1,
@@ -208,7 +216,10 @@ export default function ArtworkGallery({
           role="dialog"
           aria-label="عارض الصور"
           tabIndex={-1}
-          ref={(el) => el?.focus()}
+          ref={(el) => {
+            viewer.current = el;
+            el?.focus();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.stopPropagation();

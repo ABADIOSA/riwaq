@@ -706,37 +706,43 @@
   top: 24%;
 }
 
-/* Sources in a window over the title page (sourcesPopup). The list
-   scrolls under a fixed heading, so the close button and the quality
-   filter stay in reach. */
+/* Sources in a window over the title page (sourcesPopup). The heading,
+   with the order and quality choices, stays beside the close button; only
+   the list below it scrolls, so its scrollbar starts under the button
+   (issue #134). */
 .modal.sources-modal {
   width: min(1120px, calc(100vw - 50px));
   max-height: 88vh;
-  overflow: hidden;
 }
 .sources-modal > .modal-inner {
   display: flex;
   flex-direction: column;
-  max-height: 88vh;
+  margin-block-start: 0;
   padding: 26px 30px 0;
+  overflow: hidden;
 }
 .sources-modal .streams {
+  display: flex;
+  flex-direction: column;
   margin: 0;
-  padding: 0 0 30px;
+  padding: 0;
   border-top: 0;
   min-height: 0;
-  overflow: auto;
-  scrollbar-width: thin;
 }
-/* Room for the close button on the left of the heading. */
 .sources-modal .streams > .section-heading {
-  position: sticky;
-  top: 0;
+  flex: none;
   z-index: 3;
   padding-inline-end: 56px;
   padding-bottom: 12px;
   align-items: center;
   background: #171a1f;
+}
+.sources-modal .streams-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 30px;
+  scrollbar-width: thin;
 }
 
 /* Continue watching on the same source: a short wait before playback. */

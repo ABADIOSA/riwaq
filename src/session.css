@@ -880,9 +880,11 @@
   animation: none;
 }
 
-/* One navigation shell: logical edges follow Arabic and English. */
+/* One navigation shell: logical edges follow Arabic and English. Every
+   page's side margin is the showcase's (issue #130, after #125): rows,
+   grids, page bodies and settings line up with the showcase's edges. */
 .app.experience-riwaq {
-  --session-gutter: clamp(16px, 2vw, 32px);
+  --session-gutter: var(--showcase-gutter, 12px);
   --nav-width: 212px;
   --masthead-height: 68px;
   --window-offset: 0px;
@@ -908,10 +910,17 @@
   padding-inline: 20px;
   gap: 16px;
 }
+/* The search sits in the middle of the window (issue #131): the masthead's
+   outer columns are equal, and the box fills and centres in the middle one
+   instead of the fixed 310 px the experience rule gives it elsewhere,
+   which left it at the column's start. */
+.app.experience-riwaq .riwaq-masthead > .search-box,
 .riwaq-masthead > .search-box {
   width: 100%;
+  max-width: 520px;
   min-width: 0;
   margin: 0;
+  justify-self: center;
 }
 .riwaq-masthead .search-box input {
   min-width: 0;

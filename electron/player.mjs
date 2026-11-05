@@ -233,6 +233,16 @@ export const BUFFER_STALL_MS = 30000;
 /** A connection that never finishes loading must not wait forever. */
 export const STARTUP_STALL_MS = 60000;
 /** How long MPV may take to answer the command that hands it the source. */
+/**
+ * A start that a newer start or Stop took over (the PR #128 review: an
+ * immediate Stop used to come back as "could not connect to the player").
+ * `cancelled` tells callers nothing failed: the viewer moved on.
+ */
+export function cancelledStart(message = "بدأ تشغيل مصدر آخر") {
+  const error = new Error(message);
+  error.cancelled = true;
+  return error;
+}
 export const LOAD_REPLY_MS = 20000;
 
 /** How often a change of position alone reaches the interface. */
@@ -380,7 +390,7 @@ export class Player {
     // playing into the surface with nothing owning it.
     const token = (this.startToken = (this.startToken || 0) + 1);
     await this.stop({ cancelStart: false });
-    if (token !== this.startToken) throw new Error("بدأ تشغيل مصدر آخر");
+    if (token !== this.startToken) throw cancelledStart();
     // Kept in main only, for seek previews; never part of the HUD's state.
     this.source = { url, headers, local, live };
     // Everything this start needed, so a viewing whose picture never came up
@@ -530,12 +540,14 @@ export class Player {
     await new Promise((resolve, reject) => {
       let attempts = 0;
       const connect = () => {
-        if (
-          processError ||
-          this.child !== child ||
-          token !== this.startToken ||
-          attempts++ > 60
-        ) {
+        // Stop or a newer start while the pipe was still opening: nothing
+        // failed, the viewer moved on.
+        if (token !== this.startToken) {
+          if (this.child === child && !processError) child.kill();
+          reject(cancelledStart());
+          return;
+        }
+        if (processError || this.child !== child || attempts++ > 60) {
           // MPV may still be opening the stream: without its pipe nothing can
           // pause or stop it, so it must not be left playing. Its exit
           // handler marks the viewing inactive.
@@ -554,7 +566,11 @@ export class Player {
             // Nothing will ever own this MPV: it goes now, instead of the
             // newer start or stop waiting out the quit timeout on it.
             if (this.child === child) child.kill();
-            reject(new Error("بدأ تشغيل مصدر آخر"));
+            reject(
+              token !== this.startToken
+                ? cancelledStart()
+                : new Error("بدأ تشغيل مصدر آخر"),
+            );
             return;
           }
           connected = true;
@@ -567,16 +583,16 @@ export class Player {
       };
       connect();
     });
-    if (token !== this.startToken || this.child !== child)
-      throw new Error("بدأ تشغيل مصدر آخر");
+    if (token !== this.startToken) throw cancelledStart();
+    if (this.child !== child) throw new Error("بدأ تشغيل مصدر آخر");
     // Subscribe before loading: local/cached files can finish loading before
     // the IPC pipe opens, and file-loaded is not replayed for late clients.
     this.startWatchdog();
     // MPV answers only after creating its window and graphics device, which
     // a waking or busy GPU can stretch past the usual reply time.
     const loaded = await this.request(["loadfile", url], LOAD_REPLY_MS);
-    if (token !== this.startToken || this.child !== child)
-      throw new Error("بدأ تشغيل مصدر آخر");
+    if (token !== this.startToken) throw cancelledStart();
+    if (this.child !== child) throw new Error("بدأ تشغيل مصدر آخر");
     if (!loaded) {
       await this.stop();
       throw new Error("تعذّر إرسال المصدر إلى MPV");

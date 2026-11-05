@@ -1,6 +1,10 @@
 // 0.46: the built-in engine reaches more peers, TorrServer as a fallback,
 // and the all-users installer (issue #86).
 export default {
+  "مثل أي برنامج تورنت، المحرك المدمج يشارك الأجزاء اللي نزلت مع غيرك أثناء المشاهدة، فعنوان IP حقك يظهر للمشاركين، ويوقف المشاركة بعد نهاية المشاهدة بثوانٍ (أو بدقائق إذا اخترت حجمًا للأجزاء). ويسأل متتبعات عامة إضافية وشبكة DHT عن مشاركين، ويعيد السؤال كل 30 ثانية لما يكونون قليلين.":
+    "Like any torrent app, the built-in engine shares the pieces it has with others while you watch, so your IP address is visible to peers, and it stops sharing seconds after the viewing ends (or minutes, if you chose a size for the pieces). It also asks extra public trackers and the DHT for peers, and asks again every 30 seconds while there are few.",
+  "مع «تنحذف بعد المشاهدة» تنحذف أجزاء العمل بعد ثوانٍ من إغلاق المشغل، وأي بقايا لعمل سابق تنحذف عند فتح عمل جديد. مع حجم محدد تبقى الأعمال حتى يمتلئ، والأقدم ينحذف أولًا. التنزيلات لها مكانها الخاص ولا تنحذف هنا.":
+    "With “Deleted after the viewing”, a title's pieces are deleted seconds after the player closes, and anything an earlier title left is deleted when a new one opens. With a size, titles stay until it is full, oldest first. Downloads have their own place and are never deleted here.",
   "مثل أي برنامج تورنت، المحرك المدمج يشارك الأجزاء اللي نزلت مع غيرك أثناء المشاهدة، فعنوان IP حقك يظهر للمشاركين، ويوقف المشاركة بعد نهاية المشاهدة بدقائق. ويسأل متتبعات عامة إضافية وشبكة DHT عن مشاركين، ويعيد السؤال كل 30 ثانية لما يكونون قليلين.":
     "Like any torrent app, the built-in engine shares the pieces it has with others while you watch, so your IP address is visible to peers, and it stops sharing a few minutes after the viewing ends. It also asks extra public trackers and the DHT for peers, and asks again every 30 seconds while there are few.",
   "اسمح للمشاركين يتصلون فيك": "Let peers connect to you",

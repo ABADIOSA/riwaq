@@ -17,7 +17,7 @@
   width: min(660px, calc(100vw - 32px));
 }
 .notification-center .modal-inner {
-  padding: 30px;
+  padding: 0 30px 30px;
 }
 .notification-center > p,
 .notification-center small {

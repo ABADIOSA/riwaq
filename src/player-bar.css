@@ -1,0 +1,168 @@
+/*
+ * The player's bottom bar (issue #140), in the HUD and the theater
+ * (src/components/PlayerBar.jsx): the volume slider folded until wanted,
+ * the "elapsed / total" counter, chapters under the timeline and the small
+ * volume pill that replaced the large display over the picture (#139).
+ */
+.volume-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.volume-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+}
+.volume-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  /* Room for the slider's focus ring once open. */
+  padding-block: 4px;
+  transition:
+    max-width var(--motion-fast, 120ms) ease,
+    opacity var(--motion-fast, 120ms) ease;
+}
+.volume-group:hover .volume-fold,
+.volume-group:focus-within .volume-fold,
+.volume-group.open .volume-fold {
+  max-width: 172px;
+  opacity: 1;
+  padding-inline: 4px;
+}
+.volume-value {
+  min-width: 4ch;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.time-counter {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+button.time-counter {
+  cursor: pointer;
+}
+.time-counter:focus-visible {
+  outline: 2px solid var(--hud-accent, var(--accent));
+  outline-offset: 2px;
+}
+.chapter-now {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.78;
+  font-size: 12px;
+}
+.hud-live,
+.theater-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* A chapter's start on the timeline. */
+.hud-track > i.hud-chapter-tick,
+.chapter-tick {
+  position: absolute;
+  inset-block: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 0;
+  background: #000000b0;
+  pointer-events: none;
+  z-index: 1;
+}
+.seek-track .chapter-tick {
+  inset-block: auto;
+  top: calc(50% - 4px);
+  height: 8px;
+}
+
+/* The chapters under the timeline, each as wide as it lasts. */
+.chapter-strip {
+  display: flex;
+  gap: 3px;
+  margin-top: 7px;
+}
+.chapter-strip .chapter {
+  flex-basis: 0;
+  min-width: 0;
+  display: block !important;
+  padding: 4px 4px 0 !important;
+  border: 0;
+  border-top: 2px solid #ffffff3d !important;
+  border-radius: 0 !important;
+  background: none !important;
+  color: #ffffffa8;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chapter-strip .chapter span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chapter-strip .chapter:hover,
+.chapter-strip .chapter:focus-visible {
+  color: #fff;
+  border-top-color: #ffffffa0 !important;
+}
+.chapter-strip .chapter.playing {
+  color: #fff;
+  border-top-color: var(--hud-accent, var(--accent)) !important;
+}
+.chapter-strip .chapter:focus-visible {
+  outline: 2px solid var(--hud-accent, var(--accent));
+  outline-offset: 1px;
+}
+
+/* A volume change while the controls sleep: a small pill at the volume's
+   corner, not a display over the picture (issue #139). */
+.hud-volume-pill {
+  position: absolute;
+  bottom: 22px;
+  inset-inline-start: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #000000a6;
+  color: #f4f4f5;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  animation: hud-pill-in var(--motion-fast, 120ms) ease;
+}
+@keyframes hud-pill-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .volume-fold,
+  .hud-volume-pill {
+    transition: none;
+    animation: none;
+  }
+}

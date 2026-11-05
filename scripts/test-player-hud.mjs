@@ -11,6 +11,7 @@ import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   nativeHudClick,
+  nativeHudHover,
   nativeHudKey,
   restoreCursor,
 } from "./native-hud-input.mjs";
@@ -376,13 +377,21 @@ try {
       "the HUD seeks the video",
     );
     await waitFor(async () => {
-      const clock = await hud.locator(".hud-seek > span").first().textContent();
-      const parts = clock.trim().split(":").map(Number);
+      // "elapsed / total" since #140; the counter may show remaining.
+      const clock = await hud.locator(".time-counter").first().textContent();
+      const parts = clock
+        .trim()
+        .split(" / ")[0]
+        .replace("-", "")
+        .split(":")
+        .map(Number);
       return (
         parts.every(Number.isFinite) &&
         parts.reduce((time, part) => time * 60 + part, 0) >= 10
       );
     }, "the visible clock follows the actual seek");
+    // The slider is folded until the pointer rests on the volume (#140).
+    await nativeHudHover(app, hud, hud.locator(".volume-button"));
     await nativeHudClick(app, hud, hud.getByRole("slider"), 0.6);
     await waitFor(
       async () => Math.abs((await snapshot()).player.volume - 80) <= 2,

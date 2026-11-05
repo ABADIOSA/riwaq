@@ -495,7 +495,7 @@ const ALL_GROUPS = [
       [
         "interface",
         "الواجهة",
-        "حجم الواجهة زوايا كثافة تخطيط قائمة حركة شاشة التوقف هوية",
+        "حجم الواجهة زوايا كثافة تخطيط قائمة حركة شاشة التوقف هوية عجلة التنقل زجاج شفافية",
         PanelsTopLeft,
       ],
       [
@@ -762,15 +762,21 @@ const groupOf = (page) =>
 // Search finds a page by its Arabic and English names in either language.
 const pageWords = ([id, title, keywords]) =>
   `${title} ${keywords} ${translate(title, "en")} ${SEARCH_EN[id] || ""}`;
-// Pages that moved: an old link still lands somewhere sensible.
-const MOVED = { appearance: "theme", ...(isWeb ? WEB_HIDDEN : {}) };
+// Pages that moved: an old link still lands somewhere sensible. "start" is
+// Settings entered on its own: the first page of the first room, as a room
+// opens on its first page (issue #133). Links that mean a page name it.
+const MOVED = {
+  appearance: "theme",
+  start: GROUPS[0].pages[0][0],
+  ...(isWeb ? WEB_HIDDEN : {}),
+};
 
 export default function SettingsStudio({
   state,
   update,
   act,
   notice,
-  initialTab = "theme",
+  initialTab = "start",
   onNuvio,
   onProfiles,
   onDownloads,

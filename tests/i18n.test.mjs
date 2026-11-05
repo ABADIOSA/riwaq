@@ -342,8 +342,11 @@ test("both editions build JSX through the translating runtime", () => {
 
 // Elements forced to direction: ltr (and what lives inside them) keep
 // physical sides on purpose; src/ltr.css mirrors the few that need it.
+// The wheel's rim and lens are drawn in physical coordinates its component
+// mirrors for Arabic (src/components/RiwaqWheel.jsx); chapter ticks sit on
+// a timeline forced left-to-right.
 const PHYSICAL_OK =
-  /\.(session-kicker|session-poster-stack|window-buttons|brand-mark|hero-pages|rating|progress-line|toggle|stream-quality|epg-scale|epg-block|explore-map-tiles|dock-stepper|hud-)|search-box kbd|stream-info em|live-source-name small|setting-row \.path/;
+  /\.(wheel-rim|wheel-lens|chapter-tick|session-kicker|session-poster-stack|window-buttons|brand-mark|hero-pages|rating|progress-line|toggle|stream-quality|epg-scale|epg-block|explore-map-tiles|dock-stepper|hud-)|search-box kbd|stream-info em|live-source-name small|setting-row \.path/;
 
 test("layout CSS uses logical sides, so English mirrors the Arabic design", () => {
   const dir = fileURLToPath(new URL("../src/", import.meta.url));

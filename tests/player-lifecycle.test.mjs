@@ -414,3 +414,32 @@ test("a window that never takes the size restarts the viewing once, with the sam
   assert.equal(h.children.length, 2, "the restart keeps its one restart");
   await h.player.stop();
 });
+
+test("Stop while MPV's pipe is still opening is a cancellation, not a connection failure (PR #128 review)", async () => {
+  const h = harness({
+    autoConnect: false,
+    exitOnKill: true,
+    exitOnQuit: false,
+  });
+  const started = h.player.start(h.args).catch((error) => error);
+  await settle(() => h.sockets.length > 0);
+  const stopping = h.player.stop();
+  // The pipe does not exist yet: the socket fails and connect retries.
+  h.sockets[0].emit("error", new Error("ENOENT"));
+  const error = await started;
+  assert.equal(error.cancelled, true, error.message);
+  assert.doesNotMatch(error.message, /تعذّر الاتصال/);
+  assert.equal(h.children[0].killed, true, "the unowned MPV is gone");
+  await stopping;
+});
+
+test("an MPV that exits before its pipe opens is still a real failure", async () => {
+  const h = harness({ autoConnect: false });
+  const started = h.player.start(h.args).catch((error) => error);
+  await settle(() => h.sockets.length > 0);
+  h.children[0].emit("exit", 1);
+  h.sockets[0].emit("error", new Error("ENOENT"));
+  const error = await started;
+  assert.notEqual(error.cancelled, true);
+  assert.match(error.message, /تعذّر الاتصال/);
+});

@@ -53,13 +53,15 @@ export const HOTKEY_ACTIONS = [
   {
     id: "volumeUp",
     label: "رفع الصوت",
-    command: "add volume 5",
+    // no-osd: MPV's own bar was the large volume display over the picture
+    // (issue #139); Riwaq's controls show the level themselves.
+    command: "no-osd add volume 5",
     binding: "UP",
   },
   {
     id: "volumeDown",
     label: "خفض الصوت",
-    command: "add volume -5",
+    command: "no-osd add volume -5",
     binding: "DOWN",
   },
   { id: "mute", label: "كتم الصوت", command: "cycle mute", binding: "m" },
