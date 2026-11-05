@@ -20,16 +20,24 @@
  *   nodes saved from the last run, and asks again every 30 s while it has
  *   few peers (core/torrent-engine.mjs).
  * - Peers connect over TCP; uTP is off (see below).
- * - A released title is kept a few minutes (a replay or a failover back
- *   finds it), then destroyed; its pieces stay only within the cache size.
+ * - With "delete after viewing" (the default), a released title goes a few
+ *   seconds after its last reader closed, with its pieces, and starting
+ *   another title sweeps any that are left (issue #138). With a cache size
+ *   it is kept a few minutes (a replay or a failover back finds it), then
+ *   destroyed; its pieces stay only within the cache size.
+ * - On Windows, piece files are marked sparse before WebTorrent writes into
+ *   them, so a read near the end of a film does not make NTFS allocate the
+ *   whole file on disk (issue #138).
  */
 import { createServer } from "node:http";
 import { createSocket } from "node:dgram";
 import { randomBytes } from "node:crypto";
-import { lstatSync } from "node:fs";
+import { createRequire } from "node:module";
+import { constants, lstatSync } from "node:fs";
 import {
   mkdir,
   lstat,
+  open as openFile,
   readFile,
   readdir,
   rm,
@@ -53,7 +61,12 @@ import {
 } from "../core/torrent-engine.mjs";
 
 const READY_MS = 45000;
+// With a cache size: a replay or a failover back within minutes finds it.
 const GRACE_MS = 3 * 60 * 1000;
+// "Delete after viewing" (issue #138): the pieces go seconds after the last
+// reader closed. A few seconds cover MPV's reconnects and the gap between
+// one start and the next of the same title.
+const VIEWING_GRACE_MS = 5000;
 const TYPES = {
   mkv: "video/x-matroska",
   mp4: "video/mp4",
@@ -80,6 +93,70 @@ async function folderBytes(path) {
     else total += (await stat(full).catch(() => null))?.size || 0;
   }
   return total;
+}
+
+/**
+ * Marks a file sparse on Windows (FSCTL_SET_SPARSE through the
+ * fs-native-extensions binding random-access-file already ships; a no-op
+ * elsewhere). WebTorrent writes the pieces MPV reads at their offsets; on a
+ * plain NTFS file a write near the end allocates everything before it, so
+ * one look at a film's index reserved its whole size on disk. A failure (a
+ * FAT drive, a missing binding) leaves an ordinary file, never a failed
+ * stream.
+ */
+let nativeFs;
+function nativeExtensions() {
+  if (nativeFs === undefined) {
+    try {
+      nativeFs = createRequire(import.meta.url)("fs-native-extensions");
+    } catch {
+      nativeFs = null;
+    }
+  }
+  return nativeFs;
+}
+export async function markSparse(path, extensions = nativeExtensions()) {
+  if (!extensions?.sparse) return false;
+  let handle;
+  try {
+    // Read and write without truncating: the file may hold pieces already.
+    handle = await openFile(path, constants.O_RDWR | constants.O_CREAT);
+    await extensions.sparse(handle.fd);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+/**
+ * fs-chunk-store with each file marked sparse before its first use.
+ * `FSChunkStore` is WebTorrent's own store class (null: WebTorrent's
+ * default store is used unchanged).
+ */
+function sparseStore(FSChunkStore, mark) {
+  if (!FSChunkStore) return null;
+  return class SparseChunkStore extends FSChunkStore {
+    constructor(chunkLength, opts) {
+      super(chunkLength, opts);
+      for (const file of this.files || []) {
+        const open = file.open;
+        let opening = null;
+        file.open = (cb) => {
+          opening ||= new Promise((resolve) =>
+            open((error, raf) => {
+              if (error) return resolve({ error });
+              mark(file.path).then(
+                () => resolve({ raf }),
+                () => resolve({ raf }),
+              );
+            }),
+          );
+          opening.then(({ error, raf }) => cb(error || null, raf));
+        };
+      }
+    }
+  };
 }
 
 /** A UDP tracker answers BEP 15's connect request: UDP leaves this network. */
@@ -141,12 +218,22 @@ export async function startEngine({
   network = {},
   WebTorrent,
   graceMs = GRACE_MS,
+  viewingGraceMs = VIEWING_GRACE_MS,
+  sparse = markSparse,
   readyMs = READY_MS,
   reannounceMs = REANNOUNCE_MS,
   log = () => {},
 } = {}) {
   if (!cacheDir) throw new Error("مجلد ذاكرة التورنت غير محدد");
   WebTorrent ||= (await import("webtorrent")).default;
+  // WebTorrent's own file store, extended to mark files sparse.
+  const store = sparseStore(
+    await import("fs-chunk-store").then(
+      (module) => module.default,
+      () => null,
+    ),
+    sparse,
+  );
   await mkdir(cacheDir, { recursive: true });
   // Startup may have skipped this root because it is a junction. The
   // engine must not follow it later when pruning or creating pieces.
@@ -199,6 +286,8 @@ export async function startEngine({
   let cap = Math.max(0, Number(options.cacheBytes) || 0);
   const token = randomBytes(16).toString("hex");
   const entries = new Map();
+  // Titles being destroyed: a new start of the same title waits for it.
+  const removing = new Map();
   let closed = false;
 
   // Pieces of titles no longer watched, beyond the cache size, go; a crash
@@ -232,6 +321,7 @@ export async function startEngine({
     if (entry) {
       clearTimeout(entry.timer);
       entry.timer = null;
+      entry.released = false;
       entry.used = Date.now();
       return entry;
     }
@@ -248,6 +338,7 @@ export async function startEngine({
     }
     const torrent = client.add(magnetOf(stream), {
       path: piecePath,
+      ...(store ? { store } : {}),
       deselect: true,
       strategy: "sequential",
       ...(extraTrackers
@@ -272,25 +363,66 @@ export async function startEngine({
       } catch {}
     }, reannounceMs);
     boost.unref?.();
-    entry = { hash, torrent, ready, used: Date.now(), timer: null, boost };
+    entry = {
+      hash,
+      torrent,
+      ready,
+      used: Date.now(),
+      timer: null,
+      boost,
+      released: false,
+      // Open HTTP responses: MPV, or another player given the copied link.
+      readers: 0,
+    };
     entries.set(hash, entry);
+    // "Delete after viewing": a new title sweeps what earlier viewings left
+    // (released, nobody reading), never the one starting now.
+    if (cap === 0) {
+      for (const other of [...entries.values()])
+        if (other !== entry && other.released && other.readers === 0)
+          void remove(other.hash);
+      void prune().catch(() => {});
+    }
     return entry;
+  }
+
+  /** A released title goes after its grace, once nobody reads it. */
+  function schedule(entry) {
+    clearTimeout(entry.timer);
+    entry.timer = setTimeout(
+      () => {
+        entry.timer = null;
+        // The last reader to close schedules it again.
+        if (entry.readers > 0 || entries.get(entry.hash) !== entry) return;
+        void remove(entry.hash);
+      },
+      cap === 0 ? viewingGraceMs : graceMs,
+    );
+    entry.timer.unref?.();
   }
 
   async function remove(hash) {
     const entry = entries.get(hash);
-    if (!entry) return;
+    if (!entry) return removing.get(hash);
     entries.delete(hash);
     clearTimeout(entry.timer);
     clearInterval(entry.boost);
-    // A destroy that never calls back must not keep its pieces on disk.
-    await timeout(
-      new Promise((resolve) =>
-        entry.torrent.destroy({ destroyStore: cap === 0 }, () => resolve()),
-      ),
-      10000,
-    ).catch(() => {});
-    await prune();
+    const done = (async () => {
+      // A destroy that never calls back must not keep its pieces on disk.
+      await timeout(
+        new Promise((resolve) =>
+          entry.torrent.destroy({ destroyStore: cap === 0 }, () => resolve()),
+        ),
+        10000,
+      ).catch(() => {});
+      await prune().catch(() => {});
+    })();
+    removing.set(hash, done);
+    try {
+      await done;
+    } finally {
+      if (removing.get(hash) === done) removing.delete(hash);
+    }
   }
 
   const refuse = (res, status) => {
@@ -348,6 +480,22 @@ export async function startEngine({
     if (req.method === "HEAD" || file.length === 0) return res.end();
     const reader = file.createReadStream({ start, end });
     let done = false;
+    // A reader holds its title: a released one goes after the last closes.
+    entry.readers++;
+    let counted = true;
+    const uncount = () => {
+      if (!counted) return;
+      counted = false;
+      entry.readers--;
+      entry.used = Date.now();
+      if (
+        entry.released &&
+        entry.readers === 0 &&
+        !entry.timer &&
+        entries.get(entry.hash) === entry
+      )
+        schedule(entry);
+    };
     const finish = () => {
       if (done) return;
       done = true;
@@ -367,7 +515,10 @@ export async function startEngine({
       finish();
       res.destroy();
     });
-    res.on("close", finish);
+    res.on("close", () => {
+      finish();
+      uncount();
+    });
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -383,6 +534,9 @@ export async function startEngine({
       if (closed) throw new Error("محرك التورنت متوقف");
       if (!validHash(stream?.infoHash))
         throw new Error("معرّف التورنت غير صالح");
+      // The same title being destroyed right now: start it again after.
+      const going = removing.get(stream.infoHash.toLowerCase());
+      if (going) return going.then(() => this.url(stream));
       const entry = ensure(stream);
       const index =
         Number.isInteger(stream.fileIdx) && stream.fileIdx >= 0
@@ -392,12 +546,16 @@ export async function startEngine({
       const named = index < 0 ? cleanTorrentPath(stream.filename) : "";
       return `${origin}/${token}/${entry.hash}/${index}${named ? `?f=${encodeURIComponent(named)}` : ""}`;
     },
-    /** The viewing ended: kept a few minutes, then destroyed. */
+    /**
+     * The viewing ended. "Delete after viewing": destroyed with its pieces
+     * seconds after its last reader closed; with a cache size, kept a few
+     * minutes first.
+     */
     release(hash) {
       const entry = entries.get(String(hash || "").toLowerCase());
-      if (!entry || entry.timer) return false;
-      entry.timer = setTimeout(() => remove(entry.hash), graceMs);
-      entry.timer.unref?.();
+      if (!entry || entry.released) return false;
+      entry.released = true;
+      if (entry.readers === 0) schedule(entry);
       return true;
     },
     /** One torrent's start: metadata, peers, speed and bytes so far. */
@@ -479,7 +637,7 @@ export async function startEngine({
     /** Removes every title not being watched, and its pieces. */
     async clear() {
       for (const entry of [...entries.values()])
-        if (entry.timer) await remove(entry.hash);
+        if (entry.released && entry.readers === 0) await remove(entry.hash);
       const saved = cap;
       cap = 0;
       await prune();
