@@ -55,7 +55,8 @@ Executive interpretation (chosen here, not attributed to the owner): a wheel who
 - **Order.** Home, Discover, My library, Collections, Downloads, Addons, Music, Live TV, Settings on the rim; profile, Stremio link and the open/compact toggle below. Hidden destinations, locks, quiet interface and the update notice behave as before.
 - **Keyboard and semantics.** A `<nav>` of buttons in reading order with `aria-current="page"`; Tab walks through them; Arrow Up/Down move to the neighbour, Home/End to the first/last; focus rings are visible. No wheel-event capture.
 - **Narrow windows.** Below 761 px the drawer holds the open wheel; the content takes the full width.
-- **Migration.** `navStyle` and `glass` are appearance settings validated by `safeAppearance` (backups, accounts, shared design codes carry them). Settings saved before the wheel get them on load (`adoptWheel` via `retireLineless`) with everything else kept; a viewer can choose the old sidebar. `wheelOpen` is a validated setting.
+- **Migration.** `navStyle` and `glass` are appearance settings validated by `safeAppearance` (backups, accounts, shared design codes carry them). Settings saved before the wheel get them on load (`adoptWheel` via `retireLineless`) with everything else kept; a viewer can choose the old sidebar. `wheelOpen` is a validated setting. Limit: a 0.54 device syncing through a Riwaq account does not know `navStyle`; if it rewrites the appearance, a viewer's "sidebar" choice can come back as the wheel on the newer device (the default), never the other way round. Nothing else in the appearance is affected.
+- **Rollback.** Appearance → Interface → Navigation → Sidebar brings back the 0.54 layout per profile; Buttons and dialogs → Solid removes the glass. Reverting the branch leaves `navStyle`, `glass` and `wheelOpen` in saved settings, which 0.54 ignores.
 
 ## Glass and motion
 
