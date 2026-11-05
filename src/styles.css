@@ -1448,7 +1448,12 @@ button.secondary {
   font-size: 12px;
   color: var(--muted);
 }
+/* A dialog's frame never scrolls; its content does, starting below the
+   close button, so the scrollbar never runs beside it (issue #134).
+   overscroll-behavior keeps a scroll that reaches the end inside, and
+   src/lib/scroll-lock.js keeps the page behind still (#135). */
 .modal {
+  --modal-head: 60px;
   position: fixed;
   padding: 0;
   border: 1px solid #ffffff1c;
@@ -1457,11 +1462,14 @@ button.secondary {
   color: #eeede9;
   max-height: 90vh;
   max-width: calc(100vw - 50px);
-  overflow: auto;
+  overflow: hidden;
+  overscroll-behavior: contain;
   box-shadow: 0 30px 100px #0008;
   width: 570px;
-  scrollbar-width: thin;
-  scrollbar-color: #454b54 transparent;
+}
+.modal[open] {
+  display: flex;
+  flex-direction: column;
 }
 .modal::backdrop {
   background: #05080dbe;
@@ -1469,12 +1477,19 @@ button.secondary {
 }
 .modal-inner {
   position: relative;
-  padding: 40px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin-block-start: var(--modal-head);
+  padding: 0 40px 40px;
+  scrollbar-width: thin;
+  scrollbar-color: #454b54 transparent;
 }
 .modal-close {
   position: absolute !important;
-  inset-inline-end: 19px;
-  top: 19px;
+  inset-inline-end: 12px;
+  top: 12px;
   z-index: 5;
   background: #151920ba !important;
   border: 1px solid #ffffff19 !important;
@@ -1552,6 +1567,7 @@ button.secondary {
   width: 930px;
 }
 .details-modal > .modal-inner {
+  margin-block-start: 0;
   padding: 0;
 }
 .detail-backdrop {

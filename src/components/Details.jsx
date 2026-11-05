@@ -690,361 +690,370 @@ export default function Details({
           </IconButton>
         </div>
       </div>
-      {result?.modeFallback && (
-        <p className="stream-pref-note">
-          لا توجد مصادر من النوع الذي اخترته في «اختيار المصدر»، فنعرض كل
-          المصادر.
-        </p>
-      )}
-      {result?.remembered > 0 && (
-        <p className="stream-pref-note">
-          قدّمنا نفس الإضافة وفريق الإصدار الذي شاهدت منه هذا المسلسل آخر مرة.
-          <button
-            className="text-button"
-            onClick={() =>
-              update("forgetSeries", { seriesId: meta.id })
-                .then(() => setRequest((x) => x + 1))
-                .catch(() => {})
-            }
-          >
-            انسَ اختياري
-          </button>
-        </p>
-      )}
-      {result?.filter && (
-        <p className="stream-pref-note">
-          {result.filter.fallback
-            ? `لا مصدر يطابق مرشح «${result.filter.name}»، فنعرض الأفضل المتاح.`
-            : `مرشح «${result.filter.name}» مفعّل: ${result.filter.matched} مطابق.`}
-          {!result.filter.fallback && outside.length > 0 && (
+      {/* Below the heading: in the sources window only this part scrolls,
+          so its scrollbar starts under the close button (issue #134). */}
+      <div className="streams-body">
+        {result?.modeFallback && (
+          <p className="stream-pref-note">
+            لا توجد مصادر من النوع الذي اخترته في «اختيار المصدر»، فنعرض كل
+            المصادر.
+          </p>
+        )}
+        {result?.remembered > 0 && (
+          <p className="stream-pref-note">
+            قدّمنا نفس الإضافة وفريق الإصدار الذي شاهدت منه هذا المسلسل آخر مرة.
             <button
               className="text-button"
-              onClick={() => setShowOutside(!showOutside)}
+              onClick={() =>
+                update("forgetSeries", { seriesId: meta.id })
+                  .then(() => setRequest((x) => x + 1))
+                  .catch(() => {})
+              }
             >
-              {showOutside
-                ? "أخفِ غير المطابق"
-                : `اعرض ${outside.length} غير مطابق`}
+              انسَ اختياري
             </button>
-          )}
-        </p>
-      )}
-      {streamsLoading ? (
-        <Busy text="نبحث في إضافاتك عن المصادر…" />
-      ) : shown.length ? (
-        <>
-          {(shown.length > 4 || narrowing) && (
-            <div className="source-tools">
-              <label className="source-search">
-                <Search size={15} />
-                <input
-                  type="search"
-                  value={sourceQuery}
-                  onChange={(e) => setSourceQuery(e.target.value)}
-                  placeholder="ابحث في المصادر: فريق، REMUX، عربي…"
-                  aria-label="ابحث في المصادر"
-                  maxLength={80}
-                />
-              </label>
-              <ScrollRow className="source-chips">
-                {SOURCE_CHIPS.filter(([id]) => counts[id] > 0).map(
-                  ([id, label]) => (
+          </p>
+        )}
+        {result?.filter && (
+          <p className="stream-pref-note">
+            {result.filter.fallback
+              ? `لا مصدر يطابق مرشح «${result.filter.name}»، فنعرض الأفضل المتاح.`
+              : `مرشح «${result.filter.name}» مفعّل: ${result.filter.matched} مطابق.`}
+            {!result.filter.fallback && outside.length > 0 && (
+              <button
+                className="text-button"
+                onClick={() => setShowOutside(!showOutside)}
+              >
+                {showOutside
+                  ? "أخفِ غير المطابق"
+                  : `اعرض ${outside.length} غير مطابق`}
+              </button>
+            )}
+          </p>
+        )}
+        {streamsLoading ? (
+          <Busy text="نبحث في إضافاتك عن المصادر…" />
+        ) : shown.length ? (
+          <>
+            {(shown.length > 4 || narrowing) && (
+              <div className="source-tools">
+                <label className="source-search">
+                  <Search size={15} />
+                  <input
+                    type="search"
+                    value={sourceQuery}
+                    onChange={(e) => setSourceQuery(e.target.value)}
+                    placeholder="ابحث في المصادر: فريق، REMUX، عربي…"
+                    aria-label="ابحث في المصادر"
+                    maxLength={80}
+                  />
+                </label>
+                <ScrollRow className="source-chips">
+                  {SOURCE_CHIPS.filter(([id]) => counts[id] > 0).map(
+                    ([id, label]) => (
+                      <button
+                        key={id}
+                        className={sourceChips.includes(id) ? "chosen" : ""}
+                        aria-pressed={sourceChips.includes(id)}
+                        onClick={() =>
+                          setSourceChips((list) =>
+                            list.includes(id)
+                              ? list.filter((c) => c !== id)
+                              : [...list, id],
+                          )
+                        }
+                      >
+                        {label} <bdi>{counts[id]}</bdi>
+                      </button>
+                    ),
+                  )}
+                </ScrollRow>
+                {narrowed && (
+                  <small className="source-count" role="status">
+                    يعرض {arabicCount(visible.length, SOURCES)} من{" "}
+                    {shown.length}
+                  </small>
+                )}
+              </div>
+            )}
+            {visible.length ? (
+              sections.map((section, index) => (
+                <div className="stream-section" key={`${section.id}-${index}`}>
+                  {grouped && (
                     <button
-                      key={id}
-                      className={sourceChips.includes(id) ? "chosen" : ""}
-                      aria-pressed={sourceChips.includes(id)}
+                      className="stream-addon"
+                      aria-expanded={!folded.includes(section.id)}
                       onClick={() =>
-                        setSourceChips((list) =>
-                          list.includes(id)
-                            ? list.filter((c) => c !== id)
-                            : [...list, id],
+                        setFolded((list) =>
+                          list.includes(section.id)
+                            ? list.filter((f) => f !== section.id)
+                            : [...list, section.id],
                         )
                       }
                     >
-                      {label} <bdi>{counts[id]}</bdi>
+                      <ChevronLeft size={15} />
+                      <b dir="auto">{section.name}</b>
+                      <small>
+                        {arabicCount(section.streams.length, SOURCES)}
+                      </small>
                     </button>
-                  ),
-                )}
-              </ScrollRow>
-              {narrowed && (
-                <small className="source-count" role="status">
-                  يعرض {arabicCount(visible.length, SOURCES)} من {shown.length}
-                </small>
-              )}
-            </div>
-          )}
-          {visible.length ? (
-            sections.map((section, index) => (
-              <div className="stream-section" key={`${section.id}-${index}`}>
-                {grouped && (
-                  <button
-                    className="stream-addon"
-                    aria-expanded={!folded.includes(section.id)}
-                    onClick={() =>
-                      setFolded((list) =>
-                        list.includes(section.id)
-                          ? list.filter((f) => f !== section.id)
-                          : [...list, section.id],
-                      )
-                    }
-                  >
-                    <ChevronLeft size={15} />
-                    <b dir="auto">{section.name}</b>
-                    <small>
-                      {arabicCount(section.streams.length, SOURCES)}
-                    </small>
-                  </button>
-                )}
-                {!(grouped && folded.includes(section.id)) && (
-                  <div
-                    className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""}`}
-                  >
-                    {section.streams.map((s) => (
-                      <div
-                        key={s.key}
-                        className={`stream ${s.key === shown[0]?.key ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
-                      >
-                        <button
-                          className="stream-play"
-                          disabled={!s.supported || !!playing}
-                          onClick={() => playStream(s)}
+                  )}
+                  {!(grouped && folded.includes(section.id)) && (
+                    <div
+                      className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""}`}
+                    >
+                      {section.streams.map((s) => (
+                        <div
+                          key={s.key}
+                          className={`stream ${s.key === shown[0]?.key ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
                         >
-                          <span className="stream-quality">
-                            {!chip("resolution") ? (
-                              <Play size={20} />
-                            ) : s.resolution === 2160 ? (
-                              "4K"
-                            ) : s.resolution ? (
-                              `${s.resolution}p`
-                            ) : (
-                              <Play size={20} />
-                            )}
-                          </span>
-                          <span className="stream-info">
-                            <b dir="auto">{s.name}</b>
-                            {settings.pickerReleaseName !== false && (
-                              <span dir="auto">{s.title || s.provider}</span>
-                            )}
-                            <small>
-                              {chip("resolution") &&
-                                chipArt(art, "resolution", s.resolution).map(
-                                  (src) => (
-                                    <img
-                                      key={src}
-                                      className="badge-art"
-                                      src={src}
-                                      alt={`${s.resolution}p`}
-                                      loading="lazy"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  ),
-                                )}
-                              {s.remembered && (
-                                <em
-                                  className="tag-remembered"
-                                  title="نفس مصدر الحلقة السابقة"
-                                >
-                                  <History size={11} /> مصدرك السابق
-                                </em>
-                              )}
-                              {(s.badges || []).map((b) => (
-                                <RuleBadge key={b.label} badge={b} />
-                              ))}
-                              {chip("hdr") && s.hdr && (
-                                <ArtChip
-                                  images={chipArt(art, "hdr", s.hdr)}
-                                  label={s.hdr}
-                                >
-                                  <em className="tag-hdr">{s.hdr}</em>
-                                </ArtChip>
-                              )}
-                              {chip("codec") && s.codec && (
-                                <ArtChip
-                                  images={chipArt(art, "codec", s.codec)}
-                                  label={s.codec}
-                                >
-                                  <em>{s.codec}</em>
-                                </ArtChip>
-                              )}
-                              {chip("source") && s.source && (
-                                <ArtChip
-                                  images={chipArt(art, "source", s.source)}
-                                  label={s.source}
-                                >
-                                  <em>{s.source}</em>
-                                </ArtChip>
-                              )}
-                              {chip("audio") && s.audio && (
-                                <ArtChip
-                                  images={[
-                                    ...chipArt(art, "audio", s.audio),
-                                    ...(chipArt(art, "audio", s.audio).length
-                                      ? chipArt(art, "channels", s.channels)
-                                      : []),
-                                  ]}
-                                  label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
-                                >
-                                  <em>
-                                    {s.audio}
-                                    {s.channels ? ` ${s.channels}` : ""}
-                                  </em>
-                                </ArtChip>
-                              )}
-                              {chip("size") && s.sizeLabel && (
-                                <em>{s.sizeLabel}</em>
-                              )}
-                              {chip("cached") && s.cached && (
-                                <em className="tag-cached">
-                                  <Zap size={11} /> {s.debrid || "مخزّن"}
-                                </em>
-                              )}
-                              {chip("seeders") &&
-                                s.seeders !== null &&
-                                s.seeders !== undefined && (
-                                  <em>
-                                    <Users size={11} /> {s.seeders}
-                                  </em>
-                                )}
-                              {chip("group") && s.trustedGroup && (
-                                <em className="tag-trusted">
-                                  <ShieldCheck size={11} /> {s.group}
-                                </em>
-                              )}
-                              {chip("arabic") && s.arabicDub && (
-                                <em className="tag-arabic">دبلجة عربية</em>
-                              )}
-                              {chip("arabic") && s.arabicSub && (
-                                <em className="tag-arabic">ترجمة عربية</em>
-                              )}
-                              {s.torrent && <em>Stremio Service</em>}
-                              {s.external && <em>رابط خارجي</em>}
-                              {!s.supported && <em>صيغة غير مدعومة</em>}
-                            </small>
-                            {explained === s.key && (
-                              <small className="stream-why" dir="auto">
-                                {s.reasons.map((r) => (
-                                  <em
-                                    key={r.code}
-                                    className={r.points < 0 ? "minus" : "plus"}
-                                  >
-                                    {r.label} {r.points > 0 ? "+" : ""}
-                                    {r.points}
-                                  </em>
-                                ))}
-                              </small>
-                            )}
-                          </span>
-                          <span className="stream-action">
-                            {s.key === shown[0]?.key && (
-                              <small>الأعلى ترتيباً</small>
-                            )}
-                            {playing === s.key ? (
-                              <LoaderCircle className="spin" size={22} />
-                            ) : (
-                              <Play size={20} fill="currentColor" />
-                            )}
-                          </span>
-                        </button>
-                        {!isWeb && s.downloadable && (
                           <button
-                            className="stream-download"
-                            title="تنزيل المصدر دون تشغيل"
-                            disabled={!!playing}
-                            onClick={async () => {
-                              const r = await act("offlineStart", {
-                                key: s.key,
-                                meta,
-                                videoId,
-                                profileId: state.profiles?.active,
-                              });
-                              if (r)
-                                notice(
-                                  "بدأ التنزيل؛ يمكنك إغلاق المشغل ومتابعته من التنزيلات.",
-                                );
-                            }}
+                            className="stream-play"
+                            disabled={!s.supported || !!playing}
+                            onClick={() => playStream(s)}
                           >
-                            <Download size={18} />
+                            <span className="stream-quality">
+                              {!chip("resolution") ? (
+                                <Play size={20} />
+                              ) : s.resolution === 2160 ? (
+                                "4K"
+                              ) : s.resolution ? (
+                                `${s.resolution}p`
+                              ) : (
+                                <Play size={20} />
+                              )}
+                            </span>
+                            <span className="stream-info">
+                              <b dir="auto">{s.name}</b>
+                              {settings.pickerReleaseName !== false && (
+                                <span dir="auto">{s.title || s.provider}</span>
+                              )}
+                              <small>
+                                {chip("resolution") &&
+                                  chipArt(art, "resolution", s.resolution).map(
+                                    (src) => (
+                                      <img
+                                        key={src}
+                                        className="badge-art"
+                                        src={src}
+                                        alt={`${s.resolution}p`}
+                                        loading="lazy"
+                                        referrerPolicy="no-referrer"
+                                      />
+                                    ),
+                                  )}
+                                {s.remembered && (
+                                  <em
+                                    className="tag-remembered"
+                                    title="نفس مصدر الحلقة السابقة"
+                                  >
+                                    <History size={11} /> مصدرك السابق
+                                  </em>
+                                )}
+                                {(s.badges || []).map((b) => (
+                                  <RuleBadge key={b.label} badge={b} />
+                                ))}
+                                {chip("hdr") && s.hdr && (
+                                  <ArtChip
+                                    images={chipArt(art, "hdr", s.hdr)}
+                                    label={s.hdr}
+                                  >
+                                    <em className="tag-hdr">{s.hdr}</em>
+                                  </ArtChip>
+                                )}
+                                {chip("codec") && s.codec && (
+                                  <ArtChip
+                                    images={chipArt(art, "codec", s.codec)}
+                                    label={s.codec}
+                                  >
+                                    <em>{s.codec}</em>
+                                  </ArtChip>
+                                )}
+                                {chip("source") && s.source && (
+                                  <ArtChip
+                                    images={chipArt(art, "source", s.source)}
+                                    label={s.source}
+                                  >
+                                    <em>{s.source}</em>
+                                  </ArtChip>
+                                )}
+                                {chip("audio") && s.audio && (
+                                  <ArtChip
+                                    images={[
+                                      ...chipArt(art, "audio", s.audio),
+                                      ...(chipArt(art, "audio", s.audio).length
+                                        ? chipArt(art, "channels", s.channels)
+                                        : []),
+                                    ]}
+                                    label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
+                                  >
+                                    <em>
+                                      {s.audio}
+                                      {s.channels ? ` ${s.channels}` : ""}
+                                    </em>
+                                  </ArtChip>
+                                )}
+                                {chip("size") && s.sizeLabel && (
+                                  <em>{s.sizeLabel}</em>
+                                )}
+                                {chip("cached") && s.cached && (
+                                  <em className="tag-cached">
+                                    <Zap size={11} /> {s.debrid || "مخزّن"}
+                                  </em>
+                                )}
+                                {chip("seeders") &&
+                                  s.seeders !== null &&
+                                  s.seeders !== undefined && (
+                                    <em>
+                                      <Users size={11} /> {s.seeders}
+                                    </em>
+                                  )}
+                                {chip("group") && s.trustedGroup && (
+                                  <em className="tag-trusted">
+                                    <ShieldCheck size={11} /> {s.group}
+                                  </em>
+                                )}
+                                {chip("arabic") && s.arabicDub && (
+                                  <em className="tag-arabic">دبلجة عربية</em>
+                                )}
+                                {chip("arabic") && s.arabicSub && (
+                                  <em className="tag-arabic">ترجمة عربية</em>
+                                )}
+                                {s.torrent && <em>Stremio Service</em>}
+                                {s.external && <em>رابط خارجي</em>}
+                                {!s.supported && <em>صيغة غير مدعومة</em>}
+                              </small>
+                              {explained === s.key && (
+                                <small className="stream-why" dir="auto">
+                                  {s.reasons.map((r) => (
+                                    <em
+                                      key={r.code}
+                                      className={
+                                        r.points < 0 ? "minus" : "plus"
+                                      }
+                                    >
+                                      {r.label} {r.points > 0 ? "+" : ""}
+                                      {r.points}
+                                    </em>
+                                  ))}
+                                </small>
+                              )}
+                            </span>
+                            <span className="stream-action">
+                              {s.key === shown[0]?.key && (
+                                <small>الأعلى ترتيباً</small>
+                              )}
+                              {playing === s.key ? (
+                                <LoaderCircle className="spin" size={22} />
+                              ) : (
+                                <Play size={20} fill="currentColor" />
+                              )}
+                            </span>
                           </button>
-                        )}
-                        <button
-                          className="stream-why-toggle"
-                          title="لماذا هذا الترتيب؟"
-                          aria-label="لماذا هذا الترتيب؟"
-                          aria-expanded={explained === s.key}
-                          onClick={() =>
-                            setExplained(explained === s.key ? "" : s.key)
-                          }
-                        >
-                          <Info size={15} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
-          ) : (
-            <p className="source-none" role="status">
-              لا مصدر يطابق بحثك أو اختياراتك.
-              <button
-                className="text-button"
-                onClick={() => {
-                  setSourceQuery("");
-                  setSourceChips([]);
-                }}
-              >
-                امسح البحث
-              </button>
-            </p>
-          )}
-        </>
-      ) : (
-        <Empty
-          icon={Puzzle}
-          title={
-            result?.providers ? "لا توجد مصادر مطابقة" : "أضف مصادر المشاهدة"
-          }
-        >
-          {result?.providers
-            ? "جرّب تغيير فلتر الجودة أو تحديث المصادر."
-            : "اربط حساب ستريميو أو أضف رابط إضافة تدعم مصادر التشغيل. Cinemeta يعرض معلومات الأعمال فقط."}
-        </Empty>
-      )}
-      {dropped.length > 0 && (
-        <div className="dropped-block">
-          <button
-            className="text-button"
-            onClick={() => setShowDropped(!showDropped)}
+                          {!isWeb && s.downloadable && (
+                            <button
+                              className="stream-download"
+                              title="تنزيل المصدر دون تشغيل"
+                              disabled={!!playing}
+                              onClick={async () => {
+                                const r = await act("offlineStart", {
+                                  key: s.key,
+                                  meta,
+                                  videoId,
+                                  profileId: state.profiles?.active,
+                                });
+                                if (r)
+                                  notice(
+                                    "بدأ التنزيل؛ يمكنك إغلاق المشغل ومتابعته من التنزيلات.",
+                                  );
+                              }}
+                            >
+                              <Download size={18} />
+                            </button>
+                          )}
+                          <button
+                            className="stream-why-toggle"
+                            title="لماذا هذا الترتيب؟"
+                            aria-label="لماذا هذا الترتيب؟"
+                            aria-expanded={explained === s.key}
+                            onClick={() =>
+                              setExplained(explained === s.key ? "" : s.key)
+                            }
+                          >
+                            <Info size={15} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <p className="source-none" role="status">
+                لا مصدر يطابق بحثك أو اختياراتك.
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setSourceQuery("");
+                    setSourceChips([]);
+                  }}
+                >
+                  امسح البحث
+                </button>
+              </p>
+            )}
+          </>
+        ) : (
+          <Empty
+            icon={Puzzle}
+            title={
+              result?.providers ? "لا توجد مصادر مطابقة" : "أضف مصادر المشاهدة"
+            }
           >
-            <EyeOff size={15} /> {showDropped ? "إخفاء" : "عرض"}{" "}
-            {dropped.length} مصدراً استبعده المحرّك
+            {result?.providers
+              ? "جرّب تغيير فلتر الجودة أو تحديث المصادر."
+              : "اربط حساب ستريميو أو أضف رابط إضافة تدعم مصادر التشغيل. Cinemeta يعرض معلومات الأعمال فقط."}
+          </Empty>
+        )}
+        {dropped.length > 0 && (
+          <div className="dropped-block">
+            <button
+              className="text-button"
+              onClick={() => setShowDropped(!showDropped)}
+            >
+              <EyeOff size={15} /> {showDropped ? "إخفاء" : "عرض"}{" "}
+              {dropped.length} مصدراً استبعده المحرّك
+            </button>
+            {showDropped && (
+              <ul className="dropped-list">
+                {dropped.slice(0, 40).map((entry, index) => (
+                  <li key={index}>
+                    <b dir="auto">{entry.name}</b>
+                    <span>{entry.reasons.map((r) => r.label).join("، ")}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {arrived > 0 && (
+          <button className="secondary sources-arrived" onClick={addArrived}>
+            <RefreshCw size={15} />
+            وصل {arabicCount(arrived, SOURCES)} من إضافات تأخرت · أضفها للقائمة
           </button>
-          {showDropped && (
-            <ul className="dropped-list">
-              {dropped.slice(0, 40).map((entry, index) => (
-                <li key={index}>
-                  <b dir="auto">{entry.name}</b>
-                  <span>{entry.reasons.map((r) => r.label).join("، ")}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-      {arrived > 0 && (
-        <button className="secondary sources-arrived" onClick={addArrived}>
-          <RefreshCw size={15} />
-          وصل {arabicCount(arrived, SOURCES)} من إضافات تأخرت · أضفها للقائمة
-        </button>
-      )}
-      {result?.late?.length > 0 && (
-        <p className="sources-late" role="status">
-          ما زالت تبحث: {result.late.join("، ")}. نعرض اللي وصل، ونضيف مصادرها
-          إذا ردّت.
-        </p>
-      )}
-      {result?.failures.length > 0 && (
-        <p className="inline-warning">لم تستجب: {result.failures.join("، ")}</p>
-      )}
+        )}
+        {result?.late?.length > 0 && (
+          <p className="sources-late" role="status">
+            ما زالت تبحث: {result.late.join("، ")}. نعرض اللي وصل، ونضيف مصادرها
+            إذا ردّت.
+          </p>
+        )}
+        {result?.failures.length > 0 && (
+          <p className="inline-warning">
+            لم تستجب: {result.failures.join("، ")}
+          </p>
+        )}
+      </div>
     </section>
   );
   return (

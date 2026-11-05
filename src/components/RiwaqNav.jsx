@@ -17,6 +17,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
+import { lockScroll } from "../lib/scroll-lock.js";
 export default function RiwaqNav({
   view,
   folderFrom,
@@ -51,8 +52,10 @@ export default function RiwaqNav({
     return () => media.removeEventListener("change", change);
   }, []);
   useEffect(() => {
-    if (open && narrow) dialog.current?.showModal();
-    else dialog.current?.close();
+    if (!(open && narrow)) return void dialog.current?.close();
+    dialog.current?.showModal();
+    // The page behind the drawer stays still (issue #135).
+    return lockScroll();
   }, [open, narrow]);
   const close = () => {
     setOpen(false);

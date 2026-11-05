@@ -46,6 +46,7 @@ import {
   Music2,
 } from "lucide-react";
 import { api, call } from "./lib/api.js";
+import { lockScroll } from "./lib/scroll-lock.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
 import {
   IconButton,
@@ -640,11 +641,8 @@ export default function App() {
   const layers = `${titleActive ? "title" : ""}|${browseOpen ? "browse" : ""}`;
   useLayoutEffect(() => {
     if (layers === "|") return;
-    const root = document.documentElement;
-    const overflow = root.style.overflow;
-    const gutter = root.style.scrollbarGutter;
-    root.style.scrollbarGutter = "stable";
-    root.style.overflow = "hidden";
+    // The same lock dialogs take (src/lib/scroll-lock.js, issue #135).
+    const release = lockScroll();
     const top = titleActive ? "title-page" : "browse-page";
     const background = [...document.querySelectorAll(".content > *")].filter(
       (el) => !el.classList.contains(top),
@@ -652,8 +650,7 @@ export default function App() {
     const inert = background.map((el) => [el, el.inert]);
     for (const [el] of inert) el.inert = true;
     return () => {
-      root.style.overflow = overflow;
-      root.style.scrollbarGutter = gutter;
+      release();
       for (const [el, was] of inert) el.inert = was;
     };
   }, [layers]);
