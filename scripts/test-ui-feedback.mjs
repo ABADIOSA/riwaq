@@ -261,7 +261,14 @@ await check(
   "#137 no hand over the gaps between cards; grabbing only while dragging",
   async () => {
     await restart({ uiLanguage: "en" });
-    const row = page.locator(".rail .scroll-row").first();
+    // A row of posters (some rows hold chips or tabs).
+    const index = await page
+      .locator(".scroll-row")
+      .evaluateAll((rows) =>
+        rows.findIndex((r) => r.querySelectorAll(".poster-card").length > 2),
+      );
+    assert.ok(index >= 0, "a row of posters");
+    const row = page.locator(".scroll-row").nth(index);
     await row.scrollIntoViewIfNeeded();
     const cursors = await row.evaluate((el) => {
       const cards = el.querySelectorAll(".poster-card");
