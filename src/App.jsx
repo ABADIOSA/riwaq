@@ -1051,7 +1051,7 @@ export default function App() {
         style={{
           ...themeVariables(appearance),
         }}
-        className={`app experience-riwaq ${state.settings.sidebarCollapsed ? "sidebar-collapsed" : ""} ${themeClasses(appearance)} theme-${state.settings.accent} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
+        className={`app experience-riwaq ${state.settings.sidebarCollapsed ? "sidebar-collapsed" : ""} ${state.settings.wheelOpen ? "wheel-open" : ""} ${themeClasses(appearance)} theme-${state.settings.accent} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
         onMouseDown={(e) => {
           if (
             !state.settings.dragAnywhere ||
@@ -1111,6 +1111,10 @@ export default function App() {
             })
           }
           onDownloads={() => setOfflineOpen(true)}
+          wheelOpen={!!state.settings.wheelOpen}
+          onWheelToggle={() =>
+            update("settings", { wheelOpen: !state.settings.wheelOpen })
+          }
         />
         <main
           className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""} ${browseOpen ? "browse-open" : ""}`}

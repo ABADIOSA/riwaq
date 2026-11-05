@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { lockScroll } from "../lib/scroll-lock.js";
+import RiwaqWheel from "./RiwaqWheel.jsx";
 export default function RiwaqNav({
   view,
   folderFrom,
@@ -35,6 +36,9 @@ export default function RiwaqNav({
   collapsed,
   onCollapse,
   onDownloads,
+  // The wheel (the default navigation): open shows the names.
+  wheelOpen = false,
+  onWheelToggle,
 }) {
   const [narrow, setNarrow] = useState(
     () => matchMedia("(max-width: 760px)").matches,
@@ -89,96 +93,206 @@ export default function RiwaqNav({
       </button>
     );
   };
-  const sidebar = (
-    <aside
-      className={`riwaq-sidebar ${collapsed && !narrow ? "is-collapsed" : ""}`}
-      aria-label="مساحات رِواق"
-    >
-      <nav
-        className="riwaq-destinations"
-        id={narrow ? "riwaq-drawer-nav" : "riwaq-sidebar-nav"}
-        aria-label="التنقل الرئيسي"
+  const wheel = appearance.navStyle !== "rail";
+  const sidebar = wheel ? wheelSidebar() : railSidebar();
+  function wheelSidebar() {
+    const open = narrow || wheelOpen;
+    const rtl =
+      typeof document !== "undefined" && document.documentElement.dir === "rtl";
+    const destinations = [
+      [Home, "home", "الرئيسية"],
+      [Compass, "discover", "اكتشف"],
+      [Library, "library", "مكتبتي"],
+      [Folders, "collections", "المجموعات"],
+      [Download, "downloads", "التنزيلات"],
+      [Puzzle, "addons", "الإضافات"],
+      [Music2, "music", "موسيقى"],
+      [Tv, "live", "بث مباشر"],
+      [Settings, "settings", "الإعدادات"],
+    ]
+      .filter(
+        ([, id]) =>
+          !appearance.navHidden.includes(id) ||
+          id === view ||
+          ["downloads", "settings"].includes(id),
+      )
+      .map(([Icon, id, label]) => {
+        const gate = ["collections", "music"].includes(id) ? "library" : id;
+        return {
+          id,
+          label,
+          Icon,
+          current: view === id || (view === "folder" && folderFrom === id),
+          locked: isLocked(gate),
+          onClick:
+            id === "downloads" ? () => action(onDownloads) : () => go(id),
+        };
+      });
+    const now = destinations.find((d) => d.current);
+    const toggleLabel = narrow
+      ? "إغلاق التنقل"
+      : open
+        ? "تصغير العجلة"
+        : "إظهار الأسماء";
+    return (
+      <aside
+        className={`riwaq-sidebar riwaq-wheel ${open ? "is-open" : "is-compact"}`}
+        aria-label="مساحات رِواق"
       >
-        {[
-          [Home, "home", "الرئيسية"],
-          [Compass, "discover", "اكتشف"],
-          [Library, "library", "مكتبتي"],
-          [Folders, "collections", "المجموعات"],
-          [Download, "downloads", "التنزيلات"],
-          [Puzzle, "addons", "الإضافات"],
-        ]
-          .filter(
-            ([, id]) =>
-              !appearance.navHidden.includes(id) ||
-              id === view ||
-              id === "downloads",
-          )
-          .map(([Icon, id, label]) =>
-            item(
-              Icon,
-              id,
-              label,
-              id === "downloads" ? () => action(onDownloads) : undefined,
-            ),
+        {!open && (
+          <span className="wheel-now" aria-hidden="true">
+            {now?.label || ""}
+          </span>
+        )}
+        <RiwaqWheel
+          items={destinations}
+          open={open}
+          rtl={rtl}
+          navId={narrow ? "riwaq-drawer-nav" : "riwaq-sidebar-nav"}
+        />
+        <div className="riwaq-sidebar-bottom wheel-hub">
+          {!quiet && (
+            <>
+              {item(Users, "profiles", profile?.name || "المشاهد", () =>
+                action(onProfiles),
+              )}
+              {item(
+                LogIn,
+                "account",
+                user ? "حساب ستريميو" : "ربط ستريميو",
+                () => action(onAccount),
+              )}
+            </>
           )}
-        <div className="riwaq-nav-extra">
+          <button
+            className="riwaq-destination riwaq-collapse"
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            aria-expanded={narrow ? true : open}
+            aria-controls={narrow ? "riwaq-drawer-nav" : "riwaq-sidebar-nav"}
+            onClick={narrow ? close : onWheelToggle}
+          >
+            {narrow ? (
+              <X size={20} />
+            ) : open ? (
+              <PanelLeftClose size={20} />
+            ) : (
+              <PanelLeftOpen size={20} />
+            )}
+            <span>{toggleLabel}</span>
+          </button>
+          {updateAvailable && (
+            <span className="riwaq-sidebar-update" role="status">
+              يتوفر إصدار جديد
+            </span>
+          )}
+        </div>
+      </aside>
+    );
+  }
+  function railSidebar() {
+    return (
+      <aside
+        className={`riwaq-sidebar ${collapsed && !narrow ? "is-collapsed" : ""}`}
+        aria-label="مساحات رِواق"
+      >
+        <nav
+          className="riwaq-destinations"
+          id={narrow ? "riwaq-drawer-nav" : "riwaq-sidebar-nav"}
+          aria-label="التنقل الرئيسي"
+        >
           {[
-            [Music2, "music", "موسيقى"],
-            [Tv, "live", "بث مباشر"],
+            [Home, "home", "الرئيسية"],
+            [Compass, "discover", "اكتشف"],
+            [Library, "library", "مكتبتي"],
+            [Folders, "collections", "المجموعات"],
+            [Download, "downloads", "التنزيلات"],
+            [Puzzle, "addons", "الإضافات"],
           ]
             .filter(
-              ([, id]) => !appearance.navHidden.includes(id) || view === id,
+              ([, id]) =>
+                !appearance.navHidden.includes(id) ||
+                id === view ||
+                id === "downloads",
             )
-            .map(([Icon, id, label]) => item(Icon, id, label))}
-        </div>
-      </nav>
-      <div className="riwaq-sidebar-bottom">
-        {!quiet && (
-          <>
-            {item(Users, "profiles", profile?.name || "المشاهد", () =>
-              action(onProfiles),
+            .map(([Icon, id, label]) =>
+              item(
+                Icon,
+                id,
+                label,
+                id === "downloads" ? () => action(onDownloads) : undefined,
+              ),
             )}
-            {item(LogIn, "account", user ? "حساب ستريميو" : "ربط ستريميو", () =>
-              action(onAccount),
-            )}
-          </>
-        )}
-        <button
-          className="riwaq-destination riwaq-collapse"
-          aria-label={
-            narrow ? "إغلاق التنقل" : collapsed ? "توسيع القائمة" : "طي القائمة"
-          }
-          title={
-            narrow ? "إغلاق التنقل" : collapsed ? "توسيع القائمة" : "طي القائمة"
-          }
-          aria-expanded={narrow ? open : !collapsed}
-          aria-controls={narrow ? "riwaq-drawer-nav" : "riwaq-sidebar-nav"}
-          onClick={narrow ? close : onCollapse}
-        >
-          {narrow ? (
-            <X size={20} />
-          ) : collapsed ? (
-            <PanelLeftOpen size={20} />
-          ) : (
-            <PanelLeftClose size={20} />
+          <div className="riwaq-nav-extra">
+            {[
+              [Music2, "music", "موسيقى"],
+              [Tv, "live", "بث مباشر"],
+            ]
+              .filter(
+                ([, id]) => !appearance.navHidden.includes(id) || view === id,
+              )
+              .map(([Icon, id, label]) => item(Icon, id, label))}
+          </div>
+        </nav>
+        <div className="riwaq-sidebar-bottom">
+          {!quiet && (
+            <>
+              {item(Users, "profiles", profile?.name || "المشاهد", () =>
+                action(onProfiles),
+              )}
+              {item(
+                LogIn,
+                "account",
+                user ? "حساب ستريميو" : "ربط ستريميو",
+                () => action(onAccount),
+              )}
+            </>
           )}
-          <span>
-            {narrow
-              ? "إغلاق التنقل"
-              : collapsed
-                ? "توسيع القائمة"
-                : "طي القائمة"}
-          </span>
-        </button>
-        {item(Settings, "settings", "الإعدادات")}
-        {updateAvailable && (
-          <span className="riwaq-sidebar-update" role="status">
-            يتوفر إصدار جديد
-          </span>
-        )}
-      </div>
-    </aside>
-  );
+          <button
+            className="riwaq-destination riwaq-collapse"
+            aria-label={
+              narrow
+                ? "إغلاق التنقل"
+                : collapsed
+                  ? "توسيع القائمة"
+                  : "طي القائمة"
+            }
+            title={
+              narrow
+                ? "إغلاق التنقل"
+                : collapsed
+                  ? "توسيع القائمة"
+                  : "طي القائمة"
+            }
+            aria-expanded={narrow ? open : !collapsed}
+            aria-controls={narrow ? "riwaq-drawer-nav" : "riwaq-sidebar-nav"}
+            onClick={narrow ? close : onCollapse}
+          >
+            {narrow ? (
+              <X size={20} />
+            ) : collapsed ? (
+              <PanelLeftOpen size={20} />
+            ) : (
+              <PanelLeftClose size={20} />
+            )}
+            <span>
+              {narrow
+                ? "إغلاق التنقل"
+                : collapsed
+                  ? "توسيع القائمة"
+                  : "طي القائمة"}
+            </span>
+          </button>
+          {item(Settings, "settings", "الإعدادات")}
+          {updateAvailable && (
+            <span className="riwaq-sidebar-update" role="status">
+              يتوفر إصدار جديد
+            </span>
+          )}
+        </div>
+      </aside>
+    );
+  }
   return (
     <>
       <header className="riwaq-masthead">

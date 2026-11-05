@@ -1,5 +1,5 @@
 import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
-import { cleanSavedThemes, safeAppearance } from "./appearance.mjs";
+import { adoptWheel, cleanSavedThemes, safeAppearance } from "./appearance.mjs";
 import { cleanAddonPriority, cleanStreamFilters } from "./stream-prefs.mjs";
 import {
   cleanBadgeArt,
@@ -63,6 +63,9 @@ export const DEFAULT_SETTINGS = {
   layout: "cinematic",
   interfaceStyle: "riwaq",
   sidebarCollapsed: false,
+  // The wheel shows its destinations' names (core/wheel.mjs); compact by
+  // default.
+  wheelOpen: false,
   showShowcase: false,
   sessionBudget: 90,
   sessionMood: "any",
@@ -488,6 +491,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "sessionExpanded",
     "showShowcase",
     "sidebarCollapsed",
+    "wheelOpen",
     "skipOnline",
     "simpleColor",
     "rtxUpscale",
@@ -703,7 +707,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
  */
 export function retireLineless(settings, legacy = settings) {
   if (!settings || typeof settings !== "object") return settings;
-  const next = { ...settings };
+  // Loading old settings also moves their appearance to the wheel.
+  const next = adoptWheel({ ...settings });
   if (legacy?.linelessVideo === true && next.hdrMode === "window")
     next.hdrMode = "tonemap";
   delete next.linelessVideo;

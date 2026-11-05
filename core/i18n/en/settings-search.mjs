@@ -45,7 +45,7 @@ export default {
   logo: "logo icon taskbar image",
   type: "type font fonts typeface",
   interface:
-    "interface size corners density layout menu motion animation screensaver",
+    "interface size corners density layout menu motion animation screensaver wheel navigation sidebar glass transparency effects",
   ambience:
     "ambience background wallpaper image dim glow title theme colors theme song music sound",
   window: "window title bar buttons frame blur drag",
