@@ -21,3 +21,18 @@ export class PlaybackRequest {
     );
   }
 }
+
+/**
+ * What a play IPC answers once the player was asked to start: the player's
+ * state, or `{ cancelled: true }` when Stop or a newer play took over while
+ * MPV was still starting (an error marked `cancelled`, or this request no
+ * longer owning playback). Any other failure is a real one and is thrown.
+ */
+export async function startOutcome(started, owns = () => true) {
+  try {
+    return await started;
+  } catch (error) {
+    if (error?.cancelled || !owns()) return { cancelled: true };
+    throw error;
+  }
+}

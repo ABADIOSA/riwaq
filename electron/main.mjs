@@ -31,7 +31,7 @@ import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { Client, fetchText } from "../core/client.mjs";
-import { PlaybackRequest } from "../core/playback-request.mjs";
+import { PlaybackRequest, startOutcome } from "../core/playback-request.mjs";
 import { OfflineLibrary } from "./offline.mjs";
 import { downloadCapability } from "../core/offline-media.mjs";
 import {
@@ -1218,15 +1218,17 @@ function mpvLogFile() {
 function playLocalFile(path) {
   playbackRequest.cancel();
   nowPlaying = null;
-  return player.start({
-    executable: executable(),
-    logFile: mpvLogFile(),
-    settings: client.state.settings,
-    url: path,
-    local: true,
-    meta: { id: path, type: "local", name: basename(path) },
-    videoId: path,
-  });
+  return startOutcome(
+    player.start({
+      executable: executable(),
+      logFile: mpvLogFile(),
+      settings: client.state.settings,
+      url: path,
+      local: true,
+      meta: { id: path, type: "local", name: basename(path) },
+      videoId: path,
+    }),
+  );
 }
 /**
  * Every navigation away from the app page is refused. A file dropped on the
@@ -1522,7 +1524,9 @@ async function play(
       torrentWatch = null;
     });
   }
-  return started;
+  // Stop or another play while MPV was starting: nothing started, which is
+  // not an error (PR #128 review).
+  return startOutcome(started, () => playbackRequest.owns(request));
 }
 async function playChannel({ key, start = 0, stop = 0 }) {
   const request = playbackRequest.begin();
@@ -1531,7 +1535,7 @@ async function playChannel({ key, start = 0, stop = 0 }) {
   const channel = client.live.resolve(key, { start, stop });
   await player.stop();
   if (!playbackRequest.owns(request)) return { cancelled: true };
-  return player.start({
+  const started = player.start({
     executable: executable(),
     settings: client.state.settings,
     url: channel.url,
@@ -1548,6 +1552,7 @@ async function playChannel({ key, start = 0, stop = 0 }) {
     screenshotDir: screenshotDir(),
     logFile: mpvLogFile(),
   });
+  return startOutcome(started, () => playbackRequest.owns(request));
 }
 /**
  * After a file loads: the series' remembered audio and subtitle choices
@@ -2392,18 +2397,22 @@ const methods = {
       offline.playing = item.id;
       const saved = client.state.progress[`${item.meta.type}:${item.videoId}`];
       try {
-        return await player.start({
-          executable: executable(),
-          settings: client.state.settings,
-          url: path,
-          local: true,
-          meta: item.meta,
-          videoId: item.videoId,
-          start: saved && !saved.completed ? saved.position : 0,
-          inputConf: hotkeyFile(),
-          screenshotDir: screenshotDir(),
-          logFile: mpvLogFile(),
-        });
+        const result = await startOutcome(
+          player.start({
+            executable: executable(),
+            settings: client.state.settings,
+            url: path,
+            local: true,
+            meta: item.meta,
+            videoId: item.videoId,
+            start: saved && !saved.completed ? saved.position : 0,
+            inputConf: hotkeyFile(),
+            screenshotDir: screenshotDir(),
+            logFile: mpvLogFile(),
+          }),
+        );
+        if (result?.cancelled) offline.playing = "";
+        return result;
       } catch (error) {
         offline.playing = "";
         throw error;
