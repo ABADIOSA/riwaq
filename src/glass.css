@@ -270,25 +270,17 @@
 
 /* ---- Moving between pages ------------------------------------------------ */
 
-/* A page arrives with a short fade (and a 6 px rise for page bodies); the
-   title page and See all only fade, since they hold fixed layers. Nothing
-   waits for it: content is there from the first frame, and reduced motion
-   makes it instant (tokens.css). */
+/* A page arrives with a short fade and a 6 px rise. Nothing waits for it:
+   content is there from the first frame, and reduced motion makes it
+   instant (tokens.css). The title page and See all, full-window fixed
+   layers, open without one, so no window-sized layer is faded on every
+   open. */
 @keyframes riwaq-page-in {
   from {
     opacity: 0;
     transform: translateY(6px);
   }
 }
-@keyframes riwaq-layer-in {
-  from {
-    opacity: 0;
-  }
-}
 .app .content > .page-body {
   animation: riwaq-page-in var(--motion-page) var(--ease-out);
-}
-.app .title-page,
-.app .browse-page {
-  animation: riwaq-layer-in var(--motion-page) var(--ease-out);
 }

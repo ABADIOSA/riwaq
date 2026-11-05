@@ -67,14 +67,17 @@
 }
 .wheel-ticks {
   transform-box: view-box;
+}
+.wheel-stage.is-ready .wheel-ticks {
   transition: transform var(--motion-wheel) var(--ease-turn);
 }
-.wheel-ticks line {
+.wheel-ticks path {
+  fill: none;
   stroke: color-mix(in srgb, var(--text) 16%, transparent);
   stroke-width: 1.2;
   stroke-linecap: round;
 }
-.wheel-ticks line.major {
+.wheel-ticks path.major {
   stroke: color-mix(in srgb, var(--accent) 55%, transparent);
   stroke-width: 1.6;
 }
@@ -107,6 +110,8 @@
     0 0 0 5px color-mix(in srgb, var(--accent) 12%, transparent),
     0 10px 24px #0005,
     inset 0 1px 0 #ffffff40;
+}
+.wheel-stage.is-ready .wheel-lens {
   transition:
     transform var(--motion-wheel) var(--ease-turn),
     opacity var(--motion-page) ease;

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { lockScroll } from "../lib/scroll-lock.js";
 import RiwaqWheel from "./RiwaqWheel.jsx";
+import { language } from "../../core/i18n.mjs";
 export default function RiwaqNav({
   view,
   folderFrom,
@@ -97,8 +98,9 @@ export default function RiwaqNav({
   const sidebar = wheel ? wheelSidebar() : railSidebar();
   function wheelSidebar() {
     const open = narrow || wheelOpen;
-    const rtl =
-      typeof document !== "undefined" && document.documentElement.dir === "rtl";
+    // The interface language is set during render (useInterfaceLanguage);
+    // the document's dir follows in an effect, a frame later.
+    const rtl = language() !== "en";
     const destinations = [
       [Home, "home", "الرئيسية"],
       [Compass, "discover", "اكتشف"],
