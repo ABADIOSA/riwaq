@@ -15,36 +15,96 @@ import { offlineEpisode } from "../core/offline-media.mjs";
 const ID = /^[a-f0-9]{32}$/;
 const MAX_BYTES = 500 * 1024 ** 3;
 const POSTER_BYTES = 128 * 1024;
+const ARTWORK_TRIES = 3;
+const ARTWORK_RETRY_MS = 30000;
 const IMAGE_INPUT_BYTES = 2 * 1024 ** 2;
-async function posterBytes(url, request, signal) {
+// Some image hosts pick a format from Accept; JPEG and PNG are the ones
+// Electron's nativeImage decodes (WebP is accepted only as a last resort).
+const IMAGE_ACCEPT = "image/jpeg,image/png;q=0.9,image/webp;q=0.5,*/*;q=0.1";
+const IMAGE_TYPE = /^image\/(jpeg|jpg|pjpeg|png|webp)(;|$)/i;
+// Object stores often label images generically; the bytes then decide.
+const GENERIC_TYPE = /^(application|binary)\/octet-stream(;|$)/i;
+/** The picture format by its first bytes: jpeg, png, webp or "". */
+export function imageKind(bytes) {
+  if (!bytes || bytes.length < 4) return "";
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff)
+    return "jpeg";
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  )
+    return "png";
+  if (
+    bytes.length >= 12 &&
+    bytes.subarray(0, 4).toString("latin1") === "RIFF" &&
+    bytes.subarray(8, 12).toString("latin1") === "WEBP"
+  )
+    return "webp";
+  return "";
+}
+/**
+ * Where a download's poster may come from (issue #136), best first: the
+ * title's own poster, metahub's by IMDb ID (the one Cinemeta uses; JPEG),
+ * then its backdrop. HTTPS only: an http: address is asked over HTTPS
+ * (never the other way), and addresses with credentials are dropped.
+ */
+export function posterCandidates(meta = {}) {
+  const list = [];
+  const add = (value) => {
+    if (typeof value !== "string" || value.length >= 4096) return;
+    try {
+      const url = new URL(value);
+      if (url.protocol === "http:") url.protocol = "https:";
+      if (url.protocol !== "https:" || url.username || url.password) return;
+      if (!list.includes(url.href)) list.push(url.href);
+    } catch {}
+  };
+  add(meta.poster);
+  const imdb = /^tt\d{5,12}$/.test(meta.id || "") ? meta.id : "";
+  if (imdb) add(`https://images.metahub.space/poster/medium/${imdb}/img`);
+  add(meta.background);
+  return list.slice(0, 3);
+}
+/**
+ * One image, HTTPS at every hop (three redirects at most), at most 2 MiB,
+ * and only JPEG, PNG or WebP bytes. `fail` gets a short reason without the
+ * address (for the diagnostic's error log).
+ */
+async function posterBytes(url, request, signal, fail = () => {}) {
   let target = new URL(url);
   for (let redirects = 0; redirects < 4; redirects++) {
     if (target.protocol !== "https:" || target.username || target.password)
-      return null;
+      return (fail("not https"), null);
     const response = await request(target.href, {
       signal,
       redirect: "manual",
       credentials: "omit",
+      headers: { accept: IMAGE_ACCEPT },
     });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const next = response.headers.get("location");
       await response.body?.cancel();
-      if (!next) return null;
+      if (!next) return (fail("redirect without location"), null);
       target = new URL(next, target);
       continue;
     }
-    if (
-      !response.ok ||
-      !/^image\/(jpeg|png|webp)(;|$)/i.test(
-        response.headers.get("content-type") || "",
-      ) ||
-      Number(response.headers.get("content-length")) > IMAGE_INPUT_BYTES
-    ) {
+    const type = response.headers.get("content-type") || "";
+    if (!response.ok) {
       await response.body?.cancel();
-      return null;
+      return (fail(`status ${response.status}`), null);
+    }
+    if (type && !IMAGE_TYPE.test(type) && !GENERIC_TYPE.test(type)) {
+      await response.body?.cancel();
+      return (fail(`type ${type.split(";")[0].slice(0, 40)}`), null);
+    }
+    if (Number(response.headers.get("content-length")) > IMAGE_INPUT_BYTES) {
+      await response.body?.cancel();
+      return (fail("too large"), null);
     }
     const reader = response.body?.getReader();
-    if (!reader) return null;
+    if (!reader) return (fail("empty"), null);
     let size = 0;
     const chunks = [];
     try {
@@ -52,15 +112,17 @@ async function posterBytes(url, request, signal) {
         const { value, done } = await reader.read();
         if (done) break;
         size += value.length;
-        if (size > IMAGE_INPUT_BYTES) return null;
+        if (size > IMAGE_INPUT_BYTES) return (fail("too large"), null);
         chunks.push(value);
       }
-      return Buffer.concat(chunks);
+      const bytes = Buffer.concat(chunks);
+      if (!imageKind(bytes)) return (fail("not an image"), null);
+      return bytes;
     } finally {
       await reader.cancel().catch(() => {});
     }
   }
-  return null;
+  return (fail("too many redirects"), null);
 }
 async function removeFile(path) {
   for (let attempt = 0; ; attempt++) {
@@ -253,6 +315,8 @@ export class OfflineLibrary {
       request = fetch,
       deleteFile = removeFile,
       thumbnail,
+      onArtworkError = () => {},
+      artworkRetryMs = ARTWORK_RETRY_MS,
     },
   ) {
     this.client = client;
@@ -261,9 +325,13 @@ export class OfflineLibrary {
     this.request = request;
     this.deleteFile = deleteFile;
     this.thumbnail = thumbnail;
+    this.onArtworkError = onArtworkError;
+    this.artworkRetryMs = artworkRetryMs;
     this.artworkQueue = Promise.resolve();
     this.artworkJobs = new Map();
-    this.artworkAttempted = new Set();
+    // id → { tries, at }: a failed poster is asked again a little later
+    // (ARTWORK_TRIES a session), never in a loop.
+    this.artworkAttempted = new Map();
     this.artworkAbort = new AbortController();
     this.removing = new Set();
     this.using = new Set();
@@ -342,31 +410,55 @@ export class OfflineLibrary {
     };
     const cached = await local();
     owned();
-    if (cached || !this.thumbnail || !item.meta.poster)
+    const candidates = posterCandidates(item.meta);
+    if (cached || !this.thumbnail || !candidates.length)
       return { image: cached };
-    if (!this.artworkJobs.has(id) && !this.artworkAttempted.has(id)) {
-      this.artworkAttempted.add(id);
+    const tried = this.artworkAttempted.get(id);
+    const due =
+      !tried ||
+      (tried.tries < ARTWORK_TRIES &&
+        Date.now() - tried.at >= this.artworkRetryMs);
+    if (!this.artworkJobs.has(id) && due) {
+      this.artworkAttempted.set(id, {
+        tries: (tried?.tries || 0) + 1,
+        at: Date.now(),
+      });
       const job = this.artworkQueue
         .catch(() => {})
         .then(async () => {
           let temp;
           try {
             owned();
-            const bytes = await posterBytes(
-              item.meta.poster,
-              this.request,
-              AbortSignal.any([generation.signal, AbortSignal.timeout(8000)]),
-            );
-            owned();
-            if (!bytes) return;
-            const jpeg = this.thumbnail(bytes);
-            if (
-              !Buffer.isBuffer(jpeg) ||
-              jpeg.length > POSTER_BYTES ||
-              jpeg[0] !== 255 ||
-              jpeg[1] !== 216
-            )
-              return;
+            let jpeg = null;
+            // The title's poster first; the next candidate only when one
+            // fails (refused, not a picture, or a format Electron cannot
+            // decode, such as WebP).
+            for (const url of candidates) {
+              let reason = "";
+              const bytes = await posterBytes(
+                url,
+                this.request,
+                AbortSignal.any([generation.signal, AbortSignal.timeout(8000)]),
+                (why) => (reason = why),
+              ).catch((error) => {
+                reason = error?.name === "AbortError" ? "timeout" : "network";
+                return null;
+              });
+              owned();
+              const made = bytes ? this.thumbnail(bytes) : null;
+              if (
+                Buffer.isBuffer(made) &&
+                made.length <= POSTER_BYTES &&
+                made[0] === 255 &&
+                made[1] === 216
+              ) {
+                jpeg = made;
+                break;
+              }
+              if (bytes) reason = `decode ${imageKind(bytes)}`;
+              this.onArtworkError(reason || "unknown");
+            }
+            if (!jpeg) return;
             await mkdir(this.root, { recursive: true });
             owned();
             temp = `${this.posterPath(id)}.tmp`;
@@ -457,6 +549,9 @@ export class OfflineLibrary {
       else record.status = previousStatus;
       throw error;
     }
+    // The poster is saved while the title is still online (issue #136), so
+    // its card shows it later, after a restart and without a network.
+    if (this.thumbnail) this.artwork(profile, record.id).catch(() => {});
     job.done = (async () => {
       let source;
       try {

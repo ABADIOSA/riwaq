@@ -2838,6 +2838,10 @@ app
       offline = new OfflineLibrary(client, {
         root: join(app.getPath("userData"), "offline"),
         resolveSource: offlineSource,
+        // Why a download's poster failed (a status, a type, "decode webp"),
+        // never its address: the diagnostic shows it (issue #136).
+        onArtworkError: (reason) =>
+          logError("offline-artwork", new Error(String(reason))),
         thumbnail: (bytes) => {
           const image = nativeImage.createFromBuffer(bytes);
           if (image.isEmpty()) return null;
