@@ -59,6 +59,32 @@ export async function nativeHudKey(app, vk, holdMs = 60, during) {
   }
   await delay(200);
 }
+/**
+ * Rests the real pointer over a control without clicking, e.g. the volume
+ * button, whose slider stays folded until hovered (#140).
+ */
+export async function nativeHudHover(app, hud, locator, ratio = 0.5) {
+  const box = await locator.boundingBox();
+  assert.ok(box, "the control has a visible rectangle");
+  const target = await app.evaluate(
+    ({ BrowserWindow, screen }, point) => {
+      const w = BrowserWindow.getAllWindows().find((w) =>
+        w.webContents.getURL().endsWith("#hud"),
+      );
+      const bounds = w.getContentBounds();
+      const scale = w.webContents.getZoomFactor();
+      return screen.dipToScreenPoint({
+        x: Math.round(bounds.x + point.x * scale),
+        y: Math.round(bounds.y + point.y * scale),
+      });
+    },
+    { x: box.x + box.width * ratio, y: box.y + box.height / 2 },
+  );
+  cursor(target.x + 3, target.y);
+  await delay(30);
+  cursor(target.x, target.y);
+  await delay(350);
+}
 export async function nativeHudClick(app, hud, locator, ratio = 0.5) {
   await app.evaluate(({ BrowserWindow }) => {
     const w = BrowserWindow.getAllWindows().find(
