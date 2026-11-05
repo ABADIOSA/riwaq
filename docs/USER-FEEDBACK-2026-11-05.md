@@ -69,6 +69,17 @@ Inspired by [Apple's Materials guidance](https://developer.apple.com/design/huma
 
 Measured contrast from screenshots (pixels behind the text, not tokens): primary button 10.1:1 dark, 4.9:1 light; the open wheel's current name 16.0:1 dark, 17.8:1 light (`.cache/ui-feedback/contrast-*.json`). Arbitrary custom palettes and wallpapers are not certified.
 
+## Screenshots
+
+Same local fixture, 1440×900, dark, main's build (before) and this branch's (after), in `docs/user-feedback-2026-11-05/`: Home in Arabic and English (the wheel, the centred search, the gutters), Addons (#132), the sources window (#134), Settings entered from the wheel (#133), and the HUD over a stub bridge (#139/#140). After only: the open wheel in English, the narrow drawer in Arabic at 390 px, glass in light mode, a long dialog (#134), and the HUD in Arabic with the volume unfolded. Fixture artwork is synthetic.
+
 ## Verification on this branch
 
-See VERIFICATION.md for the commands, counts and limits.
+See VERIFICATION.md (2026-11-05) for the commands, counts, timings and limits. Required acceptance not run here, for the reviewer on Windows:
+
+1. `node scripts/test-player-hud.mjs` (embedded and separate windows, SendInput): the bar's order, the folded volume, chapter strip clicks, Stop, F8; that `↑`/`↓` show no MPV OSD bar.
+2. #138 on NTFS: play three torrents in a row with "delete after viewing"; compare `torrent-cache` size on disk (Explorer's "Size on disk" or `fsutil sparse queryflag`) after each close, and with the app open after 10 s; a crash leftover swept at the next title.
+3. #131: right-click in the search, the addon link field and a settings field: Cut/Copy/Paste/Delete/Select all in Arabic and English; a password field offers no Copy.
+4. #136: download a title whose addon gives a WebP or http poster; the card shows a poster during and after the download, after a restart and offline; the diagnostic's error log names a failure if one happens.
+5. `npm run package` with publishing disabled, `node scripts/test-packaged.mjs release/Riwaq-0.54.0-win-x64.exe --offline --stall-layout`, check MPV and the new assets are present and Admin is absent.
+6. `node scripts/test-session-ui.mjs` and `node scripts/test-review083-native.mjs` (updated for the wheel, not run here).
