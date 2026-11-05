@@ -146,8 +146,12 @@ try {
   };
 
   await wake();
+  // The slider is folded until the pointer rests on the volume (#140).
+  await page.hover(".hud-stage .volume-button");
+  await page.waitForTimeout(250);
   const slider = page.locator(".hud-stage .volume-control");
   const box = await slider.boundingBox();
+  assert.ok(box.width > 40, "the slider unfolds on hover");
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   assert.equal(
     await page.evaluate(() => document.activeElement.role),

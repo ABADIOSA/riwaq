@@ -7,6 +7,7 @@ import "./studio.css";
 import "./library.css";
 import "./appearance.css";
 import "./hud.css";
+import "./player-bar.css";
 import "./title.css";
 import "./identity.css";
 import "./collections.css";

@@ -5,7 +5,6 @@ import {
   Maximize,
   Minimize2,
   X,
-  Volume2,
   RotateCcw,
   RotateCw,
   Subtitles,
@@ -23,15 +22,21 @@ import {
 import { IconButton } from "./UI.jsx";
 import PlayerDock from "./PlayerDock.jsx";
 import PlaybackChoices from "./PlaybackChoices.jsx";
-import VolumeSlider from "./VolumeSlider.jsx";
+import {
+  ChapterNow,
+  ChapterStrip,
+  ChapterTicks,
+  EndsAt,
+  TimeCounter,
+  VolumeControl,
+  useChapters,
+} from "./PlayerBar.jsx";
 import PlayerMenu from "./PlayerMenu.jsx";
-import { clock } from "../lib/helpers.js";
 import { call } from "../lib/api.js";
 import { seekAmount, hudKey } from "../../core/hotkeys.mjs";
 import { useSpaceHold } from "../lib/use-space-hold.js";
 import { surfaceReporter } from "../../core/surface.mjs";
 import { startLine } from "../../core/torrent-engine.mjs";
-import { loc } from "../lib/format.js";
 
 export default function PlayerView({
   player,
@@ -61,6 +66,7 @@ export default function PlayerView({
     hudMode = !!player.overlay && !mini,
     command = (action, value) => act("playerCommand", { action, value });
   const series = player.mediaType === "series";
+  const chapters = useChapters(player);
   const space = useSpaceHold({
     player,
     settings: state.settings,
@@ -269,7 +275,11 @@ export default function PlayerView({
       )}
       <div className="theater-controls">
         <div className="seek-line" dir="ltr">
-          <span>{player.live ? "مباشر" : clock(player.position)}</span>
+          {player.live && (
+            <span className="theater-live">
+              <Radio size={14} /> مباشر
+            </span>
+          )}
           <span className="seek-track">
             <input
               type="range"
@@ -281,6 +291,7 @@ export default function PlayerView({
               value={Math.min(player.position || 0, player.duration || 1)}
               onChange={(e) => command("seek", Number(e.target.value))}
             />
+            <ChapterTicks marks={chapters} duration={player.duration} />
             {player.duration > 0 &&
               (player.segments || []).map((segment, index) => (
                 <i
@@ -302,26 +313,15 @@ export default function PlayerView({
               />
             )}
           </span>
-          <span>
-            {player.live ? <Radio size={14} /> : clock(player.duration)}
-          </span>
-          {!player.live && player.duration > 0 && (
-            <small className="ends-at" dir="rtl">
-              ينتهي{" "}
-              {new Intl.DateTimeFormat(loc("ar-SA"), {
-                hour: "numeric",
-                minute: "2-digit",
-                calendar: "gregory",
-                numberingSystem: "latn",
-              }).format(
-                Date.now() +
-                  ((player.duration - (player.position || 0)) /
-                    (player.speed || 1)) *
-                    1000,
-              )}
-            </small>
-          )}
         </div>
+        {!mini && (
+          <ChapterStrip
+            marks={chapters}
+            position={player.position}
+            duration={player.duration}
+            onSeek={(at) => command("seek", at)}
+          />
+        )}
         <div className="theater-actions">
           <div className="button-row">
             <IconButton
@@ -366,14 +366,6 @@ export default function PlayerView({
                 >
                   <RotateCw size={20} />
                 </IconButton>
-                <Volume2 size={19} />
-                <VolumeSlider
-                  volume={player.volume || 0}
-                  max={player.volumeMax || 150}
-                  muted={!!player.muted}
-                  onChange={(value) => command("volume", value)}
-                />
-                <small>{Math.round(player.volume || 0)}%</small>
               </>
             )}
             {!mini && series && (
@@ -381,8 +373,22 @@ export default function PlayerView({
                 <SkipForward size={19} />
               </IconButton>
             )}
+            {!mini && (
+              <VolumeControl
+                volume={player.volume || 0}
+                max={player.volumeMax || 150}
+                muted={!!player.muted}
+                onMute={() => command("mute")}
+                onChange={(value) => command("volume", value)}
+              />
+            )}
+            <TimeCounter player={player} />
+            {!mini && (
+              <ChapterNow marks={chapters} position={player.position} />
+            )}
           </div>
           <div className="button-row">
+            {!mini && <EndsAt player={player} />}
             {!mini && (
               <>
                 <IconButton
