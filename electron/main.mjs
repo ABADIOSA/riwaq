@@ -15,6 +15,7 @@ import {
   utilityProcess,
   nativeTheme,
 } from "electron";
+import { attachTextMenu } from "./text-menu.mjs";
 import {
   readFileSync,
   writeFileSync,
@@ -3287,6 +3288,8 @@ app
       window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
       window.on("close", () => playbackRequest.cancel());
       window.webContents.on("will-navigate", onDropNavigate);
+      // Cut, copy, paste, delete and select all in text fields (#131).
+      attachTextMenu(window.webContents, { t, beforeShow: syncLanguage });
       session.defaultSession.setPermissionRequestHandler(
         (_contents, _permission, callback) => callback(false),
       );

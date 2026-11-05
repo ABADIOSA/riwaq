@@ -777,9 +777,9 @@ body:has(.theater:not(.mini-theater)) {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
-.scroll-row {
-  cursor: grab;
-}
+/* A row shows no hand of its own (issue #137): over a card the card's
+   pointer shows, over the gap between cards the normal arrow, as in poster
+   grids. "grabbing" appears only while a drag is really moving the row. */
 .scroll-row.is-dragging {
   cursor: grabbing;
   scroll-snap-type: none !important;

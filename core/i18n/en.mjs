@@ -25,6 +25,7 @@ import downloadsQuality from "./en/downloads-quality.mjs";
 import quality110 from "./en/quality110.mjs";
 import uiRebuild from "./en/ui-rebuild.mjs";
 import settingsRooms from "./en/settings-rooms.mjs";
+import feedback202611 from "./en/feedback-2026-11.mjs";
 
 export default {
   ...core,
@@ -49,6 +50,7 @@ export default {
   ...quality110,
   ...uiRebuild,
   ...settingsRooms,
+  ...feedback202611,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",

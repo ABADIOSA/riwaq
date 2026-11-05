@@ -89,33 +89,6 @@ export default function Addons({
         </div>
         <span className="count-badge">{state.addons.length} إضافات</span>
       </div>
-      <div className="addon-sync">
-        <div className="sync-art">
-          <CloudDownload size={33} />
-        </div>
-        <div>
-          <h2>
-            {state.user ? "حساب ستريميو متصل" : "انقل إضافاتك من ستريميو"}
-          </h2>
-          <p>
-            {state.lastSync
-              ? `آخر استيراد: ${new Date(state.lastSync).toLocaleString(loc("ar-SA"), { calendar: "gregory" })}`
-              : "نفس الإضافات، بنفس الإعدادات، في تجربة جديدة."}
-          </p>
-        </div>
-        <button
-          className="primary"
-          disabled={!!operation}
-          onClick={state.user ? sync : onAccount}
-        >
-          {operation === "sync" ? (
-            <LoaderCircle className="spin" size={18} />
-          ) : (
-            <RefreshCw size={18} />
-          )}{" "}
-          {state.user ? "استيراد التغييرات" : "ربط حساب ستريميو"}
-        </button>
-      </div>
       <form
         className="addon-form"
         onSubmit={async (e) => {
@@ -375,18 +348,49 @@ export default function Addons({
         الترتيب والتعطيل والحذف تخص رِواق. استخدم «استيراد التغييرات» بعد تعديل
         إضافاتك في ستريميو.
       </p>
-      <div className="addon-sync nuvio-sync">
-        <div className="sync-art">
-          <Link2 size={30} />
+      {/* Linking other apps sits together below the addons themselves,
+          Stremio right above Nuvio (issue #132). */}
+      <section className="addon-links" aria-label="الربط مع تطبيقات أخرى">
+        <div className="addon-sync">
+          <div className="sync-art">
+            <CloudDownload size={33} />
+          </div>
+          <div>
+            <h2>
+              {state.user ? "حساب ستريميو متصل" : "انقل إضافاتك من ستريميو"}
+            </h2>
+            <p>
+              {state.lastSync
+                ? `آخر استيراد: ${new Date(state.lastSync).toLocaleString(loc("ar-SA"), { calendar: "gregory" })}`
+                : "نفس الإضافات، بنفس الإعدادات، في تجربة جديدة."}
+            </p>
+          </div>
+          <button
+            className="primary"
+            disabled={!!operation}
+            onClick={state.user ? sync : onAccount}
+          >
+            {operation === "sync" ? (
+              <LoaderCircle className="spin" size={18} />
+            ) : (
+              <RefreshCw size={18} />
+            )}{" "}
+            {state.user ? "استيراد التغييرات" : "ربط حساب ستريميو"}
+          </button>
         </div>
-        <div>
-          <h2>تستخدم نوفيو؟</h2>
-          <p>انقل إضافاتك ومجموعاتك ومكتبتك ومستودعات أدواتك إلى رِواق.</p>
+        <div className="addon-sync nuvio-sync">
+          <div className="sync-art">
+            <Link2 size={30} />
+          </div>
+          <div>
+            <h2>تستخدم نوفيو؟</h2>
+            <p>انقل إضافاتك ومجموعاتك ومكتبتك ومستودعات أدواتك إلى رِواق.</p>
+          </div>
+          <button className="secondary" onClick={onNuvio}>
+            <Link2 size={18} /> الربط مع نوفيو
+          </button>
         </div>
-        <button className="secondary" onClick={onNuvio}>
-          <Link2 size={18} /> الربط مع نوفيو
-        </button>
-      </div>
+      </section>
       {state.nuvioPlugins?.length > 0 && (
         <section className="nuvio-plugins">
           <div className="section-heading">

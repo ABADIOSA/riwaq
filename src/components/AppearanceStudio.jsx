@@ -124,10 +124,13 @@ export default function AppearanceStudio({ state, update, part = "" }) {
             الوضع
             {pick(
               "mode",
+              // System, Light, then Dark (issue #141), in reading order and
+              // in the DOM, so Tab and the arrows follow it too. The saved
+              // mode is untouched.
               [
-                ["dark", "داكن"],
-                ["light", "فاتح"],
                 ["system", "حسب النظام"],
+                ["light", "فاتح"],
+                ["dark", "داكن"],
               ],
               draft.mode || "dark",
               (mode) => change({ mode }),

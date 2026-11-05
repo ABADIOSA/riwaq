@@ -151,7 +151,9 @@ export default function App() {
   const [state, setState] = useState(initial),
     [ready, setReady] = useState(false),
     [view, setView] = useState("home"),
-    [settingsTab, setSettingsTab] = useState("appearance"),
+    // "start": Settings entered on its own opens its first page (#133);
+    // links into Settings name their page.
+    [settingsTab, setSettingsTab] = useState("start"),
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState(""),
@@ -1088,7 +1090,10 @@ export default function App() {
         <RiwaqNav
           view={view}
           folderFrom={folderFrom}
-          navigate={navigate}
+          navigate={(id) => {
+            if (id === "settings") setSettingsTab("start");
+            navigate(id);
+          }}
           appearance={appearance}
           profile={activeProfile}
           user={state.user}
