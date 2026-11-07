@@ -512,7 +512,7 @@ export default function Hud() {
   return (
     <div
       key={uiLanguage}
-      className={`hud-stage ${shown ? "awake" : "asleep"}`}
+      className={`hud-stage ${shown ? "awake" : "asleep"}${settings.reduceMotion ? " reduced-motion" : ""}`}
       style={
         state
           ? { "--hud-accent": resolveAppearance(state.settings).colors.accent }

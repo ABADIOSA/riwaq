@@ -32,9 +32,9 @@ export function timeCounter(player = {}, mode = "elapsed") {
  * The file's chapters as the bar draws them, or [] when they cannot be
  * trusted: MPV's chapter-list ({time, title}) sorted, with times inside the
  * file, repeated or near-repeated starts merged (the first title wins),
- * a first chapter that starts late given the opening, and each chapter's
- * end at the next one's start. One chapter is no division at all, and
- * nothing is invented: a missing title stays empty (the bar numbers it).
+ * and each chapter's end at the next one's start. The opening before a
+ * late first chapter stays unmarked. A missing title stays empty (the bar
+ * numbers it).
  */
 export function chapterMarks(chapters, duration, { live = false } = {}) {
   const length = Number(duration);
@@ -57,8 +57,6 @@ export function chapterMarks(chapters, duration, { live = false } = {}) {
     }
     marks.push({ ...c });
   }
-  if (marks.length < 2) return [];
-  marks[0].start = 0;
   return marks.map((m, i) => ({
     ...m,
     index: i,

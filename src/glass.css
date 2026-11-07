@@ -21,6 +21,8 @@
 .app {
   --glass-fill: color-mix(in srgb, var(--raised) 74%, transparent);
   --glass-fill-strong: color-mix(in srgb, var(--panel) 90%, transparent);
+  --glass-picture-fill: rgb(10 12 16 / 0.42);
+  --glass-picture-hover: rgb(10 12 16 / 0.58);
   --glass-edge: color-mix(in srgb, var(--text) 15%, transparent);
   --glass-edge-strong: color-mix(in srgb, var(--text) 26%, transparent);
   --glass-sheen: linear-gradient(
@@ -34,7 +36,7 @@
     inset 0 1px 0 rgb(255 255 255 / 0.14), 0 8px 22px rgb(0 0 0 / 0.3);
   --glass-blur: blur(18px) saturate(160%);
 }
-.app.scheme-light {
+.app:where(.scheme-light) {
   --glass-fill: color-mix(in srgb, #ffffff 78%, transparent);
   --glass-fill-strong: color-mix(in srgb, #ffffff 92%, transparent);
   --glass-edge: color-mix(in srgb, var(--text) 16%, transparent);
@@ -190,6 +192,8 @@
   .app {
     --glass-fill: var(--raised);
     --glass-fill-strong: var(--panel);
+    --glass-picture-fill: #0a0c10;
+    --glass-picture-hover: #151820;
     --glass-sheen: linear-gradient(transparent, transparent);
     --glass-blur: none;
   }
@@ -200,12 +204,17 @@
   .app {
     --glass-fill: var(--raised);
     --glass-fill-strong: var(--panel);
+    --glass-picture-fill: #0a0c10;
+    --glass-picture-hover: #151820;
+    --glass-blur: none;
   }
 }
 @media (forced-colors: active) {
   .app {
     --glass-fill: Canvas;
     --glass-fill-strong: Canvas;
+    --glass-picture-fill: Canvas;
+    --glass-picture-hover: Canvas;
     --glass-edge: CanvasText;
     --glass-edge-strong: CanvasText;
     --glass-sheen: linear-gradient(transparent, transparent);
@@ -249,7 +258,7 @@
    scheme. */
 .app.glass-on .hero .secondary,
 .app.glass-on .theater .secondary {
-  --glass-fill: rgb(10 12 16 / 0.42);
+  --glass-fill: var(--glass-picture-fill);
   --glass-edge: rgb(255 255 255 / 0.26);
   --glass-edge-strong: rgb(255 255 255 / 0.4);
   --glass-sheen: linear-gradient(
@@ -265,7 +274,7 @@
 }
 .app.glass-on .hero .secondary:hover:not(:disabled),
 .app.glass-on .theater .secondary:hover:not(:disabled) {
-  background: var(--glass-sheen), rgb(10 12 16 / 0.58);
+  background: var(--glass-sheen), var(--glass-picture-hover);
 }
 
 /* ---- Moving between pages ------------------------------------------------ */

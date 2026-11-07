@@ -64,19 +64,19 @@ test("chapters come from MPV's list, cleaned, and are never invented", () => {
   assert.equal(marks[2].title.length, 120, "titles are bounded");
   assert.equal(chapterAt(marks, 650).title, "Act II");
   assert.equal(chapterAt(marks, 0).title, "Opening");
-  // A chapter list starting late still covers the opening.
-  assert.equal(
-    chapterMarks(
-      [
-        { time: 30, title: "A" },
-        { time: 90, title: "B" },
-      ],
-      120,
-    )[0].start,
-    0,
+  const late = chapterMarks(
+    [
+      { time: 30, title: "A" },
+      { time: 90, title: "B" },
+    ],
+    120,
   );
-  // One chapter, none, live or an unknown length: no division.
-  assert.deepEqual(chapterMarks([{ time: 0, title: "Only" }], 100), []);
+  assert.equal(late[0].start, 30);
+  assert.equal(chapterAt(late, 29), null);
+  assert.equal(chapterAt(late, 30).title, "A");
+  assert.deepEqual(chapterMarks([{ time: 12, title: "Only" }], 100), [
+    { start: 12, title: "Only", index: 0, end: 100 },
+  ]);
   assert.deepEqual(chapterMarks([], 100), []);
   assert.deepEqual(chapterMarks(list, 0), []);
   assert.deepEqual(chapterMarks(list, 3600, { live: true }), []);

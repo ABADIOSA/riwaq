@@ -157,7 +157,7 @@ export function useChapters(player) {
 export function ChapterTicks({ marks, duration, className = "chapter-tick" }) {
   if (!marks.length || !(duration > 0)) return null;
   return marks
-    .slice(1)
+    .filter((m) => m.start > 0)
     .map((m) => (
       <i
         key={m.index}
@@ -178,6 +178,12 @@ export function ChapterStrip({ marks, position, duration, onSeek }) {
   const current = chapterAt(marks, position);
   return (
     <div className="chapter-strip" dir="ltr" role="group" aria-label="الفصول">
+      {marks[0].start > 0 && (
+        <span
+          aria-hidden="true"
+          style={{ flexBasis: 0, flexGrow: marks[0].start }}
+        />
+      )}
       {marks.map((m) => {
         const name = m.title || `الفصل ${m.index + 1}`;
         const playing = current?.index === m.index;

@@ -473,19 +473,20 @@ for (const lang of ["ar", "en"])
       const boxes = [];
       for (let i = 0; i < 9; i++)
         boxes.push(await buttons.nth(i).boundingBox());
-      for (const [i, b] of boxes.entries()) {
+      const ordered = boxes.toSorted((a, b) => a.y - b.y);
+      for (const [i, b] of ordered.entries()) {
         assert.ok(b.width >= 44 && b.height >= 44, `target ${i}`);
         assert.ok(
           b.x >= rail.x - 1 && b.x + b.width <= rail.x + rail.width + 1,
         );
         if (i)
           assert.ok(
-            b.y >= boxes[i - 1].y + boxes[i - 1].height - 0.5,
+            b.y >= ordered[i - 1].y + ordered[i - 1].height - 0.5,
             `overlap ${i}`,
           );
       }
       // The arc: the middle reaches furthest from the edge.
-      const reach = boxes.map((b) =>
+      const reach = ordered.map((b) =>
         lang === "ar"
           ? rail.x + rail.width - (b.x + b.width / 2)
           : b.x + b.width / 2 - rail.x,
@@ -496,11 +497,9 @@ for (const lang of ["ar", "en"])
       );
       assert.equal(await buttons.nth(0).getAttribute("aria-current"), "page");
       await shot(`wheel-compact-${lang}`);
-      // Each destination with one click; the lens turns to it, buttons stay.
-      const lens = page.locator(".wheel-lens");
-      const before = await lens.evaluate(
-        (el) => getComputedStyle(el).transform,
-      );
+      // Direct clicks select their page and the destination moves to Home's
+      // previous position, where the wheel always snaps.
+      const anchor = boxes[0];
       await destination("library").click();
       await page
         .locator(".riwaq-destinations > button[aria-current=page]")
@@ -508,27 +507,128 @@ for (const lang of ["ar", "en"])
       assert.equal(
         await destination("library").getAttribute("aria-current"),
         "page",
+        "direct Library click",
       );
       await settle(500);
-      assert.notEqual(
-        await lens.evaluate((el) => getComputedStyle(el).transform),
-        before,
-      );
+      const library = await destination("library").boundingBox();
+      assert.ok(Math.abs(library.x - anchor.x) < 1);
+      assert.ok(Math.abs(library.y - anchor.y) < 1);
       const after = await buttons.nth(8).boundingBox();
-      assert.deepEqual(after, boxes[8], "destinations do not move");
+      assert.notDeepEqual(after, boxes[8], "the other destinations move too");
       // A quick double click picks its page once and leaves the wheel usable.
       await destination("discover").dblclick();
       assert.equal(
         await destination("discover").getAttribute("aria-current"),
         "page",
+        "quick double click on Discover",
       );
       await destination("home").click();
       assert.equal(
         await destination("home").getAttribute("aria-current"),
         "page",
+        "next deliberate Home click",
       );
     },
   );
+
+await check(
+  "wheel: mouse and trackpad rotate locally, then a drag snaps",
+  async () => {
+    await restart({ uiLanguage: "en", wheelOpen: false });
+    const home = destination("home");
+    const discover = destination("discover");
+    const library = destination("library");
+    const anchor = await home.boundingBox();
+    const step = (await discover.boundingBox()).y - anchor.y;
+    const { x, y } = anchor;
+    await page.mouse.move(x + 22, y + 22);
+    await page.mouse.wheel(0, 20);
+    await page.mouse.wheel(0, 20);
+    await page.mouse.wheel(0, 20);
+    await settle(500);
+    assert.ok(await discover.evaluate((el) => document.activeElement === el));
+    assert.ok(Math.abs((await discover.boundingBox()).y - y) < 1);
+    assert.equal(await home.getAttribute("aria-current"), "page");
+    assert.equal(await page.evaluate(() => scrollY), 0);
+
+    await page.mouse.down();
+    await page.mouse.move(x + 22, y + 22 - step, { steps: 4 });
+    await settle(100);
+    assert.ok((await discover.boundingBox()).y < y - 10, "moves during drag");
+    await page.mouse.up();
+    await settle(500);
+    assert.ok(await library.evaluate((el) => document.activeElement === el));
+    assert.ok(Math.abs((await library.boundingBox()).y - y) < 1);
+    assert.equal(
+      await home.getAttribute("aria-current"),
+      "page",
+      "drag doesn't click",
+    );
+    await page.keyboard.press("Enter");
+    assert.equal(await library.getAttribute("aria-current"), "page");
+
+    await home.click();
+    await settle(500);
+    await page.mouse.move(700, 450);
+    await page.mouse.wheel(0, 700);
+    await settle();
+    assert.ok((await page.evaluate(() => scrollY)) > 100, "page still scrolls");
+  },
+);
+
+await check(
+  "wheel: a long drag snaps to the same target as the preview",
+  async () => {
+    await page.setViewportSize({ width: 1440, height: 1600 });
+    try {
+      await restart({ uiLanguage: "en", wheelOpen: false });
+      const home = destination("home");
+      const settings = destination("settings");
+      const anchor = await home.boundingBox();
+      const step = (await destination("discover").boundingBox()).y - anchor.y;
+      const x = anchor.x + anchor.width / 2;
+      const y = anchor.y + anchor.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      try {
+        // More than one full turn. Both preview and release stop one
+        // destination short of Home rather than wrapping multiple times.
+        await page.mouse.move(x, y - 10 * step, { steps: 10 });
+        await settle(100);
+        const preview = await settings.evaluate((button) => {
+          const stage = button.closest(".wheel-stage");
+          const lens = stage
+            .querySelector(".wheel-lens")
+            .getBoundingClientRect();
+          const target = button.getBoundingClientRect();
+          return {
+            delta: target.y + target.height / 2 - (lens.y + lens.height / 2),
+            angle: button.style.getPropertyValue("--wheel-angle"),
+            classes: stage.className,
+            transform: getComputedStyle(button).transform,
+            transition: getComputedStyle(button).transitionDuration,
+          };
+        });
+        assert.ok(
+          Math.abs(preview.delta) < 1,
+          `drag preview: ${JSON.stringify(preview)}; step ${step}`,
+        );
+      } finally {
+        await page.mouse.up();
+      }
+      await settle(500);
+      assert.ok(await settings.evaluate((el) => document.activeElement === el));
+      const snapped = (await settings.boundingBox()).y;
+      assert.ok(
+        Math.abs(snapped - anchor.y) < 1,
+        `snap: ${snapped} vs anchor ${anchor.y}`,
+      );
+      assert.equal(await home.getAttribute("aria-current"), "page");
+    } finally {
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+  },
+);
 
 await check(
   "wheel: arrows, Home and End move focus; Tab stays in reading order",
@@ -643,6 +743,37 @@ await check("wheel: the narrow drawer holds the open wheel", async () => {
     await page.evaluate(() => document.documentElement.style.overflow),
     "hidden",
   );
+  // An emulated touch drag snaps inside the open drawer without selecting
+  // a route or moving the page behind it.
+  const home = destination("home");
+  const discover = destination("discover");
+  const anchor = await home.locator(".wheel-disc").boundingBox();
+  const step =
+    (await discover.locator(".wheel-disc").boundingBox()).y - anchor.y;
+  const x = anchor.x + anchor.width / 2;
+  const y = anchor.y + anchor.height / 2;
+  const cdp = await context.newCDPSession(page);
+  try {
+    const touch = (type, touchPoints) =>
+      cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
+    await touch("touchStart", [{ x, y }]);
+    await touch("touchMove", [{ x, y: y - step / 2 }]);
+    await touch("touchMove", [{ x, y: y - step }]);
+    await touch("touchEnd", []);
+  } finally {
+    await cdp.detach();
+  }
+  await settle(500);
+  assert.ok(
+    await discover.evaluate((el) => document.activeElement === el),
+    "touch centers the next destination",
+  );
+  assert.equal(await home.getAttribute("aria-current"), "page");
+  assert.ok(
+    Math.abs(
+      (await discover.locator(".wheel-disc").boundingBox()).y - anchor.y,
+    ) < 1,
+  );
   await shot("wheel-drawer-ar-390");
   await page
     .locator(".riwaq-nav-dialog .riwaq-destinations > button")
@@ -655,10 +786,11 @@ await check("wheel: the narrow drawer holds the open wheel", async () => {
 await check(
   "wheel: reduced motion turns at once; the sidebar remains a choice",
   async () => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await restart({ uiLanguage: "en", reduceMotion: true });
     const duration = await page.evaluate(
       () =>
-        getComputedStyle(document.querySelector(".wheel-lens"))
+        getComputedStyle(document.querySelector(".wheel-item"))
           .transitionDuration,
     );
     assert.match(duration, /^0s/);
@@ -771,7 +903,7 @@ await check(
         pause: false,
         tracks: [],
         chapters: [
-          { time: 0, title: "Opening" },
+          { time: 20, title: "Opening" },
           { time: 900, title: "Journey" },
           { time: 2400, title: "" },
           { time: 5600, title: "Credits" },
@@ -843,15 +975,16 @@ await check(
         await hud.locator(".chapter.playing").textContent(),
         "Journey",
       );
-      assert.equal(await hud.locator(".hud-chapter-tick").count(), 3);
+      assert.equal(await hud.locator(".hud-chapter-tick").count(), 4);
+      await hud.locator(".chapter-strip .chapter").first().click();
       await hud.locator(".chapter-strip .chapter").nth(3).click();
-      assert.ok(
+      assert.deepEqual(
         await hud.evaluate(() =>
-          window.__calls.some(
-            ([m, a]) =>
-              m === "playerCommand" && a?.action === "seek" && a.value === 5600,
-          ),
+          window.__calls
+            .filter(([m, a]) => m === "playerCommand" && a?.action === "seek")
+            .map(([, a]) => a.value),
         ),
+        [20, 5600],
       );
       assert.match(
         await hud.locator(".ends-at").textContent(),
@@ -860,27 +993,20 @@ await check(
       await hud.screenshot({ path: join(output, "hud-bar-en.png") });
       // A volume key while the controls sleep: a small pill, never a large one.
       await hud.mouse.move(1279, 0);
-      await hud.waitForTimeout(3200);
-      await hud
-        .evaluate(() => {
-          window.__emit("player", { ...window.__player_last, volume: 65 });
-        })
-        .catch(() => {});
+      await hud.locator(".hud-stage.asleep").waitFor({ timeout: 5000 });
       await hud.evaluate(
         (player) => window.__emit("player", { ...player, volume: 70 }),
         player,
       );
-      await hud.waitForTimeout(150);
+      const pill = hud.locator(".hud-volume-pill");
+      await pill.waitFor({ timeout: 1000 });
       assert.equal(
         await hud.locator(".hud-volume-popup, .hud-volume-meter").count(),
         0,
       );
-      const pill = hud.locator(".hud-volume-pill");
-      if (await pill.count()) {
-        const box = await pill.boundingBox();
-        assert.ok(box.width < 140 && box.height < 40, JSON.stringify(box));
-        assert.ok(box.y > 720 - 90, "at the bottom bar");
-      }
+      const box = await pill.boundingBox();
+      assert.ok(box.width < 140 && box.height < 40, JSON.stringify(box));
+      assert.ok(box.y > 720 - 90, "at the bottom bar");
     } finally {
       await hud.close();
       server.close();
