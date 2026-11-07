@@ -1,5 +1,13 @@
 # Verification — Riwaq
 
+## 2026-11-07 — PR #142 continuation: Codex's fixes imported, review gaps closed (unreleased, NO-GO)
+
+- From the original head `bcf3bf4` (main `7e6815e`, unchanged): Codex's seven local fixes applied with `git am`, same tree `5430c07` and the same `patch-id` for each commit; then seven commits of this continuation. [Findings, gate log and remaining blockers](docs/REVIEW-PR-142-CONTINUATION.md).
+- Found and fixed: light-scheme glass buttons over the showcase read 3.24:1 and 3.61:1 (now 4.96 and 6.74); axe colour-contrast in the dark scheme 18/2/18/2 → 0 (card subtitles, footers, section subtitles took literal greys). The "Back to Home" 81 → 418 ms in Codex's measurement was the wheel's turn, not the page (a click in the page reaches Home's first card in 38 ms, main 39); the timer now reports the turn apart.
+- New tests that fail on main and the original head and pass here: real-socket artwork boundary (no socket reaches loopback; rebinding refused), torrent-cache links (on main and the original head the swarm's bytes were written through a symbolic link into a file outside the cache under a size cap), and feedback checks that exercise what their names claim (#133, #134, #137, #141, all nine wheel destinations, glyph contrast, HUD network).
+- Run on Linux by Claude at `02b329a` after `npm ci` (Node 24.22.2, Chromium 153): **1014 pass, 1 Windows-only skip**; check and both builds; web smoke, HUD keys, ui-feedback 26/26, ui-browse 39/39, ui-overhaul 17/17, carousels, downloads; TorrServer MatriX.145.1 (Linux build) against a local swarm; `measure-ui-browse` 7 alternating runs, every median within +50 ms of main.
+- Version and notes prepared for 0.55.0 Beta. **Nothing tagged, dispatched, merged or published.** Not run here (no Windows): Electron/MPV/HUD native suites, NTFS allocation and junctions, the native text menu and clipboard, MPV's own OSD and real chapters, packaging, the packaged smoke, NSIS install/upgrade/uninstall, Authenticode, real-hardware performance, screen readers, physical touch and live accounts. `Riwaq-Security-Diff.md` from Codex's review was not received.
+
 ## 2026-11-05 — November reports #130–#141, the wheel and glass (unreleased, draft PR)
 
 - Branch `claude/charming-wozniak-ltgpdp` from main `7e6815e`. [Every report, cause, change, evidence and limit](docs/USER-FEEDBACK-2026-11-05.md); before/after screenshots in `docs/user-feedback-2026-11-05/` (same fixture, 1440×900, dark).
