@@ -124,9 +124,9 @@ export default function RiwaqWheel({
       event.preventDefault();
       if (drag.current) return;
       const unit =
-        mode === WheelEvent.DOM_DELTA_LINE
+        mode === window.WheelEvent.DOM_DELTA_LINE
           ? 16
-          : mode === WheelEvent.DOM_DELTA_PAGE
+          : mode === window.WheelEvent.DOM_DELTA_PAGE
             ? SCROLL_STEP
             : 1;
       const delta = y * unit;
