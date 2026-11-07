@@ -647,7 +647,8 @@ button.secondary {
   font-size: 20px;
 }
 .section-heading > div > span {
-  color: #787e86;
+  /* The palette's muted text (was #787e86: 4.1:1 on white, axe). */
+  color: var(--muted);
   font-size: 10px;
   display: block;
   margin-top: 4px;
@@ -741,7 +742,10 @@ button.secondary {
 }
 .poster-sub {
   display: block;
-  color: #737b84;
+  /* The palette's muted text, which keeps 4.5:1 on its own surfaces in
+     both schemes; the literal #737b84 read 4.4:1 on the default dark
+     background and was not mapped in the light scheme (axe, PR #142). */
+  color: var(--muted);
   font-size: 10px;
   margin-top: 5px;
 }
@@ -866,7 +870,8 @@ button.secondary {
   justify-content: space-between;
   padding: 10px 42px 20px;
   align-items: center;
-  color: #505963;
+  /* Was #505963 (2.6:1 on the default background, axe, PR #142). */
+  color: var(--muted);
   font-size: 10px;
 }
 .page-footer b {
