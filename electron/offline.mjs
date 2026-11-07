@@ -11,6 +11,11 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { cleanMedia } from "../core/library.mjs";
 import { offlineEpisode } from "../core/offline-media.mjs";
+import {
+  ARTWORK_HOST_BLOCKED,
+  publicArtworkUrl,
+  requestArtwork,
+} from "./artwork-http.mjs";
 
 const ID = /^[a-f0-9]{32}$/;
 const MAX_BYTES = 500 * 1024 ** 3;
@@ -48,7 +53,7 @@ export function imageKind(bytes) {
  * Where a download's poster may come from (issue #136), best first: the
  * title's own poster, metahub's by IMDb ID (the one Cinemeta uses; JPEG),
  * then its backdrop. HTTPS only: an http: address is asked over HTTPS
- * (never the other way), and addresses with credentials are dropped.
+ * (never the other way). Private addresses and credentials are dropped.
  */
 export function posterCandidates(meta = {}) {
   const list = [];
@@ -57,7 +62,7 @@ export function posterCandidates(meta = {}) {
     try {
       const url = new URL(value);
       if (url.protocol === "http:") url.protocol = "https:";
-      if (url.protocol !== "https:" || url.username || url.password) return;
+      if (!publicArtworkUrl(url)) return;
       if (!list.includes(url.href)) list.push(url.href);
     } catch {}
   };
@@ -68,15 +73,14 @@ export function posterCandidates(meta = {}) {
   return list.slice(0, 3);
 }
 /**
- * One image, HTTPS at every hop (three redirects at most), at most 2 MiB,
- * and only JPEG, PNG or WebP bytes. `fail` gets a short reason without the
- * address (for the diagnostic's error log).
+ * One public HTTPS image (three redirects at most), at most 2 MiB, and only
+ * JPEG, PNG or WebP bytes. The caller's timeout bounds the entire chain.
+ * `fail` gets a fixed reason or status for the diagnostic's error log.
  */
 async function posterBytes(url, request, signal, fail = () => {}) {
   let target = new URL(url);
   for (let redirects = 0; redirects < 4; redirects++) {
-    if (target.protocol !== "https:" || target.username || target.password)
-      return (fail("not https"), null);
+    if (!publicArtworkUrl(target)) return (fail("blocked address"), null);
     const response = await request(target.href, {
       signal,
       redirect: "manual",
@@ -97,7 +101,7 @@ async function posterBytes(url, request, signal, fail = () => {}) {
     }
     if (type && !IMAGE_TYPE.test(type) && !GENERIC_TYPE.test(type)) {
       await response.body?.cancel();
-      return (fail(`type ${type.split(";")[0].slice(0, 40)}`), null);
+      return (fail("unexpected content type"), null);
     }
     if (Number(response.headers.get("content-length")) > IMAGE_INPUT_BYTES) {
       await response.body?.cancel();
@@ -312,7 +316,8 @@ export class OfflineLibrary {
     {
       root,
       resolveSource,
-      request = fetch,
+      request,
+      artworkRequest = request ?? requestArtwork,
       deleteFile = removeFile,
       thumbnail,
       onArtworkError = () => {},
@@ -322,7 +327,8 @@ export class OfflineLibrary {
     this.client = client;
     this.root = root;
     this.resolveSource = resolveSource;
-    this.request = request;
+    this.request = request ?? fetch;
+    this.artworkRequest = artworkRequest;
     this.deleteFile = deleteFile;
     this.thumbnail = thumbnail;
     this.onArtworkError = onArtworkError;
@@ -437,11 +443,17 @@ export class OfflineLibrary {
               let reason = "";
               const bytes = await posterBytes(
                 url,
-                this.request,
+                this.artworkRequest,
                 AbortSignal.any([generation.signal, AbortSignal.timeout(8000)]),
                 (why) => (reason = why),
               ).catch((error) => {
-                reason = error?.name === "AbortError" ? "timeout" : "network";
+                reason =
+                  error?.code === ARTWORK_HOST_BLOCKED
+                    ? "blocked address"
+                    : error?.name === "AbortError" ||
+                        error?.name === "TimeoutError"
+                      ? "timeout"
+                      : "network";
                 return null;
               });
               owned();
@@ -479,7 +491,13 @@ export class OfflineLibrary {
     }
     await this.artworkJobs.get(id);
     owned();
-    return { image: await local() };
+    const image = await local();
+    const last = this.artworkAttempted.get(id);
+    if (image || !last || last.tries >= ARTWORK_TRIES) return { image };
+    return {
+      image,
+      retryAfterMs: Math.max(1, last.at + this.artworkRetryMs - Date.now()),
+    };
   }
   cancelArtwork() {
     this.artworkAbort.abort();

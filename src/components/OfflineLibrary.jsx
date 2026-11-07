@@ -24,22 +24,25 @@ const LABELS = {
 function DownloadCard({ item: x, profileId, busy, act, confirm, request }) {
   const [art, setArt] = useState(null);
   useEffect(() => setArt(null), [profileId, x.id]);
-  // Asked when the card appears and again when its state changes (a
-  // download finishing, a resume): main saves the poster once and answers
-  // from disk afterwards, and retries a failed one only after a pause.
-  const ask = art ? "shown" : x.status;
   useEffect(() => {
-    if (ask === "shown") return;
+    if (art) return;
     let active = true;
-    request("offlineArtwork", { profileId, id: x.id })
-      .then((r) => {
-        if (active && r?.image) setArt(r.image);
-      })
-      .catch(() => {});
+    let retryTimer;
+    const load = async () => {
+      try {
+        const result = await request("offlineArtwork", { profileId, id: x.id });
+        if (!active) return;
+        if (result?.image) setArt(result.image);
+        else if (result?.retryAfterMs > 0)
+          retryTimer = setTimeout(load, result.retryAfterMs);
+      } catch {}
+    };
+    load();
     return () => {
       active = false;
+      clearTimeout(retryTimer);
     };
-  }, [profileId, x.id, request, ask]);
+  }, [profileId, x.id, x.status, request, art]);
   const episode = offlineEpisode(x.meta, x.videoId, x.episode);
   return (
     <article className="download-card" aria-label={x.meta.name}>

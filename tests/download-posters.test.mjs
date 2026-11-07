@@ -9,6 +9,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import {
   OfflineLibrary,
   imageKind,
@@ -73,6 +75,153 @@ test("the picture's own bytes decide its format", () => {
   );
   assert.equal(imageKind(WEBP), "webp");
   assert.equal(imageKind(Buffer.from("<html>nope</html>")), "");
+});
+
+test("automatic poster candidates reject private and special-use destinations", () => {
+  for (const poster of [
+    "https://0x7f000001/poster",
+    "https://169.254.169.254/poster",
+    "https://100.64.0.1/poster",
+    "https://[::ffff:127.0.0.1]/poster",
+    "https://[fc00::1]/poster",
+    "https://[fe90::1]/poster",
+    "https://localhost./poster",
+    "https://printer.local./poster",
+    "https://intranet/poster",
+  ]) {
+    assert.deepEqual(posterCandidates({ poster }), [], poster);
+  }
+  assert.deepEqual(posterCandidates({ poster: "https://8.8.8.8/art" }), [
+    "https://8.8.8.8/art",
+  ]);
+});
+
+test("poster redirects cannot connect to a private host and MIME is not logged", async () => {
+  const f = await fixture({
+    id: "tt0111161",
+    type: "movie",
+    name: "Fixture",
+    poster: "https://art.example/start",
+    background: "https://art.example/backdrop",
+  });
+  const asked = [];
+  const reasons = [];
+  const lib = new OfflineLibrary(f.client, {
+    root: f.root,
+    thumbnail: () => JPEG,
+    onArtworkError: (reason) => reasons.push(reason),
+    request: async (url) => {
+      asked.push(url);
+      if (url.endsWith("/start"))
+        return new Response(null, {
+          status: 302,
+          headers: { location: "https://127.0.0.1:9443/private" },
+        });
+      if (url.includes("metahub"))
+        return new Response("rejected", {
+          headers: { "content-type": "secret-fixture-abcdefghijkl" },
+        });
+      return new Response(JPEG, { headers: { "content-type": "image/jpeg" } });
+    },
+  });
+  try {
+    assert.ok((await lib.artwork("p", id)).image);
+    assert.deepEqual(asked, [
+      "https://art.example/start",
+      "https://images.metahub.space/poster/medium/tt0111161/img",
+      "https://art.example/backdrop",
+    ]);
+    assert.deepEqual(reasons, ["blocked address", "unexpected content type"]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("poster HTTPS transport gives the socket only validated DNS answers", async () => {
+  const { requestArtwork } = await import("../electron/artwork-http.mjs");
+  const privateAnswers = [
+    { address: "10.0.0.7", family: 4 },
+    { address: "::ffff:c0a8:101", family: 6 },
+    { address: "fd00::1", family: 6 },
+  ];
+  const publicAnswer = { address: "93.184.216.34", family: 4 };
+  let lookups = 0;
+  let connected = false;
+  let response;
+  const options = (answers) => ({
+    lookup(host, opts, done) {
+      assert.equal(host, "art.example");
+      assert.equal(opts.all, true);
+      lookups++;
+      done(null, answers);
+    },
+    request(target, opts, receive) {
+      assert.equal(String(target), "https://art.example:8443/art");
+      assert.equal(opts.agent, false);
+      assert.equal(opts.headers.accept, "image/jpeg");
+      const req = new EventEmitter();
+      req.end = () =>
+        opts.lookup("art.example", { all: true }, (error, addresses) => {
+          if (error) return req.emit("error", error);
+          assert.deepEqual(addresses, [publicAnswer]);
+          connected = true;
+          response = new PassThrough();
+          response.statusCode = 200;
+          response.headers = { "content-type": "image/jpeg" };
+          receive(response);
+        });
+      return req;
+    },
+  });
+  const target = "https://art.example:8443/art";
+  const init = { headers: { accept: "image/jpeg" } };
+  await assert.rejects(
+    requestArtwork(target, init, options(privateAnswers)),
+    /blocked address/,
+  );
+  assert.equal(connected, false);
+  const result = await requestArtwork(
+    target,
+    init,
+    options([...privateAnswers, publicAnswer]),
+  );
+  assert.equal(lookups, 2);
+  assert.equal(connected, true);
+  assert.equal(result.headers.get("content-type"), "image/jpeg");
+  await result.body.cancel();
+  assert.equal(response.destroyed, true);
+});
+
+test("poster transport forwards abort and destroys a stalled response body", async () => {
+  const { requestArtwork } = await import("../electron/artwork-http.mjs");
+  const controller = new AbortController();
+  const response = new PassThrough();
+  response.statusCode = 200;
+  response.headers = {};
+  const init = { signal: controller.signal };
+  const transport = {
+    request(_target, options, receive) {
+      assert.equal(options.signal, controller.signal);
+      // The request API handles the signal by destroying its response.
+      options.signal.addEventListener(
+        "abort",
+        () => response.destroy(options.signal.reason),
+        { once: true },
+      );
+      const request = new EventEmitter();
+      request.end = () => receive(response);
+      return request;
+    },
+  };
+  const result = await requestArtwork(
+    "https://art.example/art",
+    init,
+    transport,
+  );
+  const pending = result.body.getReader().read();
+  controller.abort(new Error("fixture timed out"));
+  await assert.rejects(pending, /fixture timed out/);
+  assert.equal(response.destroyed, true);
 });
 
 test("a refused or undecodable poster falls through to the next candidate", async () => {

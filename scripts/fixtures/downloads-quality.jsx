@@ -9,7 +9,9 @@ import "../../src/appearance.css";
 import "../../src/identity.css";
 import "../../src/ltr.css";
 import "../../src/review083.css";
-const lang = new URLSearchParams(location.search).get("lang") || "ar";
+const query = new URLSearchParams(location.search);
+const lang = query.get("lang") || "ar";
+let retryArtwork = query.has("retryArtwork");
 setLanguage(lang);
 document.documentElement.lang = lang;
 document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
@@ -66,11 +68,16 @@ window.__menu = {
 window.__request = async (method, args) => {
   window.__calls.push({ method, args });
   if (method === "offlineList") return { items };
-  if (method === "offlineArtwork")
+  if (method === "offlineArtwork") {
+    if (retryArtwork && args.id === entries[0].id) {
+      retryArtwork = false;
+      return { image: null, retryAfterMs: 75 };
+    }
     return {
       image:
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/F1sAAAAASUVORK5CYII=",
     };
+  }
   if (method === "offlineRemove") {
     if (window.__removeError) throw Error("Could not delete");
     items = items.filter((x) => x.id !== args.id);

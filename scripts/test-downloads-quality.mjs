@@ -377,6 +377,25 @@ try {
         );
       },
     );
+    if (!baseline) {
+      await check(
+        `${lang}: artwork retries while the download stays ready`,
+        async () => {
+          await page.goto(
+            `${server.resolvedUrls.local[0]}__downloads?lang=${lang}&retryArtwork`,
+          );
+          const card = page.locator(".offline-library article").first();
+          await card.locator(".download-art img").waitFor({ timeout: 2000 });
+          const calls = await page.evaluate(() =>
+            window.__calls.filter(
+              ({ method, args }) =>
+                method === "offlineArtwork" && args.id === "a".repeat(32),
+            ),
+          );
+          assert.equal(calls.length, 2);
+        },
+      );
+    }
     await page.close();
   }
   assert.deepEqual(errors, []);
