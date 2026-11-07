@@ -124,10 +124,13 @@ export default function AppearanceStudio({ state, update, part = "" }) {
             الوضع
             {pick(
               "mode",
+              // System, Light, then Dark (issue #141), in reading order and
+              // in the DOM, so Tab and the arrows follow it too. The saved
+              // mode is untouched.
               [
-                ["dark", "داكن"],
-                ["light", "فاتح"],
                 ["system", "حسب النظام"],
+                ["light", "فاتح"],
+                ["dark", "داكن"],
               ],
               draft.mode || "dark",
               (mode) => change({ mode }),
@@ -327,6 +330,23 @@ export default function AppearanceStudio({ state, update, part = "" }) {
               draft.radius,
               (radius) => change({ radius }),
             )}
+          </div>
+          <div className="studio-field">
+            الأزرار والنوافذ
+            {pick(
+              "glass",
+              [
+                ["on", "زجاجية"],
+                ["solid", "مصمتة"],
+              ],
+              draft.glass || "on",
+              (glass) => change({ glass }),
+            )}
+            <small>
+              «زجاجية» أزرار ونوافذ شفافة قليلًا بحافة مضيئة، مستوحاة من زجاج
+              أبل. «مصمتة» تقلل الشفافية والمؤثرات. «تقليل الحركة» في «السلوك»
+              أسفل هذه الصفحة يوقف دوران العجلة والانتقالات.
+            </small>
           </div>
           <div className="studio-field">
             كثافة العرض
@@ -542,6 +562,23 @@ export default function AppearanceStudio({ state, update, part = "" }) {
       {show("interface") && (
         <section className="settings-card">
           <h2>التنقل</h2>
+          <div className="studio-field">
+            شكل التنقل
+            {pick(
+              "navStyle",
+              [
+                ["wheel", "العجلة"],
+                ["rail", "الشريط الجانبي"],
+              ],
+              draft.navStyle || "wheel",
+              (navStyle) => change({ navStyle }),
+            )}
+            <small>
+              العجلة هوية رِواق: الوجهات على حافة عجلة تدور إلى ما تختاره، وزر
+              أسفلها يُظهر الأسماء. الشريط الجانبي قائمة مستقيمة كما في
+              الإصدارات السابقة.
+            </small>
+          </div>
           <div className="studio-field">
             عناصر القائمة
             <div className="choice-row">

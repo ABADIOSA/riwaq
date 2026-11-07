@@ -555,8 +555,14 @@ button.danger,
 .nuvio-plugins {
   margin-top: 28px;
 }
-.nuvio-sync {
+/* Stremio and Nuvio linking, together below the addons (issue #132). */
+.addon-links {
+  display: grid;
+  gap: 14px;
   margin-top: 30px;
+}
+.addon-links > .addon-sync {
+  margin: 0;
 }
 .home-editor {
   list-style: none;

@@ -928,16 +928,17 @@ test("the volume slider reads full at 100%, with any boost after it (issue #82)"
   assert.equal(volumeAt(VOLUME_MAIN_SHARE - 0.01, 150), 100);
   assert.equal(volumeAt(-1, 150), 0);
   assert.equal(volumeAt(2, 150), 150);
-  // Both players use the shared slider, never a range bound to MPV's value.
+  // Both players use the shared slider (inside PlayerBar's VolumeControl
+  // since issue #140), never a range bound to MPV's value.
+  const read = (file) =>
+    readFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), "utf8");
+  assert.match(read("src/components/PlayerBar.jsx"), /<VolumeSlider/);
   for (const file of [
     "src/components/Hud.jsx",
     "src/components/PlayerView.jsx",
   ]) {
-    const page = readFileSync(
-      fileURLToPath(new URL(`../${file}`, import.meta.url)),
-      "utf8",
-    );
-    assert.match(page, /<VolumeSlider/, file);
+    const page = read(file);
+    assert.match(page, /<VolumeControl/, file);
     assert.doesNotMatch(page, /type="range"[\s\S]{0,80}volume/, file);
   }
 });

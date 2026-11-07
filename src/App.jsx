@@ -46,6 +46,7 @@ import {
   Music2,
 } from "lucide-react";
 import { api, call } from "./lib/api.js";
+import { lockScroll } from "./lib/scroll-lock.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
 import {
   IconButton,
@@ -150,7 +151,9 @@ export default function App() {
   const [state, setState] = useState(initial),
     [ready, setReady] = useState(false),
     [view, setView] = useState("home"),
-    [settingsTab, setSettingsTab] = useState("appearance"),
+    // "start": Settings entered on its own opens its first page (#133);
+    // links into Settings name their page.
+    [settingsTab, setSettingsTab] = useState("start"),
     [search, setSearch] = useState(""),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState(""),
@@ -614,13 +617,18 @@ export default function App() {
   const openTitle = (next) => {
     cancelAnimationFrame(titleFrame.current);
     cancelAnimationFrame(catalogFrame.current);
-    if (!selected)
+    if (!selected) {
+      const browse = document.querySelector(".content > .browse-page");
       titleReturn.current = {
         x: window.scrollX,
         y: window.scrollY,
+        browse,
+        browseX: browse?.scrollLeft,
+        browseY: browse?.scrollTop,
         focus: document.activeElement,
         profileId: state.profiles?.active,
       };
+    }
     restoreTitle.current = false;
     setSelected(next);
   };
@@ -640,11 +648,8 @@ export default function App() {
   const layers = `${titleActive ? "title" : ""}|${browseOpen ? "browse" : ""}`;
   useLayoutEffect(() => {
     if (layers === "|") return;
-    const root = document.documentElement;
-    const overflow = root.style.overflow;
-    const gutter = root.style.scrollbarGutter;
-    root.style.scrollbarGutter = "stable";
-    root.style.overflow = "hidden";
+    // The same lock dialogs take (src/lib/scroll-lock.js, issue #135).
+    const release = lockScroll();
     const top = titleActive ? "title-page" : "browse-page";
     const background = [...document.querySelectorAll(".content > *")].filter(
       (el) => !el.classList.contains(top),
@@ -652,8 +657,7 @@ export default function App() {
     const inert = background.map((el) => [el, el.inert]);
     for (const [el] of inert) el.inert = true;
     return () => {
-      root.style.overflow = overflow;
-      root.style.scrollbarGutter = gutter;
+      release();
       for (const [el, was] of inert) el.inert = was;
     };
   }, [layers]);
@@ -672,6 +676,10 @@ export default function App() {
           if (saved.profileId !== stateRef.current.profiles?.active) return;
           if (saved.focus?.isConnected)
             saved.focus.focus({ preventScroll: true });
+          if (saved.browse?.isConnected) {
+            saved.browse.scrollLeft = saved.browseX;
+            saved.browse.scrollTop = saved.browseY;
+          }
           window.scrollTo(saved.x, saved.y);
         });
       }
@@ -1052,7 +1060,7 @@ export default function App() {
         style={{
           ...themeVariables(appearance),
         }}
-        className={`app experience-riwaq ${state.settings.sidebarCollapsed ? "sidebar-collapsed" : ""} ${themeClasses(appearance)} theme-${state.settings.accent} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
+        className={`app experience-riwaq ${state.settings.sidebarCollapsed ? "sidebar-collapsed" : ""} ${state.settings.wheelOpen ? "wheel-open" : ""} ${themeClasses(appearance)} theme-${state.settings.accent} cards-${state.settings.cardSize || "comfortable"} cardstyle-${state.settings.cardStyle || "glass"} ${state.settings.reduceMotion ? "reduced-motion" : ""} ${state.settings.showRatings === false ? "hide-ratings" : ""} ${barShown ? "chrome-bar" : ""} ${state.settings.frostTopBar ? "frost-on" : ""}`}
         onMouseDown={(e) => {
           if (
             !state.settings.dragAnywhere ||
@@ -1091,7 +1099,10 @@ export default function App() {
         <RiwaqNav
           view={view}
           folderFrom={folderFrom}
-          navigate={navigate}
+          navigate={(id) => {
+            if (id === "settings") setSettingsTab("start");
+            navigate(id);
+          }}
           appearance={appearance}
           profile={activeProfile}
           user={state.user}
@@ -1109,6 +1120,10 @@ export default function App() {
             })
           }
           onDownloads={() => setOfflineOpen(true)}
+          wheelOpen={!!state.settings.wheelOpen}
+          onWheelToggle={() =>
+            update("settings", { wheelOpen: !state.settings.wheelOpen })
+          }
         />
         <main
           className={`content ${player.active ? "with-player" : ""} ${selected ? "title-open" : ""} ${browseOpen ? "browse-open" : ""}`}

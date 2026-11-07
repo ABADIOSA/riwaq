@@ -417,16 +417,17 @@ try {
     "title opens",
   );
   await click(".riwaq-wordmark");
+  // The wheel (the default navigation) opens to show names, and back.
   await click(".riwaq-collapse");
   await wait(
-    () => evaluate("!!document.querySelector('.app.sidebar-collapsed')"),
-    "sidebar collapses",
+    () => evaluate("!!document.querySelector('.app.wheel-open')"),
+    "wheel opens",
   );
-  assert.equal((await call("init")).settings.sidebarCollapsed, true);
+  assert.equal((await call("init")).settings.wheelOpen, true);
   await click(".riwaq-collapse");
   await wait(
-    () => evaluate("!document.querySelector('.app.sidebar-collapsed')"),
-    "sidebar expands",
+    () => evaluate("!document.querySelector('.app.wheel-open')"),
+    "wheel compacts",
   );
   await click("[aria-label='الإعدادات']");
   await wait(

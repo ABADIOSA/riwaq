@@ -692,7 +692,13 @@ test("main checks its playback request after every wait before MPV starts", asyn
       owns.some((i) => i > at(wait)),
       `ownership checked after ${wait}`,
     );
-  assert.ok(owns.at(-1) < at("player.start("), "all before MPV starts");
+  // The one after the start only decides its answer ({ cancelled: true }
+  // when Stop took over, the PR #128 review), never whether MPV starts.
+  const answer = at("return startOutcome(started");
+  assert.ok(
+    owns.filter((i) => i < answer).at(-1) < at("player.start("),
+    "all before MPV starts",
+  );
   // Everything that ends a viewing or changes who watches revokes it.
   for (const name of ["stop:", "profileSwitch:", "profileLock:"]) {
     const body = main.slice(main.indexOf(`  ${name}`));

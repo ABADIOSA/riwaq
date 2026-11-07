@@ -1,0 +1,300 @@
+/*
+ * Riwaq's wheel (core/wheel.mjs, src/components/RiwaqWheel.jsx): the
+ * default navigation. The destinations sit on the rim of a wheel whose hub
+ * lies beyond the window's side edge. Its buttons rotate to a fixed glass
+ * lens. The straight sidebar stays
+ * available (Appearance → Interface → Navigation, nav-rail).
+ */
+/* Wide windows only: below 761 px the wheel lives in the drawer and the
+   content takes the whole width (session.css). */
+@media (min-width: 761px) {
+  .app.experience-riwaq.nav-wheel {
+    --nav-width: 92px;
+  }
+  .app.experience-riwaq.nav-wheel.wheel-open {
+    --nav-width: 236px;
+  }
+}
+.riwaq-sidebar.riwaq-wheel {
+  padding: 0;
+  gap: 0;
+  /* The hub's glow, from the window edge. */
+  background:
+    radial-gradient(
+      ellipse 140% 55% at 0% 50%,
+      color-mix(in srgb, var(--accent) 9%, transparent),
+      transparent 70%
+    ),
+    var(--bg);
+}
+[dir="rtl"] .riwaq-sidebar.riwaq-wheel {
+  background:
+    radial-gradient(
+      ellipse 140% 55% at 100% 50%,
+      color-mix(in srgb, var(--accent) 9%, transparent),
+      transparent 70%
+    ),
+    var(--bg);
+}
+.riwaq-wheel .wheel-stage {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  touch-action: pinch-zoom;
+  user-select: none;
+}
+/* A window too short for every destination: the wheel scrolls on its own
+   to show the snap point. */
+.riwaq-wheel .wheel-stage.is-scrolling {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.wheel-rim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  pointer-events: none;
+  overflow: hidden;
+}
+.wheel-rim-line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 20%, transparent);
+  stroke-width: 1.5;
+}
+.wheel-ticks path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text) 16%, transparent);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+.wheel-ticks path.major {
+  stroke: color-mix(in srgb, var(--accent) 55%, transparent);
+  stroke-width: 1.6;
+}
+.wheel-spoke {
+  stroke: color-mix(in srgb, var(--text) 12%, transparent);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  transition: stroke var(--motion-wheel) ease;
+}
+.wheel-spoke.active {
+  stroke: var(--accent);
+}
+/* The lens marks the wheel's snap point. */
+.wheel-lens {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      circle at 50% 30%,
+      color-mix(in srgb, #fff 22%, transparent),
+      transparent 60%
+    ),
+    color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 10px 24px #0005,
+    inset 0 1px 0 #ffffff40;
+}
+.wheel-stage.is-ready .wheel-lens {
+  transition: opacity var(--motion-page) ease;
+}
+.wheel-stage.is-idle .wheel-lens {
+  opacity: 0.35;
+}
+/* The first rotation moves the target around the hub. The equal and
+   opposite second rotation keeps its disc and label upright. */
+.riwaq-sidebar .riwaq-destination.wheel-item {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: var(--text);
+  text-align: start;
+  transition: none;
+  transform-origin: 22px 50%;
+  transform: translateX(calc(-1 * var(--wheel-radius)))
+    rotate(var(--wheel-angle)) translateX(var(--wheel-radius))
+    rotate(calc(-1 * var(--wheel-angle)));
+}
+[dir="rtl"] .riwaq-sidebar .riwaq-destination.wheel-item {
+  transform-origin: calc(100% - 22px) 50%;
+}
+.wheel-stage.is-ready:not(.is-dragging) .wheel-item:not(.wheel-wrap) {
+  transition:
+    transform var(--motion-wheel) var(--ease-out),
+    opacity var(--motion-wheel) ease;
+}
+.wheel-stage.is-dragging,
+.riwaq-sidebar .wheel-stage.is-dragging .wheel-item {
+  cursor: grabbing;
+}
+.riwaq-sidebar .riwaq-destination.wheel-item:hover,
+.riwaq-sidebar .riwaq-destination.wheel-item.selected {
+  background: none;
+}
+.riwaq-sidebar .riwaq-destination.wheel-item.selected::before {
+  display: none;
+}
+.wheel-disc {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--glass-sheen), var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+  transition:
+    transform var(--motion-press) var(--ease-out),
+    color var(--motion-press) ease,
+    background-color var(--motion-press) ease;
+}
+.wheel-item:hover .wheel-disc {
+  transform: scale(1.07);
+  color: var(--text);
+}
+.wheel-item:active .wheel-disc {
+  transform: scale(0.95);
+}
+.wheel-item.selected .wheel-disc {
+  color: var(--accent);
+  background:
+    var(--glass-sheen), color-mix(in srgb, var(--accent) 16%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.wheel-item:focus-visible {
+  outline: none;
+}
+.wheel-item:focus-visible .wheel-disc {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.wheel-item .nav-lock {
+  position: absolute;
+  top: 0;
+  inset-inline-start: 30px;
+  color: var(--muted);
+}
+.wheel-label {
+  min-width: 0;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wheel-item.selected .wheel-label {
+  font-weight: 700;
+  color: var(--text);
+}
+.wheel-stage.is-open .wheel-item:focus-visible .wheel-label {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+/* Compact: the name is a glass tooltip beside the wheel on hover and focus. */
+.wheel-stage.is-compact .wheel-label {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: calc(100% + 14px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--glass-sheen), var(--glass-fill-strong);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: var(--glass-blur);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(-6px, -50%);
+  transition:
+    opacity var(--motion-press) ease,
+    transform var(--motion-press) var(--ease-out),
+    visibility 0s linear var(--motion-press);
+}
+[dir="rtl"] .wheel-stage.is-compact .wheel-label {
+  transform: translate(6px, -50%);
+}
+.wheel-stage.is-compact .wheel-item:hover .wheel-label,
+.wheel-stage.is-compact .wheel-item:focus-visible .wheel-label {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(0, -50%);
+  transition-delay: 0s;
+}
+.wheel-stage.is-scrolling.is-compact .wheel-label {
+  display: none;
+}
+/* The page now open, above a compact wheel. */
+.wheel-now {
+  display: block;
+  min-height: 34px;
+  padding: 12px 6px 0;
+  font-size: 10.5px;
+  line-height: 1.3;
+  font-weight: 700;
+  text-align: center;
+  color: var(--accent);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+/* The hub row: profile, account, open/compact and the update notice. */
+.riwaq-wheel .wheel-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  margin: 0;
+}
+.riwaq-wheel.is-compact .wheel-hub {
+  align-items: center;
+}
+.riwaq-wheel .wheel-hub .riwaq-destination {
+  border-radius: 999px;
+  min-height: 44px;
+}
+.riwaq-wheel.is-compact .wheel-hub .riwaq-destination {
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+}
+.riwaq-wheel.is-compact .wheel-hub .riwaq-destination > span,
+.riwaq-wheel.is-compact .wheel-hub .nav-lock,
+.riwaq-wheel.is-compact .riwaq-sidebar-update {
+  display: none;
+}
+.riwaq-wheel.is-compact .wheel-hub::after {
+  content: none;
+}
+/* The narrow drawer: the open wheel, the same rim and lens. */
+.riwaq-nav-dialog:has(.riwaq-wheel) {
+  height: min(700px, calc(100dvh - 24px));
+}
+.riwaq-nav-dialog .riwaq-wheel {
+  height: 100%;
+}

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { WatchedContext } from "../lib/watched.js";
 import { attachDragScroll } from "../lib/drag-scroll.js";
+import { lockScroll } from "../lib/scroll-lock.js";
 import { PosterActionsContext } from "../lib/poster-actions.js";
 import { typeName, clock, imgUrl, episodeList } from "../lib/helpers.js";
 import { titleKey } from "../../core/library.mjs";
@@ -50,12 +51,21 @@ export function Empty({ icon: Icon = Film, title, children, action }) {
     </div>
   );
 }
+/**
+ * A dialog. Its frame never scrolls: its content does, below the close
+ * button, so a scrollbar never runs beside it (issue #134), and the page
+ * behind stays still while it is open, nested dialogs included (#135).
+ */
 export function Modal({ children, onClose, className = "", labelledBy }) {
   const ref = useRef();
   useEffect(() => {
     const d = ref.current;
     d.showModal();
-    return () => d.close();
+    const release = lockScroll();
+    return () => {
+      d.close();
+      release();
+    };
   }, []);
   return (
     <dialog
@@ -72,16 +82,14 @@ export function Modal({ children, onClose, className = "", labelledBy }) {
         if (e.target === ref.current) onClose();
       }}
     >
-      <div className="modal-inner">
-        <IconButton
-          title="إغلاق"
-          className="icon-button modal-close"
-          onClick={onClose}
-        >
-          <X size={21} />
-        </IconButton>
-        {children}
-      </div>
+      <IconButton
+        title="إغلاق"
+        className="icon-button modal-close"
+        onClick={onClose}
+      >
+        <X size={21} />
+      </IconButton>
+      <div className="modal-inner">{children}</div>
     </dialog>
   );
 }

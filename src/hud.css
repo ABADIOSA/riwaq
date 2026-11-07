@@ -475,56 +475,6 @@ html.hud-root #root {
   text-align: start;
 }
 /* The volume popup while the controls sleep. */
-.hud-volume-popup {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-radius: 14px;
-  background: #000b;
-  pointer-events: none;
-  font-variant-numeric: tabular-nums;
-  animation: hud-volume-in 0.15s ease;
-  z-index: 2;
-}
-.hud-volume-popup.at-center {
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-}
-.hud-volume-popup.at-top {
-  left: 50%;
-  top: 28px;
-  transform: translateX(-50%);
-}
-.hud-volume-popup.at-top-left {
-  left: 28px;
-  top: 28px;
-}
-.hud-volume-popup.at-top-right {
-  right: 28px;
-  top: 28px;
-}
-.hud-volume-meter {
-  position: relative;
-  width: 140px;
-  height: 5px;
-  border-radius: 5px;
-  background: #ffffff2e;
-  overflow: hidden;
-}
-.hud-volume-meter i {
-  position: absolute;
-  inset-block: 0;
-  left: 0;
-  background: var(--hud-accent);
-}
-@keyframes hud-volume-in {
-  from {
-    opacity: 0;
-  }
-}
 /* Waiting on the network mid-viewing: a quiet pill, not a frozen picture. */
 .hud-buffering {
   position: absolute;

@@ -24,10 +24,9 @@ import {
 } from "lucide-react";
 import PlayerDock from "./PlayerDock.jsx";
 import PlaybackChoices from "./PlaybackChoices.jsx";
-import VolumeSlider from "./VolumeSlider.jsx";
 import PlayerMenu from "./PlayerMenu.jsx";
 import { api, call } from "../lib/api.js";
-import { clock } from "../lib/helpers.js";
+import { clockTime } from "../../core/player-time.mjs";
 import { resolveAppearance } from "../../core/appearance.mjs";
 import { hudHidden } from "../../core/hud-layout.mjs";
 import { SEPARATE_HIDDEN } from "../../core/hud.mjs";
@@ -35,7 +34,15 @@ import { qualityChips } from "../../core/player-tuning.mjs";
 import { startLine } from "../../core/torrent-engine.mjs";
 import { hudKey, pointerFocus } from "../../core/hotkeys.mjs";
 import { useInterfaceLanguage } from "../lib/language.js";
-import { loc } from "../lib/format.js";
+import {
+  ChapterNow,
+  ChapterStrip,
+  ChapterTicks,
+  EndsAt,
+  TimeCounter,
+  VolumeControl,
+  useChapters,
+} from "./PlayerBar.jsx";
 import { useSpaceHold } from "../lib/use-space-hold.js";
 
 // Controls fade after the pointer has been still this long, and the pointer
@@ -43,17 +50,6 @@ import { useSpaceHold } from "../lib/use-space-hold.js";
 const IDLE_MS = 2500;
 // A click waits this long to see whether it becomes a double click.
 const CLICK_MS = 230;
-
-const endsAt = (player) =>
-  new Intl.DateTimeFormat(loc("ar-SA"), {
-    hour: "numeric",
-    minute: "2-digit",
-    calendar: "gregory",
-    numberingSystem: "latn",
-  }).format(
-    Date.now() +
-      ((player.duration - (player.position || 0)) / (player.speed || 1)) * 1000,
-  );
 
 const RTX_LABELS = {
   upscale: "RTX VSR",
@@ -107,6 +103,7 @@ export default function Hud() {
   const [shaderMenu, setShaderMenu] = useState(false);
   // The volume popup while the controls sleep (Harbor's volume OSD).
   const [volumePopup, setVolumePopup] = useState(0);
+  const [volumeReveal, setVolumeReveal] = useState(0);
   const lastVolume = useRef(null);
   const idle = useRef();
   const click = useRef();
@@ -326,16 +323,24 @@ export default function Hud() {
     sleepMenu ||
     shaderMenu ||
     player.loading;
-  // A volume change while the controls sleep (a key, the wheel on a mouse
-  // over another window) shows a short popup instead of waking everything.
+  // A volume change (a key, the wheel) shows itself in the bottom bar
+  // (issue #139): with the controls up, the volume slider unfolds for a
+  // moment; while they sleep, a small pill at the volume's corner, never the
+  // large display over the picture (MPV's own is off too: no-osd).
   useEffect(() => {
     const volume = Math.round(player.volume ?? -1);
     const was = lastVolume.current;
     lastVolume.current = volume;
     if (was === null || was === volume || volume < 0) return;
-    if (shown || settings.volumeOsd === false) return;
+    if (shown) return setVolumeReveal(Date.now());
+    if (settings.volumeOsd === false) return;
     setVolumePopup(Date.now());
   }, [player.volume]);
+  useEffect(() => {
+    if (!volumeReveal) return;
+    const timer = setTimeout(() => setVolumeReveal(0), 1300);
+    return () => clearTimeout(timer);
+  }, [volumeReveal]);
   useEffect(() => {
     if (!volumePopup) return;
     const timer = setTimeout(() => setVolumePopup(0), 1300);
@@ -364,6 +369,8 @@ export default function Hud() {
     return () => clearTimeout(timer);
   }, [flash]);
 
+  // Before the early return: hooks run in the same order every render.
+  const chapters = useChapters(player);
   if (!player.active) return <div className="hud-stage idle" />;
 
   const nextCard =
@@ -491,7 +498,6 @@ export default function Hud() {
       Math.min(maxVolume, (player.volume || 0) + (e.deltaY < 0 ? 5 : -5)),
     );
     command("volume", volume);
-    pulse("volume");
     wake();
   };
   const seekTo = (event) => {
@@ -506,7 +512,7 @@ export default function Hud() {
   return (
     <div
       key={uiLanguage}
-      className={`hud-stage ${shown ? "awake" : "asleep"}`}
+      className={`hud-stage ${shown ? "awake" : "asleep"}${settings.reduceMotion ? " reduced-motion" : ""}`}
       style={
         state
           ? { "--hud-accent": resolveAppearance(state.settings).colors.accent }
@@ -695,10 +701,8 @@ export default function Hud() {
         <div className={`hud-flash ${flash.kind}`} key={flash.at}>
           {flash.kind === "pause" ? (
             <Pause size={34} fill="currentColor" />
-          ) : flash.kind === "play" ? (
-            <Play size={34} fill="currentColor" />
           ) : (
-            <span>{Math.round(player.volume || 0)}%</span>
+            <Play size={34} fill="currentColor" />
           )}
         </div>
       )}
@@ -715,22 +719,16 @@ export default function Hud() {
       )}
       {volumePopup > 0 && (
         <div
-          className={`hud-volume-popup at-${settings.volumeOsdPosition || "center"}`}
+          className="hud-volume-pill"
           key={volumePopup}
           dir="ltr"
+          role="status"
         >
           {player.muted || !player.volume ? (
-            <VolumeX size={18} />
+            <VolumeX size={15} />
           ) : (
-            <Volume2 size={18} />
+            <Volume2 size={15} />
           )}
-          <span className="hud-volume-meter">
-            <i
-              style={{
-                width: `${Math.min(100, ((player.volume || 0) / maxVolume) * 100)}%`,
-              }}
-            />
-          </span>
           <b>{Math.round(player.volume || 0)}%</b>
         </div>
       )}
@@ -842,7 +840,11 @@ export default function Hud() {
           </div>
         )}
         <div className="hud-seek" dir="ltr">
-          <span>{player.live ? "مباشر" : clock(player.position)}</span>
+          {player.live && (
+            <span className="hud-live">
+              <Radio size={14} /> مباشر
+            </span>
+          )}
           <div
             className="hud-track"
             onMouseMove={(e) =>
@@ -867,6 +869,11 @@ export default function Hud() {
               style={{
                 width: `${player.duration ? Math.min(100, ((player.position || 0) / player.duration) * 100) : 0}%`,
               }}
+            />
+            <ChapterTicks
+              marks={chapters}
+              duration={player.duration}
+              className="hud-chapter-tick"
             />
             {player.duration > 0 &&
               (player.segments || []).map((segment, index) => (
@@ -922,14 +929,19 @@ export default function Hud() {
             )}
             {seekHover && (
               <b className="hud-seek-time" style={{ left: seekHover.x }}>
-                {clock(seekHover.t)}
+                {clockTime(seekHover.t)}
               </b>
             )}
           </div>
-          <span>
-            {player.live ? <Radio size={14} /> : clock(player.duration)}
-          </span>
         </div>
+        {shows("seek") && (
+          <ChapterStrip
+            marks={chapters}
+            position={player.position}
+            duration={player.duration}
+            onSeek={(at) => command("seek", at)}
+          />
+        )}
         <div className="hud-actions">
           <div className="hud-group">
             <button
@@ -986,32 +998,20 @@ export default function Hud() {
               </button>
             )}
             {shows("volume") && (
-              <>
-                <button
-                  title="كتم الصوت"
-                  onClick={() => command("mute")}
-                  className="hud-volume-icon"
-                >
-                  {player.muted || !player.volume ? (
-                    <VolumeX size={19} />
-                  ) : (
-                    <Volume2 size={19} />
-                  )}
-                </button>
-                <VolumeSlider
-                  volume={player.volume || 0}
-                  max={maxVolume}
-                  muted={!!player.muted}
-                  onChange={(value) => command("volume", value)}
-                />
-                <small>{Math.round(player.volume || 0)}%</small>
-              </>
+              <VolumeControl
+                volume={player.volume || 0}
+                max={maxVolume}
+                muted={!!player.muted}
+                onMute={() => command("mute")}
+                onChange={(value) => command("volume", value)}
+                reveal={volumeReveal > 0}
+              />
             )}
+            <TimeCounter player={player} className="hud-time" />
+            <ChapterNow marks={chapters} position={player.position} />
           </div>
           <div className="hud-group">
-            {shows("ends") && !player.live && player.duration > 0 && (
-              <small className="hud-ends">ينتهي {endsAt(player)}</small>
-            )}
+            {shows("ends") && <EndsAt player={player} className="hud-ends" />}
             {shows("subs") && (
               <button
                 title="الترجمة (C أو الزر الأيمن)"

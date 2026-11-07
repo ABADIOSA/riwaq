@@ -7,6 +7,31 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.55.0",
+    title: "عجلة رِواق، وتحكم أوضح",
+    items: [
+      "التنقل صار «العجلة»: وجهاتك على حافة عجلة تدور إلى ما تختاره، ومن المظهر والواجهة ← الواجهة ← شكل التنقل ترجع للشريط الجانبي متى شئت.",
+      "أزرار ونوافذ «زجاجية» بلون ثيمك، أو «مصمتة» لمن يفضّلها بلا شفافية، وكل الحركات تتوقف مع «تقليل الحركة».",
+      "شريط المشغل: تشغيل وإيقاف، رجوع وتقديم، الصوت، الوقت المنقضي أو المتبقي مع المدة، شريط الفصول بأسمائها، ووقت الانتهاء بنظام 12 ساعة.",
+      "↑ و↓ تغيّران الصوت بمؤشر صغير بدل الشريط الأبيض الكبير.",
+      "النوافذ ما تحرّك الصفحة خلفها، وزر الإغلاق بعيد عن شريط التمرير، وفي نافذة المصادر تتمرر القائمة فقط.",
+      "صور التنزيلات تُحفظ من بداية التنزيل وتظهر بلا إنترنت، ومساحة التورنت تُحرَّر بعد المشاهدة مباشرة.",
+      "قص ونسخ ولصق في حقول الكتابة، والبحث في المنتصف، وصفحة الإضافات تبدأ بالتثبيت، والإعدادات تبدأ بلغة الواجهة.",
+    ],
+    en: {
+      title: "Riwaq's wheel, and clearer controls",
+      items: [
+        "Navigation is now the wheel: your destinations sit on the rim of a wheel that turns to what you choose. Appearance & interface → Interface → Navigation takes you back to the sidebar whenever you like.",
+        "Glass buttons and dialogs in your theme's colours, or Solid if you prefer no transparency; every movement stops with Reduce motion.",
+        "The player's bar: play and pause, back and forward, volume, elapsed or remaining time with the length, a chapter strip with their names, and the time it ends in 12-hour form.",
+        "↑ and ↓ change the volume with a small indicator instead of the large white bar.",
+        "Dialogs never move the page behind them, the close button sits clear of the scrollbar, and only the list scrolls in the sources window.",
+        "Download posters are saved when a download starts and show offline, and torrent space is freed right after watching.",
+        "Cut, copy and paste in text fields, a centred search, the addons page starts with installing, and Settings opens on the interface language.",
+      ],
+    },
+  },
+  {
     version: "0.54.0",
     title: "رِواق أوضح، وأقرب لذوقك",
     items: [

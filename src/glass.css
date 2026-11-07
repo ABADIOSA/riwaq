@@ -1,0 +1,311 @@
+/*
+ * Glass controls (November 2026; Appearance → Interface → Glass).
+ *
+ * Inspired by Apple's Liquid Glass and its guidance on materials, drawn with
+ * plain CSS for this app: a translucent tint of the viewer's own palette, a
+ * thin luminous edge, a soft sheen at the top and a short shadow that lifts
+ * the control above the page. It is not Apple's system material, and it
+ * never claims to be one on Windows.
+ *
+ * - Backdrop blur only on floating surfaces (dialogs, menus, tooltips, the
+ *   wheel's labels), never per card or per button: that would repaint the
+ *   page on every move (CLAUDE.md, Performance).
+ * - Only transform and opacity animate.
+ * - "Solid" (glass-solid), Windows' or the browser's reduced transparency,
+ *   forced colours and browsers without backdrop-filter all get the same
+ *   shapes, opaque.
+ * - Nothing here touches what is drawn over a picture or the video (the
+ *   HUD keeps its own dark layer: a blur in its window has no video under
+ *   it to sample).
+ */
+.app {
+  --glass-fill: color-mix(in srgb, var(--raised) 74%, transparent);
+  --glass-fill-strong: color-mix(in srgb, var(--panel) 90%, transparent);
+  /* Over a picture the layer alone must keep white text at 4.5:1 or more,
+     whatever the picture is: over pure white, 64% of this colour leaves
+     about rgb(95 95 96), 6.3:1 for white text (issue #142 review: 42% gave
+     3.6:1 on a light showcase). */
+  --glass-picture-fill: rgb(10 12 16 / 0.64);
+  --glass-picture-hover: rgb(10 12 16 / 0.74);
+  --glass-edge: color-mix(in srgb, var(--text) 15%, transparent);
+  --glass-edge-strong: color-mix(in srgb, var(--text) 26%, transparent);
+  --glass-sheen: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.1),
+    rgb(255 255 255 / 0) 55%
+  );
+  --glass-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1), 0 3px 12px rgb(0 0 0 / 0.22);
+  --glass-shadow-lift:
+    inset 0 1px 0 rgb(255 255 255 / 0.14), 0 8px 22px rgb(0 0 0 / 0.3);
+  --glass-blur: blur(18px) saturate(160%);
+  /* The primary's own sheen, in the top quarter only (see .primary). */
+  --primary-sheen: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.2),
+    rgb(255 255 255 / 0) 24%
+  );
+}
+.app:where(.scheme-light) {
+  --glass-fill: color-mix(in srgb, #ffffff 78%, transparent);
+  --glass-fill-strong: color-mix(in srgb, #ffffff 92%, transparent);
+  --glass-edge: color-mix(in srgb, var(--text) 16%, transparent);
+  --glass-edge-strong: color-mix(in srgb, var(--text) 28%, transparent);
+  --glass-sheen: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.75),
+    rgb(255 255 255 / 0) 60%
+  );
+  --glass-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9), 0 2px 10px rgb(26 29 36 / 0.1);
+  --glass-shadow-lift: inset 0 1px 0 #fff, 0 8px 20px rgb(26 29 36 / 0.16);
+}
+
+/* ---- Buttons ------------------------------------------------------------ */
+
+.app.glass-on button.primary,
+.app.glass-on button.secondary,
+.app.glass-on .choice-row button,
+.app.glass-on .icon-button {
+  transition:
+    transform var(--motion-press) var(--ease-out),
+    box-shadow var(--motion-press) ease,
+    filter var(--motion-press) ease;
+}
+/* Primary: the accent, with its sheen and a glow of its own colour. The
+   text colour is the palette's accent ink (≥ 4.5:1, core/appearance.mjs),
+   which leaves no room for white light over the text: the light scheme's
+   page sheen (75% white) brought it to 3.2:1. The primary's own sheen
+   stays in the top quarter, above the glyphs, in both schemes. */
+.app.glass-on .primary {
+  background: var(--primary-sheen), var(--accent-fill);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, #fff 40%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.app.glass-on .primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    0 10px 24px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+/* Secondary: tinted glass with a luminous edge. */
+.app.glass-on .secondary {
+  background: var(--glass-sheen), var(--glass-fill);
+  border-color: var(--glass-edge) !important;
+  box-shadow: var(--glass-shadow);
+  color: var(--text);
+}
+.app.glass-on .secondary:hover:not(:disabled) {
+  background:
+    var(--glass-sheen), color-mix(in srgb, var(--text) 9%, var(--raised));
+  border-color: var(--glass-edge-strong) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--glass-shadow-lift);
+}
+/* Destructive: the same glass, red edge and text (never accent-coloured). */
+.app.glass-on button.danger,
+.app.glass-on .secondary.danger {
+  background:
+    var(--glass-sheen),
+    color-mix(in srgb, var(--bad, #e5484d) 12%, var(--raised));
+  border-color: color-mix(
+    in srgb,
+    var(--bad, #ff8a8a) 55%,
+    transparent
+  ) !important;
+}
+/* Choices: glass chips; the selected one carries the accent edge. */
+.app.glass-on .choice-row button {
+  background: var(--glass-sheen), var(--glass-fill);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+.app.glass-on .choice-row button:hover:not(:disabled) {
+  border-color: var(--glass-edge-strong);
+}
+.app.glass-on .choice-row button.selected,
+.app.glass-on .choice-row button[aria-checked="true"],
+.app.glass-on .choice-row button[aria-pressed="true"] {
+  background:
+    var(--glass-sheen), color-mix(in srgb, var(--accent) 18%, var(--raised));
+  border-color: color-mix(in srgb, var(--accent) 75%, transparent);
+}
+/* Round tool buttons float a little when the pointer reaches them. */
+.app.glass-on .icon-button:hover:not(:disabled) {
+  background: var(--glass-sheen), var(--glass-fill);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+}
+/* Pressed: a short sink, never a jump. */
+.app.glass-on button.primary:active:not(:disabled),
+.app.glass-on button.secondary:active:not(:disabled),
+.app.glass-on .choice-row button:active:not(:disabled),
+.app.glass-on .icon-button:active:not(:disabled) {
+  transform: scale(0.97);
+  box-shadow: none;
+}
+/* Disabled: flat, no lift, no glow. */
+.app.glass-on button.primary:disabled,
+.app.glass-on button.secondary:disabled,
+.app.glass-on .choice-row button:disabled {
+  box-shadow: none;
+  transform: none;
+  filter: saturate(0.6);
+}
+/* Focus: one ring for every glass control, outside its edge. */
+.app button.primary:focus-visible,
+.app button.secondary:focus-visible,
+.app .choice-row button:focus-visible,
+.app .icon-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+/* Busy: a control that is loading keeps its size and says so. */
+.app button[aria-busy="true"] {
+  cursor: progress;
+}
+
+/* ---- Floating surfaces --------------------------------------------------- */
+
+.app.glass-on .modal {
+  background: var(--glass-sheen), var(--glass-fill-strong);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-edge);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 30px 90px rgb(0 0 0 / 0.45);
+}
+.app.glass-on .modal-close {
+  background: var(--glass-sheen), var(--glass-fill) !important;
+  border-color: var(--glass-edge) !important;
+  box-shadow: var(--glass-shadow);
+}
+.app.glass-on .player-menu,
+.app.glass-on .poster-actions-menu,
+.app.glass-on .toast {
+  backdrop-filter: var(--glass-blur);
+}
+/* The wheel's glass lens sits on the rail; the rail itself stays solid so
+   the destinations read on any wallpaper. */
+
+/* ---- Solid, reduced transparency, forced colours ------------------------ */
+
+.app.glass-solid {
+  --glass-fill: var(--raised);
+  --glass-fill-strong: var(--panel);
+  --glass-sheen: linear-gradient(transparent, transparent);
+  --primary-sheen: linear-gradient(transparent, transparent);
+  --glass-shadow: none;
+  --glass-shadow-lift: 0 2px 8px rgb(0 0 0 / 0.18);
+  --glass-blur: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .app {
+    --glass-fill: var(--raised);
+    --glass-fill-strong: var(--panel);
+    --glass-picture-fill: #0a0c10;
+    --glass-picture-hover: #151820;
+    --glass-sheen: linear-gradient(transparent, transparent);
+    --primary-sheen: linear-gradient(transparent, transparent);
+    --glass-blur: none;
+  }
+}
+@supports not (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  .app {
+    --glass-fill: var(--raised);
+    --glass-fill-strong: var(--panel);
+    --glass-picture-fill: #0a0c10;
+    --glass-picture-hover: #151820;
+    --glass-blur: none;
+  }
+}
+@media (forced-colors: active) {
+  .app {
+    --glass-fill: Canvas;
+    --glass-fill-strong: Canvas;
+    --glass-picture-fill: Canvas;
+    --glass-picture-hover: Canvas;
+    --glass-edge: CanvasText;
+    --glass-edge-strong: CanvasText;
+    --glass-sheen: linear-gradient(transparent, transparent);
+    --primary-sheen: linear-gradient(transparent, transparent);
+    --glass-shadow: none;
+    --glass-shadow-lift: none;
+    --glass-blur: none;
+  }
+  .wheel-lens {
+    border-color: Highlight;
+    background: transparent;
+    box-shadow: none;
+  }
+  .wheel-item.selected .wheel-disc {
+    border: 2px solid Highlight;
+  }
+}
+
+/* ---- The player's controls (HUD and theater) ----------------------------- */
+
+/* Over the picture: a dark readable layer with the same edge and sheen. */
+.hud-stage .hud-actions button:hover,
+.hud-stage .hud-actions button.on {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.hud-stage .hud-main {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.25),
+    0 4px 14px rgb(0 0 0 / 0.35);
+}
+.hud-volume-pill,
+.hud-stage .chapter-strip .chapter:focus-visible {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);
+}
+
+/* Over a picture (the showcase, the theater) the glass stays dark in both
+   schemes: a dark scrim is what keeps its text readable there
+   (src/scheme-light.css keeps these dark for the same reason). A title's
+   page fades its backdrop into the page colour, so its buttons follow the
+   scheme. */
+.app.glass-on .hero .secondary,
+.app.glass-on .theater .secondary {
+  --glass-fill: var(--glass-picture-fill);
+  --glass-edge: rgb(255 255 255 / 0.26);
+  --glass-edge-strong: rgb(255 255 255 / 0.4);
+  --glass-sheen: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.14),
+    rgb(255 255 255 / 0) 55%
+  );
+  --glass-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.16), 0 4px 14px rgb(0 0 0 / 0.3);
+  --glass-shadow-lift:
+    inset 0 1px 0 rgb(255 255 255 / 0.2), 0 8px 22px rgb(0 0 0 / 0.4);
+  color: #fff;
+}
+.app.glass-on .hero .secondary:hover:not(:disabled),
+.app.glass-on .theater .secondary:hover:not(:disabled) {
+  background: var(--glass-sheen), var(--glass-picture-hover);
+}
+
+/* ---- Moving between pages ------------------------------------------------ */
+
+/* A page arrives with a short fade and a 6 px rise. Nothing waits for it:
+   content is there from the first frame, and reduced motion makes it
+   instant (tokens.css). The title page and See all, full-window fixed
+   layers, open without one, so no window-sized layer is faded on every
+   open. */
+@keyframes riwaq-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.app .content > .page-body {
+  animation: riwaq-page-in var(--motion-page) var(--ease-out);
+}

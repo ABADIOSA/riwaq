@@ -216,6 +216,13 @@ export const DEFAULT_APPEARANCE = {
   // Riwaq's own look (arched cards, khatam stars, mashrabiya, Naskh
   // headings) or the classic rectangular one.
   identity: "riwaq",
+  // How Riwaq is navigated: the wheel (the identity since November 2026,
+  // core/wheel.mjs) or the straight sidebar of 0.47–0.54. Independent of
+  // the card shapes above (issue #117).
+  navStyle: "wheel",
+  // Controls drawn as tinted glass (inspired by Apple's Liquid Glass, made
+  // for this app's pages), or solid with fewer effects (less transparency).
+  glass: "on",
   // Dark (the palette as chosen, as before 0.54), light (Pure White) or
   // whatever Windows or the browser uses (issue #126).
   mode: "dark",
@@ -282,6 +289,31 @@ const number = (value, min, max, fallback) =>
     ? Math.round(Math.max(min, Math.min(max, Number(value))))
     : fallback;
 
+export const NAV_STYLES = ["wheel", "rail"];
+export const GLASS = ["on", "solid"];
+
+/**
+ * Appearance saved before the wheel (0.54 and older, a backup, a synced
+ * device) moves to the new identity: the wheel and glass controls, with
+ * everything else it held (palette, mode, cards, hidden destinations)
+ * kept. Written into the saved settings, not only drawn by default.
+ */
+export function adoptWheel(settings) {
+  if (!settings || typeof settings !== "object") return settings;
+  const a = settings.appearance;
+  if (!a || typeof a !== "object") return settings;
+  if (NAV_STYLES.includes(a.navStyle) && GLASS.includes(a.glass))
+    return settings;
+  return {
+    ...settings,
+    appearance: {
+      ...a,
+      navStyle: NAV_STYLES.includes(a.navStyle) ? a.navStyle : "wheel",
+      glass: GLASS.includes(a.glass) ? a.glass : "on",
+    },
+  };
+}
+
 export const HIDEABLE_NAV = [
   ["discover", "اكتشف"],
   ["library", "مكتبتي"],
@@ -332,6 +364,8 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
     next.posterHover,
   );
   next.identity = choose(input.identity, ["riwaq", "classic"], next.identity);
+  next.navStyle = choose(input.navStyle, NAV_STYLES, next.navStyle);
+  next.glass = choose(input.glass, GLASS, next.glass);
   next.mode = choose(input.mode, MODES, next.mode);
   if (typeof input.posterTitles === "boolean")
     next.posterTitles = input.posterTitles;
@@ -649,6 +683,8 @@ export function themeClasses(input) {
   const a = safeAppearance(input);
   return [
     `identity-${a.identity}`,
+    `nav-${a.navStyle}`,
+    `glass-${a.glass}`,
     // The stylesheet's light surfaces (src/scheme-light.css) key off the
     // colours drawn, so a custom light palette gets them too.
     isLight(a.colors) ? "scheme-light" : "scheme-dark",

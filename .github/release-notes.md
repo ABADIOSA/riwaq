@@ -1,47 +1,50 @@
-## رِواق 0.54.0 · تجريبي / Beta — رِواق أوضح، وأقرب لذوقك · A More Personal, Polished and Reliable Riwaq
+## رِواق 0.55.0 · تجريبي / Beta — عجلة رِواق، وتحكم أوضح · Riwaq's Wheel, and Clearer Controls
 
 ### الجديد
 
-- **الإعدادات في ست غرف واضحة:** المظهر والواجهة، المشغل والتشغيل، المصادر والمكتبة، التنزيلات والملفات، الحسابات والربط، النظام والتشخيص. ما فيه «أساسية» و«متقدمة»، وكل خيار له مكان واحد، ومعها صفحات جديدة للملفات الشخصية والتنزيلات والخصوصية (#127).
-- **وضع فاتح «أبيض نقي»** مع داكن وحسب النظام، من المظهر والواجهة ← السمة. يتبع ويندوز مباشرة، ولون ثيمك يتعمّق ليُقرأ على الأبيض، وشريط عنوان النافذة يتبع الملف الشخصي والوضع (#126).
-- **العرض الرئيسي** بنفس المسافة من الأعلى والجانبين (#125).
-- **أسهم التنقل** زوج متجاور جنب عنوان كل صف: طاقم التمثيل والسلسلة والعد التنازلي والحلقات والتبويبات (#122).
-- **السحب بالفأرة** لأعلى ولأسفل فوق شبكات البوسترات وصفوفها، والضغطة القصيرة تفتح العمل كالعادة (#111).
-- **أزرار الربط بالإنجليزية** صارت «Link Trakt» و«Link Simkl» و«Link AniList» (#124).
-- **سياسة خصوصية** بالعربية والإنجليزية في النظام والتشخيص ← الخصوصية، تشرح ما يبقى على جهازك وما يُرسل ولمن.
+- **العجلة** صارت التنقل الافتراضي: الوجهات على حافة عجلة تدور إلى ما تختاره وتثبت عند المؤشر، بالنقر أو Enter أو Space، والعجلة والسحب والأسهم تحرّك التركيز فقط. الشريط الجانبي باقٍ خيارًا في المظهر والواجهة ← الواجهة ← شكل التنقل.
+- **أزرار ونوافذ «زجاجية»** بلون ثيمك وحافة مضيئة، أو «مصمتة» بلا شفافية. تصير معتمة تلقائيًا مع تقليل الشفافية أو الألوان الإجبارية، وكل الحركات تتوقف مع «تقليل الحركة».
+- **شريط المشغل:** تشغيل وإيقاف، رجوع وتقديم، الصوت، الوقت المنقضي أو المتبقي مع المدة، شريط فصول بأسمائها يقفز عند النقر، ووقت الانتهاء بنظام 12 ساعة (#140).
+- **↑ و↓** تغيّران الصوت بمؤشر صغير بدل الشريط الأبيض الكبير من MPV (#139).
+- **النوافذ** ما تحرّك الصفحة خلفها، والموضع يرجع بعد إغلاق آخر نافذة (#135). زر الإغلاق بعيد عن شريط التمرير، وفي نافذة المصادر تتمرر القائمة فقط (#134).
+- **صور التنزيلات** تُحفظ من بداية التنزيل، وتظهر بعد إعادة التشغيل وبلا إنترنت، مع محاولات محدودة عند الفشل المؤقت (#136).
+- **مساحة التورنت** مع «احذف بعد المشاهدة» تُحرَّر بعد إغلاق آخر قارئ، وملفات القطع على ويندوز تُعلَّم sparse قبل أول كتابة (#138).
+- قص ونسخ ولصق وحذف وتحديد الكل في حقول الكتابة (#131)، والبحث في منتصف مكانه، وهامش واحد للصفوف والعرض الرئيسي (#130)، وصفحة الإضافات تبدأ بالتثبيت ثم Stremio فوق Nuvio (#132)، والإعدادات تبدأ بلغة الواجهة (#133)، والوضع بالترتيب: حسب النظام، فاتح، داكن (#141)، وما فيه يد سحب فوق الفراغ بين البطاقات (#137).
 
 ### تحت الغطاء
 
-- ذاكرة التورنت أكثر أمانًا: بقايا الإغلاق المفاجئ تُحذف عند التشغيل التالي، والتنظيف ما يتبع أي رابط أو اختصار مجلد ولا يلمس تنزيلاتك (#123).
-- Electron 44.9.3 وVite 8.3.5 مع إصلاحات أمنية، وتثبيت نسخ أدوات البناء.
-- إصلاح خيارات المظهر اللي كانت تختار الخيار الأول عند الضغط على عنوانها.
+- جلب صور التنزيل يقبل وجهات HTTPS عامة فقط، ويفحص كل تحويل والعنوان الذي سيُتصل به فعلًا، فلا يصل إلى شبكتك المحلية أو جهازك.
+- ذاكرة التورنت ترفض أي رابط أو junction أو ملف مرتبط داخلها، والتنظيف محصور في مجلد العنوان نفسه.
+- إيقاف التشغيل فور بدئه يُعامل إلغاءً لا خطأ اتصال، ويبقى فشل MPV الحقيقي خطأ.
+- تباين أوضح لنصوص البطاقات والتذييل وأزرار الزجاج في الوضع الفاتح.
 
 ### English
 
-- **Settings in six clear rooms:** Appearance & interface, Player & playback, Sources & library, Downloads & files, Accounts & linking, System & diagnostics. No Basic or Advanced split, every option has one place, with new Profiles, Downloads and Privacy pages (#127).
-- **A Pure White light mode** alongside dark and System, in Appearance & interface → Theme. It follows Windows live, your theme's accent deepens to read on white, and the window's title bar follows the profile and mode (#126).
-- **The showcase** sits the same distance from the top and both sides (#125).
-- **Row arrows** are one adjacent pair beside each row's title: cast, series, countdowns, episodes and tabs (#122).
-- **Mouse dragging** up and down over poster grids and rows; a short click still opens the title (#111).
-- **Link buttons in English** read "Link Trakt", "Link Simkl" and "Link AniList" (#124).
-- **A privacy policy** in Arabic and English under System & diagnostics → Privacy, explaining what stays on your device, what is sent and to whom.
+- **The wheel** is the default navigation: destinations sit on the rim of a wheel that turns to what you choose and settles at the pointer. Click, Enter or Space opens one; the mouse wheel, dragging and the arrows only move focus. The sidebar stays a choice in Appearance & interface → Interface → Navigation.
+- **Glass buttons and dialogs** in your theme's colours with a luminous edge, or **Solid** with no transparency. They turn opaque with reduced transparency or forced colours, and every movement stops with Reduce motion.
+- **The player's bar:** play and pause, back and forward, volume, elapsed or remaining time with the length, a chapter strip with names that seeks on click, and the end time in 12-hour form (#140).
+- **↑ and ↓** change the volume with a small indicator instead of MPV's large white bar (#139).
+- **Dialogs** never move the page behind them, and the position returns when the last one closes (#135). The close button sits clear of the scrollbar, and only the list scrolls in the sources window (#134).
+- **Download posters** are saved when a download starts and show after a restart and offline, with bounded retries after a passing failure (#136).
+- **Torrent space** with "Delete after viewing" is freed once the last reader closes, and piece files on Windows are marked sparse before the first write (#138).
+- Cut, Copy, Paste, Delete and Select all in text fields (#131); a centred search; one gutter for rows and the showcase (#130); the addons page starts with installing, then Stremio right above Nuvio (#132); Settings opens on the interface language (#133); Mode reads System, Light, Dark (#141); no grab hand over the gaps between cards (#137).
 
-Under the hood: safer torrent-cache cleanup (pieces left by a crash are removed at the next start; cleanup never follows a link or junction and never touches your downloads, #123); Electron 44.9.3 and Vite 8.3.5 with security fixes, and pinned build tools; appearance options no longer pick their first choice when you click their caption.
+Under the hood: download artwork reaches only public HTTPS destinations, checking every redirect and the address actually connected, so it cannot reach your local network or this computer; the torrent cache refuses any link, junction or linked file inside it and cleans only the title's own folder; stopping a start at once is a cancellation, not a connection error, while a real MPV failure stays an error; clearer contrast for card text, footers and glass buttons in light mode.
 
 ### حدود معروفة · Known limits
 
-- إصدار تجريبي. لم يُعتمد على HDR أو Dolby Vision أو RTX حقيقي، ولا على شاشات متعددة بدقة مختلفة أو شاشات لمس أو قارئات الشاشة، ولا بحسابات خدمات حقيقية.
-- إلغاء التشغيل فور بدئه قد يعرض رسالة اتصال، مع أن الإيقاف يتم بأمان ولا يبقى مشغّل يعمل. موجود قبل هذا الإصدار، وإصلاحه منفصل.
+- إصدار تجريبي. لم يُعتمد على HDR أو Dolby Vision أو RTX حقيقي، ولا على شاشات متعددة بدقة مختلفة أو شاشات لمس فعلية أو قارئات الشاشة، ولا بحسابات خدمات حقيقية.
+- جهاز بإصدار 0.54 يزامن عبر حساب رِواق قد يعيد اختيار «الشريط الجانبي» إلى العجلة الافتراضية.
 - الملفات موقّعة لتحديثات رِواق (Ed25519) لكنها غير موقّعة بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-- Beta. Real HDR, Dolby Vision and RTX output, mixed-DPI multi-monitor setups, touchscreens, screen readers and real provider accounts are not certified.
-- Cancelling a start immediately can show a connection message even though playback stops safely and no player is left running. This predates the release and is tracked separately.
+- Beta. Real HDR, Dolby Vision and RTX output, mixed-DPI multi-monitor setups, physical touchscreens, screen readers and real provider accounts are not certified.
+- A 0.54 device syncing through a Riwaq account can turn a "Sidebar" choice back into the default wheel.
 - Updates are authenticated with Riwaq's Ed25519 signature; the files carry no Windows Authenticode publisher signature, so SmartScreen may warn.
 
 ### التحقق · Verification
 
-962 اختبارًا، والتنسيق، وبناء سطح المكتب والويب، وفحوص Chromium للواجهة والموقع كامل. مراجعة مستقلة على ويندوز شغّلت Electron وMPV فعليًا (الحلقة المدمجة والنافذة المنفصلة، الاستعادة بـ F8، التنزيلات، الملفات الشخصية، الحزمة المحمولة والمثبّت وترقية معزولة) مع حدودها المذكورة في [docs/REVIEW-PR-128.md](https://github.com/ABADIOSA/riwaq/blob/main/docs/REVIEW-PR-128.md). مسار الإصدار يشغّل الاختبارات على ويندوز ويبني الحزم ويوقّع ملف التحديث. ليس إصدار Stable.
+التفاصيل وحدودها في [VERIFICATION.md](https://github.com/ABADIOSA/riwaq/blob/main/VERIFICATION.md) ومراجعة PR #142. ليس إصدار Stable.
 
-962 tests, formatting, desktop and web builds, Chromium interface checks and the full site smoke. An independent Windows review ran the real Electron and MPV (embedded and separate window, F8 recovery, downloads, profiles, the portable build, the installer and an isolated upgrade), with the limits recorded in [docs/REVIEW-PR-128.md](https://github.com/ABADIOSA/riwaq/blob/main/docs/REVIEW-PR-128.md). The release workflow runs the tests on Windows, builds the packages and signs the update manifest. This is not a Stable release.
+Details and their limits are in [VERIFICATION.md](https://github.com/ABADIOSA/riwaq/blob/main/VERIFICATION.md) and the PR #142 review. This is not a Stable release.
 
 التطبيق مجاني ومفتوح المصدر بترخيص MIT. Riwaq remains free and open source under the MIT license.

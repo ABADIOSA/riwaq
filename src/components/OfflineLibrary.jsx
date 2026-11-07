@@ -23,18 +23,26 @@ const LABELS = {
 };
 function DownloadCard({ item: x, profileId, busy, act, confirm, request }) {
   const [art, setArt] = useState(null);
+  useEffect(() => setArt(null), [profileId, x.id]);
   useEffect(() => {
+    if (art) return;
     let active = true;
-    setArt(null);
-    request("offlineArtwork", { profileId, id: x.id })
-      .then((r) => {
-        if (active) setArt(r?.image || null);
-      })
-      .catch(() => {});
+    let retryTimer;
+    const load = async () => {
+      try {
+        const result = await request("offlineArtwork", { profileId, id: x.id });
+        if (!active) return;
+        if (result?.image) setArt(result.image);
+        else if (result?.retryAfterMs > 0)
+          retryTimer = setTimeout(load, result.retryAfterMs);
+      } catch {}
+    };
+    load();
     return () => {
       active = false;
+      clearTimeout(retryTimer);
     };
-  }, [profileId, x.id, request]);
+  }, [profileId, x.id, x.status, request, art]);
   const episode = offlineEpisode(x.meta, x.videoId, x.episode);
   return (
     <article className="download-card" aria-label={x.meta.name}>

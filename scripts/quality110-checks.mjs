@@ -174,7 +174,17 @@ export async function qualityChecks({
         await browser.waitFor();
         assert.equal(await browser.locator(".browse-tabs").count(), 0);
         assert.equal(await browser.locator("h1").innerText(), "Latest");
-        assert.equal(await browser.locator(".poster-card").count(), 20);
+        // Its own titles only. A wider grid (the compact wheel) can reach
+        // the end at once and load the catalog's next page, so the count
+        // is at least one page rather than exactly one.
+        const cards = await browser
+          .locator(".poster-card")
+          .evaluateAll((all) => all.map((c) => c.getAttribute("aria-label")));
+        assert.ok(cards.length >= 20, `${cards.length} cards`);
+        assert.ok(
+          cards.every((label) => /Quality movie \d+/.test(label)),
+          "only the chosen catalog",
+        );
         await page.keyboard.press("Escape");
         assert.equal(await tab.getAttribute("aria-selected"), "true");
         await group.locator(".smart-chips [role=tab]").first().click();

@@ -81,6 +81,15 @@ async function sample(site) {
       await nav(1);
       await page.locator(".poster-card").first().waitFor();
     });
+    // The wheel turns its destinations after a choice (300 ms, none with
+    // reduced motion). Playwright will not click a moving button, so timing
+    // Home straight after Discover measured the turn, not the page (the PR
+    // #142 review read 81 → 418 ms). The turn is reported on its own.
+    const motion = await time(() =>
+      page.waitForFunction(() =>
+        document.getAnimations().every((a) => a.playState !== "running"),
+      ),
+    );
     const home = await time(async () => {
       await nav(0);
       await page.locator(".smart-shelf .poster-card").first().waitFor();
@@ -111,6 +120,7 @@ async function sample(site) {
     return {
       cold,
       discover,
+      motion,
       home,
       seeAll,
       details,

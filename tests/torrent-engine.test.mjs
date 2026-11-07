@@ -459,7 +459,7 @@ test("a released title is destroyed after its grace period, with its pieces", as
     cacheDir,
     network: OFFLINE,
     WebTorrent,
-    graceMs: 50,
+    viewingGraceMs: 50,
   });
   try {
     const url = engine.url({ infoHash: torrent.infoHash });
