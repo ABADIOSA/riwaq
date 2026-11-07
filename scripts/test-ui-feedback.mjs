@@ -97,50 +97,83 @@ const destination = (id) =>
       ].indexOf(id),
     );
 
-/** Contrast of an element's text against what is actually behind it. */
+/**
+ * Contrast of an element's text against what is actually drawn behind its
+ * glyphs. The element is captured twice, as drawn and with its text made
+ * transparent: the pixels that differ are the glyphs, the second capture is
+ * the background under them (glass, sheen, artwork), and the text colour is
+ * the element's own computed colour composited over that background. The
+ * result is a low percentile over the glyph pixels, so one stray
+ * anti-aliased pixel cannot decide it and a bright decoration elsewhere in
+ * the box (a border, an icon) cannot stand in for the text.
+ */
 async function drawnContrast(locator) {
-  const png = await locator.screenshot();
-  return page.evaluate(async (data) => {
-    const img = new Image();
-    img.src = `data:image/png;base64,${data}`;
-    await img.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0);
-    const { data: px } = ctx.getImageData(0, 0, img.width, img.height);
-    const lum = (r, g, b) => {
-      const c = [r, g, b].map((v) => {
-        v /= 255;
-        return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-      });
-      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-    };
-    // The background is the most common colour of the inner area.
-    const counts = new Map();
-    const inset = Math.floor(Math.min(img.width, img.height) * 0.2);
-    for (let y = inset; y < img.height - inset; y++)
-      for (let x = inset; x < img.width - inset; x++) {
-        const i = (y * img.width + x) * 4;
-        const key = `${px[i] >> 2},${px[i + 1] >> 2},${px[i + 2] >> 2}`;
-        counts.set(key, (counts.get(key) || 0) + 1);
-      }
-    const [bgKey] = [...counts].sort((a, b) => b[1] - a[1])[0];
-    const [r, g, b] = bgKey.split(",").map((v) => Number(v) * 4 + 2);
-    const bg = lum(r, g, b);
-    let best = 1;
-    for (let y = inset; y < img.height - inset; y++)
-      for (let x = inset; x < img.width - inset; x++) {
-        const i = (y * img.width + x) * 4;
-        const l = lum(px[i], px[i + 1], px[i + 2]);
-        best = Math.max(
-          best,
-          (Math.max(l, bg) + 0.05) / (Math.min(l, bg) + 0.05),
+  const drawn = await locator.screenshot({ animations: "disabled" });
+  const color = await locator.evaluate((el) => getComputedStyle(el).color);
+  const style = await locator.evaluate((el) => {
+    const s = document.createElement("style");
+    s.dataset.contrastProbe = "";
+    el.dataset.contrastProbe = "";
+    s.textContent =
+      "[data-contrast-probe], [data-contrast-probe] * { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; }";
+    document.head.append(s);
+    return true;
+  });
+  assert.ok(style);
+  const under = await locator.screenshot({ animations: "disabled" });
+  await locator.evaluate((el) => {
+    delete el.dataset.contrastProbe;
+    document.querySelector("style[data-contrast-probe]")?.remove();
+  });
+  return page.evaluate(
+    async ([a, b, color]) => {
+      const pixels = async (data) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${data}`;
+        await img.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+        return ctx.getImageData(0, 0, img.width, img.height).data;
+      };
+      const [pa, pb] = await Promise.all([pixels(a), pixels(b)]);
+      const lum = (r, g, bl) => {
+        const c = [r, g, bl].map((v) => {
+          v /= 255;
+          return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+      };
+      const [tr, tg, tb, ta = 1] = color.match(/[\d.]+/g).map(Number);
+      const ratios = [];
+      for (let i = 0; i < pa.length; i += 4) {
+        const diff =
+          Math.abs(pa[i] - pb[i]) +
+          Math.abs(pa[i + 1] - pb[i + 1]) +
+          Math.abs(pa[i + 2] - pb[i + 2]);
+        if (diff < 24) continue;
+        const [br, bg, bb] = [pb[i], pb[i + 1], pb[i + 2]];
+        const text = lum(
+          tr * ta + br * (1 - ta),
+          tg * ta + bg * (1 - ta),
+          tb * ta + bb * (1 - ta),
+        );
+        const back = lum(br, bg, bb);
+        ratios.push(
+          (Math.max(text, back) + 0.05) / (Math.min(text, back) + 0.05),
         );
       }
-    return Math.round(best * 100) / 100;
-  }, png.toString("base64"));
+      if (ratios.length < 8) return { ratio: 0, glyphs: ratios.length };
+      ratios.sort((x, y) => x - y);
+      return {
+        ratio: Math.round(ratios[Math.floor(ratios.length * 0.05)] * 100) / 100,
+        glyphs: ratios.length,
+      };
+    },
+    [drawn.toString("base64"), under.toString("base64"), color],
+  );
 }
 
 await page.goto(siteUrl);
@@ -222,31 +255,108 @@ await check(
   },
 );
 
-await check("#134 the sources window scrolls only its list", async () => {
+// A long list of sources, so the list really has to scroll (the fixture
+// answers one stream).
+const manyStreams = (route) =>
+  route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      streams: Array.from({ length: 40 }, (_, i) => ({
+        url: `${base}/video.webm?n=${i}`,
+        name: `Fixture ${i + 1}`,
+        title: `Fixture ${i + 1} 1080p WEB-DL\n${(i + 1) * 100} MB`,
+      })),
+    }),
+  });
+for (const [lang, width, height] of [
+  ["en", 1440, 900],
+  ["ar", 1440, 900],
+  // A 1440×900 window at 200% zoom lays out as 720×450 CSS pixels.
+  ["ar", 720, 450],
+  ["en", 720, 450],
+])
+  await check(
+    `#134 ${lang} ${width}×${height}: the sources window scrolls only its list`,
+    async () => {
+      await page.route(/\/stream\//, manyStreams);
+      try {
+        await page.setViewportSize({ width, height });
+        await restart({ uiLanguage: lang });
+        await page.locator(".poster-card").first().click();
+        await page.locator(".title-page").waitFor();
+        await page.locator(".title-page .title-play").click();
+        await page.locator(".sources-modal[open]").waitFor();
+        await settle(600);
+        const read = () =>
+          page.evaluate(() => {
+            const d = document.querySelector(".sources-modal");
+            const body = d.querySelector(".streams-body");
+            const close = d.querySelector(".modal-close");
+            const heading = d.querySelector(".streams > .section-heading");
+            const scrollers = [...d.querySelectorAll("*"), d].filter(
+              (el) =>
+                el.scrollHeight > el.clientHeight + 1 &&
+                /auto|scroll/.test(getComputedStyle(el).overflowY),
+            );
+            return {
+              bodyTop: body.getBoundingClientRect().top,
+              bodyScroll: body.scrollTop,
+              bodyRoom: body.scrollHeight - body.clientHeight,
+              closeTop: close.getBoundingClientRect().top,
+              closeBottom: close.getBoundingClientRect().bottom,
+              headingTop: heading.getBoundingClientRect().top,
+              frameScroll: d.scrollTop,
+              scrollers: scrollers.map((el) => el.className),
+              pageY: window.scrollY,
+            };
+          });
+        const g = await read();
+        assert.ok(g.bodyTop >= g.closeBottom - 0.5, JSON.stringify(g));
+        assert.ok(g.bodyRoom > 200, `a long list: ${JSON.stringify(g)}`);
+        // Only the list can scroll: not the frame, not the heading's parent.
+        assert.deepEqual(g.scrollers, ["streams-body"], JSON.stringify(g));
+        // Wheel over the list, then the keyboard inside it: the list moves,
+        // the close button, the heading and the page stay where they were.
+        const box = await page
+          .locator(".sources-modal .streams-body")
+          .boundingBox();
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.wheel(0, 600);
+        await settle(300);
+        const after = await read();
+        assert.ok(after.bodyScroll > 100, JSON.stringify(after));
+        assert.equal(after.frameScroll, 0);
+        assert.ok(Math.abs(after.closeTop - g.closeTop) < 0.5);
+        assert.ok(Math.abs(after.headingTop - g.headingTop) < 0.5);
+        assert.equal(after.pageY, g.pageY);
+        // Wheel over the heading does not move the frame either.
+        const head = await page
+          .locator(".sources-modal .streams > .section-heading")
+          .boundingBox();
+        await page.mouse.move(
+          head.x + head.width / 2,
+          head.y + head.height / 2,
+        );
+        await page.mouse.wheel(0, 400);
+        await settle(200);
+        const still = await read();
+        assert.equal(still.frameScroll, 0);
+        assert.ok(Math.abs(still.closeTop - g.closeTop) < 0.5);
+        await shot(`sources-${lang}-${width}`);
+      } finally {
+        await page.unroute(/\/stream\//, manyStreams);
+      }
+    },
+  );
+
+await check("#134/#135 closing the sources window, then Details", async () => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await restart({ uiLanguage: "en" });
   await page.locator(".poster-card").first().click();
   await page.locator(".title-page").waitFor();
   await page.locator(".title-page .title-play").click();
   await page.locator(".sources-modal[open]").waitFor();
   await settle(600);
-  const g = await page.evaluate(() => {
-    const d = document.querySelector(".sources-modal");
-    const body = d.querySelector(".streams-body");
-    const close = d.querySelector(".modal-close").getBoundingClientRect();
-    const heading = d.querySelector(".streams > .section-heading");
-    return {
-      bodyTop: body.getBoundingClientRect().top,
-      closeBottom: close.bottom,
-      bodyScrollable: getComputedStyle(body).overflowY,
-      headingScrolls:
-        heading.parentElement.scrollHeight >
-          heading.parentElement.clientHeight + 1 &&
-        getComputedStyle(heading.parentElement).overflowY !== "visible",
-    };
-  });
-  assert.ok(g.bodyTop >= g.closeBottom, JSON.stringify(g));
-  assert.equal(g.bodyScrollable, "auto");
-  await shot("sources-en");
   // The source dialog and its parent Details page each own a lock.
   await page.keyboard.press("Escape");
   await page.locator(".sources-modal[open]").waitFor({ state: "detached" });
@@ -264,61 +374,92 @@ await check("#134 the sources window scrolls only its list", async () => {
 });
 
 // --- #137 ------------------------------------------------------------------
-await check(
-  "#137 no hand over the gaps between cards; grabbing only while dragging",
-  async () => {
-    await restart({ uiLanguage: "en" });
-    // A row of posters (some rows hold chips or tabs).
-    const index = await page
-      .locator(".scroll-row")
-      .evaluateAll((rows) =>
-        rows.findIndex((r) => r.querySelectorAll(".poster-card").length > 2),
+for (const lang of ["ar", "en"])
+  await check(
+    `#137 ${lang}: no hand over the gaps between cards; a gap click opens nothing`,
+    async () => {
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await restart({ uiLanguage: lang });
+      // A row of posters (some rows hold chips or tabs).
+      const index = await page
+        .locator(".scroll-row")
+        .evaluateAll((rows) =>
+          rows.findIndex((r) => r.querySelectorAll(".poster-card").length > 2),
+        );
+      assert.ok(index >= 0, "a row of posters");
+      const row = page.locator(".scroll-row").nth(index);
+      await row.scrollIntoViewIfNeeded();
+      const cursors = await row.evaluate((el) => {
+        const cards = el.querySelectorAll(".poster-card");
+        const a = cards[0].getBoundingClientRect();
+        const b = cards[1].getBoundingClientRect();
+        const gapX =
+          (Math.max(a.right, b.right) + Math.min(a.left, b.left)) / 2;
+        const left = Math.min(a.right, b.right);
+        const right = Math.max(a.left, b.left);
+        const x = right > left ? (left + right) / 2 : gapX;
+        const y = a.top + a.height / 2;
+        const gap = document.elementFromPoint(x, y);
+        // Points across the gap and the card edges either side of it.
+        const along = [-0.45, -0.2, 0, 0.2, 0.45].map((f) => {
+          const px = x + f * Math.max(1, right - left);
+          const hit = document.elementFromPoint(px, y);
+          return {
+            px,
+            card: !!hit?.closest(".poster-card"),
+            cursor: hit ? getComputedStyle(hit).cursor : "",
+          };
+        });
+        return {
+          x,
+          y,
+          width: right - left,
+          row: getComputedStyle(el).cursor,
+          gapTarget: gap === el || el.contains(gap),
+          gapInCard: !!gap.closest(".poster-card"),
+          gap: getComputedStyle(gap).cursor,
+          card: getComputedStyle(cards[0]).cursor,
+          along,
+        };
+      });
+      assert.notEqual(cursors.row, "grab");
+      assert.ok(cursors.gapTarget);
+      assert.ok(cursors.width >= 4, `a real gap: ${JSON.stringify(cursors)}`);
+      assert.ok(!cursors.gapInCard, JSON.stringify(cursors));
+      assert.ok(
+        !["grab", "pointer"].includes(cursors.gap),
+        JSON.stringify(cursors),
       );
-    assert.ok(index >= 0, "a row of posters");
-    const row = page.locator(".scroll-row").nth(index);
-    await row.scrollIntoViewIfNeeded();
-    const cursors = await row.evaluate((el) => {
-      const cards = el.querySelectorAll(".poster-card");
-      const a = cards[0].getBoundingClientRect();
-      const b = cards[1].getBoundingClientRect();
-      const gapX = (Math.max(a.right, b.right) + Math.min(a.left, b.left)) / 2;
-      const left = Math.min(a.right, b.right);
-      const right = Math.max(a.left, b.left);
-      const x = right > left ? (left + right) / 2 : gapX;
-      const y = a.top + a.height / 2;
-      const gap = document.elementFromPoint(x, y);
-      return {
-        row: getComputedStyle(el).cursor,
-        gapTarget: gap === el || el.contains(gap),
-        gap: getComputedStyle(gap).cursor,
-        card: getComputedStyle(cards[0]).cursor,
-      };
-    });
-    assert.notEqual(cursors.row, "grab");
-    assert.ok(cursors.gapTarget);
-    assert.ok(
-      !["grab", "pointer"].includes(cursors.gap),
-      JSON.stringify(cursors),
-    );
-    assert.equal(cursors.card, "pointer");
-    const box = await row.boundingBox();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 - 80, box.y + box.height / 2, {
-      steps: 6,
-    });
-    assert.equal(
-      await row.evaluate((el) => getComputedStyle(el).cursor),
-      "grabbing",
-    );
-    await page.mouse.up();
-    await settle();
-    assert.notEqual(
-      await row.evaluate((el) => getComputedStyle(el).cursor),
-      "grabbing",
-    );
-  },
-);
+      // Inside the gap no point shows a hand; a hand means a card.
+      for (const p of cursors.along)
+        assert.equal(p.cursor === "pointer", p.card, JSON.stringify(p));
+      assert.equal(cursors.card, "pointer");
+      // A real click in the gap opens no title.
+      await page.mouse.click(cursors.x, cursors.y);
+      await settle(300);
+      assert.equal(await page.locator(".title-page").count(), 0, "gap click");
+      const box = await row.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(
+        box.x + box.width / 2 - 80,
+        box.y + box.height / 2,
+        {
+          steps: 6,
+        },
+      );
+      assert.equal(
+        await row.evaluate((el) => getComputedStyle(el).cursor),
+        "grabbing",
+      );
+      await page.mouse.up();
+      await settle();
+      assert.notEqual(
+        await row.evaluate((el) => getComputedStyle(el).cursor),
+        "grabbing",
+      );
+    },
+  );
 
 // --- #130, #131 ------------------------------------------------------------
 for (const lang of ["ar", "en"])
@@ -427,35 +568,105 @@ await check(
         .textContent(),
       /Interface language/,
     );
+    // Entering by keyboard keeps focus where the viewer is and reaches the
+    // selected page within the page's own tab order.
+    await destination("home").click();
+    await destination("settings").focus();
+    await page.keyboard.press("Enter");
+    await page.locator(".studio-index").waitFor();
+    assert.ok(
+      await page.evaluate(
+        () =>
+          document.activeElement && document.activeElement !== document.body,
+      ),
+      "focus is not lost on entry",
+    );
+    let reached = false;
+    for (let i = 0; i < 40 && !reached; i++) {
+      await page.keyboard.press("Tab");
+      reached = await page.evaluate(() =>
+        document.activeElement?.matches?.(
+          ".studio-index-pages > button.selected, .studio-index-pages > button[aria-current]",
+        ),
+      );
+    }
+    assert.ok(reached, "Tab reaches the selected settings page");
+    // A real link into Settings names its page: the shortcuts sheet's
+    // "Customize" opens Keyboard shortcuts on the desktop. The web edition
+    // has no MPV key map, so the same link lands on Player (WEB_HIDDEN in
+    // SettingsStudio.jsx) — still the named page, not the first one.
+    await destination("home").click();
+    await page.locator(".poster-card").first().waitFor();
+    await page.locator("body").press("?");
+    await page.locator(".shortcuts-help").waitFor();
+    await page.locator(".shortcuts-help .button-row .secondary").click();
+    await page.locator(".studio-index").waitFor();
+    assert.match(
+      await page
+        .locator(".studio-index-pages > button.selected")
+        .first()
+        .textContent(),
+      /^\s*(Keyboard shortcuts|Player)\b/,
+    );
+    // And entering on its own afterwards starts at the first page again.
+    await destination("home").click();
+    await destination("settings").click();
+    assert.match(
+      await page
+        .locator(".studio-index-pages > button.selected")
+        .first()
+        .textContent(),
+      /Interface language/,
+    );
   },
 );
 
-await check(
-  "#141 Mode reads System, Light, Dark; the saved mode stays",
-  async () => {
-    await appearance({ mode: "dark" }, { uiLanguage: "en" });
-    await destination("settings").click();
-    await page.locator(".studio-index-pages > button").nth(1).click();
-    const field = page.locator(".scheme-field");
-    await field.waitFor();
-    const labels = (await field.locator("[role=radio]").allTextContents()).map(
-      (t) => t.trim(),
-    );
-    assert.deepEqual(labels, ["System", "Light", "Dark"]);
-    assert.equal(
-      await field.locator("[role=radio][aria-checked=true]").textContent(),
-      "Dark",
-    );
-    assert.equal((await call("init")).settings.appearance.mode, "dark");
-    // Keyboard order follows: Tab from System reaches Light.
-    await field.locator("[role=radio]").first().focus();
-    await page.keyboard.press("Tab");
-    assert.equal(
-      await page.evaluate(() => document.activeElement.textContent.trim()),
-      "Light",
-    );
-  },
-);
+for (const [lang, names] of [
+  ["en", ["System", "Light", "Dark"]],
+  ["ar", ["النظام", "فاتح", "داكن"]],
+])
+  await check(
+    `#141 ${lang}: Mode reads System, Light, Dark in DOM, on screen and by Tab; the saved mode stays`,
+    async () => {
+      await appearance({ mode: "dark" }, { uiLanguage: lang });
+      await destination("settings").click();
+      await page.locator(".studio-index-pages > button").nth(1).click();
+      const field = page.locator(".scheme-field");
+      await field.waitFor();
+      const radios = field.locator("[role=radio]");
+      const labels = (await radios.allTextContents()).map((t) => t.trim());
+      assert.equal(labels.length, 3);
+      names.forEach((name, i) =>
+        assert.ok(labels[i].includes(name), labels.join(",")),
+      );
+      assert.ok(
+        (
+          await field.locator("[role=radio][aria-checked=true]").textContent()
+        ).includes(names[2]),
+      );
+      assert.equal((await call("init")).settings.appearance.mode, "dark");
+      // On screen: reading order, right to left in Arabic.
+      const xs = [];
+      for (let i = 0; i < 3; i++)
+        xs.push((await radios.nth(i).boundingBox()).x);
+      const sorted = [...xs].sort((a, b) => (lang === "ar" ? b - a : a - b));
+      assert.deepEqual(xs, sorted, `reading order on screen: ${xs}`);
+      // Tab walks System → Light → Dark; Shift+Tab walks back.
+      await radios.first().focus();
+      const focused = () =>
+        page.evaluate(() => document.activeElement.textContent.trim());
+      for (const name of names.slice(1)) {
+        await page.keyboard.press("Tab");
+        assert.ok((await focused()).includes(name), `Tab → ${name}`);
+      }
+      for (const name of names.slice(0, 2).reverse()) {
+        await page.keyboard.press("Shift+Tab");
+        assert.ok((await focused()).includes(name), `Shift+Tab → ${name}`);
+      }
+      // Visiting the page and moving focus never changed the saved mode.
+      assert.equal((await call("init")).settings.appearance.mode, "dark");
+    },
+  );
 
 // --- The wheel -------------------------------------------------------------
 for (const lang of ["ar", "en"])
@@ -535,6 +746,63 @@ for (const lang of ["ar", "en"])
         "page",
         "next deliberate Home click",
       );
+      // Every one of the nine, in turn: one click selects it (and only it),
+      // and it settles at the anchor. Downloads is an action (it opens the
+      // downloads window over the current page, RiwaqNav), so its click
+      // must keep the current page and open that window instead.
+      for (const id of [
+        "discover",
+        "library",
+        "collections",
+        "downloads",
+        "addons",
+        "music",
+        "live",
+        "settings",
+        "home",
+      ]) {
+        const before = await page
+          .locator(".riwaq-destinations > button[aria-current=page]")
+          .getAttribute("aria-label");
+        await destination(id).click();
+        await settle(500);
+        if (id === "downloads") {
+          assert.equal(
+            await page
+              .locator(".riwaq-destinations > button[aria-current=page]")
+              .getAttribute("aria-label"),
+            before,
+            "Downloads keeps the current page",
+          );
+          assert.ok(
+            await page.locator("dialog[open], .modal[open]").count(),
+            "Downloads opens its window",
+          );
+          await page.keyboard.press("Escape");
+          await page
+            .locator("dialog[open], .modal[open]")
+            .first()
+            .waitFor({ state: "detached" });
+          continue;
+        }
+        assert.equal(
+          await page
+            .locator(".riwaq-destinations > button[aria-current=page]")
+            .count(),
+          1,
+          `${id}: one current page`,
+        );
+        assert.equal(
+          await destination(id).getAttribute("aria-current"),
+          "page",
+          `${id} selected by one click`,
+        );
+        const box = await destination(id).boundingBox();
+        assert.ok(
+          Math.abs(box.x - anchor.x) < 1 && Math.abs(box.y - anchor.y) < 1,
+          `${id} at the anchor: ${JSON.stringify(box)}`,
+        );
+      }
     },
   );
 
@@ -833,22 +1101,38 @@ for (const mode of ["dark", "light"])
       const measured = {};
       for (const [name, sel] of [
         ["primary", ".session-compose .primary, .primary"],
-        ["choice", ".choice-row button, .session-band button"],
+        ["secondary", "main .secondary"],
+        ["choice", "main .session-budgets button:not(.chosen)"],
+        ["chosen", "main :is(.session-budgets, .session-moods) button.chosen"],
         [
           "wheel label",
           ".riwaq-destinations > button[aria-current=page] .wheel-label",
         ],
       ]) {
+        // A missing control is a failure, never a skipped measurement.
         const target = page.locator(sel).first();
-        if (!(await target.count())) continue;
-        measured[name] = await drawnContrast(target);
-        assert.ok(measured[name] >= 4.5, `${name}: ${measured[name]}`);
+        assert.ok(await target.count(), `${name}: no element for ${sel}`);
+        await target.scrollIntoViewIfNeeded();
+        measured[name] = {
+          ...(await drawnContrast(target)),
+          element: await target.evaluate(
+            (el) =>
+              `${el.tagName}.${el.className} «${el.textContent.trim().slice(0, 30)}»`,
+          ),
+        };
+        await target
+          .screenshot({
+            path: join(output, `glass-${mode}-${name.replace(/ /g, "-")}.png`),
+          })
+          .catch(() => {});
       }
       await shot(`glass-${mode}`);
       writeFileSync(
         join(output, `contrast-${mode}.json`),
         JSON.stringify(measured, null, 2),
       );
+      for (const [name, m] of Object.entries(measured))
+        assert.ok(m.ratio >= 4.5, `${name}: ${JSON.stringify(m)}`);
       await appearance({ glass: "solid" }, { uiLanguage: "en" });
       assert.ok(await page.locator(".app.glass-solid").count());
       const flat = await page
@@ -889,6 +1173,15 @@ await check(
     await new Promise((done) => server.listen(0, "127.0.0.1", done));
     const hud = await browser.newPage({
       viewport: { width: 1280, height: 720 },
+    });
+    // The HUD page has its own context: block the internet there too, and
+    // record every request that is not the local build.
+    const outside = [];
+    await hud.context().route(/^https?:\/\//, (route) => {
+      if (new URL(route.request().url()).hostname === "127.0.0.1")
+        return route.continue();
+      outside.push(route.request().url());
+      return route.abort("internetdisconnected");
     });
     try {
       const state = {
@@ -1014,6 +1307,7 @@ await check(
       const box = await pill.boundingBox();
       assert.ok(box.width < 140 && box.height < 40, JSON.stringify(box));
       assert.ok(box.y > 720 - 90, "at the bottom bar");
+      assert.deepEqual(outside, [], "the HUD asked nothing of the internet");
     } finally {
       await hud.close();
       server.close();
