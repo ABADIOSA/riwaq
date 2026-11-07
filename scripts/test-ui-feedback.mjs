@@ -155,7 +155,7 @@ await restart({
 
 // --- #135, #134 ------------------------------------------------------------
 await check(
-  "#135 a dialog keeps the page behind still, nested too",
+  "#135 a dialog keeps the page behind still and restores page scrolling",
   async () => {
     await restart({ uiLanguage: "en" });
     await page.mouse.wheel(0, 700);
@@ -170,12 +170,6 @@ await check(
     await page.keyboard.press("End");
     await settle();
     assert.equal(await page.evaluate(() => scrollY), before, "wheel and keys");
-    // A second dialog over the first, then closing only the inner one.
-    await page.evaluate(() => {
-      const inner = document.createElement("dialog");
-      inner.className = "modal probe";
-      document.body.append(inner);
-    });
     await page.keyboard.press("Escape");
     await page.locator("dialog.modal[open]").waitFor({ state: "detached" });
     assert.equal(await page.evaluate(() => scrollY), before, "offset kept");
@@ -184,9 +178,10 @@ await check(
       "",
       "the page scrolls again",
     );
+    // Test the page, away from the wheel's own scroll capture.
+    await page.mouse.move(1000, 450);
     await page.mouse.wheel(0, 200);
-    await settle();
-    assert.ok((await page.evaluate(() => scrollY)) > before);
+    await page.waitForFunction((offset) => scrollY > offset, before);
   },
 );
 
@@ -252,8 +247,20 @@ await check("#134 the sources window scrolls only its list", async () => {
   assert.ok(g.bodyTop >= g.closeBottom, JSON.stringify(g));
   assert.equal(g.bodyScrollable, "auto");
   await shot("sources-en");
+  // The source dialog and its parent Details page each own a lock.
   await page.keyboard.press("Escape");
+  await page.locator(".sources-modal[open]").waitFor({ state: "detached" });
+  assert.equal(await page.locator(".title-page").count(), 1);
+  assert.equal(
+    await page.evaluate(() => document.documentElement.style.overflow),
+    "hidden",
+  );
   await page.keyboard.press("Escape");
+  await page.locator(".title-page").waitFor({ state: "detached" });
+  assert.equal(
+    await page.evaluate(() => document.documentElement.style.overflow),
+    "",
+  );
 });
 
 // --- #137 ------------------------------------------------------------------
