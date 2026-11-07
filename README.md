@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.54.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
+  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.55.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-15191e">
   <a href="https://abadiosa.github.io/riwaq/"><img alt="Web" src="https://img.shields.io/badge/web-abadiosa.github.io%2Friwaq-15191e"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-15191e"></a>
@@ -30,19 +30,19 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.54.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.54.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.55.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.55.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.54.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
+الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.55.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.54.0 · تجريبي
+### الجديد في 0.55.0 · تجريبي
 
-- الإعدادات صارت ست غرف واضحة: المظهر والواجهة، المشغل والتشغيل، المصادر والمكتبة، التنزيلات والملفات، الحسابات والربط، النظام والتشخيص. لا «أساسية» ولا «متقدمة»، وكل خيار في مكان واحد.
-- وضع فاتح «أبيض نقي» مع داكن وحسب النظام، من **الإعدادات ← المظهر والواجهة ← السمة**. يتبع ويندوز مباشرة، ولون ثيمك يتعمّق ليُقرأ على الأبيض.
-- العرض الرئيسي بنفس المسافة من الأعلى والجانبين، وأسهم كل صف زوج متجاور جنب عنوانه، والسحب بالفأرة لأعلى ولأسفل فوق البوسترات.
-- أزرار ربط Trakt وSimkl وAniList صحيحة بالإنجليزية، وبقايا التورنت بعد إغلاق مفاجئ تُحذف بأمان دون المساس بتنزيلاتك.
-- [سياسة خصوصية](PRIVACY.ar.md) بالعربية والإنجليزية، وتحديث Electron وVite بإصلاحات أمنية.
+- التنقل صار «العجلة»: وجهاتك على حافة عجلة تدور إلى ما تختاره. الشريط الجانبي باقٍ في **الإعدادات ← المظهر والواجهة ← الواجهة ← شكل التنقل**.
+- أزرار ونوافذ «زجاجية» بلون ثيمك أو «مصمتة» بلا شفافية، وكل الحركات تتوقف مع «تقليل الحركة».
+- شريط مشغل جديد: الوقت المنقضي أو المتبقي، الفصول بأسمائها، ووقت الانتهاء بنظام 12 ساعة، و↑ و↓ تغيّران الصوت بمؤشر صغير.
+- النوافذ ما تحرّك الصفحة خلفها، وفي نافذة المصادر تتمرر القائمة فقط، وزر الإغلاق بعيد عن شريط التمرير.
+- صور التنزيلات تُحفظ من بداية التنزيل، ومساحة التورنت تُحرَّر بعد المشاهدة، وجلب الصور والتنظيف محصوران فلا يلمسان شبكتك المحلية أو ملفاتك.
 
 الإصدارات السابقة في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -110,19 +110,19 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.54.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.54.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.55.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.55.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.54.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
+Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.55.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.54.0 · Beta
+### What's new in 0.55.0 · Beta
 
-- Settings are six clear rooms: Appearance & interface, Player & playback, Sources & library, Downloads & files, Accounts & linking, System & diagnostics. No Basic or Advanced split; every option has one place.
-- A Pure White light mode alongside dark and System, in **Settings → Appearance & interface → Theme**. It follows Windows live, and your theme's accent deepens to read on white.
-- The showcase sits the same distance from the top and sides, each row's arrows are one pair beside its title, and you can drag up and down over posters with the mouse.
-- Trakt, Simkl and AniList link buttons read correctly in English, and torrent pieces left by a crash are removed safely without touching your downloads.
-- A [privacy policy](PRIVACY.md) in Arabic and English, and Electron and Vite updated with security fixes.
+- Navigation is now the wheel: your destinations sit on the rim of a wheel that turns to what you choose. The sidebar stays in **Settings → Appearance & interface → Interface → Navigation**.
+- Glass buttons and dialogs in your theme's colours, or Solid with no transparency; every movement stops with Reduce motion.
+- A new player bar: elapsed or remaining time, named chapters and the end time in 12-hour form, and ↑ and ↓ change the volume with a small indicator.
+- Dialogs never move the page behind them, only the list scrolls in the sources window, and the close button sits clear of the scrollbar.
+- Download posters are saved when a download starts, torrent space is freed after watching, and artwork fetching and cleanup are confined so they never touch your local network or files.
 
 Earlier releases are in the [changelog](docs/CHANGELOG.md).
 
