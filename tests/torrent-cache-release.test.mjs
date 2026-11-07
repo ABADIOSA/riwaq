@@ -8,12 +8,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { request } from "node:http";
 import { randomBytes } from "node:crypto";
+import { EventEmitter, once } from "node:events";
+import { Readable } from "node:stream";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   statSync,
+  symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,6 +46,7 @@ function get(url, headers = {}) {
       res.on("end", () =>
         resolve({ status: res.statusCode, body: Buffer.concat(chunks) }),
       );
+      res.on("error", reject);
     });
     req.on("error", reject);
     req.end();
@@ -130,6 +135,161 @@ test("a reader still streaming holds a released title until it closes", async ()
       "gone after the reader closed",
     );
   } finally {
+    await engine.close();
+    await new Promise((resolve) => seeder.destroy(resolve));
+  }
+});
+
+test("a reader awaiting metadata keeps a released title through another start", async () => {
+  const torrents = [];
+  class PendingTorrent extends EventEmitter {
+    files = [];
+    destroy(_options, callback) {
+      this.files = [];
+      callback();
+    }
+  }
+  class PendingClient extends EventEmitter {
+    add() {
+      const torrent = new PendingTorrent();
+      torrents.push(torrent);
+      return torrent;
+    }
+    destroy(callback) {
+      callback();
+    }
+  }
+  const engine = await startEngine({
+    cacheDir: mkdtempSync(join(tmpdir(), "riwaq-cache-")),
+    network: OFFLINE,
+    WebTorrent: PendingClient,
+    viewingGraceMs: 30,
+    readyMs: 1000,
+  });
+  const hash = "a".repeat(40);
+  const http = request(await engine.url({ infoHash: hash }));
+  try {
+    const socket = once(http, "socket");
+    const reply = once(http, "response");
+    reply.catch(() => {});
+    http.end();
+    const [connection] = await socket;
+    if (connection.connecting) await once(connection, "connect");
+    // The GET has arrived, but the torrent deliberately has no metadata.
+    await wait(75);
+    assert.equal(engine.release(hash), true);
+    await engine.url({ infoHash: "b".repeat(40) });
+    await wait(100);
+    assert.ok(engine.status(hash), "pending request holds the released title");
+    torrents[0].files = [
+      {
+        name: "Clip.mkv",
+        length: 1,
+        createReadStream: () => Readable.from([Buffer.from("x")]),
+      },
+    ];
+    torrents[0].emit("ready");
+    const [response] = await reply;
+    const finished = once(response, "end");
+    assert.equal(response.statusCode, 200);
+    response.resume();
+    await finished;
+    assert.ok((await until(() => !engine.status(hash))) >= 0);
+  } finally {
+    http.destroy();
+    await engine.close();
+  }
+});
+
+test("a nested junction in a hash folder cannot open or delete an outside file", async () => {
+  const name = "Outside.mkv";
+  const pack = mkdtempSync(join(tmpdir(), "riwaq-pack-"));
+  const outside = mkdtempSync(join(tmpdir(), "riwaq-outside-"));
+  const bytes = randomBytes(100 * 1024);
+  writeFileSync(join(pack, name), bytes);
+  writeFileSync(join(pack, "Other.mkv"), randomBytes(100 * 1024));
+  const outsideFile = join(outside, name);
+  writeFileSync(outsideFile, bytes);
+  const cacheDir = mkdtempSync(join(tmpdir(), "riwaq-cache-"));
+  const seeder = new WebTorrent({ ...OFFLINE, lsd: false, natPmp: false });
+  const torrent = await new Promise((resolve) =>
+    seeder.seed(pack, { announce: [], name: "Pack" }, resolve),
+  );
+  const marked = [];
+  const engine = await startEngine({
+    cacheDir,
+    network: OFFLINE,
+    WebTorrent,
+    viewingGraceMs: 50,
+    sparse: async (path) => marked.push(path),
+  });
+  try {
+    const hashDir = join(cacheDir, torrent.infoHash);
+    mkdirSync(hashDir);
+    symlinkSync(outside, join(hashDir, "Pack"), "junction");
+    const fileIdx = torrent.files.findIndex((file) => file.name === name);
+    assert.ok(fileIdx >= 0);
+    const url = await engine.url({ infoHash: torrent.infoHash, fileIdx });
+    engine.addPeer(torrent.infoHash, `127.0.0.1:${seeder.address().port}`);
+    const response = await fetch(url, {
+      headers: { Range: "bytes=0-1023" },
+      signal: AbortSignal.timeout(1500),
+    })
+      .then((r) => r.arrayBuffer())
+      .catch(() => null);
+    engine.release(torrent.infoHash);
+    assert.ok((await until(() => !existsSync(hashDir))) >= 0);
+    assert.equal(response, null, "outside bytes never reach the HTTP reader");
+    assert.equal(marked.length, 0, "outside file was never opened for sparse");
+    assert.ok(existsSync(outsideFile), "cache cleanup leaves outside file");
+    assert.equal(statSync(outsideFile).size, bytes.length);
+  } finally {
+    await engine.close();
+    await new Promise((resolve) => seeder.destroy(resolve));
+  }
+});
+
+test("a locked old cache folder does not keep another released title", async (t) => {
+  if (process.platform !== "win32") return t.skip("Windows file-sharing flags");
+  const { default: koffi } = await import("koffi");
+  const kernel = koffi.load("kernel32.dll");
+  const open = kernel.func(
+    "intptr_t CreateFileW(str16, uint32_t, uint32_t, void *, uint32_t, uint32_t, void *)",
+  );
+  const close = kernel.func("int CloseHandle(intptr_t)");
+  const { seeder, torrent, address } = await seed(
+    randomBytes(512 * 1024),
+    "Unlocked.mkv",
+  );
+  const cacheDir = mkdtempSync(join(tmpdir(), "riwaq-cache-"));
+  const engine = await startEngine({
+    cacheDir,
+    network: OFFLINE,
+    WebTorrent,
+    viewingGraceMs: 50,
+  });
+  let handle;
+  try {
+    const url = await engine.url({ infoHash: torrent.infoHash });
+    engine.addPeer(torrent.infoHash, address);
+    assert.equal((await get(url, { Range: "bytes=-1024" })).status, 206);
+    const released = join(cacheDir, torrent.infoHash, "Unlocked.mkv");
+    assert.ok(existsSync(released));
+    await wait(150);
+    const oldDir = join(cacheDir, "d".repeat(40));
+    const old = join(oldDir, "Locked.mkv");
+    mkdirSync(oldDir);
+    writeFileSync(old, "locked");
+    utimesSync(oldDir, 1, 1);
+    // Read/write sharing is allowed, delete sharing is deliberately withheld.
+    const file = open(old, 0x80000000, 0x3, null, 3, 0x80, null);
+    assert.ok(file !== -1 && file !== -1n);
+    handle = file;
+    assert.equal(engine.release(torrent.infoHash), true);
+    assert.ok((await until(() => !existsSync(released))) >= 0);
+    assert.ok(existsSync(old), "Windows still protects the locked file");
+  } finally {
+    if (handle !== undefined) close(handle);
     await engine.close();
     await new Promise((resolve) => seeder.destroy(resolve));
   }

@@ -41,10 +41,9 @@ import {
   readFile,
   readdir,
   rm,
-  stat,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import {
   DHT_BOOTSTRAP,
   FEW_PEERS,
@@ -90,7 +89,8 @@ async function folderBytes(path) {
   for (const item of items) {
     const full = join(path, item.name);
     if (item.isDirectory()) total += await folderBytes(full);
-    else total += (await stat(full).catch(() => null))?.size || 0;
+    else if (item.isFile())
+      total += (await lstat(full).catch(() => null))?.size || 0;
   }
   return total;
 }
@@ -130,12 +130,33 @@ export async function markSparse(path, extensions = nativeExtensions()) {
   }
 }
 /**
- * fs-chunk-store with each file marked sparse before its first use.
- * `FSChunkStore` is WebTorrent's own store class (null: WebTorrent's
- * default store is used unchanged).
+ * Cache paths can outlive a crash. Refuse any existing junction, symlink
+ * or shared hard link before the store creates directories or opens a file.
  */
-function sparseStore(FSChunkStore, mark) {
-  if (!FSChunkStore) return null;
+async function checkPiecePath(cacheDir, path) {
+  const name = relative(cacheDir, path);
+  const unsafe = () => new Error("مجلد ذاكرة التورنت ليس مجلداً آمناً");
+  const parts = name.split(sep);
+  if (!name || isAbsolute(name) || parts[0] === "..") throw unsafe();
+  let current = cacheDir;
+  for (const part of parts) {
+    const info = await lstat(current).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    });
+    if (!info) return;
+    if (!info.isDirectory() || info.isSymbolicLink()) throw unsafe();
+    current = join(current, part);
+  }
+  const file = await lstat(path).catch((error) => {
+    if (error.code !== "ENOENT") throw error;
+    return null;
+  });
+  if (file && (!file.isFile() || file.nlink > 1)) throw unsafe();
+}
+
+/** WebTorrent's own store, with checked paths and sparsity before use. */
+function sparseStore(FSChunkStore, cacheDir, mark) {
   return class SparseChunkStore extends FSChunkStore {
     constructor(chunkLength, opts) {
       super(chunkLength, opts);
@@ -143,16 +164,17 @@ function sparseStore(FSChunkStore, mark) {
         const open = file.open;
         let opening = null;
         file.open = (cb) => {
-          opening ||= new Promise((resolve) =>
-            open((error, raf) => {
-              if (error) return resolve({ error });
-              mark(file.path).then(
-                () => resolve({ raf }),
-                () => resolve({ raf }),
-              );
-            }),
-          );
-          opening.then(({ error, raf }) => cb(error || null, raf));
+          opening ||= (async () => {
+            await checkPiecePath(cacheDir, file.path);
+            const raf = await new Promise((resolve, reject) =>
+              open((error, file) => (error ? reject(error) : resolve(file))),
+            );
+            try {
+              await mark(file.path);
+            } catch {}
+            return raf;
+          })();
+          opening.then((raf) => cb(null, raf), cb);
         };
       }
     }
@@ -228,10 +250,8 @@ export async function startEngine({
   WebTorrent ||= (await import("webtorrent")).default;
   // WebTorrent's own file store, extended to mark files sparse.
   const store = sparseStore(
-    await import("fs-chunk-store").then(
-      (module) => module.default,
-      () => null,
-    ),
+    (await import("fs-chunk-store")).default,
+    cacheDir,
     sparse,
   );
   await mkdir(cacheDir, { recursive: true });
@@ -288,13 +308,16 @@ export async function startEngine({
   const entries = new Map();
   // Titles being destroyed: a new start of the same title waits for it.
   const removing = new Map();
+  const pruning = new Map();
   let closed = false;
 
   // Pieces of titles no longer watched, beyond the cache size, go; a crash
   // left over from an earlier run is cleaned the same way.
-  async function prune() {
+  async function prune(limit) {
     let names;
     try {
+      const root = await lstat(cacheDir);
+      if (!root.isDirectory() || root.isSymbolicLink()) return;
       names = await readdir(cacheDir);
     } catch {
       return;
@@ -308,11 +331,32 @@ export async function startEngine({
       listed.push({
         name,
         bytes: await folderBytes(path),
-        used: entries.get(name)?.used || info.mtimeMs,
+        used: entries.get(name.toLowerCase())?.used || info.mtimeMs,
       });
     }
-    for (const name of cachePrune(listed, cap, [...entries.keys()]))
-      await rm(join(cacheDir, name), { recursive: true, force: true });
+    const active = listed
+      .filter(({ name }) => entries.has(name.toLowerCase()))
+      .map(({ name }) => name);
+    let firstError;
+    for (const name of cachePrune(listed, limit ?? cap, active)) {
+      const hash = name.toLowerCase();
+      // A title may have started while a previous folder was being removed.
+      if (entries.has(hash) || pruning.has(hash)) continue;
+      const deletion = rm(join(cacheDir, name), {
+        recursive: true,
+        force: true,
+      });
+      pruning.set(hash, deletion);
+      try {
+        await deletion;
+      } catch (error) {
+        // A locked stale folder should not strand other released titles.
+        firstError ??= error;
+      } finally {
+        pruning.delete(hash);
+      }
+    }
+    if (firstError) throw firstError;
   }
 
   function ensure(stream) {
@@ -338,7 +382,7 @@ export async function startEngine({
     }
     const torrent = client.add(magnetOf(stream), {
       path: piecePath,
-      ...(store ? { store } : {}),
+      store,
       deselect: true,
       strategy: "sequential",
       ...(extraTrackers
@@ -408,10 +452,11 @@ export async function startEngine({
     clearTimeout(entry.timer);
     clearInterval(entry.boost);
     const done = (async () => {
-      // A destroy that never calls back must not keep its pieces on disk.
+      // Close the store without deleting its metadata-derived paths. Prune
+      // removes whole hash folders without following nested junctions.
       await timeout(
         new Promise((resolve) =>
-          entry.torrent.destroy({ destroyStore: cap === 0 }, () => resolve()),
+          entry.torrent.destroy({ destroyStore: false }, () => resolve()),
         ),
         10000,
       ).catch(() => {});
@@ -447,11 +492,27 @@ export async function startEngine({
     if (parts.length !== 3 || parts[0] !== token) return refuse(res, 404);
     const entry = entries.get(parts[1].toLowerCase());
     if (!entry) return refuse(res, 404);
+    // A valid request holds this title even while awaiting its metadata.
+    entry.readers++;
+    res.once("close", () => {
+      entry.readers--;
+      entry.used = Date.now();
+      if (
+        !closed &&
+        entry.released &&
+        entry.readers === 0 &&
+        !entry.timer &&
+        entries.get(entry.hash) === entry
+      )
+        schedule(entry);
+    });
     try {
       await timeout(entry.ready, readyMs);
     } catch {
-      return refuse(res, 504);
+      if (!res.destroyed) refuse(res, 504);
+      return;
     }
+    if (res.destroyed) return;
     const index = Number(parts[2]);
     const at = pickFile(
       entry.torrent.files,
@@ -480,22 +541,6 @@ export async function startEngine({
     if (req.method === "HEAD" || file.length === 0) return res.end();
     const reader = file.createReadStream({ start, end });
     let done = false;
-    // A reader holds its title: a released one goes after the last closes.
-    entry.readers++;
-    let counted = true;
-    const uncount = () => {
-      if (!counted) return;
-      counted = false;
-      entry.readers--;
-      entry.used = Date.now();
-      if (
-        entry.released &&
-        entry.readers === 0 &&
-        !entry.timer &&
-        entries.get(entry.hash) === entry
-      )
-        schedule(entry);
-    };
     const finish = () => {
       if (done) return;
       done = true;
@@ -515,10 +560,7 @@ export async function startEngine({
       finish();
       res.destroy();
     });
-    res.on("close", () => {
-      finish();
-      uncount();
-    });
+    res.once("close", finish);
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -535,8 +577,9 @@ export async function startEngine({
       if (!validHash(stream?.infoHash))
         throw new Error("معرّف التورنت غير صالح");
       // The same title being destroyed right now: start it again after.
-      const going = removing.get(stream.infoHash.toLowerCase());
-      if (going) return going.then(() => this.url(stream));
+      const hash = stream.infoHash.toLowerCase();
+      const going = removing.get(hash) || pruning.get(hash);
+      if (going) return going.catch(() => {}).then(() => this.url(stream));
       const entry = ensure(stream);
       const index =
         Number.isInteger(stream.fileIdx) && stream.fileIdx >= 0
@@ -638,10 +681,7 @@ export async function startEngine({
     async clear() {
       for (const entry of [...entries.values()])
         if (entry.released && entry.readers === 0) await remove(entry.hash);
-      const saved = cap;
-      cap = 0;
-      await prune();
-      cap = saved;
+      await prune(0);
       return true;
     },
     async close() {
