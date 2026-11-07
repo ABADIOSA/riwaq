@@ -617,13 +617,18 @@ export default function App() {
   const openTitle = (next) => {
     cancelAnimationFrame(titleFrame.current);
     cancelAnimationFrame(catalogFrame.current);
-    if (!selected)
+    if (!selected) {
+      const browse = document.querySelector(".content > .browse-page");
       titleReturn.current = {
         x: window.scrollX,
         y: window.scrollY,
+        browse,
+        browseX: browse?.scrollLeft,
+        browseY: browse?.scrollTop,
         focus: document.activeElement,
         profileId: state.profiles?.active,
       };
+    }
     restoreTitle.current = false;
     setSelected(next);
   };
@@ -671,6 +676,10 @@ export default function App() {
           if (saved.profileId !== stateRef.current.profiles?.active) return;
           if (saved.focus?.isConnected)
             saved.focus.focus({ preventScroll: true });
+          if (saved.browse?.isConnected) {
+            saved.browse.scrollLeft = saved.browseX;
+            saved.browse.scrollTop = saved.browseY;
+          }
           window.scrollTo(saved.x, saved.y);
         });
       }
