@@ -1,8 +1,8 @@
 /*
  * Riwaq's wheel (core/wheel.mjs, src/components/RiwaqWheel.jsx): the
  * default navigation. The destinations sit on the rim of a wheel whose hub
- * lies beyond the window's side edge; the rim's ticks and a glass lens turn
- * to the chosen one while the buttons stay put. The straight sidebar stays
+ * lies beyond the window's side edge. Its buttons rotate to a fixed glass
+ * lens. The straight sidebar stays
  * available (Appearance → Interface → Navigation, nav-rail).
  */
 /* Wide windows only: below 761 px the wheel lives in the drawer and the
@@ -43,9 +43,11 @@
   min-height: 0;
   padding: 0;
   overflow: visible;
+  touch-action: pinch-zoom;
+  user-select: none;
 }
 /* A window too short for every destination: the wheel scrolls on its own
-   (names then show as tooltips only in the open wheel). */
+   to show the snap point. */
 .riwaq-wheel .wheel-stage.is-scrolling {
   overflow-x: hidden;
   overflow-y: auto;
@@ -64,12 +66,6 @@
   fill: none;
   stroke: color-mix(in srgb, var(--text) 20%, transparent);
   stroke-width: 1.5;
-}
-.wheel-ticks {
-  transform-box: view-box;
-}
-.wheel-stage.is-ready .wheel-ticks {
-  transition: transform var(--motion-wheel) var(--ease-turn);
 }
 .wheel-ticks path {
   fill: none;
@@ -90,7 +86,7 @@
 .wheel-spoke.active {
   stroke: var(--accent);
 }
-/* The lens orbits the hub to the chosen destination. */
+/* The lens marks the wheel's snap point. */
 .wheel-lens {
   position: absolute;
   width: 56px;
@@ -112,14 +108,13 @@
     inset 0 1px 0 #ffffff40;
 }
 .wheel-stage.is-ready .wheel-lens {
-  transition:
-    transform var(--motion-wheel) var(--ease-turn),
-    opacity var(--motion-page) ease;
+  transition: opacity var(--motion-page) ease;
 }
 .wheel-stage.is-idle .wheel-lens {
   opacity: 0.35;
 }
-/* A destination: a fixed, round target; open, its name beside it. */
+/* The first rotation moves the target around the hub. The equal and
+   opposite second rotation keeps its disc and label upright. */
 .riwaq-sidebar .riwaq-destination.wheel-item {
   position: absolute;
   z-index: 1;
@@ -135,6 +130,23 @@
   background: none;
   color: var(--text);
   text-align: start;
+  transition: none;
+  transform-origin: 22px 50%;
+  transform: translateX(calc(-1 * var(--wheel-radius)))
+    rotate(var(--wheel-angle)) translateX(var(--wheel-radius))
+    rotate(calc(-1 * var(--wheel-angle)));
+}
+[dir="rtl"] .riwaq-sidebar .riwaq-destination.wheel-item {
+  transform-origin: calc(100% - 22px) 50%;
+}
+.wheel-stage.is-ready:not(.is-dragging) .wheel-item:not(.wheel-wrap) {
+  transition:
+    transform var(--motion-wheel) var(--ease-out),
+    opacity var(--motion-wheel) ease;
+}
+.wheel-stage.is-dragging,
+.riwaq-sidebar .wheel-stage.is-dragging .wheel-item {
+  cursor: grabbing;
 }
 .riwaq-sidebar .riwaq-destination.wheel-item:hover,
 .riwaq-sidebar .riwaq-destination.wheel-item.selected {

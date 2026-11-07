@@ -2,13 +2,8 @@
  * Riwaq's wheel navigation (November 2026): the destinations sit on the rim
  * of a large wheel whose hub lies just beyond the window's side edge (right
  * in Arabic, left in English), so the visible part is the arc nearest the
- * content. Selecting a destination turns the wheel: its rim (ticks and
- * spokes) and a glass lens rotate about the hub to the chosen place.
- *
- * The destinations themselves never move. A click target that slid away
- * after a press would make a quick second click land on another page, and
- * every destination stays reachable without turning anything. Text and
- * icons stay upright: only the rim and the lens turn.
+ * content. The destinations rotate around the hub as the viewer brings one
+ * to the wheel's middle, while text and icons stay upright.
  *
  * Geometry is in CSS pixels measured from the window's side edge (`x`) and
  * the top of the wheel's area (`y`); the component mirrors it for Arabic.
@@ -73,15 +68,20 @@ export function wheelLayout({ count, height, open = false }) {
 }
 
 /**
- * The wheel's turn for the selected destination: the rim and the lens
- * rotate by its angle (mirrored for a right-hand wheel). A page that is not
- * on the wheel (a title, a folder opened from elsewhere) keeps the last
- * turn, so the wheel does not spin for nothing.
+ * The slot on the arc for a destination. The cursor snaps to the same
+ * middle slot and the other destinations wrap through the ends. During a
+ * drag, fractional offsets turn continuously until the cursor snaps.
  */
-export function wheelTurn(layout, index, { rtl = false, previous = 0 } = {}) {
-  const item = layout?.items?.[index];
-  if (!item) return previous;
-  return rtl ? -item.angle : item.angle;
+export function wheelSlot(index, cursor, count, offset = 0) {
+  const anchor = Math.floor((count - 1) / 2);
+  const slot = anchor + index - cursor + offset + 0.5;
+  return (((slot % count) + count) % count) - 0.5;
+}
+
+/** The angle along the arc for an integer or fractional slot. */
+export function wheelAngle(layout, slot) {
+  const dy = (slot - (layout.items.length - 1) / 2) * layout.step;
+  return Math.asin(clamp(dy / layout.radius, -1, 1)) * DEG;
 }
 
 /** The SVG path of the visible rim, from just above the first to below the last. */

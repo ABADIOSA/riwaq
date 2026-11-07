@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 import {
   WHEEL,
   rimPath,
+  wheelAngle,
   wheelKey,
   wheelLayout,
-  wheelTurn,
+  wheelSlot,
 } from "../core/wheel.mjs";
 import {
   DEFAULT_APPEARANCE,
@@ -58,14 +59,13 @@ test("a short window keeps the minimum spacing and lets the wheel scroll", () =>
   assert.equal(roomy.height, 900);
 });
 
-test("the wheel turns to the chosen destination, mirrored on the right", () => {
+test("the wheel interpolates along the arc, with a mirrored rim on the right", () => {
   const layout = wheelLayout({ count: 9, height: 520 });
-  const angle = layout.items[7].angle;
-  assert.ok(angle > 0);
-  assert.equal(wheelTurn(layout, 7), angle);
-  assert.equal(wheelTurn(layout, 7, { rtl: true }), -angle);
-  // A page that is not on the wheel keeps the last turn.
-  assert.equal(wheelTurn(layout, -1, { previous: 12 }), 12);
+  assert.equal(wheelAngle(layout, 4), 0);
+  assert.ok(wheelAngle(layout, 7) > 0);
+  assert.ok(wheelAngle(layout, 6.5) > wheelAngle(layout, 6));
+  assert.ok(wheelAngle(layout, 6.5) < wheelAngle(layout, 7));
+  assert.equal(wheelAngle(layout, 2.5), -wheelAngle(layout, 5.5));
   assert.match(rimPath(layout), /^M [\d.]+ [\d.-]+ A /);
   assert.notEqual(rimPath(layout, { rtl: true }), rimPath(layout));
 });
@@ -79,6 +79,26 @@ test("arrows, Home and End move between destinations predictably", () => {
   assert.equal(wheelKey("End", 2, 9), 8);
   assert.equal(wheelKey("Enter", 2, 9), null);
   assert.equal(wheelKey("ArrowDown", 0, 0), null);
+});
+
+test("each destination can occupy the same anchor and the other slots wrap in order", () => {
+  for (const count of [3, 8, 9]) {
+    const anchor = Math.floor((count - 1) / 2);
+    for (let selected = 0; selected < count; selected++) {
+      assert.equal(wheelSlot(selected, selected, count), anchor);
+      const slots = Array.from({ length: count }, (_, index) =>
+        wheelSlot(index, selected, count),
+      );
+      assert.deepEqual(
+        slots.toSorted((a, b) => a - b),
+        [...slots.keys()],
+      );
+      assert.equal(slots[(selected + 1) % count], anchor + 1);
+    }
+  }
+  assert.equal(wheelSlot(0, 0, 9, 0.25), 4.25);
+  assert.equal(wheelSlot(5, 0, 9, -0.25), -0.25);
+  assert.equal(wheelSlot(5, 0, 9, -0.75), 8.25);
 });
 
 test("the wheel and glass are the default; the old sidebar stays a choice", () => {
@@ -162,21 +182,13 @@ test("the wheel keeps the destinations in order, with page semantics", () => {
     component,
     /aria-current=\{item\.current \? "page" : undefined\}/,
   );
-  // Buttons are the nav's own children, in reading order, never moved by
-  // the turn: only the rim's ticks and the lens rotate.
-  assert.doesNotMatch(
-    component.slice(component.indexOf("<button")),
-    /rotate\(/,
-  );
-  assert.match(
-    component,
-    /className="wheel-ticks"[\s\S]*rotate\(\$\{turn\}deg\)/,
-  );
-  // No wheel-event capture: the page keeps its own scrolling.
-  assert.doesNotMatch(component, /onWheel|addEventListener\("wheel"/);
+  // The stage alone captures wheel events.
+  assert.match(component, /stage\.addEventListener\("wheel", rotate,/);
+  assert.match(component, /onPointerMove=\{moveDrag\}/);
+  assert.match(component, /"--wheel-angle":/);
   // Reduced motion stops the turn (the shared motion tokens).
   const tokens = read("src/tokens.css");
-  assert.match(tokens, /\.app\.reduced-motion \{[^}]*--motion-wheel: 0ms/);
+  assert.match(tokens, /\.app\.reduced-motion[^{]*\{[^}]*--motion-wheel: 0ms/);
   assert.match(tokens, /prefers-reduced-motion[\s\S]*--motion-wheel: 0ms/);
   // Glass has opaque fallbacks.
   const glass = read("src/glass.css");
