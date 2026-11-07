@@ -181,3 +181,19 @@ test("the transport keeps TLS verification and adds no proxy or agent", async ()
   assert.equal("cookie" in options.headers, false);
   assert.equal("authorization" in options.headers, false);
 });
+
+test("main builds the offline library with the guarded artwork transport", async () => {
+  // OfflineLibrary falls back to `request` for artwork when no
+  // `artworkRequest` is given (tests inject one). In main neither may be
+  // passed, or download artwork would leave the public-HTTPS boundary.
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const main = readFileSync(
+    fileURLToPath(new URL("../electron/main.mjs", import.meta.url)),
+    "utf8",
+  );
+  const start = main.indexOf("new OfflineLibrary(client, {");
+  assert.ok(start > 0, "main constructs the offline library");
+  const block = main.slice(start, main.indexOf("\n      });", start));
+  assert.doesNotMatch(block, /^\s*(request|artworkRequest)\s*[:,]/m);
+});
