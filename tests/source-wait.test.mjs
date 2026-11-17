@@ -347,7 +347,9 @@ test("stability: one heading per addon even when a source moved out of its run",
     ],
   );
   const details = source("src/components/Details.jsx");
-  assert.match(details, /\(shown\.length > 4 \|\| narrowing\) &&/);
+  // The search and chips past four sources (or while one is on); the
+  // advanced filters with any list (PR #155 review, F4).
+  assert.match(details, /\(shown\.length > 4 \|\| searching\) &&/);
   assert.match(details, /arabicCount\(visible\.length, SOURCES\)/);
   // TMDB rows keep their full date, so this year's upcoming films count
   // as not out yet.

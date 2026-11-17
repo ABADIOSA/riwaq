@@ -210,18 +210,28 @@ test("volume keys and the wheel show only the round level (#147)", () => {
     hud.indexOf("const onWheel"),
     hud.indexOf("const seekTo"),
   );
-  assert.match(wheel, /command\("volume", volume\)/);
+  assert.match(wheel, /osd\.external\(\);\s*command\("volume", volume\)/);
   assert.doesNotMatch(wheel, /wake\(\)/);
   // The slider never unfolds by itself: no reveal from a key or the wheel.
   const bar = read("src/components/PlayerBar.jsx");
   assert.doesNotMatch(bar, /reveal/);
   assert.doesNotMatch(hud, /reveal=|volumeReveal/);
-  // The bar's own slider and mute button keep the round level away.
-  assert.match(hud, /barVolume\.current = Date\.now\(\);\s*command\("mute"\)/);
+  // The bar's own slider and mute button keep the round level away, by
+  // the values they sent, not by a pause after them (PR #155 review): a
+  // key right after the slider still shows. The theater draws it too.
   assert.match(
     hud,
-    /barVolume\.current = Date\.now\(\);\s*command\("volume", value\)/,
+    /osd\.bar\(player\.volume \|\| 0, !player\.muted\);\s*command\("mute"\)/,
   );
+  assert.match(
+    hud,
+    /osd\.bar\(value, !!player\.muted\);\s*command\("volume", value\)/,
+  );
+  assert.match(hud, /else osd\.external\(\);/);
+  assert.doesNotMatch(hud, /barVolume|< 800/);
+  const theater = read("src/components/PlayerView.jsx");
+  assert.match(theater, /const osd = useVolumeOsd\(player\);/);
+  assert.match(theater, /<VolumeOsd[\s\S]{0,240}inline/);
   // It is round, in the middle, and says the percentage alone.
   const css = read("src/player-bar.css");
   const osd = css.slice(css.indexOf(".volume-osd {"));

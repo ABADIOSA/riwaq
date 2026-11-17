@@ -14,6 +14,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -34,6 +35,24 @@ async function seed(name, bytes) {
     seeder.seed(join(dir, name), { announce: [] }, resolve),
   );
   return { seeder, torrent, address: `127.0.0.1:${seeder.address().port}` };
+}
+
+/** Whether this account may create a file symbolic link (Windows asks for a right). */
+let linkRight;
+function canLinkFiles() {
+  if (linkRight !== undefined) return linkRight;
+  const dir = mkdtempSync(join(tmpdir(), "riwaq-linkright-"));
+  try {
+    writeFileSync(join(dir, "target"), "x");
+    symlinkSync(join(dir, "target"), join(dir, "link"), "file");
+    linkRight = true;
+  } catch (error) {
+    if (error.code !== "EPERM") throw error;
+    linkRight = false;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return linkRight;
 }
 
 /** A guard file outside the cache, and what it held. */
@@ -61,7 +80,15 @@ async function run({ prepare, name = "Single.mkv", cacheBytes = 0 }) {
   const outside = guard(content.length);
   outside.bytes = readFileSync(outside.path);
   const hashDir = join(cacheDir, torrent.infoHash);
-  prepare({ hashDir, cacheDir, name, outside });
+  // A setup that fails (Windows refusing a link without the right to
+  // create one) must not leave the seeding swarm running: its open
+  // sockets kept the whole run from ending (PR #155 review, EPERM).
+  try {
+    prepare({ hashDir, cacheDir, name, outside });
+  } catch (error) {
+    await new Promise((resolve) => seeder.destroy(resolve));
+    throw error;
+  }
   const engine = await startEngine({
     cacheDir,
     options: { cacheBytes },
@@ -116,7 +143,15 @@ for (const [policy, cacheBytes] of [
   ["delete after viewing", 0],
   ["a 2 GB cap", 2 * 1024 ** 3],
 ]) {
-  test(`${policy}: a piece file that is a symbolic link is never opened`, async () => {
+  test(`${policy}: a piece file that is a symbolic link is never opened`, async (t) => {
+    // Windows lets only an administrator or Developer Mode create a file
+    // symbolic link; without that right no such link can be planted, so
+    // the case cannot arise and is skipped with its reason. Everywhere it
+    // can, the assertions below run unchanged.
+    if (!canLinkFiles())
+      return t.skip(
+        "this account may not create file symbolic links (EPERM): enable Developer Mode or run elevated to exercise it",
+      );
     const { body, marked, outside, content } = await run({
       cacheBytes,
       prepare: ({ hashDir, name, outside }) => {

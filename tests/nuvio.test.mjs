@@ -394,3 +394,43 @@ test("a shape-only diagnostic report, with no addresses or keys", async () => {
     assert.ok(!report.includes(secret), `no ${secret} in the report`);
   assert.match(nuvioDiagnostics({}, 3), /no collections_3/);
 });
+
+test("a switch while Nuvio's addons install keeps the other profile untouched (PR #155 F2)", async () => {
+  const stores = Object.fromEntries(
+    Object.entries(asText()).map(([n, t]) => [n, parseProperties(t)]),
+  );
+  let switchNow;
+  const client = new Client({
+    load: () => ({}),
+    save: () => {},
+    request: async (url) => {
+      // The first addon install is the moment the viewer switches.
+      switchNow?.();
+      switchNow = null;
+      if (url.includes("torrentio"))
+        return {
+          id: "com.stremio.torrentio",
+          name: "Torrentio",
+          version: "1.0.0",
+          resources: ["stream"],
+          types: ["movie"],
+          catalogs: [],
+        };
+      throw new Error("HTTP 500");
+    },
+  });
+  const a = client.profiles.store.active;
+  client.profiles.create({ name: "B" });
+  const b = client.profiles.store.list.find((p) => p.id !== a).id;
+  switchNow = () => client.profiles.switch({ id: b });
+  await assert.rejects(
+    client.importNuvio(stores, {
+      profile: 1,
+      parts: { addons: true, collections: true, library: true },
+    }),
+    /تغيّر الملف الشخصي/,
+  );
+  assert.equal(client.profiles.store.active, b);
+  assert.deepEqual(client.state.collections || [], []);
+  assert.deepEqual(client.state.favorites, []);
+});

@@ -135,11 +135,17 @@ test("no Harbor badge packs page; the badge engine and rules stay (#152)", () =>
   ]) {
     const source = read(file);
     assert.doesNotMatch(source, /badgePackFetch|copyBadgePack/, file);
-    assert.match(source, /badgeStyleFetch/, file);
+    // The page names a look and its profile; core fetches the look's own
+    // pinned address and applies it to that profile (PR #155 review, F2).
+    assert.match(source, /badgeStyleApply/, file);
   }
   assert.match(
     read("electron/main.mjs"),
-    /const url = frStyleUrl\(String\(a\?\.look \|\| ""\)\);\s*if \(!url\) throw/,
+    /client\.applyBadgeStyle\(\s*\{ look: String\(a\?\.look \|\| ""\), profileId: a\?\.profileId \}/,
+  );
+  assert.match(
+    read("core/client.mjs"),
+    /const url = frStyleUrl\(String\(look \|\| ""\)\);\s*if \(!url\) throw/,
   );
 });
 
@@ -245,9 +251,10 @@ test("FR-Badges reads with its groups; a style keeps the viewer's rules first", 
 
 test("only the pinned FR-Badges files can be fetched", async () => {
   const look = await import("../core/badge-look.mjs");
+  // One commit, never "main", which moves (PR #155 review, security).
   assert.equal(
     look.frStyleUrl("fr-frost"),
-    "https://raw.githubusercontent.com/farizmohd70/FR-Badges/main/badges-frost.json",
+    "https://raw.githubusercontent.com/farizmohd70/FR-Badges/3fae65b65bb8859003eb8f6b5d4e51a0065b3901/badges-frost.json",
   );
   assert.equal(look.frStyleUrl("https://evil.example/x.json"), "");
   assert.equal(look.frStyleUrl("riwaq"), "");
@@ -316,7 +323,10 @@ test("a row keeps the important badges, folds the rest, never repeats one", asyn
     ),
   );
   const details = read("src/components/Details.jsx");
-  assert.match(details, /const covered = coveredKinds\(s\.badges \|\| \[\]\)/);
+  assert.match(
+    details,
+    /const badges = visibleBadges\(s\.badges, settings\);\s*const covered = coveredKinds\(badges\)/,
+  );
   assert.match(details, /className="tag-more"/);
   // A picture that fails shows its label as a glass chip, readable even
   // when the pack's own colours are transparent.

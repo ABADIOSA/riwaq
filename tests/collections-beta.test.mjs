@@ -185,6 +185,9 @@ test("import modes: merge by ID, add as copies, replace everything", () => {
     updated: 1,
     replaced: 0,
     skipped: 0,
+    folders: 1,
+    unsupported: 1,
+    ids: ["nuvio-kaptain-genres"],
   });
   const genres = merged.collections.find(
     (c) => c.id === "nuvio-kaptain-genres",
@@ -394,15 +397,19 @@ test("the page asks for a picture by ID, behind the library lock", () => {
   const read = (file) =>
     readFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), "utf8");
   const main = read("electron/main.mjs");
+  // The picker names its slot and profile (PR #155 review, F2 and F8).
   assert.match(
     main,
-    /collectionArtPick: async \(\) => \{\s*client\.profiles\.gate\("library"\);/,
+    /collectionArtPick: async \(a\) => \{\s*client\.profiles\.gate\("library"\);/,
   );
   assert.match(
     main,
     /collectionArt: async \(a\) => \{\s*client\.profiles\.gate\("library"\);/,
   );
   const web = read("web/bridge.js");
-  assert.match(web, /collectionArtPick: async \(\) => \{/);
+  assert.match(
+    web,
+    /collectionArtPick: async \(a\) => \{\s*client\.profiles\.gate\("library"\);/,
+  );
   assert.match(read("electron/preload.cjs"), /"collectionArt",/);
 });
