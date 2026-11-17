@@ -245,3 +245,36 @@ export function applyStreamPrefs(streams, settings = {}, addonOrder = []) {
       : null,
   };
 }
+
+/**
+ * Deleting one saved filter without asking first (issue #153): the list
+ * without it, the active filter afterwards (none when it was the one), and
+ * what Undo needs to put it back. Null when there is no such filter.
+ */
+export function removeFilter(filters, active, id) {
+  const list = Array.isArray(filters) ? filters : [];
+  const index = list.findIndex((f) => f?.id === id);
+  if (index < 0) return null;
+  return {
+    filters: list.filter((_, i) => i !== index),
+    active: active === id ? "" : active || "",
+    undo: { filter: list[index], index, wasActive: active === id },
+  };
+}
+
+/**
+ * Undo: the deleted filter back in its place, active again if it was and
+ * nothing else was chosen since. Null when it cannot come back (it already
+ * did, or the list is full).
+ */
+export function restoreFilter(filters, active, undo) {
+  const list = Array.isArray(filters) ? filters : [];
+  const filter = undo?.filter;
+  if (!filter?.id || list.some((f) => f?.id === filter.id)) return null;
+  if (list.length >= FILTER_LIMIT) return null;
+  const at = Math.max(0, Math.min(list.length, Number(undo.index) || 0));
+  return {
+    filters: [...list.slice(0, at), filter, ...list.slice(at)],
+    active: undo.wasActive && !active ? filter.id : active || "",
+  };
+}

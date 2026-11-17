@@ -345,7 +345,9 @@ function parseResolution(text, source) {
 function parseHdr(text) {
   const dolby =
     /\b(dolby\s*vision|dovi|dv)\b/i.test(text) && !/\bdvd\b/i.test(text);
-  const hdr10plus = /\bhdr10\s*(?:\+|plus)\b/i.test(text);
+  // "HDR10+" ends in a sign: no word boundary after it unless a letter
+  // follows, so only "plus" needs one.
+  const hdr10plus = /\bhdr10\s*(?:\+|plus\b)/i.test(text);
   const hdr10 = hdr10plus || /\bhdr10\b/i.test(text);
   const hlg = /\bhlg\b/i.test(text);
   const generic = /\bhdr\b/i.test(text);
@@ -399,7 +401,9 @@ function parseAudio(text) {
   if (/\bdts[-. ]?hd(?:[-. ]?ma)?\b/i.test(text)) return "DTS-HD MA";
   if (/\bflac\b/i.test(text)) return "FLAC";
   if (/\bdts\b/i.test(text)) return "DTS";
-  if (/\b(ddp|dd\+|e-?ac-?3|eac3)\b/i.test(text)) return "DD+";
+  // "DDP5.1" glues the channels on and "DD+" ends in a sign: neither has
+  // a word boundary where the old pattern wanted one (issue #154 tests).
+  if (/\b(ddp(?=\d|\b)|dd\+|e-?ac-?3|eac3)/i.test(text)) return "DD+";
   if (/\b(ac-?3|dd(?:5|2|7)[.\- ]?\d)\b/i.test(text)) return "AC3";
   if (/\bopus\b/i.test(text)) return "Opus";
   if (/\baac\b/i.test(text)) return "AAC";

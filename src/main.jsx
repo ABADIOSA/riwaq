@@ -29,6 +29,7 @@ import "./scheme-light.css";
 // The wheel and the glass controls (November 2026): after the light
 // scheme, so their palette-based surfaces win in both schemes.
 import "./glass.css";
+import "./liquid.css";
 import "./wheel.css";
 import { watchErrors } from "./lib/diagnostics.js";
 import { savedScheme } from "./lib/scheme.js";

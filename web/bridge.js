@@ -36,6 +36,7 @@ import {
 } from "../core/spotify.mjs";
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
+import { frStyleUrl } from "../core/badge-look.mjs";
 import { artworkHost } from "../core/artwork.mjs";
 import {
   FIVE,
@@ -844,18 +845,14 @@ export async function startBridge({ version, store }) {
     },
     catalog: (a) => client.catalog(a),
     catalogPlan: (a) => client.catalogPlan(a),
-    badgePackFetch: (a) => fetchPackText(String(a?.url || "")),
-    copyBadgePack: async (a) => {
-      const json = String(a?.json || "");
-      let data;
-      try {
-        data = JSON.parse(json);
-      } catch {
-        throw new Error("حزمة غير صالحة");
-      }
-      if (data?.format !== "riwaq-badges" || json.length > 400000)
-        throw new Error("حزمة غير صالحة");
-      return copyText(json);
+    // FR-Badges styles (core/badge-look.mjs): the page names a look and only
+    // its pinned file on GitHub is fetched (redirects re-checked, 3 MB at
+    // most); no address ever comes from the renderer. Only the text returns.
+    badgeStyleFetch: async (a) => {
+      const url = frStyleUrl(String(a?.look || ""));
+      if (!url) throw new Error("نمط غير معروف");
+      const { text } = await fetchPackText(url);
+      return { text };
     },
     copyThemeCode: async (a) => {
       const code = String(a?.code || "");

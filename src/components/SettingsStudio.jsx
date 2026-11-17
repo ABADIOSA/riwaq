@@ -28,7 +28,6 @@ import {
   PlayerLayoutPage,
 } from "./settings/MorePages.jsx";
 import {
-  BadgePacksPage,
   BadgeRulesPage,
   BadgesPage,
   FiltersPage,
@@ -92,7 +91,6 @@ import {
   MousePointerClick,
   BadgeCheck,
   ListChecks,
-  Package,
   Tv,
   Server,
   ServerCog,
@@ -612,14 +610,18 @@ const ALL_GROUPS = [
         MousePointerClick,
       ],
       ["filters", "مرشحات البث", "مرشح جودة 4K HDR أتموس حجم مشاركين", Filter],
-      ["badges", "شارات البث", "شارات الصيغة دقة ترميز صوت", BadgeCheck],
+      [
+        "badges",
+        "شارات البث",
+        "شارات الصيغة دقة ترميز صوت مظهر الشارات زجاج سائل FR-Badges Frost Glass Minimal",
+        BadgeCheck,
+      ],
       [
         "badgeRules",
         "قواعد الشارات",
         "قاعدة شارة نمط مجموعة إصدار",
         ListChecks,
       ],
-      ["badgePacks", "حزم الشارات", "حزمة استيراد تصدير JSON", Package],
       [
         "p2p",
         "محرك P2P",
@@ -1045,12 +1047,11 @@ export default function SettingsStudio({
               {id === "filters" && (
                 <FiltersPage state={state} update={update} notice={notice} />
               )}
-              {id === "badges" && <BadgesPage state={state} update={update} />}
+              {id === "badges" && (
+                <BadgesPage state={state} update={update} notice={notice} />
+              )}
               {id === "badgeRules" && (
                 <BadgeRulesPage state={state} update={update} notice={notice} />
-              )}
-              {id === "badgePacks" && (
-                <BadgePacksPage state={state} update={update} notice={notice} />
               )}
               {id === "window" && (
                 <WindowPage state={state} update={update} win={win} />

@@ -1,6 +1,8 @@
 import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
 import { adoptWheel, cleanSavedThemes, safeAppearance } from "./appearance.mjs";
 import { cleanAddonPriority, cleanStreamFilters } from "./stream-prefs.mjs";
+import { cleanFacets } from "./source-facets.mjs";
+import { BADGE_LOOKS } from "./badge-look.mjs";
 import {
   cleanBadgeArt,
   cleanBadgeRules,
@@ -229,6 +231,13 @@ export const DEFAULT_SETTINGS = {
   badgeRules: [],
   // Pictures for the built-in chips, from a badge pack.
   badgeArt: {},
+  // How the badges look (core/badge-look.mjs): Riwaq's chips, Liquid
+  // Glass, an FR-Badges style, or none.
+  badgeLook: "riwaq",
+  // The picker's advanced filters (issue #154), kept per profile only when
+  // the viewer asks the picker to remember them.
+  sourceFacetsRemember: false,
+  sourceFacets: {},
   // Streaming services the viewer pays for, shown as home rows.
   streamingServices: [],
   // Series: hide episode titles not reached yet.
@@ -492,6 +501,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "quietInterface",
     "showSession",
     "tasteCompass",
+    "sourceFacetsRemember",
     "sessionExpanded",
     "showShowcase",
     "sidebarCollapsed",
@@ -597,6 +607,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     sourceMode: ["all", "direct", "p2p"],
     streamOrder: ["riwaq", "addon"],
     streamOrderInside: ["addon", "riwaq"],
+    badgeLook: BADGE_LOOKS,
     titleTheme: ["artwork", "genre", "off"],
     themeSong: ["auto", "button", "off"],
     themeSongSource: ["auto", "previews"],
@@ -627,6 +638,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.streamFilters = cleanStreamFilters(input.streamFilters);
   if (Array.isArray(input.addonPriority))
     next.addonPriority = cleanAddonPriority(input.addonPriority);
+  if (input.sourceFacets && typeof input.sourceFacets === "object")
+    next.sourceFacets = cleanFacets(input.sourceFacets);
   if (Array.isArray(input.streamingServices))
     next.streamingServices = cleanServices(input.streamingServices);
   if (input.prayerCustom && typeof input.prayerCustom === "object") {

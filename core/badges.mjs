@@ -37,7 +37,12 @@ const HEX = /^#[0-9A-Fa-f]{6}$/;
 const TITLE_MAX = 400;
 const DEFAULT_COLOR = "#E7B66E";
 const STYLES = ["filled", "outlined", "bordered", "filled and bordered"];
-const MATCH_LIMIT = 8;
+// A row draws the most important few and folds the rest behind "+N"
+// (core/badge-look.mjs fitBadges), so it may match a few more than it shows.
+const MATCH_LIMIT = 16;
+// A badge's group (FR-Badges' groupId: resolution, dynamic-range...), for
+// its place in the row and the built-in chip it stands for.
+const GROUP_ID = /^[a-z][a-z-]{1,23}$/;
 
 const text = (value, max) =>
   typeof value === "string"
@@ -145,6 +150,8 @@ export function cleanBadgeRules(input) {
     if (STYLES.includes(r.style) && r.style !== "filled") rule.style = r.style;
     const pack = text(r.pack, 60);
     if (pack) rule.pack = pack;
+    if (typeof r.group === "string" && GROUP_ID.test(r.group))
+      rule.group = r.group;
     out.push(rule);
     if (out.length >= RULE_LIMIT) break;
   }
@@ -448,7 +455,7 @@ export function ruleBadges(stream, rules, deadline = Infinity) {
     if (Date.now() > deadline) break;
     if (!compile(rule.pattern)?.test(subject)) continue;
     const badge = { label: rule.label, color: rule.color };
-    for (const key of ["image", "textColor", "borderColor", "style"])
+    for (const key of ["image", "textColor", "borderColor", "style", "group"])
       if (rule[key]) badge[key] = rule[key];
     out.push(badge);
     if (out.length >= MATCH_LIMIT) break;
@@ -569,6 +576,7 @@ export function importBadgePack(json, makeId, { name = "" } = {}) {
         textColor: f.textColor,
         borderColor: f.borderColor,
         style: f.tagStyle,
+        group: f.groupId,
       });
     }
   } else {

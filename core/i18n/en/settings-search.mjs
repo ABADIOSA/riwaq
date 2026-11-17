@@ -50,9 +50,9 @@ export default {
     "ambience background wallpaper image dim glow title theme colors theme song music sound",
   window: "window title bar buttons frame blur drag",
   playerLayout: "player layout controls bar buttons simple cinematic",
-  badges: "stream badges format resolution codec audio",
+  badges:
+    "stream badges format resolution codec audio appearance look liquid glass fr-badges frost minimal off",
   badgeRules: "badge rules rule pattern regex release group",
-  badgePacks: "badge packs pack import export json",
   awards: "awards icons oscar trophy golden globe emmy",
   hotkeys: "keyboard shortcuts hotkeys keys customize conflict",
   presence: "presence notifications rich presence status notify",

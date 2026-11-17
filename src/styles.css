@@ -1878,6 +1878,23 @@ button.secondary {
   align-items: center;
   padding: 0;
 }
+/* A notice's one action, such as Undo after a deletion (issue #153). */
+.toast button.toast-action {
+  flex: none;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+  font-weight: 650;
+}
+.toast button.toast-action:hover,
+.toast button.toast-action:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.toast button.toast-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 @media (min-width: 1500px) {
   .hero {
     height: 590px;

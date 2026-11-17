@@ -57,6 +57,7 @@ import {
 } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
+import { frStyleUrl } from "../core/badge-look.mjs";
 import { artworkHost } from "../core/artwork.mjs";
 import {
   FIVE,
@@ -1729,24 +1730,15 @@ const methods = {
   },
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
-  // A badge pack is copied only as Riwaq's own pack JSON.
-  // A badge pack from a link (harbor.site, GitHub, a gist...): HTTPS only,
-  // never a machine on the viewer's network, and only its text comes back.
-  badgePackFetch: (a) => fetchPackText(String(a?.url || "")),
-  copyBadgePack: (a) => {
-    const json = String(a?.json || "");
-    let data;
-    try {
-      data = JSON.parse(json);
-    } catch {
-      throw new Error("حزمة غير صالحة");
-    }
-    if (data?.format !== "riwaq-badges" || json.length > 400000)
-      throw new Error("حزمة غير صالحة");
-    clipboard.writeText(json);
-    return true;
+  // FR-Badges styles (core/badge-look.mjs): the page names a look and only
+  // its pinned file on GitHub is fetched (redirects re-checked, 3 MB at
+  // most); no address ever comes from the renderer. Only the text returns.
+  badgeStyleFetch: async (a) => {
+    const url = frStyleUrl(String(a?.look || ""));
+    if (!url) throw new Error("نمط غير معروف");
+    const { text } = await fetchPackText(url);
+    return { text };
   },
-  // Only a design code may be copied; nothing else reaches the clipboard.
   copyThemeCode: (a) => {
     const code = String(a?.code || "");
     if (!code.startsWith("RIWAQ-THEME-1:") || code.length > 6000)
