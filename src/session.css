@@ -907,7 +907,10 @@
       110px,
       1fr
     );
-  padding-inline: 20px;
+  /* Its content stays put while the scroll lock hides the page's
+     scrollbar (issue #149, src/tokens.css). */
+  padding-left: calc(20px + var(--lock-gutter-left, 0px));
+  padding-right: calc(20px + var(--lock-gutter-right, 0px));
   gap: 16px;
 }
 /* The search sits in the middle of the window (issue #131): the masthead's
@@ -1076,7 +1079,8 @@
     grid-template-columns: 44px auto 1fr;
     grid-template-rows: 44px 44px;
     gap: 6px 8px;
-    padding: 8px 12px;
+    padding: 8px calc(12px + var(--lock-gutter-right, 0px)) 8px
+      calc(12px + var(--lock-gutter-left, 0px));
   }
   .riwaq-drawer-trigger {
     display: flex;

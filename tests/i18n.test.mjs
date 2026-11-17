@@ -363,7 +363,11 @@ test("layout CSS uses logical sides, so English mirrors the Arabic design", () =
           /^\s*(left|right|(?:margin|padding|border)-(?:left|right)[\w-]*|border-(?:top|bottom)-(?:left|right)-radius)\s*:\s*(.*)$/.exec(
             line,
           ) || /^\s*(text-align|float)\s*:\s*(left|right)\b/.exec(line);
-        if (!m || /50%/.test(m[2])) continue;
+        // The scroll lock pads by the page's scrollbar, which sits on a
+        // physical side whatever the reading direction (issue #149,
+        // src/tokens.css): those lines carry its width.
+        if (!m || /50%/.test(m[2]) || /--lock-gutter-(left|right)/.test(m[2]))
+          continue;
         found.push(`${name}: ${sel.split("\n").pop()} { ${line.trim()} }`);
       }
     }

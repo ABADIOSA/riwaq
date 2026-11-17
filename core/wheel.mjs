@@ -10,8 +10,12 @@
  */
 export const WHEEL = {
   // The rail's width: compact (icons and the lens) or open (with names).
-  compact: 92,
-  open: 236,
+  // Compact: the lens keeps clear of the divider beside the content
+  // (issue #146, follow-up: it touched it at 92).
+  compact: 100,
+  // Open: room for the longest name and no wide empty strip after it
+  // (issue #146, follow-up).
+  open: 212,
   // A destination's hit target (and the minimum WCAG-friendly size).
   item: 44,
   // Space from one destination's centre to the next.
@@ -84,13 +88,17 @@ export function wheelAngle(layout, slot) {
   return Math.asin(clamp(dy / layout.radius, -1, 1)) * DEG;
 }
 
-/** The SVG path of the visible rim, from just above the first to below the last. */
+/**
+ * The SVG path of the visible rim: the arc from the first destination to the
+ * last, under their discs. Nothing runs past either end or outside the
+ * circle (issue #146: the rim once overhung by up to 40 px and carried tick
+ * marks on its outer side).
+ */
 export function rimPath(layout, { rtl = false, width } = {}) {
   const { hub, radius, items } = layout;
   if (!items.length) return "";
-  const extra = Math.min(40, layout.step || 40);
-  const y1 = items[0].y - extra;
-  const y2 = items.at(-1).y + extra;
+  const y1 = items[0].y;
+  const y2 = items.at(-1).y;
   const x = (y) =>
     hub.x + Math.sqrt(Math.max(0, radius * radius - (y - hub.y) ** 2));
   const fx = (value) => (rtl ? (width ?? layout.width) - value : value);

@@ -200,3 +200,37 @@ test("the wheel keeps the destinations in order, with page semantics", () => {
   ])
     assert.ok(glass.includes(query), query);
 });
+
+test("the rim stays on the circle, between the first and last destination (#146)", () => {
+  for (const open of [false, true]) {
+    const layout = wheelLayout({ count: 9, height: 640, open });
+    const path = rimPath(layout);
+    const [, x1, y1, , , , , , , x2, y2] = path.split(" ").map(Number);
+    // It starts at the first destination and ends at the last: no overhang.
+    assert.equal(y1, layout.items[0].y);
+    assert.equal(y2, layout.items.at(-1).y);
+    assert.ok(Math.abs(x1 - layout.items[0].x) < 0.2, `${x1}`);
+    assert.ok(Math.abs(x2 - layout.items.at(-1).x) < 0.2, `${x2}`);
+  }
+  // No tick marks beyond the rim, in the component or its styles.
+  const wheel = read("src/components/RiwaqWheel.jsx");
+  assert.doesNotMatch(wheel, /wheel-ticks|TICK_EVERY/);
+  assert.doesNotMatch(read("src/wheel.css"), /wheel-ticks/);
+  // The inner spokes toward the hub stay.
+  assert.match(wheel, /className=\{`wheel-spoke/);
+  // Open, it is as wide as its names need; compact, the lens keeps clear of
+  // the divider.
+  const compact = wheelLayout({ count: 9, height: 640 });
+  const lens = 56 / 2 + 5; // the lens and its ring
+  assert.ok(WHEEL.compact - (WHEEL.apex.compact + lens) >= 10);
+  assert.ok(WHEEL.open <= 212);
+  assert.match(
+    read("src/wheel.css"),
+    new RegExp(`--nav-width: ${WHEEL.compact}px`),
+  );
+  assert.match(
+    read("src/wheel.css"),
+    new RegExp(`--nav-width: ${WHEEL.open}px`),
+  );
+  assert.ok(compact.items.every((item) => item.x - WHEEL.item / 2 >= 0));
+});

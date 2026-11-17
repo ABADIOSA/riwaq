@@ -136,6 +136,9 @@ export const DEFAULT_SETTINGS = {
   settingsMode: "simple",
   quietInterface: false,
   showSession: true,
+  // The taste compass on Discover and Home (issue #148: it could not be
+  // hidden from Discover).
+  tasteCompass: true,
   // Today's session opens as a compact band unless the viewer widened it.
   sessionExpanded: false,
   audioDevice: "auto",
@@ -488,6 +491,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "stremioBannerHidden",
     "quietInterface",
     "showSession",
+    "tasteCompass",
     "sessionExpanded",
     "showShowcase",
     "sidebarCollapsed",

@@ -37,9 +37,16 @@ export default function DiscoverSections({
     return blendedSection(addonRows, tab, shown);
   }, [addonRows, tab, mine]);
   const tabName = tabs.find((t) => t.id === tab)?.name || "";
+  // The tabs belong to the rows they switch (issue #148): one block under
+  // a single separator, the tabs right above the first row's heading, with
+  // no line or empty band of their own between them.
   return (
-    <>
-      <ScrollRow className="filter-tabs" role="tablist" aria-label="الأقسام">
+    <section className="discover-sections" aria-label="الأقسام">
+      <ScrollRow
+        className="filter-tabs discover-tabs"
+        role="tablist"
+        aria-label="الأقسام"
+      >
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -64,12 +71,19 @@ export default function DiscoverSections({
           </button>
         </div>
       )}
-      {mine.map((row) => (
-        <DiscoverRail key={row.key} row={row} onOpen={onOpen} onMore={onMore} />
+      {mine.map((row, index) => (
+        <DiscoverRail
+          key={row.key}
+          row={row}
+          onOpen={onOpen}
+          onMore={onMore}
+          first={index === 0}
+        />
       ))}
-      {blended.map((row) => (
+      {blended.map((row, index) => (
         <Rail
           key={row.key}
+          className={!mine.length && index === 0 ? "discover-first" : ""}
           title={row.name}
           subtitle={row.subtitle}
           metas={row.metas}
@@ -82,14 +96,20 @@ export default function DiscoverSections({
           ما فيه أعمال في «{tabName}» الحين. جرّب قسماً آخر.
         </p>
       )}
-    </>
+    </section>
   );
 }
 
 /** One of Riwaq's rows: its own name, the kind of title, and its full page. */
-const DiscoverRail = memo(function DiscoverRail({ row, onOpen, onMore }) {
+const DiscoverRail = memo(function DiscoverRail({
+  row,
+  onOpen,
+  onMore,
+  first = false,
+}) {
   return (
     <Rail
+      className={first ? "discover-first" : ""}
       title={row.name}
       subtitle={typeName(row.type)}
       metas={row.metas}

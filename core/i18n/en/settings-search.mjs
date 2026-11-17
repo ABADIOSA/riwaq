@@ -34,7 +34,7 @@ export default {
   filters: "stream filters filter quality atmos size seeders peers",
   p2p: "p2p torrent engine connections speed cache built-in webtorrent stremio service upload sharing peers",
   server: "streaming server address connection version",
-  home: "home order rows catalogs hide sections pinned collections",
+  home: "home order rows catalogs hide sections pinned collections taste compass discover",
   cards: "poster cards card size corners ratings title",
   details: "details pages background spoilers episode names awards",
   data: "metadata providers data ratings images language keys",

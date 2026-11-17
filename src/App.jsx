@@ -1452,20 +1452,22 @@ export default function App() {
                               />
                             )}
                             {id === "continue" && continueFirst && sessionBand}
-                            {id === "taste" && ready && (
-                              // Folded as on Discover: its editor opens on
-                              // request, so browsing is never behind a form.
-                              <TasteDiscovery
-                                key={state.profiles?.active}
-                                rows={shownRows}
-                                state={state}
-                                update={update}
-                                onOpen={openStable}
-                                watched={finished}
-                                loading={loading}
-                                collapsed
-                              />
-                            )}
+                            {id === "taste" &&
+                              ready &&
+                              state.settings.tasteCompass !== false && (
+                                // Folded as on Discover: its editor opens on
+                                // request, so browsing is never behind a form.
+                                <TasteDiscovery
+                                  key={state.profiles?.active}
+                                  rows={shownRows}
+                                  state={state}
+                                  update={update}
+                                  onOpen={openStable}
+                                  watched={finished}
+                                  loading={loading}
+                                  collapsed
+                                />
+                              )}
                             {id === "suggestions" && (
                               <TraktSuggestions
                                 trakt={traktState}
@@ -1547,7 +1549,7 @@ export default function App() {
                         ))
                     ) : view === "discover" ? (
                       <>
-                        {ready && (
+                        {ready && state.settings.tasteCompass !== false && (
                           <TasteDiscovery
                             key={state.profiles?.active}
                             rows={shownRows}
