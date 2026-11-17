@@ -1,5 +1,19 @@
 # سجل رِواق — Riwaq changelog
 
+## غير منشور · Unreleased — تحسينات نوفمبر وشارات FR والمجموعات المتحركة · November fixes, FR badges and moving collection covers
+
+لم يُرفع رقم الإصدار ولم يُنشر شيء. التفاصيل والأدلة في docs/BETA-2026-11-17.md.
+Not versioned or published. Details and evidence in docs/BETA-2026-11-17.md.
+
+- شريط المشغل: «ينتهي» على خط الأيقونات (#144)، كل العناصر في مربعات زجاجية ثابتة (#151)، دائرة صغيرة لمستوى الصوت بالمفاتيح والعجلة بلا إظهار الأدوات (#147) وحذف خيار المؤشر القديم (#145)، وقائمة السياق بعرض أطول عنصر (#150).
+- العجلة بلا خطوط خارجية (#146)، وخيار لإخفاء «بوصلة ذوقك» وتصنيفات «اكتشف» داخل قسمها بخط واحد (#148)، وبلا فراغ بجانب شريط التمرير (#149).
+- فلاتر متقدمة في نافذة المصادر (#154)، وحذف المرشح بلا تأكيد مع «تراجع» (#153)، وإزالة حزم شارات Harbor (#152) مع «مظهر شارات المصادر»: رِواق، زجاج سائل، FR Glass وFR Frost وMinimal من FR-Badges.
+- المجموعات: غلاف GIF يتحرك عند المرور أو التركيز فقط، وصور من جهازك، واستيراد وتصدير نوفيو بكل حقول العرض مع تقرير ودمج أو إضافة أو استبدال، وقوالب رِواق الثمانية.
+- Player bar: Ends on the icons' line (#144), every control in a steady glass chip (#151), a small round volume level for keys and the wheel without waking the controls (#147), the old indicator switch removed (#145), a context menu as wide as its longest item (#150).
+- A wheel without outer lines (#146), a switch to hide the taste compass and Discover's tabs inside their block under one line (#148), and no band beside the scrollbar (#149).
+- Advanced source filters (#154), filter deletion without a dialog and with Undo (#153), Harbor badge packs removed (#152) in favour of "Stream badge appearance": Riwaq, Liquid Glass, FR Glass, FR Frost and Minimal from FR-Badges.
+- Collections: GIF covers that move only under the pointer or focus, pictures from your computer, Nuvio import and export with every display field, a report and merge/add/replace, and eight Riwaq templates.
+
 ## رِواق 0.55.0 · تجريبي / Beta — عجلة رِواق، وتحكم أوضح · Riwaq's Wheel, and Clearer Controls
 
 ### الجديد

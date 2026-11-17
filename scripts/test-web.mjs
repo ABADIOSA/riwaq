@@ -735,8 +735,10 @@ try {
         );
         // The wheel (the default navigation) starts compact; its button
         // shows the names and makes it compact again.
+        // 100 px since #146's follow-up (the lens clears the divider);
+        // open it is 212 px.
         assert.ok(
-          (await page.locator(".riwaq-sidebar").boundingBox()).width < 100,
+          (await page.locator(".riwaq-sidebar").boundingBox()).width <= 100,
           "the wheel starts compact",
         );
         assert.ok(
