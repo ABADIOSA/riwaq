@@ -1729,6 +1729,7 @@ export default function App() {
                 state={state}
                 update={update}
                 act={act}
+                setState={setState}
                 notice={notice}
               />
             )}

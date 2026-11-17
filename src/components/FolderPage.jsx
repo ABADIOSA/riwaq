@@ -13,6 +13,7 @@ import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
 import { Busy, Empty, Poster, Rail, ScrollRow } from "./UI.jsx";
 import { Face, FOLDERS, SOURCES, TITLES, n, noteText } from "./Collections.jsx";
+import { StillImage, useArt } from "./CollectionArt.jsx";
 import { folderItems, mergePage, randomPick } from "../../core/folder-view.mjs";
 import { watchedTitles, withoutWatched } from "../../core/library.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
@@ -55,6 +56,7 @@ export default function FolderPage({
   const [sort, setSort] = useState("source");
   const [layout, setLayout] = useState("grid");
   const [loadingMore, setLoadingMore] = useState("");
+  const [logoBroken, setLogoBroken] = useState(false);
   const signature = folder
     ? JSON.stringify([
         folder.catalogs,
@@ -157,15 +159,21 @@ export default function FolderPage({
     if (pick) onOpen(pick);
   };
   const siblings = collection.folders;
+  const heroArt = useArt(folder.backdrop || folder.cover || "");
+  const heroLogo = useArt(folder.logo || "");
   const loaded = folderItems(view).length;
 
   return (
     <div className="page-body folder-page" ref={top}>
       <header className={`folder-hero shape-${folder.shape}`}>
-        {folder.cover && (
-          <div
+        {/* The folder's own backdrop when it has one, else its still
+            cover; a picture from this computer through its ID; never
+            moving (PR #155 review, F8). */}
+        {heroArt && (
+          <StillImage
             className="folder-hero-backdrop"
-            style={{ backgroundImage: `url("${folder.cover}")` }}
+            src={heroArt}
+            lazy={false}
           />
         )}
         <div className="folder-hero-inner">
@@ -179,12 +187,23 @@ export default function FolderPage({
                 {collection.emoji} {collection.title} ·{" "}
                 {arabicCount(siblings.length, FOLDERS)}
               </span>
-              <h1 dir="auto">
-                {folder.emoji && !folder.cover && (
-                  <span className="pinned-emoji">{folder.emoji}</span>
-                )}
-                {folder.title}
-              </h1>
+              {heroLogo && !logoBroken ? (
+                <h1 className="folder-hero-logo">
+                  <StillImage
+                    src={heroLogo}
+                    alt={folder.title}
+                    lazy={false}
+                    onError={() => setLogoBroken(true)}
+                  />
+                </h1>
+              ) : (
+                <h1 dir="auto">
+                  {folder.emoji && !folder.cover && (
+                    <span className="pinned-emoji">{folder.emoji}</span>
+                  )}
+                  {folder.title}
+                </h1>
+              )}
               <p className="muted">
                 {n(rows.length, SOURCES)}
                 {data ? ` · ${n(loaded, TITLES)} حتى الآن` : ""}

@@ -401,3 +401,17 @@ button.time-counter {
     animation: none;
   }
 }
+
+/* The theater's round level (issue #147, PR #155 review): in the controls
+   row beside the volume, since HTML cannot paint over Windows' native
+   picture in the main window. */
+.volume-osd.inline {
+  position: static;
+  width: 46px;
+  height: 46px;
+  margin: 0;
+  flex: none;
+}
+.volume-osd.inline b {
+  font-size: 12px;
+}

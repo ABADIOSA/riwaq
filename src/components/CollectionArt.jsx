@@ -11,7 +11,8 @@ import { call } from "../lib/api.js";
  * the card unmounts the GIF (it stops decoding). A GIF that fails falls back
  * to the still for the rest of the session; a card with no picture shows
  * its emoji on the theme's colours. Reduced motion (Riwaq's own switch or
- * the system's) never starts a GIF.
+ * the system's) never starts a GIF. The still slots (cover, backdrop,
+ * logo) never move at all (StillImage).
  */
 
 /** Whether motion should stay still: Riwaq's switch, or the system's. */
@@ -30,30 +31,136 @@ export function useReducedMotion(setting = false) {
   return !!setting || system;
 }
 
+/**
+ * Whether a picture address might move: a GIF or WebP by its name or data
+ * type, or a picture from this computer in the web edition (an object
+ * address says nothing of its type).
+ */
+export function mayMove(src) {
+  if (typeof src !== "string" || !src) return false;
+  if (/^data:image\/(gif|webp)/i.test(src) || /^blob:/i.test(src)) return true;
+  try {
+    return /\.(gif|webp)$/i.test(new URL(src).pathname);
+  } catch {
+    return false;
+  }
+}
+// The longest side a frozen still is kept at: sharp on a card or a hero at
+// twice the pixel density, without holding a full-size bitmap per card.
+const STILL_MAX = 960;
+
+/**
+ * A picture in a still slot (a cover, a backdrop, a logo): never moves,
+ * whatever the motion setting (PR #155 review, F8). A picture that might
+ * be animated is drawn once into a canvas, which shows the first frame
+ * (the canvas rule for animated images), at most STILL_MAX a side;
+ * anything else is a plain image. The loader is let go once drawn or when
+ * the element goes.
+ */
+export function StillImage({
+  src,
+  className = "",
+  alt = "",
+  onError,
+  lazy = true,
+}) {
+  const canvas = useRef(null);
+  const moving = mayMove(src);
+  const failed = useRef(onError);
+  failed.current = onError;
+  useEffect(() => {
+    if (!moving) return;
+    let live = true;
+    const img = new Image();
+    const release = () => {
+      img.onload = img.onerror = null;
+      img.removeAttribute("src");
+    };
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    img.onload = () => {
+      const c = canvas.current;
+      if (live && c && img.naturalWidth && img.naturalHeight) {
+        const scale = Math.min(
+          1,
+          STILL_MAX / Math.max(img.naturalWidth, img.naturalHeight),
+        );
+        c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
+        c.dataset.ready = "1";
+      }
+      release();
+    };
+    img.onerror = () => {
+      release();
+      if (live) failed.current?.();
+    };
+    img.src = src;
+    return () => {
+      live = false;
+      release();
+    };
+  }, [src, moving]);
+  if (!moving)
+    return (
+      <img
+        className={className}
+        src={src}
+        alt={alt}
+        loading={lazy ? "lazy" : undefined}
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={onError}
+      />
+    );
+  return (
+    <canvas
+      ref={canvas}
+      className={`${className} still-frame`}
+      role={alt ? "img" : undefined}
+      aria-label={alt || undefined}
+      aria-hidden={alt ? undefined : "true"}
+    />
+  );
+}
+
 // Pictures the viewer chose from this computer: Riwaq keeps them by an
 // opaque ID and hands back an address only it can serve. Cached per ID.
 const localCache = new Map();
 export function useArt(src) {
+  return useArtState(src).url;
+}
+/**
+ * The same, saying whether a picture from this computer is missing here
+ * (another device's, or gone): `missing` once the answer came back empty,
+ * so the editor can say so instead of failing silently. A missing answer
+ * is not cached, so a picture picked again shows at once.
+ */
+export function useArtState(src) {
   const local = typeof src === "string" && LOCAL_ART.test(src);
-  const [url, setUrl] = useState(() =>
-    local ? localCache.get(src) || "" : src || "",
-  );
+  const [state, setState] = useState(() => ({
+    url: local ? localCache.get(src) || "" : src || "",
+    missing: false,
+  }));
   useEffect(() => {
-    if (!local) return setUrl(src || "");
-    if (localCache.has(src)) return setUrl(localCache.get(src));
+    if (!local) return setState({ url: src || "", missing: false });
+    if (localCache.has(src))
+      return setState({ url: localCache.get(src), missing: false });
     let live = true;
+    setState({ url: "", missing: false });
     call("collectionArt", { id: src })
       .then((found) => {
         const value = typeof found === "string" ? found : "";
-        localCache.set(src, value);
-        if (live) setUrl(value);
+        if (value) localCache.set(src, value);
+        if (live) setState({ url: value, missing: !value });
       })
-      .catch(() => live && setUrl(""));
+      .catch(() => live && setState({ url: "", missing: true }));
     return () => {
       live = false;
     };
   }, [src, local]);
-  return url;
+  return state;
 }
 
 // GIFs that failed this session: never asked for again.
@@ -96,8 +203,11 @@ export function CollectionArt({
       if (live) setGifReady(false);
     };
     probe.src = gifSrc;
+    // Leaving the card before the GIF arrived stops the probe too.
     return () => {
       live = false;
+      probe.onload = probe.onerror = null;
+      probe.removeAttribute("src");
     };
   }, [wants, gifReady, gifSrc]);
   const showGif = wants && gifReady;
@@ -107,13 +217,9 @@ export function CollectionArt({
       aria-hidden="true"
     >
       {stillSrc && !stillBroken ? (
-        <img
+        <StillImage
           className="art-still"
           src={stillSrc}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
           onError={() => setStillBroken(true)}
         />
       ) : (
@@ -187,12 +293,9 @@ export function FolderTile({
     >
       <CollectionArt item={folder} active={on} reduced={reduced} />
       {logo && !logoBroken ? (
-        <img
+        <StillImage
           className="folder-logo"
           src={logo}
-          alt=""
-          loading="lazy"
-          referrerPolicy="no-referrer"
           onError={() => setLogoBroken(true)}
         />
       ) : (

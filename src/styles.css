@@ -997,6 +997,10 @@ button.secondary {
   gap: 12px;
   margin: 4px 0 16px;
 }
+/* A list with nothing to search or tell apart draws no tools row. */
+.source-tools:empty {
+  display: none;
+}
 .source-search {
   display: flex;
   align-items: center;

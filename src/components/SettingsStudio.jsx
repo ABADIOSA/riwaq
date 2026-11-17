@@ -777,6 +777,7 @@ export default function SettingsStudio({
   state,
   update,
   act,
+  setState,
   notice,
   initialTab = "start",
   onNuvio,
@@ -1045,10 +1046,22 @@ export default function SettingsStudio({
               )}
               {id === "picker" && <PickerPage state={state} update={update} />}
               {id === "filters" && (
-                <FiltersPage state={state} update={update} notice={notice} />
+                <FiltersPage
+                  state={state}
+                  update={update}
+                  act={act}
+                  setState={setState}
+                  notice={notice}
+                />
               )}
               {id === "badges" && (
-                <BadgesPage state={state} update={update} notice={notice} />
+                <BadgesPage
+                  state={state}
+                  update={update}
+                  act={act}
+                  setState={setState}
+                  notice={notice}
+                />
               )}
               {id === "badgeRules" && (
                 <BadgeRulesPage state={state} update={update} notice={notice} />

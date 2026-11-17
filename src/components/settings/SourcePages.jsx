@@ -1,24 +1,17 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   FILTER_LIMIT,
   FILTER_OPTIONS,
   cleanAddonPriority,
-  removeFilter,
-  restoreFilter,
 } from "../../../core/stream-prefs.mjs";
 import {
   BADGE_KINDS,
   RULE_LIMIT,
-  importBadgePack,
   patternProblem,
   ruleBadges,
 } from "../../../core/badges.mjs";
-import {
-  chooseFrStyle,
-  chooseLook,
-  isFrLook,
-} from "../../../core/badge-look.mjs";
+import { chooseLook, isFrLook } from "../../../core/badge-look.mjs";
 import { call } from "../../lib/api.js";
 import { RuleBadge } from "../StreamBadge.jsx";
 
@@ -298,13 +291,10 @@ const summary = (f) =>
     .join(" · ");
 
 /** Saved stream filters: the quality the viewer prefers, one active. */
-export function FiltersPage({ state, update, notice }) {
+export function FiltersPage({ state, update, act, setState, notice }) {
   const s = state.settings;
   const filters = s.streamFilters || [];
   const [draft, setDraft] = useState(null);
-  // Undo runs after later edits: it reads the list as it is then.
-  const latestFilters = useRef({ filters, active: s.activeFilter || "" });
-  latestFilters.current = { filters, active: s.activeFilter || "" };
   const save = (list, extra = {}) =>
     update("settings", { streamFilters: list, ...extra });
   const commit = async () => {
@@ -324,17 +314,29 @@ export function FiltersPage({ state, update, notice }) {
     });
   // One press deletes one filter, no question first (issue #153); the
   // notice offers Undo, which puts it back in its place, active again if
-  // it was. Only this filter goes: there is no delete-all here.
+  // it was. Only this filter goes: there is no delete-all here. Both are
+  // done by main on the profile's list as it is then, and both name the
+  // profile they were pressed in: an Undo pressed after switching profile,
+  // even with this page closed, is refused there and changes neither
+  // profile (PR #155 review, F2).
   const remove = async (filter) => {
-    const plan = removeFilter(filters, s.activeFilter, filter.id);
-    if (!plan) return;
-    if (!(await save(plan.filters, { activeFilter: plan.active }))) return;
+    const profileId = state.profiles?.active;
+    const r = await act("streamFilterEdit", {
+      profileId,
+      action: "remove",
+      id: filter.id,
+    });
+    if (!r) return;
+    setState(r.state);
     notice(`حُذف المرشح «${filter.name}»`, {
       label: "تراجع",
-      run: () => {
-        const now = latestFilters.current;
-        const back = restoreFilter(now.filters, now.active, plan.undo);
-        if (back) save(back.filters, { activeFilter: back.active });
+      run: async () => {
+        const back = await act("streamFilterEdit", {
+          profileId,
+          action: "restore",
+          id: filter.id,
+        });
+        if (back) setState(back.state);
       },
     });
   };
@@ -524,7 +526,7 @@ const LOOKS = [
   ["off", "بدون شارات", "يخفي شارات الصيغة كلها؛ تبقى شاراتك المخصصة."],
 ];
 
-function BadgeLookCard({ state, update, notice }) {
+function BadgeLookCard({ state, update, act, setState, notice }) {
   const s = state.settings;
   const on = s.badgesOn !== false;
   const current = on ? s.badgeLook || "riwaq" : "off";
@@ -538,18 +540,22 @@ function BadgeLookCard({ state, update, notice }) {
     if (look === "off") return update("settings", { badgesOn: false });
     if (!isFrLook(look)) return update("settings", chooseLook(s, look));
     setBusy(look);
+    // Main fetches the style and adds it to this profile's settings only
+    // if this profile is still the active one when the file arrives; a
+    // switch meanwhile leaves both profiles as they were (F2).
     try {
-      const { text } = await call("badgeStyleFetch", { look });
-      const pack = importBadgePack(text, undefined, { name: look });
-      const { patch, report: done } = chooseFrStyle(s, pack, look);
-      if (await update("settings", patch)) {
-        setReport(done);
-        notice(
-          done.over
-            ? `«${done.style}»: حُمّلت ${done.loaded} شارة و${done.pictures} صورة، ولم تتسع ${done.over}`
-            : `«${done.style}»: حُمّلت ${done.loaded} شارة و${done.pictures} صورة`,
-        );
-      }
+      const r = await call("badgeStyleApply", {
+        look,
+        profileId: state.profiles?.active,
+      });
+      setState(r.state);
+      const done = r.report;
+      setReport(done);
+      notice(
+        done.over
+          ? `«${done.style}»: حُمّلت ${done.loaded} شارة و${done.pictures} صورة، ولم تتسع ${done.over}`
+          : `«${done.style}»: حُمّلت ${done.loaded} شارة و${done.pictures} صورة`,
+      );
     } catch (e) {
       setError(
         `${e.message}. بقي المظهر كما كان؛ تحقق من الاتصال وحاول مرة ثانية.`,
@@ -608,13 +614,19 @@ function BadgeLookCard({ state, update, notice }) {
 }
 
 /** Built-in format chips: their look, and single kinds hidden. */
-export function BadgesPage({ state, update, notice }) {
+export function BadgesPage({ state, update, act, setState, notice }) {
   const s = state.settings;
   const hidden = new Set(s.badgesHidden || []);
   const on = s.badgesOn !== false;
   return (
     <>
-      <BadgeLookCard state={state} update={update} notice={notice} />
+      <BadgeLookCard
+        state={state}
+        update={update}
+        act={act}
+        setState={setState}
+        notice={notice}
+      />
       <section className="settings-card">
         <div
           className={`badge-preview badges-${on ? s.badgeLook || "riwaq" : "off"}`}

@@ -56,12 +56,13 @@ import { releaseTarget } from "../../core/countdown.mjs";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
 import SourceFacets from "./SourceFacets.jsx";
-import { coveredKinds, fitBadges } from "../../core/badge-look.mjs";
 import {
-  applyFacets,
-  cleanFacets,
-  facetCount,
-} from "../../core/source-facets.mjs";
+  chipPictures,
+  coveredKinds,
+  fitBadges,
+  visibleBadges,
+} from "../../core/badge-look.mjs";
+import { applyFacets, cleanFacets } from "../../core/source-facets.mjs";
 import {
   SOURCE_CHIPS,
   addonSections,
@@ -622,25 +623,35 @@ export default function Details({
   });
   const visible = applyFacets(searched, facets);
   const narrowed = visible.length !== shown.length;
-  // The tools stay while a search or chip is on, even if the list shrank
+  // The search and chips stay while one is on, even if the list shrank
   // under five (a quality pick), so the viewer can always see and clear it.
-  const narrowing =
-    !!sourceQuery.trim() || sourceChips.length > 0 || facetCount(facets) > 0;
-  // Remembered filters follow every change, a moment after it.
+  const searching = !!sourceQuery.trim() || sourceChips.length > 0;
+  // A remembered-filters save still waiting when the page goes (another
+  // title, a profile switch, a playback) is dropped with it (F2).
+  useEffect(() => () => clearTimeout(facetSave.current), []);
+  // Remembered filters follow every change, a moment after it. The save
+  // names the profile it was made in: main refuses it once another profile
+  // is active, and drops it if Remember was turned off meanwhile; turning
+  // Remember off or leaving the page cancels a pending one (PR #155
+  // review, F2).
   const chooseFacets = (next) => {
     setFacets(next);
-    if (!settings.sourceFacetsRemember) return;
     clearTimeout(facetSave.current);
+    if (!settings.sourceFacetsRemember) return;
+    const profileId = state.profiles?.active;
     facetSave.current = setTimeout(
-      () => update("settings", { sourceFacets: next }).catch(() => {}),
+      () => update("settings", { sourceFacets: next, profileId }),
       500,
     );
   };
-  const rememberFacets = (on) =>
+  const rememberFacets = (on) => {
+    clearTimeout(facetSave.current);
     update("settings", {
       sourceFacetsRemember: on,
       sourceFacets: on ? facets : {},
-    }).catch(() => {});
+      profileId: state.profiles?.active,
+    });
+  };
   const counts = chipCounts(shown);
   const grouped = result?.order === "addon";
   const sections = grouped
@@ -648,7 +659,8 @@ export default function Details({
     : [{ id: "all", name: "", streams: visible }];
   const hiddenKinds = new Set(settings.badgesHidden || []);
   const chip = (kind) => settings.badgesOn !== false && !hiddenKinds.has(kind);
-  const art = settings.badgeArt || {};
+  // The viewer's own chip pictures first, then an FR-Badges style's (F6).
+  const art = chipPictures(settings);
   // Badges a row shows before "+N" (core/badge-look.mjs fitBadges).
   const BADGE_ROOM = settings.pickerLayout === "compact" ? 4 : 6;
   const dropped = result?.dropped || [];
@@ -775,54 +787,59 @@ export default function Details({
           <Busy text="نبحث في إضافاتك عن المصادر…" />
         ) : shown.length ? (
           <>
-            {(shown.length > 4 || narrowing) && (
-              <div className="source-tools">
-                <label className="source-search">
-                  <Search size={15} />
-                  <input
-                    type="search"
-                    value={sourceQuery}
-                    onChange={(e) => setSourceQuery(e.target.value)}
-                    placeholder="ابحث في المصادر: فريق، REMUX، عربي…"
-                    aria-label="ابحث في المصادر"
-                    maxLength={80}
-                  />
-                </label>
-                <ScrollRow className="source-chips">
-                  {SOURCE_CHIPS.filter(([id]) => counts[id] > 0).map(
-                    ([id, label]) => (
-                      <button
-                        key={id}
-                        className={sourceChips.includes(id) ? "chosen" : ""}
-                        aria-pressed={sourceChips.includes(id)}
-                        onClick={() =>
-                          setSourceChips((list) =>
-                            list.includes(id)
-                              ? list.filter((c) => c !== id)
-                              : [...list, id],
-                          )
-                        }
-                      >
-                        {label} <bdi>{counts[id]}</bdi>
-                      </button>
-                    ),
-                  )}
-                </ScrollRow>
-                {narrowed && (
-                  <small className="source-count" role="status">
-                    يعرض {arabicCount(visible.length, SOURCES)} من{" "}
-                    {shown.length}
-                  </small>
-                )}
-                <SourceFacets
-                  streams={searched}
-                  chosen={facets}
-                  onChange={chooseFacets}
-                  remember={!!settings.sourceFacetsRemember}
-                  onRemember={rememberFacets}
-                />
-              </div>
-            )}
+            {/* The search and quick chips help in a long list; the advanced
+                filters are offered with any list that has something to
+                tell apart, and always while one is chosen, so a remembered
+                filter can be seen and cleared (PR #155 review, F4). */}
+            <div className="source-tools">
+              {(shown.length > 4 || searching) && (
+                <>
+                  <label className="source-search">
+                    <Search size={15} />
+                    <input
+                      type="search"
+                      value={sourceQuery}
+                      onChange={(e) => setSourceQuery(e.target.value)}
+                      placeholder="ابحث في المصادر: فريق، REMUX، عربي…"
+                      aria-label="ابحث في المصادر"
+                      maxLength={80}
+                    />
+                  </label>
+                  <ScrollRow className="source-chips">
+                    {SOURCE_CHIPS.filter(([id]) => counts[id] > 0).map(
+                      ([id, label]) => (
+                        <button
+                          key={id}
+                          className={sourceChips.includes(id) ? "chosen" : ""}
+                          aria-pressed={sourceChips.includes(id)}
+                          onClick={() =>
+                            setSourceChips((list) =>
+                              list.includes(id)
+                                ? list.filter((c) => c !== id)
+                                : [...list, id],
+                            )
+                          }
+                        >
+                          {label} <bdi>{counts[id]}</bdi>
+                        </button>
+                      ),
+                    )}
+                  </ScrollRow>
+                </>
+              )}
+              {narrowed && (
+                <small className="source-count" role="status">
+                  يعرض {arabicCount(visible.length, SOURCES)} من {shown.length}
+                </small>
+              )}
+              <SourceFacets
+                streams={searched}
+                chosen={facets}
+                onChange={chooseFacets}
+                remember={!!settings.sourceFacetsRemember}
+                onRemember={rememberFacets}
+              />
+            </div>
             {visible.length ? (
               sections.map((section, index) => (
                 <div className="stream-section" key={`${section.id}-${index}`}>
@@ -853,8 +870,9 @@ export default function Details({
                         // A pack badge that says what a built-in chip says
                         // takes its place; the row keeps the most important
                         // few and folds the rest behind "+N".
-                        const covered = coveredKinds(s.badges || []);
-                        const fitted = fitBadges(s.badges || [], BADGE_ROOM);
+                        const badges = visibleBadges(s.badges, settings);
+                        const covered = coveredKinds(badges);
+                        const fitted = fitBadges(badges, BADGE_ROOM);
                         const has = (kind) => chip(kind) && !covered.has(kind);
                         return (
                           <div

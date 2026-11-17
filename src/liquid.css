@@ -355,7 +355,8 @@
       var(--panel)
     );
 }
-.collection-art img {
+.collection-art img,
+.collection-art canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -537,7 +538,10 @@
   border-color: var(--accent);
   color: var(--accent);
 }
-.collection-hero-logo img {
+.collection-hero-logo img,
+.collection-hero-logo canvas,
+.folder-hero-logo img,
+.folder-hero-logo canvas {
   max-height: 90px;
   max-width: min(420px, 80%);
   object-fit: contain;
@@ -750,4 +754,16 @@
   .collections-page > .page-heading .button-row {
     flex-wrap: wrap;
   }
+}
+
+/*
+ * A still slot drawn from a picture that might move (StillImage): the
+ * first frame in a canvas, laid out like the image it stands for
+ * (PR #155 review, F8).
+ */
+canvas.still-frame {
+  display: block;
+}
+.folder-hero-logo {
+  margin: 0;
 }

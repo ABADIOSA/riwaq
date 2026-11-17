@@ -41,6 +41,7 @@ import {
   VolumeControl,
   VolumeOsd,
   useChapters,
+  useVolumeOsd,
 } from "./PlayerBar.jsx";
 import { useSpaceHold } from "../lib/use-space-hold.js";
 
@@ -100,12 +101,9 @@ export default function Hud() {
   const [sleepMenu, setSleepMenu] = useState(false);
   // GLSL presets (Anime4K's modes, FSRCNNX, the viewer's chain) by name.
   const [shaderMenu, setShaderMenu] = useState(false);
-  // The round level in the middle after a key or the wheel (issue #147).
-  const [volumeOsd, setVolumeOsd] = useState(0);
-  const lastVolume = useRef(null);
-  // When the bar's own slider or mute button last changed the sound: the
-  // viewer is looking at it, so the round level stays away.
-  const barVolume = useRef(0);
+  // The round level in the middle after a key or the wheel (issue #147):
+  // not for the bar's own slider or button (useVolumeOsd).
+  const osd = useVolumeOsd(player);
   const idle = useRef();
   const click = useRef();
   // Holding the picture plays faster until it is let go (Harbor's gesture).
@@ -155,6 +153,7 @@ export default function Hud() {
       act("playerKey", { binding });
       // Volume and mute keys show only the round level (issue #147).
       if (!quietBinding(binding, state?.hotkeys)) wake();
+      else osd.external();
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -271,7 +270,6 @@ export default function Hud() {
     setPreviewHint(false);
     setSleepMenu(false);
     setShaderMenu(false);
-    lastVolume.current = null;
   }, [player.videoId]);
   // A preview is asked for only once the pointer rests on the timeline, so
   // sweeping across it does not send a request per pixel.
@@ -325,29 +323,6 @@ export default function Hud() {
     sleepMenu ||
     shaderMenu ||
     player.loading;
-  // A volume or mute change that did not come from the bar (a key, the
-  // wheel, MPV's own window) shows a small round level in the middle of the
-  // picture (issue #147): the controls stay as they were and the slider
-  // stays folded. MPV's own bar is off for those keys (no-osd, #139). The
-  // first report of a viewing is its starting level, not a change.
-  useEffect(() => {
-    const now = {
-      video: player.videoId || "",
-      volume: Math.round(player.volume ?? -1),
-      muted: !!player.muted,
-    };
-    const was = lastVolume.current;
-    lastVolume.current = now;
-    if (!was || was.video !== now.video || now.volume < 0) return;
-    if (was.volume === now.volume && was.muted === now.muted) return;
-    if (Date.now() - barVolume.current < 800) return;
-    setVolumeOsd(Date.now());
-  }, [player.volume, player.muted, player.videoId]);
-  useEffect(() => {
-    if (!volumeOsd) return;
-    const timer = setTimeout(() => setVolumeOsd(0), 1100);
-    return () => clearTimeout(timer);
-  }, [volumeOsd]);
   const series = player.mediaType === "series";
   // Main hides the pointer itself (CSS cursor alone does not in this window).
   useEffect(() => {
@@ -499,6 +474,7 @@ export default function Hud() {
       0,
       Math.min(maxVolume, (player.volume || 0) + (e.deltaY < 0 ? 5 : -5)),
     );
+    osd.external();
     command("volume", volume);
     // The round level shows it; the controls stay as they were (#147).
   };
@@ -719,11 +695,11 @@ export default function Hud() {
           onError={setNotice}
         />
       )}
-      {volumeOsd > 0 && (
+      {osd.stamp > 0 && (
         <VolumeOsd
           volume={player.volume}
           muted={!!player.muted}
-          stamp={volumeOsd}
+          stamp={osd.stamp}
         />
       )}
       {(holding || space.holding) && (
@@ -997,11 +973,11 @@ export default function Hud() {
                 max={maxVolume}
                 muted={!!player.muted}
                 onMute={() => {
-                  barVolume.current = Date.now();
+                  osd.bar(player.volume || 0, !player.muted);
                   command("mute");
                 }}
                 onChange={(value) => {
-                  barVolume.current = Date.now();
+                  osd.bar(value, !!player.muted);
                   command("volume", value);
                 }}
               />

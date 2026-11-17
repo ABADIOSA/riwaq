@@ -78,11 +78,17 @@ html[dir="ltr"] .app > .riwaq-sidebar {
   left: var(--lock-gutter-left);
   box-shadow: calc(-1 * var(--lock-gutter-left)) 0 0 0 var(--bg);
 }
+/* The layers step aside by the gutter only to line up with a sidebar on
+   that side. With none (below 761 px the wheel is in the drawer and
+   --nav-width is 0) they reach the window's edge: in Arabic at 390 px the
+   title page and See all stopped 15 px short of it (PR #155 review, F10;
+   older than #155). min() keeps the gutter while the sidebar is there and
+   0 when --nav-width is 0. */
 html[dir="rtl"] .title-page,
 html[dir="rtl"] .browse-page {
-  margin-right: var(--lock-gutter-right);
+  margin-right: min(var(--lock-gutter-right), var(--nav-width, 0px) * 1000);
 }
 html[dir="ltr"] .title-page,
 html[dir="ltr"] .browse-page {
-  margin-left: var(--lock-gutter-left);
+  margin-left: min(var(--lock-gutter-left), var(--nav-width, 0px) * 1000);
 }

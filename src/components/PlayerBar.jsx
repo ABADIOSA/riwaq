@@ -243,13 +243,71 @@ export function EndsAt({ player, className = "" }) {
  * in the middle of the picture with the percentage alone, never the
  * controls, the bar or the slider. Muted shows the crossed speaker.
  */
-export function VolumeOsd({ volume = 0, muted = false, stamp = 0 }) {
+/**
+ * When the round level shows (issue #147, PR #155 review): for a volume or
+ * mute change that did not come from the bar's own slider or button (a
+ * key, the wheel, MPV's own window); the bar's are left alone, the viewer
+ * is looking at it. The bar's changes are told apart by the values it
+ * sent, not by a pause after it, so a key pressed right after dragging the
+ * slider still shows; a key or the wheel marks itself (`external`) and
+ * always shows. The first report of a viewing is its starting level.
+ */
+export function useVolumeOsd(player) {
+  const [stamp, setStamp] = useState(0);
+  const last = useRef(null);
+  const sent = useRef([]);
+  const external = useRef(0);
+  useEffect(() => {
+    const now = {
+      video: player.videoId || "",
+      volume: Math.round(player.volume ?? -1),
+      muted: !!player.muted,
+    };
+    const was = last.current;
+    last.current = now;
+    if (!was || was.video !== now.video || now.volume < 0) return;
+    if (was.volume === now.volume && was.muted === now.muted) return;
+    const at = Date.now();
+    sent.current = sent.current.filter((s) => at - s.at < 1500);
+    const fromBar =
+      at - external.current >= 1500 &&
+      sent.current.some((s) => s.key === `${now.volume}|${now.muted}`);
+    if (!fromBar) setStamp(at);
+  }, [player.volume, player.muted, player.videoId]);
+  useEffect(() => {
+    if (!stamp) return;
+    const timer = setTimeout(() => setStamp(0), 1100);
+    return () => clearTimeout(timer);
+  }, [stamp]);
+  return {
+    stamp,
+    /** The bar set this level (or mute state) itself. */
+    bar(volume, muted) {
+      external.current = 0;
+      sent.current = [
+        ...sent.current.slice(-19),
+        { key: `${Math.round(volume)}|${!!muted}`, at: Date.now() },
+      ];
+    },
+    /** A key or the wheel is about to change it. */
+    external() {
+      external.current = Date.now();
+    },
+  };
+}
+
+export function VolumeOsd({
+  volume = 0,
+  muted = false,
+  stamp = 0,
+  inline = false,
+}) {
   const level = Math.max(0, Math.round(Number(volume) || 0));
   const silent = muted || !level;
   const Icon = silent ? VolumeX : level < 50 ? Volume1 : Volume2;
   return (
     <div
-      className={`volume-osd ${silent ? "muted" : ""}`}
+      className={`volume-osd ${silent ? "muted" : ""} ${inline ? "inline" : ""}`}
       key={stamp}
       dir="ltr"
       role="status"

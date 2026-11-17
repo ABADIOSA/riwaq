@@ -95,7 +95,8 @@
     linear-gradient(135deg, #ffffff12, #ffffff03);
   color: var(--accent);
 }
-.collection-face img {
+.collection-face img,
+.collection-face canvas {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -126,7 +127,7 @@
 }
 .collection-tools button,
 .pick-tools button,
-.folder-sources li button,
+.folder-sources li > button,
 .folder-new button {
   display: grid;
   place-items: center;
@@ -163,17 +164,26 @@
 }
 .collection-hero {
   position: relative;
+  isolation: isolate;
   margin: -6px 0 22px;
   border-radius: var(--radius-lg, 16px);
-  background-size: cover;
-  background-position: center;
   overflow: hidden;
   border: 1px solid var(--line, #ffffff12);
+}
+/* The collection's still picture, behind the shade and the text. */
+.collection-hero-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -2;
 }
 .collection-hero::before {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: -1;
   background:
     linear-gradient(0deg, var(--bg, #111418) 5%, #000000a0 60%, #0000005c),
     radial-gradient(
@@ -312,6 +322,7 @@ button.danger,
 }
 .folder-sources li {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
@@ -768,9 +779,11 @@ button.danger,
 .folder-hero-backdrop {
   position: absolute;
   inset: -30px;
+  width: calc(100% + 60px);
+  height: calc(100% + 60px);
   z-index: -2;
-  background-size: cover;
-  background-position: center;
+  object-fit: cover;
+  object-position: center;
   filter: blur(26px) saturate(1.2);
   opacity: 0.55;
   transform: scale(1.05);
@@ -931,4 +944,56 @@ button.danger,
 }
 .service-needs {
   margin: 0 0 24px;
+}
+
+/* A TMDB discover query open for editing (PR #155 review, F9). */
+.discover-form {
+  flex: 1 0 100%;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  margin-top: 6px;
+  border-radius: 12px;
+  min-width: 0;
+}
+.discover-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.discover-field {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.discover-field span {
+  font-size: 12px;
+  color: var(--muted, #a1a1aa);
+}
+.discover-field input,
+.discover-field select {
+  min-width: 0;
+  width: 100%;
+}
+.discover-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.discover-genres legend {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted, #a1a1aa);
+}
+.discover-genres label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.discover-any {
+  flex-basis: 100%;
 }

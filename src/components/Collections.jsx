@@ -40,6 +40,7 @@ import {
   artUrl,
   SHAPES,
   TMDB_PRESETS,
+  TMDB_SORTS,
   fromNuvio,
   parseTmdbSource,
   parseTraktSource,
@@ -48,12 +49,14 @@ import {
 import { presetCards } from "../../core/collection-presets.mjs";
 import {
   CollectionArt,
+  StillImage,
   FolderTile,
   useActive,
   useArt,
+  useArtState,
   useReducedMotion,
 } from "./CollectionArt.jsx";
-import { sourceLabel } from "../../core/collection-sources.mjs";
+import { TMDB_GENRES, sourceLabel } from "../../core/collection-sources.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
 import { watchedTitles, withoutWatched } from "../../core/library.mjs";
 
@@ -152,12 +155,7 @@ export function Face({ item, className = "" }) {
   return (
     <span className={`collection-face ${className}`}>
       {cover && !broken ? (
-        <img
-          src={cover}
-          alt=""
-          loading="lazy"
-          onError={() => setBroken(true)}
-        />
+        <StillImage src={cover} onError={() => setBroken(true)} />
       ) : (
         <b>{item.emoji || <Folders size={26} />}</b>
       )}
@@ -461,11 +459,9 @@ function CollectionCard({ c, first, last, reduced, onOpen, update }) {
         />
         <span className="collection-card-info">
           {logo && !logoBroken ? (
-            <img
+            <StillImage
               className="collection-logo"
               src={logo}
-              alt=""
-              referrerPolicy="no-referrer"
               onError={() => setLogoBroken(true)}
             />
           ) : (
@@ -635,10 +631,14 @@ function CollectionView({
   };
   return (
     <div className="page-body collection-view">
-      <div
-        className="collection-hero"
-        style={heroArt ? { backgroundImage: `url("${heroArt}")` } : undefined}
-      >
+      <div className="collection-hero">
+        {heroArt && (
+          <StillImage
+            className="collection-hero-art"
+            src={heroArt}
+            lazy={false}
+          />
+        )}
         <div className="collection-hero-inner">
           <button className="text-button" onClick={onBack}>
             <ArrowRight size={16} /> كل المجموعات
@@ -648,13 +648,14 @@ function CollectionView({
               collection={collection}
               edit={edit}
               notice={notice}
+              profileId={state.profiles?.active}
             />
           ) : heroLogo && !logoBroken ? (
             <h1 className="collection-hero-logo">
-              <img
+              <StillImage
                 src={heroLogo}
                 alt={collection.title}
-                referrerPolicy="no-referrer"
+                lazy={false}
                 onError={() => setLogoBroken(true)}
               />
             </h1>
@@ -818,6 +819,7 @@ function CollectionView({
                 edit={edit}
                 notice={notice}
                 reduced={reduced}
+                profileId={state.profiles?.active}
                 onRemoved={() => setFolderId("")}
               />
             )}
@@ -857,7 +859,7 @@ function Field({ label, value, onCommit, ...props }) {
   );
 }
 
-function CollectionFields({ collection, edit, notice }) {
+function CollectionFields({ collection, edit, notice, profileId }) {
   return (
     <div className="collection-fields">
       <Field
@@ -877,12 +879,14 @@ function CollectionFields({ collection, edit, notice }) {
         label="الخلفية (رابط https أو صورة من جهازك)"
         value={collection.cover}
         notice={notice}
+        profileId={profileId}
         onCommit={(cover) => edit({ action: "update", cover })}
       />
       <ArtField
         label="شعار المجموعة"
         value={collection.logo}
         notice={notice}
+        profileId={profileId}
         onCommit={(logo) => edit({ action: "update", logo })}
       />
     </div>
@@ -894,12 +898,23 @@ function CollectionFields({ collection, edit, notice }) {
  * computer (the native dialog; Riwaq keeps it and the field shows only that
  * it is local). Empty clears it.
  */
-function ArtField({ label, value, onCommit, notice }) {
+function ArtField({
+  label,
+  value,
+  onCommit,
+  notice,
+  slot = "still",
+  profileId,
+}) {
   const local = typeof value === "string" && LOCAL_ART.test(value);
+  const { missing } = useArtState(local ? value : "");
   const [error, setError] = useState("");
+  // The slot decides what is accepted (a still slot refuses an animated
+  // file, F8); the profile must still be the active one when the dialog
+  // closes (F2).
   const pick = async () => {
     try {
-      const picked = await call("collectionArtPick");
+      const picked = await call("collectionArtPick", { slot, profileId });
       if (picked?.ref) onCommit(picked.ref);
     } catch (e) {
       notice?.(e.message);
@@ -910,8 +925,11 @@ function ArtField({ label, value, onCommit, notice }) {
       <span>{label}</span>
       <div className="art-field-row">
         {local ? (
-          <span className="art-local">
-            <HardDrive size={14} aria-hidden="true" /> صورة من هذا الجهاز
+          <span className={`art-local ${missing ? "missing" : ""}`}>
+            <HardDrive size={14} aria-hidden="true" />{" "}
+            {missing
+              ? "صورة من جهاز آخر غير موجودة هنا؛ يظهر بدلها الغلاف الاحتياطي"
+              : "صورة من هذا الجهاز"}
           </span>
         ) : (
           <ArtInput
@@ -1001,6 +1019,7 @@ function FolderEditor({
   edit,
   notice,
   reduced,
+  profileId,
   onRemoved,
 }) {
   const [catalogs, setCatalogs] = useState(null);
@@ -1012,6 +1031,8 @@ function FolderEditor({
     : parseTmdbSource(link) && { trakt: false, source: parseTmdbSource(link) };
   const [choice, setChoice] = useState("");
   const [genre, setGenre] = useState("");
+  // Which TMDB discover query is open for editing (its index, or "new").
+  const [editingQuery, setEditingQuery] = useState(null);
   const index = collection.folders.findIndex((f) => f.id === folder.id);
   useEffect(() => {
     call("collectionCatalogs")
@@ -1070,6 +1091,7 @@ function FolderEditor({
         folder={folder}
         reduced={reduced}
         notice={notice}
+        profileId={profileId}
         set={(patch) => folderEdit({ action: "folderUpdate", ...patch })}
       />
       <div className="folder-sources">
@@ -1107,7 +1129,7 @@ function FolderEditor({
         {(folder.tmdb?.length > 0 || folder.trakt?.length > 0) && (
           <ul>
             {(folder.tmdb || []).map((t, i) => (
-              <li key={`t${i}`}>
+              <li key={`t${i}`} className={editingQuery === i ? "editing" : ""}>
                 <span dir="auto">
                   <b>{sourceLabel(t)}</b>
                   <small>
@@ -1116,12 +1138,38 @@ function FolderEditor({
                     {t.media === "tv" ? "مسلسلات" : "أفلام"}
                   </small>
                 </span>
+                {t.kind === "discover" && (
+                  <button
+                    title="عدّل الاستعلام"
+                    aria-label={`عدّل الاستعلام: ${sourceLabel(t)}`}
+                    aria-expanded={editingQuery === i}
+                    onClick={() =>
+                      setEditingQuery(editingQuery === i ? null : i)
+                    }
+                  >
+                    <Pencil size={15} />
+                  </button>
+                )}
                 <button
                   title="أزل المصدر"
                   onClick={() => folderEdit({ action: "tmdbRemove", index: i })}
                 >
                   <X size={15} />
                 </button>
+                {editingQuery === i && (
+                  <DiscoverForm
+                    source={t}
+                    onCancel={() => setEditingQuery(null)}
+                    onSave={async (source) => {
+                      const ok = await folderEdit({
+                        action: "tmdbUpdate",
+                        index: i,
+                        source,
+                      });
+                      if (ok) setEditingQuery(null);
+                    }}
+                  />
+                )}
               </li>
             ))}
             {(folder.trakt || []).map((t, i) => (
@@ -1143,6 +1191,28 @@ function FolderEditor({
               </li>
             ))}
           </ul>
+        )}
+        {editingQuery === "new" ? (
+          <DiscoverForm
+            source={{
+              kind: "discover",
+              media: "movie",
+              sort: "popularity.desc",
+            }}
+            onCancel={() => setEditingQuery(null)}
+            onSave={async (source) => {
+              const ok = await folderEdit({ action: "tmdbAdd", source });
+              if (ok) setEditingQuery(null);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => setEditingQuery("new")}
+          >
+            <Plus size={15} /> استعلام «اكتشف» جديد من TMDB
+          </button>
         )}
         <div className="catalog-picker">
           <select
@@ -1301,7 +1371,7 @@ function FolderEditor({
  * glow and hiding the name, with the card drawn still and as it looks
  * under the pointer, so a change shows before it is used.
  */
-function FolderLook({ folder, reduced, notice, set }) {
+function FolderLook({ folder, reduced, notice, set, profileId }) {
   const toggle = (key, on, title, text) => (
     <label className="look-toggle">
       <input
@@ -1322,24 +1392,29 @@ function FolderLook({ folder, reduced, notice, set }) {
           label="الغلاف الثابت"
           value={folder.cover}
           notice={notice}
+          profileId={profileId}
           onCommit={(cover) => set({ cover })}
         />
         <ArtField
           label="الغلاف المتحرك (GIF)"
           value={folder.gif}
           notice={notice}
+          slot="moving"
+          profileId={profileId}
           onCommit={(gif) => set({ gif })}
         />
         <ArtField
           label="الخلفية الكبيرة"
           value={folder.backdrop}
           notice={notice}
+          profileId={profileId}
           onCommit={(backdrop) => set({ backdrop })}
         />
         <ArtField
           label="شعار العنوان"
           value={folder.logo}
           notice={notice}
+          profileId={profileId}
           onCommit={(logo) => set({ logo })}
         />
         {folder.gif &&
@@ -1697,6 +1772,215 @@ const PARTS = [
         : "يُحفظ مشفّراً على جهازك",
   ],
 ];
+
+// TMDB's genre lists differ for films and series (core/collection-sources).
+const GENRES = {
+  movie: [
+    28, 12, 16, 35, 80, 99, 18, 10751, 14, 36, 27, 10402, 9648, 10749, 878,
+    10770, 53, 10752, 37,
+  ],
+  tv: [
+    10759, 16, 35, 80, 99, 18, 10751, 10762, 9648, 10763, 10764, 10765, 10766,
+    10767, 10768, 37,
+  ],
+};
+const genreName = (id) =>
+  (TMDB_GENRES[id] || []).map(([ar]) => ar).join(" · ") || String(id);
+const SORT_NAMES = {
+  original: "ترتيب TMDB",
+  "popularity.desc": "الأكثر شعبية",
+  "vote_average.desc": "الأعلى تقييماً",
+  "vote_count.desc": "الأكثر تصويتاً",
+  "primary_release_date.desc": "الأحدث إصداراً (أفلام)",
+  "first_air_date.desc": "الأحدث عرضاً (مسلسلات)",
+};
+const ids = (value) =>
+  String(value || "")
+    .split(/[,|]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+/**
+ * A TMDB discover query in words the viewer can change (PR #155 review,
+ * F9): its name, films or series, the order, genres (all of them or any),
+ * keywords (TMDB keyword IDs) to include or leave out, a year or a date
+ * range or "the last N days", and the least votes and rating. Filters the
+ * form does not show (studios, networks, people, providers, languages
+ * beyond the first) are kept as they are. Main checks every value again
+ * (editCollections tmdbUpdate) and names a field it refuses.
+ */
+function DiscoverForm({ source, onSave, onCancel }) {
+  const f = source.filters || {};
+  const [draft, setDraft] = useState(() => ({
+    title: source.title || "",
+    media: source.media === "tv" ? "tv" : "movie",
+    sort: source.sort || "popularity.desc",
+    genres: ids(f.withGenres).map(Number),
+    any: String(f.withGenres || "").includes("|"),
+    keywords: f.withKeywords || "",
+    withoutKeywords: f.withoutKeywords || "",
+    year: f.year ?? "",
+    from: f.releaseDateGte || "",
+    to: f.releaseDateLte || "",
+    recentDays: f.recentDays ?? "",
+    votes: f.voteCountGte ?? "",
+    rating: f.voteAverageGte ?? "",
+    language: f.withOriginalLanguage || "",
+    country: f.withOriginCountry || "",
+  }));
+  const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
+  const genres = GENRES[draft.media];
+  const save = () => {
+    const filters = { ...f };
+    const put = (key, value) => {
+      if (value === "" || value === null || value === undefined)
+        delete filters[key];
+      else filters[key] = value;
+    };
+    const chosen = draft.genres.filter((g) => genres.includes(g));
+    put("withGenres", chosen.join(draft.any ? "|" : ","));
+    put("withKeywords", String(draft.keywords).replace(/\s+/g, ""));
+    put("withoutKeywords", String(draft.withoutKeywords).replace(/\s+/g, ""));
+    put("year", draft.year === "" ? "" : Number(draft.year));
+    put("releaseDateGte", draft.from);
+    put("releaseDateLte", draft.to);
+    put("recentDays", draft.recentDays === "" ? "" : Number(draft.recentDays));
+    put("voteCountGte", draft.votes === "" ? "" : Number(draft.votes));
+    put("voteAverageGte", draft.rating === "" ? "" : Number(draft.rating));
+    put("withOriginalLanguage", draft.language.trim());
+    put("withOriginCountry", draft.country.trim());
+    onSave({
+      kind: "discover",
+      media: draft.media,
+      sort: draft.sort,
+      title: draft.title.trim(),
+      filters,
+    });
+  };
+  const field = (label, key, props = {}) => (
+    <label className="discover-field">
+      <span>{label}</span>
+      <input
+        value={draft[key]}
+        onChange={(e) => set({ [key]: e.target.value })}
+        {...props}
+      />
+    </label>
+  );
+  return (
+    <div
+      className="discover-form lg-panel"
+      role="group"
+      aria-label="استعلام اكتشف"
+    >
+      <div className="discover-row">
+        {field("الاسم", "title", { dir: "auto", maxLength: 80 })}
+        <label className="discover-field">
+          <span>النوع</span>
+          <select
+            value={draft.media}
+            onChange={(e) => set({ media: e.target.value, genres: [] })}
+          >
+            <option value="movie">أفلام</option>
+            <option value="tv">مسلسلات</option>
+          </select>
+        </label>
+        <label className="discover-field">
+          <span>الترتيب</span>
+          <select
+            value={draft.sort}
+            onChange={(e) => set({ sort: e.target.value })}
+          >
+            {TMDB_SORTS.map((id) => (
+              <option key={id} value={id}>
+                {SORT_NAMES[id] || id}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <fieldset className="discover-genres">
+        <legend>الأنواع</legend>
+        {genres.map((g) => (
+          <label key={g}>
+            <input
+              type="checkbox"
+              checked={draft.genres.includes(g)}
+              onChange={(e) =>
+                set({
+                  genres: e.target.checked
+                    ? [...draft.genres, g]
+                    : draft.genres.filter((x) => x !== g),
+                })
+              }
+            />
+            <span>{genreName(g)}</span>
+          </label>
+        ))}
+        <label className="discover-any">
+          <input
+            type="checkbox"
+            checked={draft.any}
+            onChange={(e) => set({ any: e.target.checked })}
+          />
+          <span>يكفي أحد الأنواع المختارة</span>
+        </label>
+      </fieldset>
+      <div className="discover-row">
+        {field("الكلمات المفتاحية (أرقام TMDB)", "keywords", {
+          dir: "ltr",
+          inputMode: "numeric",
+          placeholder: "818,9672",
+        })}
+        {field("بدون الكلمات المفتاحية", "withoutKeywords", {
+          dir: "ltr",
+          inputMode: "numeric",
+        })}
+      </div>
+      <div className="discover-row">
+        {field("السنة", "year", { type: "number", min: 1870, max: 2200 })}
+        {field("من تاريخ", "from", { type: "date" })}
+        {field("إلى تاريخ", "to", { type: "date" })}
+        {field("آخر عدد من الأيام", "recentDays", {
+          type: "number",
+          min: 1,
+          max: 3650,
+        })}
+      </div>
+      <div className="discover-row">
+        {field("أقل عدد أصوات", "votes", { type: "number", min: 0 })}
+        {field("أقل تقييم", "rating", {
+          type: "number",
+          min: 0,
+          max: 10,
+          step: 0.1,
+        })}
+        {field("لغة العمل الأصلية", "language", {
+          dir: "ltr",
+          placeholder: "ar",
+          maxLength: 40,
+        })}
+        {field("بلد الإنتاج", "country", {
+          dir: "ltr",
+          placeholder: "SA",
+          maxLength: 40,
+        })}
+      </div>
+      <p className="subtle">
+        رقم الكلمة المفتاحية من صفحتها في TMDB. ما لا يظهر هنا من الاستعلام
+        (استوديوهات، شبكات، أشخاص، منصات) يبقى كما هو.
+      </p>
+      <div className="button-row">
+        <button type="button" className="primary" onClick={save}>
+          <Check size={15} /> احفظ الاستعلام
+        </button>
+        <button type="button" className="secondary" onClick={onCancel}>
+          إلغاء
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Linking with Nuvio: read Nuvio Desktop's data on this PC or its backup,
@@ -2077,6 +2361,11 @@ function NuvioPreview({ peek, only, setOnly, mode, setMode }) {
       {over > 0 && (
         <p className="inline-warning">
           {`لن يتسع كله: ${report.over.collections} مجموعة و${report.over.folders} مجلداً و${report.over.sources} مصدراً فوق حدود رِواق.`}
+        </p>
+      )}
+      {report.duplicates > 0 && (
+        <p className="muted">
+          {`في الملف ${report.duplicates} معرّفاً مكرراً؛ يُحفظ كل منها بمعرّف مميز.`}
         </p>
       )}
       <fieldset className="nuvio-pick">
