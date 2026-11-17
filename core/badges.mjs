@@ -445,17 +445,27 @@ const compile = (pattern) => {
  * (a Date.now() time) no more rules are tried.
  */
 export function ruleBadges(stream, rules, deadline = Infinity) {
-  const subject = `${stream?.name || ""} ${stream?.title || ""}`.slice(
-    0,
-    TITLE_MAX,
-  );
+  const subject =
+    `${stream?.name || ""} ${stream?.title || ""} ${stream?.description || ""}`.slice(
+      0,
+      TITLE_MAX,
+    );
   const out = [];
   for (const rule of rules || []) {
     if (!rule.enabled) continue;
     if (Date.now() > deadline) break;
     if (!compile(rule.pattern)?.test(subject)) continue;
     const badge = { label: rule.label, color: rule.color };
-    for (const key of ["image", "textColor", "borderColor", "style", "group"])
+    // The pack's name tells the interface which badges an appearance
+    // brought (core/badge-look.mjs visibleBadges).
+    for (const key of [
+      "image",
+      "textColor",
+      "borderColor",
+      "style",
+      "group",
+      "pack",
+    ])
       if (rule[key]) badge[key] = rule[key];
     out.push(badge);
     if (out.length >= MATCH_LIMIT) break;

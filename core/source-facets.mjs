@@ -16,7 +16,13 @@
  * description with the same kind of whole-word tests. Browser-safe.
  */
 
-const text = (s) => `${s?.name || ""} ${s?.title || ""}`;
+import { languageOf } from "./subtitles.mjs";
+
+// The name, the title and the addon's separate description: a fact named
+// only in the description (TrueHD, English subtitles) is still a fact
+// (PR #155 review, F5).
+const text = (s) =>
+  `${s?.name || ""} ${s?.title || ""} ${s?.description || ""}`;
 const test = (rx) => (s) => rx.test(text(s));
 
 const RELEASES = ["REMUX", "BluRay", "WEB-DL", "WEBRip", "HDTV"];
@@ -159,19 +165,20 @@ export const FACET_GROUPS = [
     read: (s) => AUDIO.filter(([, has]) => has(s)).map(([id]) => id),
   },
   {
+    // The layout as the source names it: 5.0 is not 5.1 (F5).
     id: "channels",
     title: "القنوات",
     values: [
       ["7.1", "7.1"],
+      ["7.0", "7.0"],
       ["5.1", "5.1"],
+      ["5.0", "5.0"],
+      ["2.1", "2.1"],
       ["2.0", "ستيريو"],
     ],
     read: (s) => {
       const c = String(s.channels || "");
-      if (c.startsWith("7.")) return ["7.1"];
-      if (c.startsWith("5.")) return ["5.1"];
-      if (c.startsWith("2.")) return ["2.0"];
-      return [];
+      return CHANNELS.has(c) ? [c] : [];
     },
   },
   {
@@ -181,12 +188,16 @@ export const FACET_GROUPS = [
     title: "نوع المصدر",
     values: [
       ["cached", "Debrid مخزّن"],
+      ["uncached", "Debrid غير مخزّن"],
       ["debrid", "Debrid دون تأكيد التخزين"],
       ["torrent", "تورنت P2P"],
       ["direct", "رابط مباشر HTTP/HLS"],
       ["external", "يفتح خارج رِواق"],
     ],
+    // Cached, said to be not cached, or a debrid source that says neither
+    // (F5: "[RD] Not cached" is not cached, whatever word it holds).
     read: (s) => {
+      if (s.uncached && (s.debrid || !s.cached)) return ["uncached"];
       if (s.cached) return ["cached"];
       if (s.debrid) return ["debrid"];
       if (s.torrent) return ["torrent"];
@@ -213,13 +224,15 @@ export const FACET_GROUPS = [
     // label says just that.
     id: "language",
     title: "الترجمة واللغة",
+    // Each other language the engine recognises is its own value ("French
+    // mentioned"), never folded into one "other" (F5); "mentioned", since a
+    // name may stand for the audio or the subtitles.
     values: [
       ["arSub", "ترجمة عربية"],
       ["arDub", "دبلجة عربية"],
       ["enSub", "ترجمة إنجليزية"],
       ["multi", "عدة لغات أو ترجمات"],
       ["en", "الإنجليزية مذكورة"],
-      ["otherLang", "لغة أخرى مذكورة"],
     ],
     read: (s) => {
       const out = [];
@@ -229,7 +242,9 @@ export const FACET_GROUPS = [
       if (EN_SUB_RX.test(text(s))) out.push("enSub");
       if (MULTI_RX.test(text(s)) || langs.length > 2) out.push("multi");
       if (langs.includes("en")) out.push("en");
-      if (langs.some((l) => l !== "ar" && l !== "en")) out.push("otherLang");
+      for (const l of langs)
+        if (l !== "ar" && l !== "en" && LANG_CODE.test(l))
+          out.push(`lang:${l}`);
       return out;
     },
   },
@@ -241,6 +256,12 @@ export const FACET_GROUPS = [
     read: (s) => [addonValue(s)],
   },
 ];
+
+const CHANNELS = new Set(["7.1", "7.0", "5.1", "5.0", "2.1", "2.0"]);
+const LANG_CODE = /^[a-z]{2,3}$/;
+const LANG_VALUE = /^lang:[a-z]{2,3}$/;
+/** "French mentioned": a language value's label. */
+const languageLabel = (value) => `${languageOf(value.slice(5)).name} مذكورة`;
 
 /** A source's addon copy, as a facet value (never an address). */
 export const addonValue = (s) =>
@@ -267,7 +288,9 @@ export function cleanFacets(input) {
         list.filter(
           (v) =>
             typeof v === "string" &&
-            (id === "addon" ? /^[^\s<>"`]{1,200}$/.test(v) : allowed.has(v)),
+            (id === "addon"
+              ? /^[^\s<>"`]{1,200}$/.test(v)
+              : allowed.has(v) || (id === "language" && LANG_VALUE.test(v))),
         ),
       ),
     ].slice(0, 30);
@@ -321,6 +344,16 @@ export function facetPanel(streams = [], chosen = {}) {
           );
       values = [...names].map(([id, label]) => ({ id, label }));
     }
+    if (group.id === "language") {
+      const extra = new Set();
+      for (const s of streams)
+        for (const v of group.read(s)) if (LANG_VALUE.test(v)) extra.add(v);
+      for (const v of picked) if (LANG_VALUE.test(v)) extra.add(v);
+      values = [
+        ...values,
+        ...[...extra].sort().map((id) => ({ id, label: languageLabel(id) })),
+      ];
+    }
     values = values
       .map((v) => ({
         ...v,
@@ -370,6 +403,8 @@ export function chosenFacets(chosen = {}, streams = []) {
         value === UNKNOWN
           ? `${group.title}: غير مذكور`
           : group.values.find(([v]) => v === value)?.[1];
+      if (group.id === "language" && LANG_VALUE.test(value))
+        label = languageLabel(value);
       if (group.id === "addon" && value !== UNKNOWN) {
         const s = streams.find((x) => addonValue(x) === value);
         label = s ? (s.home ? "نسختك على خادمك" : s.provider || s.name) : value;

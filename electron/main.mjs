@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { Client, fetchText } from "../core/client.mjs";
+import { Client, PROFILE_CHANGED, fetchText } from "../core/client.mjs";
 import { PlaybackRequest, startOutcome } from "../core/playback-request.mjs";
 import { OfflineLibrary } from "./offline.mjs";
 import { downloadCapability } from "../core/offline-media.mjs";
@@ -56,10 +56,13 @@ import {
   resolveBindings,
 } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
-import { fetchPackText } from "../core/badges.mjs";
-import { frStyleUrl } from "../core/badge-look.mjs";
-import { ART_MAX_BYTES, referencedArt } from "../core/collection-art.mjs";
-import { dataUrl, fileArtStore } from "./collection-art.mjs";
+import { fetchFrStyle } from "../core/badge-look.mjs";
+import {
+  ART_GRACE_MS,
+  ART_MAX_BYTES,
+  referencedArt,
+} from "../core/collection-art.mjs";
+import { dataUrl, fileArtStore, readArtFile } from "./collection-art.mjs";
 import { artworkHost } from "../core/artwork.mjs";
 import {
   FIVE,
@@ -358,7 +361,7 @@ const collectionArtStore = () =>
   (artStore ||= fileArtStore(join(app.getPath("userData"), "collection-art")));
 const sweepCollectionArt = () =>
   collectionArtStore()
-    .sweep(referencedArt(client.allCollections()))
+    .sweep(() => referencedArt(client.allCollections()))
     .catch((error) => logError("collection-art", error));
 
 async function sweepTorrentCache() {
@@ -1743,15 +1746,24 @@ const methods = {
   },
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
-  // FR-Badges styles (core/badge-look.mjs): the page names a look and only
-  // its pinned file on GitHub is fetched (redirects re-checked, 3 MB at
-  // most); no address ever comes from the renderer. Only the text returns.
-  badgeStyleFetch: async (a) => {
-    const url = frStyleUrl(String(a?.look || ""));
-    if (!url) throw new Error("نمط غير معروف");
-    const { text } = await fetchPackText(url);
-    return { text };
-  },
+  // FR-Badges styles (core/badge-look.mjs): the page names a look and the
+  // profile it chose it in; only that look's pinned file is fetched
+  // (fetchFrStyle: one host and path, redirects re-checked, bounded), and
+  // its badges join that profile's settings only while it is still the
+  // active one (PR #155 review, F2). No address comes from the renderer.
+  badgeStyleApply: (a) =>
+    client.applyBadgeStyle(
+      { look: String(a?.look || ""), profileId: a?.profileId },
+      (url) => fetchFrStyle(url),
+    ),
+  // Deleting a saved stream filter and its Undo, on the current list of
+  // the profile that asked (issue #153, F2).
+  streamFilterEdit: (a) =>
+    client.streamFilterEdit({
+      profileId: a?.profileId,
+      action: String(a?.action || ""),
+      id: String(a?.id || ""),
+    }),
   copyThemeCode: (a) => {
     const code = String(a?.code || "");
     if (!code.startsWith("RIWAQ-THEME-1:") || code.length > 6000)
@@ -2567,8 +2579,16 @@ const methods = {
   // A picture for a collection or folder from this computer: the native
   // dialog picks it, the bytes decide what it is (core/collection-art.mjs),
   // and the page gets back only "local:<id>". Behind the library lock.
-  collectionArtPick: async () => {
+  // A still slot (cover, backdrop, logo) refuses an animated file (F8).
+  // The profile that opened the dialog must still be the active one when
+  // it closes, or nothing is kept (F2); the file is opened once and read
+  // from that handle, a regular file of at most 8 MB (readArtFile).
+  collectionArtPick: async (a) => {
     client.profiles.gate("library");
+    const owner = client.profiles.store.active;
+    client.sameProfile(
+      a?.profileId === undefined ? undefined : String(a.profileId),
+    );
     const picked = await dialog.showOpenDialog(window, {
       title: t("اختر صورة للمجموعة"),
       properties: ["openFile"],
@@ -2578,16 +2598,25 @@ const methods = {
     });
     const path = picked.canceled ? "" : picked.filePaths[0];
     if (!path) return null;
-    if ((await stat(path)).size > ART_MAX_BYTES)
-      throw new Error("الصورة أكبر من 8 ميغابايت");
-    const { ref, type, width, height } = await collectionArtStore().add(
-      await readFile(path),
-    );
+    if (client.profiles.store.active !== owner)
+      throw new Error(PROFILE_CHANGED);
+    client.profiles.gate("library");
+    const bytes = await readArtFile(path, ART_MAX_BYTES);
+    const { ref, type, width, height } = await collectionArtStore().add(bytes, {
+      still: a?.slot !== "moving",
+    });
+    client.notePickedArt(ref);
+    // A picture picked and never saved goes at the next sweep after its
+    // grace period, even if nothing else happens meanwhile.
+    setTimeout(sweepCollectionArt, ART_GRACE_MS + 60_000).unref?.();
     return { ref, type, width, height };
   },
+  // Only a picture this profile's collections name (or it just picked).
   collectionArt: async (a) => {
     client.profiles.gate("library");
-    const found = await collectionArtStore().read(String(a?.id || ""));
+    const ref = `local:${String(a?.id || "").replace(/^local:/, "")}`;
+    if (!client.canReadArt(ref)) return "";
+    const found = await collectionArtStore().read(ref);
     return found ? dataUrl(found) : "";
   },
   collectionCatalogs: () => client.collectionCatalogs(),

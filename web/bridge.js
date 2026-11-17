@@ -17,7 +17,7 @@
  * addresses, provider keys and addon URLs stay on this side of the bridge,
  * and addresses are opened only after the same checks main makes.
  */
-import { Client, fetchText } from "../core/client.mjs";
+import { Client, PROFILE_CHANGED, fetchText } from "../core/client.mjs";
 import {
   automaticSubtitle,
   cuesAround,
@@ -35,9 +35,12 @@ import {
   pkce as spotifyPkce,
 } from "../core/spotify.mjs";
 import { DEBRID } from "../core/services.mjs";
-import { fetchPackText } from "../core/badges.mjs";
-import { frStyleUrl } from "../core/badge-look.mjs";
-import { ART_MAX_BYTES, referencedArt } from "../core/collection-art.mjs";
+import { fetchFrStyle } from "../core/badge-look.mjs";
+import {
+  ART_GRACE_MS,
+  ART_MAX_BYTES,
+  referencedArt,
+} from "../core/collection-art.mjs";
 import { artObjectUrl, browserArtStore } from "./collection-art.js";
 import { artworkHost } from "../core/artwork.mjs";
 import {
@@ -803,7 +806,7 @@ export async function startBridge({ version, store }) {
   // short grace, core/collection-art.mjs).
   const sweepArt = () =>
     browserArtStore
-      .sweep(referencedArt(client.allCollections()))
+      .sweep(() => referencedArt(client.allCollections()))
       .catch(() => {});
   const methods = {
     musicLocalLibrary: async (a) => {
@@ -856,11 +859,22 @@ export async function startBridge({ version, store }) {
     // FR-Badges styles (core/badge-look.mjs): the page names a look and only
     // its pinned file on GitHub is fetched (redirects re-checked, 3 MB at
     // most); no address ever comes from the renderer. Only the text returns.
-    badgeStyleFetch: async (a) => {
-      const url = frStyleUrl(String(a?.look || ""));
-      if (!url) throw new Error("نمط غير معروف");
-      const { text } = await fetchPackText(url);
-      return { text };
+    badgeStyleApply: async (a) => {
+      const done = await client.applyBadgeStyle(
+        { look: String(a?.look || ""), profileId: a?.profileId },
+        (url) => fetchFrStyle(url),
+      );
+      await store.settled();
+      return done;
+    },
+    streamFilterEdit: async (a) => {
+      const done = client.streamFilterEdit({
+        profileId: a?.profileId,
+        action: String(a?.action || ""),
+        id: String(a?.id || ""),
+      });
+      await store.settled();
+      return done;
     },
     copyThemeCode: async (a) => {
       const code = String(a?.code || "");
@@ -1436,22 +1450,37 @@ export async function startBridge({ version, store }) {
     },
     // A picture for a collection or folder from this computer, kept in
     // this browser (web/collection-art.js); the page gets "local:<id>".
-    collectionArtPick: async () => {
+    // As on the desktop: a still slot refuses an animated file (F8), the
+    // profile that opened the chooser must still be active (F2), and a
+    // picture is read only by a profile whose collections name it.
+    collectionArtPick: async (a) => {
       client.profiles.gate("library");
+      const owner = client.profiles.store.active;
+      client.sameProfile(
+        a?.profileId === undefined ? undefined : String(a.profileId),
+      );
       const file = await pickFile({
         accept: "image/gif,image/png,image/jpeg,image/webp",
       });
       if (!file) return null;
+      if (client.profiles.store.active !== owner)
+        throw new Error(PROFILE_CHANGED);
+      client.profiles.gate("library");
       if (file.size > ART_MAX_BYTES)
         throw new Error("الصورة أكبر من 8 ميغابايت");
       const { ref, type, width, height } = await browserArtStore.add(
         new Uint8Array(await file.arrayBuffer()),
+        { still: a?.slot !== "moving" },
       );
+      client.notePickedArt(ref);
+      setTimeout(sweepArt, ART_GRACE_MS + 60_000);
       return { ref, type, width, height };
     },
     collectionArt: async (a) => {
       client.profiles.gate("library");
-      return artObjectUrl(String(a?.id || ""));
+      const ref = `local:${String(a?.id || "").replace(/^local:/, "")}`;
+      if (!client.canReadArt(ref)) return "";
+      return artObjectUrl(ref);
     },
     nuvioPickBackup: async () => {
       client.profiles.gate("settings");

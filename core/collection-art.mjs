@@ -119,6 +119,65 @@ export function sniffImage(bytes) {
   return { type, mime: ART_TYPES[type], width, height };
 }
 
+/**
+ * Whether the bytes hold more than one frame: a GIF with two image
+ * descriptors, a PNG with an animation control chunk (APNG), or a WebP
+ * with its animation flag. A still slot (cover, backdrop, logo) refuses
+ * these, so a moving picture never plays where a still one is promised,
+ * whatever the motion setting (PR #155 review, F8). Reads the structure
+ * only, bounded by the bytes; never throws.
+ */
+export function isAnimated(bytes, type) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+  try {
+    if (type === "gif") {
+      let i = 13;
+      if (b[10] & 0x80) i += 3 * (1 << ((b[10] & 0x07) + 1));
+      let frames = 0;
+      const skipBlocks = () => {
+        while (i < b.length && b[i] !== 0) i += b[i] + 1;
+        i++;
+      };
+      while (i < b.length) {
+        const kind = b[i];
+        if (kind === 0x3b) break;
+        if (kind === 0x21) {
+          i += 2;
+          skipBlocks();
+        } else if (kind === 0x2c) {
+          if (++frames > 1) return true;
+          const packed = b[i + 9];
+          i += 10;
+          if (packed & 0x80) i += 3 * (1 << ((packed & 0x07) + 1));
+          i++; // LZW minimum code size
+          skipBlocks();
+        } else return false;
+      }
+      return false;
+    }
+    if (type === "png") {
+      let i = 8;
+      while (i + 8 <= b.length) {
+        const length = u32be(b, i);
+        const name = ascii(b, i + 4, 4);
+        if (name === "acTL") return true;
+        if (name === "IDAT" || name === "IEND") return false;
+        i += 12 + length;
+      }
+      return false;
+    }
+    if (type === "webp") {
+      if (ascii(b, 12, 4) === "VP8X") return (b[20] & 0x02) !== 0;
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+const STILL_REFUSED =
+  "هذه صورة متحركة؛ ضعها في «الغلاف المتحرك» أو اختر صورة ثابتة لهذه الخانة";
+
 /** A fresh random ID for a stored picture. */
 export function newArtId() {
   const bytes = new Uint8Array(16);
@@ -157,12 +216,17 @@ export class ArtStore {
     this.backend = backend;
     this.now = now;
   }
-  /** Checks and keeps the bytes; returns "local:<id>". */
-  async add(bytes) {
+  /**
+   * Checks and keeps the bytes; returns "local:<id>". `still` is a still
+   * slot: an animated picture is refused there with a reason, never kept.
+   */
+  async add(bytes, { still = false } = {}) {
     const found = sniffImage(bytes);
+    const animated = isAnimated(bytes, found.type);
+    if (still && animated) throw new Error(STILL_REFUSED);
     const id = newArtId();
     await this.backend.write(id, bytes, found.mime);
-    return { ref: `local:${id}`, ...found };
+    return { ref: `local:${id}`, ...found, animated };
   }
   /** The picture for "local:<id>", or null (another device's, or gone). */
   async read(ref) {
@@ -170,13 +234,25 @@ export class ArtStore {
     if (!id) return null;
     return (await this.backend.read(id)) || null;
   }
-  /** Deletes what `referenced` does not name, past the grace period. */
+  /**
+   * Deletes what `referenced` does not name, past the grace period.
+   * `referenced` may be a function giving the set as it is now: it is
+   * asked again just before each file goes, so a restore or a re-link that
+   * lands while the sweep awaits the store keeps its picture (PR #155
+   * review: cleanup and concurrency).
+   */
   async sweep(referenced) {
-    const keep = referenced instanceof Set ? referenced : new Set(referenced);
+    const now = () =>
+      typeof referenced === "function"
+        ? referenced()
+        : referenced instanceof Set
+          ? referenced
+          : new Set(referenced);
     let removed = 0;
     for (const { id, at } of await this.backend.list()) {
-      if (!validArtId(id) || keep.has(id)) continue;
+      if (!validArtId(id) || now().has(id)) continue;
       if (this.now() - (Number(at) || 0) < ART_GRACE_MS) continue;
+      if (now().has(id)) continue;
       await this.backend.remove(id);
       removed++;
     }

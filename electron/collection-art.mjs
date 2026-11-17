@@ -5,16 +5,22 @@
  * data URL, never a path.
  */
 import {
+  lstat,
   mkdir,
+  open,
   readdir,
-  readFile,
   rename,
   rm,
-  stat,
   writeFile,
 } from "node:fs/promises";
+import { constants } from "node:fs";
 import { join } from "node:path";
-import { ArtStore, ART_TYPES, validArtId } from "../core/collection-art.mjs";
+import {
+  ArtStore,
+  ART_MAX_BYTES,
+  ART_TYPES,
+  validArtId,
+} from "../core/collection-art.mjs";
 
 const EXT = Object.fromEntries(
   Object.entries(ART_TYPES).map(([ext, mime]) => [mime, ext]),
@@ -24,14 +30,50 @@ const MIME = Object.fromEntries(
 );
 const NAME = /^([a-f\d]{32})\.(gif|png|jpeg|webp)$/;
 
+/**
+ * Reads one picture file through a single handle (PR #155 review,
+ * security): opened without following a final link where the system
+ * allows it (O_NOFOLLOW; on Windows lstat refuses a link or junction
+ * first), then checked through that same handle to be a regular file of
+ * at most `max` bytes, and read from it. Nothing is read from a name
+ * that changed between the check and the read.
+ */
+export async function readArtFile(path, max) {
+  const link = await lstat(path);
+  if (link.isSymbolicLink() || !link.isFile())
+    throw new Error("اختر ملف صورة عادياً");
+  const handle = await open(
+    path,
+    constants.O_RDONLY | (constants.O_NOFOLLOW || 0),
+  );
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) throw new Error("اختر ملف صورة عادياً");
+    if (info.size > max) throw new Error("الصورة أكبر من 8 ميغابايت");
+    const bytes = Buffer.alloc(info.size);
+    let at = 0;
+    while (at < info.size) {
+      const { bytesRead } = await handle.read(bytes, at, info.size - at, at);
+      if (!bytesRead) break;
+      at += bytesRead;
+    }
+    return bytes.subarray(0, at);
+  } finally {
+    await handle.close();
+  }
+}
+
 export function fileArtStore(dir) {
+  // Only a regular file directly in the folder counts: a link or a folder
+  // under a picture's name is never followed, read or deleted.
   const find = async (id) => {
     if (!validArtId(id)) return null;
     for (const ext of Object.keys(MIME)) {
       const path = join(dir, `${id}.${ext}`);
       try {
-        await stat(path);
-        return { path, mime: MIME[ext] };
+        const info = await lstat(path);
+        if (info.isFile() && !info.isSymbolicLink())
+          return { path, mime: MIME[ext] };
       } catch {
         /* next */
       }
@@ -50,7 +92,14 @@ export function fileArtStore(dir) {
     async read(id) {
       const found = await find(id);
       if (!found) return null;
-      return { bytes: await readFile(found.path), mime: found.mime };
+      try {
+        return {
+          bytes: await readArtFile(found.path, ART_MAX_BYTES),
+          mime: found.mime,
+        };
+      } catch {
+        return null;
+      }
     },
     async remove(id) {
       const found = await find(id);
@@ -68,7 +117,9 @@ export function fileArtStore(dir) {
         const m = NAME.exec(name);
         if (!m) continue;
         try {
-          out.push({ id: m[1], at: (await stat(join(dir, name))).mtimeMs });
+          const info = await lstat(join(dir, name));
+          if (info.isFile() && !info.isSymbolicLink())
+            out.push({ id: m[1], at: info.mtimeMs });
         } catch {
           /* gone meanwhile */
         }

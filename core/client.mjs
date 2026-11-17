@@ -16,7 +16,11 @@ import {
   webUrl,
 } from "./protocol.mjs";
 import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
-import { applyStreamPrefs } from "./stream-prefs.mjs";
+import {
+  applyStreamPrefs,
+  removeFilter,
+  restoreFilter,
+} from "./stream-prefs.mjs";
 import { discoverCinemetaUrl, discoverPlan, discoverRow } from "./discover.mjs";
 import {
   forgetSeries,
@@ -24,7 +28,8 @@ import {
   rememberSeries,
   sourceIdentity,
 } from "./series-memory.mjs";
-import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
+import { cleanBadgeRules, importBadgePack, ruleBadges } from "./badges.mjs";
+import { chooseFrStyle, frStyleUrl, isFrRule } from "./badge-look.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
 import { SpotifyHub } from "./spotify.mjs";
@@ -82,11 +87,13 @@ import {
   availableCatalogs,
   editCollections,
   fromNuvio,
+  applyTemplate,
   importCollections,
   mergeCollections,
   resolveCatalog,
 } from "./collections.mjs";
 import { presetCollection } from "./collection-presets.mjs";
+import { ART_GRACE_MS, artId, referencedArt } from "./collection-art.mjs";
 import { nuvioProfile } from "./nuvio.mjs";
 import {
   FEED_PREFIX,
@@ -148,6 +155,9 @@ function boundedSet(map, key, value, limit) {
 // A position alone reaches the encrypted file at most this often (see
 // persistProgress); anything else is written at once.
 export const PROGRESS_SAVE_MS = 20000;
+/** Said when work for one profile finishes after another became active. */
+export const PROFILE_CHANGED =
+  "تغيّر الملف الشخصي قبل اكتمال هذا التغيير؛ لم يُحفظ شيء";
 const streamIdentity = (stream) =>
   JSON.stringify([
     stream.url,
@@ -288,6 +298,10 @@ export class Client {
       ...(accountRequest ? { request: accountRequest } : {}),
     });
     this.profiles = new Profiles(this);
+    // Deleted stream filters waiting for Undo, by profile (streamFilterEdit).
+    this.filterUndo = new Map();
+    // Pictures picked from this computer, not yet in a folder (canReadArt).
+    this.artPicks = new Map();
     this.notifier = new Notifier(this);
     this.announcements = new Announcements(this, {
       platform: announcementPlatform,
@@ -605,7 +619,34 @@ export class Client {
     this.persist();
     return this.publicState();
   }
+  /**
+   * Work the interface started for one profile and finishes later (an
+   * Undo, a download, a delayed save) names that profile; main refuses it
+   * once another profile is active, so it can never land in the wrong one
+   * (PR #155 review, F2). The check sits here, where the state is
+   * written, not only in React.
+   */
+  sameProfile(profileId) {
+    if (profileId !== undefined && profileId !== this.profiles.store.active)
+      throw new Error(PROFILE_CHANGED);
+  }
   settings(input, playback) {
+    if (input && typeof input === "object" && "profileId" in input) {
+      const { profileId, ...rest } = input;
+      this.sameProfile(String(profileId ?? ""));
+      input = rest;
+    }
+    // Remembered source filters are saved a moment after each change; one
+    // that arrives after Remember was turned off is stale and is dropped.
+    if (
+      input &&
+      "sourceFacets" in input &&
+      !("sourceFacetsRemember" in input) &&
+      !this.state.settings.sourceFacetsRemember
+    ) {
+      const { sourceFacets, ...rest } = input;
+      input = rest;
+    }
     if (
       input?.rememberVolume === true &&
       !this.state.settings.rememberVolume &&
@@ -616,6 +657,66 @@ export class Client {
     this.state.settings = safeSettings(input, this.state.settings);
     this.persist();
     return this.publicState();
+  }
+  /**
+   * Deleting a saved stream filter and its Undo (issue #153, PR #155 review
+   * F2), both worked out on the profile's list as it is now, not on a copy
+   * the page held. The deleted filter waits here, per profile, for Undo;
+   * an Undo for another profile, or one already used, changes nothing.
+   */
+  streamFilterEdit({ profileId, action, id } = {}) {
+    this.sameProfile(String(profileId ?? ""));
+    const owner = this.profiles.store.active;
+    const settings = this.state.settings;
+    const key = `${owner}|${String(id || "")}`;
+    if (action === "remove") {
+      const plan = removeFilter(
+        settings.streamFilters,
+        settings.activeFilter,
+        String(id || ""),
+      );
+      if (!plan) throw new Error("المرشح غير موجود");
+      this.settings({ streamFilters: plan.filters, activeFilter: plan.active });
+      this.filterUndo.set(key, plan.undo);
+      // Only the last few deletions can come back.
+      while (this.filterUndo.size > 8)
+        this.filterUndo.delete(this.filterUndo.keys().next().value);
+      return { state: this.publicState(), removed: true };
+    }
+    if (action === "restore") {
+      const undo = this.filterUndo.get(key);
+      this.filterUndo.delete(key);
+      const back = undo
+        ? restoreFilter(settings.streamFilters, settings.activeFilter, undo)
+        : null;
+      if (back)
+        this.settings({
+          streamFilters: back.filters,
+          activeFilter: back.active,
+        });
+      return { state: this.publicState(), restored: !!back };
+    }
+    throw new Error("إجراء غير معروف");
+  }
+  /**
+   * Choosing an FR-Badges style (core/badge-look.mjs): its pinned file is
+   * fetched by the caller's `fetchText` (main or the web bridge), and the
+   * badges are added to the settings of the profile that asked, worked out
+   * from that profile's rules as they are when the file arrives. A switch
+   * to another profile during the download leaves both untouched (F2).
+   */
+  async applyBadgeStyle({ look, profileId } = {}, fetchText) {
+    const owner = this.profiles.store.active;
+    this.sameProfile(profileId === undefined ? undefined : String(profileId));
+    const url = frStyleUrl(String(look || ""));
+    if (!url) throw new Error("نمط غير معروف");
+    const text = await fetchText(url);
+    if (this.profiles.store.active !== owner) throw new Error(PROFILE_CHANGED);
+    const pack = importBadgePack(text, undefined, { name: look });
+    const { patch, report } = chooseFrStyle(this.state.settings, pack, look);
+    this.state.settings = safeSettings(patch, this.state.settings);
+    this.persist();
+    return { state: this.publicState(), report };
   }
   /** Only actual player volume changes are saved; coalesce drag/key bursts. */
   recordVolume(volume) {
@@ -751,15 +852,48 @@ export class Client {
       ),
     ];
   }
+  /**
+   * Pictures chosen from this computer (core/collection-art.mjs) are read
+   * only by a profile whose collections name them, or that picked one a
+   * moment ago and has not saved it into a folder yet: knowing an ID is
+   * not enough (PR #155 review, security). Picks are kept per profile for
+   * the store's grace period.
+   */
+  notePickedArt(ref) {
+    const id = artId(ref);
+    if (!id) return;
+    this.artPicks.set(id, {
+      profile: this.profiles.store.active,
+      at: Date.now(),
+    });
+    while (this.artPicks.size > 50)
+      this.artPicks.delete(this.artPicks.keys().next().value);
+  }
+  canReadArt(ref) {
+    const id = artId(ref);
+    if (!id) return false;
+    if (referencedArt(this.state.collections || []).has(id)) return true;
+    const pick = this.artPicks.get(id);
+    return (
+      !!pick &&
+      pick.profile === this.profiles.store.active &&
+      Date.now() - pick.at < ART_GRACE_MS
+    );
+  }
   collectionsEdit(input) {
     this.profiles.gate("library");
+    // An edit started before a profile switch (a picture picked while the
+    // dialog was open) names its profile and is refused after it (F2).
+    if (input && "profileId" in input)
+      this.sameProfile(String(input.profileId ?? ""));
     // A Riwaq template (core/collection-presets.mjs): added, or updated in
     // place when it is already here (its IDs are stable), never copied.
+    // The viewer's edits to it are kept (applyTemplate); at the collection
+    // limit it is refused, so the interface never says it was added.
     if (input?.action === "preset") {
-      const { collections } = importCollections(
+      const { collections } = applyTemplate(
         this.state.collections || [],
-        [presetCollection(String(input.preset || ""))],
-        { mode: "merge" },
+        presetCollection(String(input.preset || "")),
       );
       this.state.collections = collections;
       this.persist();
@@ -781,6 +915,10 @@ export class Client {
    */
   async importNuvio(stores, { profile, parts = {} } = {}) {
     this.profiles.gate("settings");
+    // Addons install with awaits; what belongs to a profile (collections,
+    // library, plugins, the key) is written only if the profile that
+    // started the import is still the active one (PR #155 review, F2).
+    const owner = this.profiles.store.active;
     const index = Number(profile);
     if (!Number.isInteger(index) || index < 1)
       throw new Error("اختر ملف نوفيو");
@@ -816,6 +954,10 @@ export class Client {
           result.addonFailures.push(new URL(addon.url).host);
         }
       }
+    }
+    if (this.profiles.store.active !== owner) {
+      if (result.addons) this.persist();
+      throw new Error(PROFILE_CHANGED);
     }
     if (parts.collections) {
       const merged = mergeCollections(
@@ -877,6 +1019,9 @@ export class Client {
     if (typeof text !== "string" || !text.trim() || text.length > 4_000_000)
       throw new Error("الصق نص مجموعات نوفيو أولاً");
     const converted = fromNuvio(text);
+    // The IDs the preview showed (the same reading, so the same IDs); an
+    // import that would bring nothing, or a choice the file no longer
+    // holds, throws before the state is touched (PR #155 review, F1).
     const pick = Array.isArray(only)
       ? only.filter((id) => typeof id === "string").slice(0, 200)
       : undefined;
@@ -887,6 +1032,21 @@ export class Client {
     );
     this.state.collections = done.collections;
     this.persist();
+    // The report covers only the collections chosen, and what was kept
+    // after the limits, not everything the file held (F7).
+    const chosen = new Set(
+      converted.collections
+        .filter((c) => !pick || pick.includes(c.id))
+        .map((c) => c.id),
+    );
+    const over = { collections: 0, folders: 0, sources: 0 };
+    for (const id of chosen) {
+      const part = converted.report.byCollection[id];
+      if (!part) continue;
+      over.folders += part.over.folders;
+      over.sources += part.over.sources;
+    }
+    if (!pick) over.collections = converted.report.over.collections;
     return {
       result: {
         collections: done.report.added + done.report.updated,
@@ -894,10 +1054,13 @@ export class Client {
         updated: done.report.updated,
         replaced: done.report.replaced,
         skipped: done.report.skipped,
-        folders: converted.folders,
-        skippedSources: converted.skipped,
-        unsupported: converted.report.unsupported.slice(0, 50),
-        over: converted.report.over,
+        folders: done.report.folders,
+        skippedSources: done.report.unsupported,
+        unsupported: converted.report.unsupported
+          .filter((u) => chosen.has(u.collectionId))
+          .slice(0, 50),
+        over,
+        duplicates: converted.report.duplicates,
       },
       state: this.publicState(),
     };
@@ -2039,6 +2202,15 @@ export class Client {
           (!!stream.url && !/\.(m3u8|mpd)([?#]|$)/i.test(stream.url)),
         name: stream.name || stream.provider,
         title: stream.title || stream.description || "",
+        // An addon may describe a source in a field of its own beside the
+        // title (TrueHD, English subtitles): kept, so the filters, search
+        // and badges read it too (PR #155 review, F5).
+        ...(stream.title &&
+        typeof stream.description === "string" &&
+        stream.description.trim() &&
+        stream.description !== stream.title
+          ? { description: stream.description.slice(0, 600) }
+          : {}),
         provider: stream.provider,
         tier: entry.tier,
         score: entry.score,
@@ -2056,6 +2228,7 @@ export class Client {
         sizeLabel: sizeLabel(parsed.size),
         seeders: parsed.seeders,
         cached: parsed.cached,
+        uncached: parsed.uncached,
         debrid: parsed.debrid,
         arabicSub: parsed.arabic.sub,
         arabicDub: parsed.arabic.dub,
@@ -2095,7 +2268,11 @@ export class Client {
     );
     // Badge matching gets a time budget so no stream title can hold up the
     // picker.
-    const rules = cleanBadgeRules(settings.badgeRules);
+    // With badges off, an FR-Badges style's rules are not even tried; the
+    // viewer's own still are (PR #155 review, F6).
+    const rules = cleanBadgeRules(settings.badgeRules).filter(
+      (r) => settings.badgesOn !== false || !isFrRule(r),
+    );
     const badgeDeadline = Date.now() + 1500;
     // The viewer's own copies on their home servers come first.
     const home = (

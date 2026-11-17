@@ -2,7 +2,7 @@ import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
 import { adoptWheel, cleanSavedThemes, safeAppearance } from "./appearance.mjs";
 import { cleanAddonPriority, cleanStreamFilters } from "./stream-prefs.mjs";
 import { cleanFacets } from "./source-facets.mjs";
-import { BADGE_LOOKS } from "./badge-look.mjs";
+import { BADGE_LOOKS, cleanStyleArt } from "./badge-look.mjs";
 import {
   cleanBadgeArt,
   cleanBadgeRules,
@@ -229,8 +229,12 @@ export const DEFAULT_SETTINGS = {
   badgesOn: true,
   badgesHidden: [],
   badgeRules: [],
-  // Pictures for the built-in chips, from a badge pack.
+  // Pictures for the built-in chips, the viewer's own (a badge pack or by
+  // hand).
   badgeArt: {},
+  // Pictures an FR-Badges style gives the built-in chips, kept apart from
+  // the viewer's so leaving the style never takes theirs (PR #155, F6).
+  badgeStyleArt: {},
   // How the badges look (core/badge-look.mjs): Riwaq's chips, Liquid
   // Glass, an FR-Badges style, or none.
   badgeLook: "riwaq",
@@ -696,6 +700,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.badgeRules = cleanBadgeRules(input.badgeRules);
   if (input.badgeArt && typeof input.badgeArt === "object")
     next.badgeArt = cleanBadgeArt(input.badgeArt);
+  if (input.badgeStyleArt && typeof input.badgeStyleArt === "object")
+    next.badgeStyleArt = cleanStyleArt(input.badgeStyleArt);
   if (Array.isArray(input.badgesHidden))
     next.badgesHidden = cleanHiddenBadges(input.badgesHidden);
   if (typeof input.activeFilter === "string")

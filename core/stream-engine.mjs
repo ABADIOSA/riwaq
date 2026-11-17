@@ -396,7 +396,9 @@ function parseSource(text) {
 
 function parseAudio(text) {
   if (/\batmos\b/i.test(text)) return "Atmos";
-  if (/\bdts[-. ]?x\b/i.test(text)) return "DTS-X";
+  // "DTS:X" is how the format writes itself; without the colon it read as
+  // plain DTS (PR #155 review, F5).
+  if (/\bdts[-. :]?x\b/i.test(text)) return "DTS-X";
   if (/\btrue-?hd\b/i.test(text)) return "TrueHD";
   if (/\bdts[-. ]?hd(?:[-. ]?ma)?\b/i.test(text)) return "DTS-HD MA";
   if (/\bflac\b/i.test(text)) return "FLAC";
@@ -413,7 +415,7 @@ function parseAudio(text) {
 
 function parseChannels(text) {
   const attached = text.match(
-    /(?:atmos|true-?hd|dts(?:[-. ]?hd)?(?:[-. ]?ma)?|dts[-. ]?x|ddp?|e?-?ac-?3|eac3|aac|flac|opus)[\s.\-]*([752])[.\- ]([01])\b/i,
+    /(?:atmos|true-?hd|dts(?:[-. ]?hd)?(?:[-. ]?ma)?|dts[-. :]?x|ddp?|e?-?ac-?3|eac3|aac|flac|opus)[\s.\-]*([752])[.\- ]([01])\b/i,
   );
   if (attached) return `${attached[1]}.${attached[2]}`;
   // A bare "2.1" is far more often a file size than a channel layout.
@@ -503,15 +505,24 @@ function parseDebrid(text) {
     : named
       ? DEBRID_SLUGS[lower(named[1])] || ""
       : "";
-  if (bracket && /^(download|dl)$/i.test(bracket[2] || ""))
-    return { debrid: slug, cached: false };
+  // An addon that says a source is not cached is believed over any
+  // positive word or mark beside it: "[RD] Not cached" once counted as
+  // cached because it holds the word (PR #155 review, F5). Three states:
+  // cached, not cached (said so), and unknown (neither said).
+  if (
+    (bracket && /^(download|dl)$/i.test(bracket[2] || "")) ||
+    UNCACHED_RX.test(text)
+  )
+    return { debrid: slug, cached: false, uncached: true };
   const cached =
     (!!bracket && bracket[2] === "+") ||
     /⚡/.test(text) ||
     /\b(cached|instant)\b/i.test(text) ||
     /مخزّن|مخزن/.test(text);
-  return { debrid: slug, cached };
+  return { debrid: slug, cached, uncached: false };
 }
+const UNCACHED_RX =
+  /\b(?:not|non|un)[-\s]?(?:cached|instant)\b|غير\s*(?:مخزّن|مخزن)/i;
 
 function parseLanguages(text) {
   const languages = new Set();
@@ -531,7 +542,7 @@ export function parseStream(stream = {}) {
   const text = sourceText(stream);
   const source = parseSource(text);
   const episode = parseEpisode(text);
-  const { debrid, cached } = parseDebrid(text);
+  const { debrid, cached, uncached } = parseDebrid(text);
   const languages = parseLanguages(text);
   const arabicSub = ARABIC_SUB_RX.test(text);
   const arabicDub = ARABIC_DUB_RX.test(text);
@@ -583,6 +594,7 @@ export function parseStream(stream = {}) {
     pack: parsePack(text, episode),
     debrid,
     cached,
+    uncached,
     kind,
     sample: /\bsample\b/i.test(text),
     trailer: /\b(trailer|teaser|مقطع\s*دعائي)\b/i.test(text),
