@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Volume2, VolumeX } from "lucide-react";
+import { Volume1, Volume2, VolumeX } from "lucide-react";
 import VolumeSlider from "./VolumeSlider.jsx";
 import {
   chapterAt,
@@ -68,7 +68,8 @@ export function TimeCounter({ player, className = "" }) {
  * The volume button and its slider. The slider is folded until the pointer
  * rests on the control or the keyboard focuses it (CSS), a touch on the
  * button opens it (a second touch mutes), and it stays open while it is
- * being dragged even when the pointer wanders off.
+ * being dragged even when the pointer wanders off. A key or the wheel never
+ * unfolds it (issue #147): those show VolumeOsd in the middle instead.
  */
 export function VolumeControl({
   volume = 0,
@@ -77,8 +78,6 @@ export function VolumeControl({
   onMute,
   onChange,
   showValue = true,
-  // Unfolds for a moment after a key or the wheel changed the volume.
-  reveal = false,
 }) {
   const [touchOpen, setTouchOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -107,7 +106,7 @@ export function VolumeControl({
   return (
     <div
       ref={box}
-      className={`volume-group ${touchOpen || dragging || reveal ? "open" : ""}`}
+      className={`volume-group ${touchOpen || dragging ? "open" : ""}`}
       onPointerDownCapture={(e) => {
         pointer.current = e.pointerType || "mouse";
         if (e.target.closest?.(".volume-control")) setDragging(true);
@@ -217,7 +216,12 @@ export function ChapterNow({ marks, position }) {
   );
 }
 
-/** "Ends 10:42 PM" (ص/م in Arabic); "tomorrow" when past midnight. */
+/**
+ * "Ends 10:42 PM" (ص/م in Arabic); "tomorrow" when past midnight. Its own
+ * class (issue #144): the title page's `.ends-at` paragraph carries a top
+ * margin, which pushed this label below the icons beside it. `dir="auto"`
+ * keeps "4:06 م" reading right to left and "4:06 AM" left to right.
+ */
 export function EndsAt({ player, className = "" }) {
   const [now, setNow] = useState(() => Date.now());
   // The clock moves while paused too: it is the end if playback resumed.
@@ -228,8 +232,32 @@ export function EndsAt({ player, className = "" }) {
   const end = endsAt(player, { now, locale: language() });
   if (!end) return null;
   return (
-    <small className={`ends-at ${className}`}>
+    <small className={`player-ends ${className}`} dir="auto">
       {end.days > 0 ? `ينتهي ${end.time} · غدًا` : `ينتهي ${end.time}`}
     </small>
+  );
+}
+
+/**
+ * The level a key or the wheel just set (issue #147): a small round badge
+ * in the middle of the picture with the percentage alone, never the
+ * controls, the bar or the slider. Muted shows the crossed speaker.
+ */
+export function VolumeOsd({ volume = 0, muted = false, stamp = 0 }) {
+  const level = Math.max(0, Math.round(Number(volume) || 0));
+  const silent = muted || !level;
+  const Icon = silent ? VolumeX : level < 50 ? Volume1 : Volume2;
+  return (
+    <div
+      className={`volume-osd ${silent ? "muted" : ""}`}
+      key={stamp}
+      dir="ltr"
+      role="status"
+      aria-live="polite"
+      aria-label={muted ? "الصوت مكتوم" : `مستوى الصوت ${level}%`}
+    >
+      <Icon size={16} aria-hidden="true" />
+      <b>{muted ? "—" : `${level}%`}</b>
+    </div>
   );
 }

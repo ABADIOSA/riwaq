@@ -60,7 +60,10 @@
 }
 .player-menu .download-unavailable,
 .player-menu .menu-note {
-  max-width: 270px;
+  /* Wraps to the items' width and never sets it (issue #150). */
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
   margin: 0;
   padding: 0 12px 9px;
   color: #c6c9d0;

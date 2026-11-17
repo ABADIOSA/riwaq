@@ -550,19 +550,10 @@ export function OnScreenPage({ state, update }) {
           onChange={(keepFullscreen) => set({ keepFullscreen })}
         />
       </section>
-      <section className="settings-card">
-        <h2>مؤشر مستوى الصوت</h2>
-        {/* The large display over the picture is gone (issue #139): the
-            level shows in the bottom bar, or as a small pill at its corner
-            while the controls sleep. volumeOsdPosition stays in saved
-            settings, unread, for older devices that sync. */}
-        <Toggle
-          on={s.volumeOsd !== false}
-          title="مؤشر صغير لمستوى الصوت"
-          text="يظهر لحظة تغيّر الصوت من لوحة المفاتيح أو العجلة وأدوات التحكم مخفية، صغيرًا عند مكان الصوت في الشريط السفلي دون أن يغطي الصورة."
-          onChange={(volumeOsd) => set({ volumeOsd })}
-        />
-      </section>
+      {/* No volume indicator switch (issue #145): a key or the wheel
+          always shows the small round level in the middle of the picture
+          (issue #147, VolumeOsd). volumeOsd and volumeOsdPosition stay in
+          saved settings, unread, for older devices that sync. */}
     </>
   );
 }

@@ -250,19 +250,8 @@
 
 /* ---- The player's controls (HUD and theater) ----------------------------- */
 
-/* Over the picture: a dark readable layer with the same edge and sheen. */
-.hud-stage .hud-actions button:hover,
-.hud-stage .hud-actions button.on {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.18),
-    0 0 0 1px rgb(255 255 255 / 0.12);
-}
-.hud-stage .hud-main {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.25),
-    0 4px 14px rgb(0 0 0 / 0.35);
-}
-.hud-volume-pill,
+/* The bar's glass chips (issue #151) live in src/player-bar.css, one
+   rule set for the HUD and the theater. */
 .hud-stage .chapter-strip .chapter:focus-visible {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);
 }

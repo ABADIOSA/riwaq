@@ -1149,7 +1149,7 @@ for (const mode of ["dark", "light"])
 
 // --- The player's bar (#139, #140) ----------------------------------------
 await check(
-  "#139/#140 the HUD's bar: counter, folded volume, chapters, ends at",
+  "#139/#140/#144/#147/#150/#151 the HUD's bar: counter, folded volume, chapters, ends at, chips, round level, menu",
   async () => {
     const TYPES = {
       ".html": "text/html; charset=utf-8",
@@ -1225,6 +1225,15 @@ await check(
               if (method === "hudSnapshot") return { state, player };
               if (method === "subtitles") return [];
               if (method === "playerSources") return { streams: [] };
+              if (method === "playbackMenu")
+                return {
+                  videoId: "tt0000001",
+                  sessionId: 1,
+                  profileId: "default",
+                  paused: false,
+                  torrent: false,
+                  download: true,
+                };
               return true;
             },
             on: (event, fn) => {
@@ -1286,27 +1295,144 @@ await check(
         ),
         [20, 5600],
       );
+      const ends = hud.locator(".player-ends");
       assert.match(
-        await hud.locator(".ends-at").textContent(),
+        await ends.textContent(),
         /^Ends \d{1,2}:\d{2} (AM|PM)( · tomorrow)?$/,
       );
+      // #144: "Ends" sits on the icons' line (centres within a pixel).
+      await hud.mouse.move(640, 300);
+      await hud.waitForTimeout(250);
+      const middle = (box) => box.y + box.height / 2;
+      const endsBox = await ends.boundingBox();
+      const iconBox = await hud
+        .locator(".hud-actions .hud-group:last-child > button")
+        .first()
+        .boundingBox();
+      assert.ok(
+        Math.abs(middle(endsBox) - middle(iconBox)) <= 1,
+        `ends ${JSON.stringify(endsBox)} icon ${JSON.stringify(iconBox)}`,
+      );
+      // #151: every control in the bar has its glass chip without hover,
+      // all the same height.
+      const chips = await hud.$$eval(
+        ".hud-actions .hud-group > button, .hud-actions .playback-choices button:not([role=menuitemradio]), .hud-actions .volume-group, .hud-actions .player-ends, .hud-actions .chapter-now",
+        (nodes) =>
+          nodes.map((node) => {
+            const style = getComputedStyle(node);
+            return {
+              name: node.className || node.title,
+              fill: style.backgroundColor,
+              image: style.backgroundImage,
+              edge: style.borderTopWidth,
+              height: Math.round(node.getBoundingClientRect().height),
+            };
+          }),
+      );
+      assert.ok(chips.length >= 8, `${chips.length} controls`);
+      for (const chip of chips) {
+        assert.ok(
+          chip.fill !== "rgba(0, 0, 0, 0)" || chip.image !== "none",
+          `no chip: ${JSON.stringify(chip)}`,
+        );
+        assert.equal(chip.edge, "1px", JSON.stringify(chip));
+        assert.equal(chip.height, 38, JSON.stringify(chip));
+      }
       await hud.screenshot({ path: join(output, "hud-bar-en.png") });
-      // A volume key while the controls sleep: a small pill, never a large one.
+      // #147: a volume key shows the round level in the middle and nothing
+      // else: the controls stay asleep and the slider stays folded.
       await hud.mouse.move(1279, 0);
       await hud.locator(".hud-stage.asleep").waitFor({ timeout: 5000 });
+      await hud.keyboard.press("ArrowUp");
       await hud.evaluate(
         (player) => window.__emit("player", { ...player, volume: 70 }),
         player,
       );
-      const pill = hud.locator(".hud-volume-pill");
-      await pill.waitFor({ timeout: 1000 });
+      const osd = hud.locator(".volume-osd");
+      await osd.waitFor({ timeout: 1000 });
+      assert.equal((await osd.textContent()).trim(), "70%");
       assert.equal(
-        await hud.locator(".hud-volume-popup, .hud-volume-meter").count(),
+        await hud
+          .locator(".hud-volume-pill, .hud-volume-popup, .hud-volume-meter")
+          .count(),
         0,
       );
-      const box = await pill.boundingBox();
-      assert.ok(box.width < 140 && box.height < 40, JSON.stringify(box));
-      assert.ok(box.y > 720 - 90, "at the bottom bar");
+      const round = await osd.boundingBox();
+      assert.ok(
+        round.width < 100 && Math.abs(round.width - round.height) < 1,
+        JSON.stringify(round),
+      );
+      assert.ok(
+        Math.abs(round.x + round.width / 2 - 640) <= 2 &&
+          Math.abs(round.y + round.height / 2 - 360) <= 2,
+        `in the middle: ${JSON.stringify(round)}`,
+      );
+      assert.equal(await hud.locator(".hud-stage.asleep").count(), 1);
+      assert.ok(
+        (await fold.boundingBox()).width < 2,
+        "the slider stays folded",
+      );
+      assert.ok(
+        await hud.evaluate(() =>
+          window.__calls.some(
+            ([m, a]) => m === "playerKey" && a?.binding === "UP",
+          ),
+        ),
+        "the key reached the player",
+      );
+      await hud.screenshot({ path: join(output, "hud-volume-osd.png") });
+      // The wheel over the picture: the same, still asleep.
+      await hud.waitForTimeout(1300);
+      await hud.mouse.move(640, 360);
+      await hud.mouse.move(1279, 0);
+      await hud.locator(".hud-stage.asleep").waitFor({ timeout: 5000 });
+      await hud.evaluate(() => {
+        const stage = document.querySelector(".hud-stage");
+        stage.dispatchEvent(
+          new WheelEvent("wheel", { deltaY: 100, bubbles: true }),
+        );
+      });
+      await hud.evaluate(
+        (player) =>
+          window.__emit("player", { ...player, volume: 65, muted: false }),
+        player,
+      );
+      await osd.waitFor({ timeout: 1000 });
+      assert.equal((await osd.textContent()).trim(), "65%");
+      assert.equal(await hud.locator(".hud-stage.asleep").count(), 1);
+      // The bar's own slider never draws the round level.
+      await hud.waitForTimeout(1300);
+      await hud.mouse.move(640, 300);
+      await hud.mouse.move(650, 310);
+      await hud.locator(".hud-stage.awake").waitFor({ timeout: 2000 });
+      await hud.hover(".volume-button");
+      await hud.waitForTimeout(250);
+      await hud.locator(".volume-control").click();
+      await hud.evaluate(
+        (player) => window.__emit("player", { ...player, volume: 40 }),
+        player,
+      );
+      await hud.waitForTimeout(200);
+      assert.equal(await osd.count(), 0, "no round level for the slider");
+      // #150: the right-click menu is as wide as its longest item.
+      await hud.mouse.click(400, 300, { button: "right" });
+      await hud.locator(".player-menu button").first().waitFor();
+      const widths = await hud.$eval(".player-menu", (menu) => ({
+        menu: menu.getBoundingClientRect().width,
+        widest: Math.max(
+          ...[...menu.querySelectorAll("button")].map((b) => {
+            const range = document.createRange();
+            range.selectNodeContents(b);
+            return range.getBoundingClientRect().width;
+          }),
+        ),
+      }));
+      assert.ok(
+        widths.menu <= widths.widest + 6 * 2 + 12 * 2 + 2 + 1,
+        JSON.stringify(widths),
+      );
+      await hud.screenshot({ path: join(output, "hud-menu-en.png") });
+      await hud.keyboard.press("Escape");
       assert.deepEqual(outside, [], "the HUD asked nothing of the internet");
     } finally {
       await hud.close();

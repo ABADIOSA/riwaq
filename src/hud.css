@@ -193,10 +193,7 @@ html.hud-root #root {
   align-items: center;
   margin-top: 10px;
 }
-.hud-main {
-  background: #ffffff1a !important;
-  padding: 10px !important;
-}
+/* Play/pause: its chip lives with the others (src/player-bar.css). */
 .hud-stage .volume-control {
   --volume-accent: var(--hud-accent);
   width: 104px;
@@ -205,9 +202,6 @@ html.hud-root #root {
   color: #d4d4d8;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-}
-.hud-ends {
-  margin-inline-end: 6px;
 }
 .hud-skip {
   position: absolute;

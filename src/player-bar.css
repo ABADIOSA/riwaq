@@ -32,7 +32,7 @@
 .volume-group:hover .volume-fold,
 .volume-group:focus-within .volume-fold,
 .volume-group.open .volume-fold {
-  max-width: 172px;
+  max-width: 188px;
   opacity: 1;
   padding-inline: 4px;
 }
@@ -135,33 +135,268 @@ button.time-counter {
   outline-offset: 1px;
 }
 
-/* A volume change while the controls sleep: a small pill at the volume's
-   corner, not a display over the picture (issue #139). */
-.hud-volume-pill {
+/* A volume key or the wheel (issue #147): a small round level in the
+   middle of the picture, the percentage alone. Nothing else wakes: not the
+   controls, not the bar, not the slider. */
+.volume-osd {
   position: absolute;
-  bottom: 22px;
-  inset-inline-start: 26px;
-  display: inline-flex;
+  top: 50%;
+  left: 50%;
+  z-index: 4;
+  width: 76px;
+  height: 76px;
+  margin: -38px 0 0 -38px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: #000000a6;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 50%;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0) 55%),
+    rgb(10 12 16 / 0.62);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    0 8px 24px rgb(0 0 0 / 0.35);
   color: #f4f4f5;
-  font-size: 12px;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
-  animation: hud-pill-in var(--motion-fast, 120ms) ease;
+  animation: volume-osd-in var(--motion-fast, 120ms) ease;
 }
-@keyframes hud-pill-in {
+.volume-osd b {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+}
+.volume-osd svg {
+  opacity: 0.85;
+}
+.volume-osd.muted {
+  color: #fca5a5;
+}
+@keyframes volume-osd-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: scale(0.92);
+  }
+}
+
+/* ---- The bar's glass chips (issue #151) --------------------------------
+
+   Every control in the bottom bar sits in the same glass chip, always, not
+   only on hover: the same height, radius, edge, sheen and gap. Hover
+   brightens, a pressed toggle takes the accent edge, the keyboard gets one
+   ring. Over the video the chip stays dark in both schemes; no backdrop
+   blur (the HUD's window has no video under it to sample). */
+.hud-stage,
+.theater {
+  --bar-chip-size: 38px;
+  --bar-chip-radius: 11px;
+  --bar-chip-gap: 8px;
+  --bar-chip-fill: rgb(14 16 21 / 0.5);
+  --bar-chip-fill-hover: rgb(46 50 60 / 0.68);
+  --bar-chip-fill-main: rgb(255 255 255 / 0.16);
+  --bar-chip-edge: rgb(255 255 255 / 0.15);
+  --bar-chip-edge-hover: rgb(255 255 255 / 0.3);
+  --bar-chip-sheen: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.09),
+    rgb(255 255 255 / 0) 55%
+  );
+  --bar-chip-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12), 0 2px 8px rgb(0 0 0 / 0.25);
+}
+.hud-actions .hud-group,
+.app .theater-actions .button-row {
+  gap: var(--bar-chip-gap);
+}
+.hud-actions .hud-group > button,
+.hud-actions .playback-choices,
+.hud-actions .playback-choice > button,
+.hud-actions .playback-choices > button,
+.hud-actions .volume-group,
+.hud-actions .time-counter,
+.hud-actions .player-ends,
+.hud-actions .chapter-now,
+.app .theater-actions .button-row > .icon-button,
+.app .theater-actions .playback-choices > button,
+.app .theater-actions .playback-choice > button,
+.app .theater-actions .volume-group,
+.app .theater-actions .time-counter,
+.app .theater-actions .player-ends,
+.app .theater-actions .chapter-now {
+  box-sizing: border-box;
+  min-width: var(--bar-chip-size);
+  height: var(--bar-chip-size);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  margin: 0;
+  border: 1px solid var(--bar-chip-edge);
+  border-radius: var(--bar-chip-radius);
+  background: var(--bar-chip-sheen), var(--bar-chip-fill);
+  box-shadow: var(--bar-chip-shadow);
+  color: #f4f4f5;
+  line-height: 1;
+  transition:
+    background-color var(--motion-fast, 120ms) ease,
+    border-color var(--motion-fast, 120ms) ease,
+    transform var(--motion-press, 150ms) ease;
+}
+/* The picture-mode and quick-choice buttons share one group: the group
+   carries no chip of its own, each button does. */
+.hud-actions .playback-choices,
+.app .theater-actions .playback-choices {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  gap: var(--bar-chip-gap);
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.hud-actions .playback-choice > button,
+.hud-actions .playback-choices > button,
+.app .theater-actions .playback-choice > button,
+.app .theater-actions .playback-choices > button {
+  width: var(--bar-chip-size);
+  padding: 0;
+}
+/* Play/pause leads with a brighter fill, at the same height. */
+.hud-actions .hud-main,
+.app .theater-actions .button-row:first-child > .icon-button:first-child {
+  background: var(--bar-chip-sheen), var(--bar-chip-fill-main);
+  border-color: rgb(255 255 255 / 0.22);
+  padding: 0 10px;
+}
+.hud-actions .hud-group > button:hover:not(:disabled),
+.hud-actions .playback-choice > button:hover:not(:disabled),
+.hud-actions .playback-choices > button:hover:not(:disabled),
+.hud-actions .volume-group:hover,
+.hud-actions .volume-group.open,
+.app .theater-actions .button-row > .icon-button:hover:not(:disabled),
+.app .theater-actions .playback-choice > button:hover:not(:disabled),
+.app .theater-actions .playback-choices > button:hover:not(:disabled),
+.app .theater-actions .volume-group:hover,
+.app .theater-actions .volume-group.open {
+  background: var(--bar-chip-sheen), var(--bar-chip-fill-hover);
+  border-color: var(--bar-chip-edge-hover);
+  box-shadow: var(--bar-chip-shadow);
+  color: #fff;
+  transform: none;
+}
+.hud-actions .hud-group > button:active:not(:disabled),
+.app .theater-actions .button-row > .icon-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+/* A toggle that is on (a panel open, A/B repeat, the sleep timer). */
+.hud-actions .hud-group > button.on,
+.hud-actions .hud-group > button[aria-pressed="true"],
+.hud-actions .playback-choice > button[aria-expanded="true"],
+.app .theater-actions .button-row > .icon-button.on,
+.app .theater-actions .playback-choice > button[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--hud-accent, var(--accent)) 72%, #fff);
+  color: var(--hud-accent, var(--accent));
+}
+.hud-actions .hud-group > button:focus-visible,
+.hud-actions .playback-choice > button:focus-visible,
+.hud-actions .playback-choices > button:focus-visible,
+.hud-actions .time-counter:focus-visible,
+.app .theater-actions .button-row > .icon-button:focus-visible,
+.app .theater-actions .time-counter:focus-visible {
+  outline: 2px solid var(--hud-accent, var(--accent));
+  outline-offset: 2px;
+}
+.hud-actions .hud-group > button:disabled,
+.app .theater-actions .button-row > .icon-button:disabled {
+  opacity: 0.5;
+}
+/* The volume chip holds its button and, unfolded, the slider: the button
+   draws no box of its own inside it. */
+.hud-actions .volume-group,
+.app .theater-actions .volume-group {
+  padding: 0;
+  gap: 0;
+}
+.hud-actions .volume-group > .volume-button,
+.app .theater-actions .volume-group > .volume-button {
+  min-width: calc(var(--bar-chip-size) - 2px);
+  min-height: calc(var(--bar-chip-size) - 2px);
+  padding: 0;
+  border: 0;
+  background: none !important;
+  box-shadow: none;
+}
+.hud-actions .volume-group .volume-value,
+.app .theater-actions .volume-group .volume-value {
+  padding-inline-end: 6px;
+}
+/* Text chips: tabular figures so a changing clock never shifts its
+   neighbours, centred inside a minimum width. */
+.hud-actions .time-counter,
+.app .theater-actions .time-counter {
+  padding: 0 11px;
+  font-size: 12.5px;
+}
+.player-ends {
+  white-space: nowrap;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.hud-actions .player-ends,
+.app .theater-actions .player-ends {
+  min-width: 13ch;
+  padding: 0 11px;
+  color: #e4e4e7;
+}
+.hud-actions .chapter-now,
+.app .theater-actions .chapter-now {
+  display: inline-block;
+  max-width: 240px;
+  padding: 0 11px;
+  line-height: calc(var(--bar-chip-size) - 2px);
+  opacity: 1;
+  color: #d4d4d8;
+}
+/* The mini player keeps its smaller buttons, in the same chips. */
+.mini-theater {
+  --bar-chip-size: 30px;
+  --bar-chip-radius: 9px;
+  --bar-chip-gap: 6px;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .hud-stage,
+  .theater {
+    --bar-chip-fill: #12141a;
+    --bar-chip-fill-hover: #262a33;
+    --bar-chip-fill-main: #2a2e37;
+    --bar-chip-sheen: linear-gradient(transparent, transparent);
+  }
+  .volume-osd {
+    background: #0a0c10;
+  }
+}
+@media (forced-colors: active) {
+  .hud-actions .hud-group > button,
+  .hud-actions .volume-group,
+  .hud-actions .time-counter,
+  .hud-actions .player-ends,
+  .app .theater-actions .button-row > .icon-button,
+  .app .theater-actions .volume-group,
+  .volume-osd {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .volume-fold,
-  .hud-volume-pill {
+  .volume-osd,
+  .hud-actions .hud-group > button,
+  .app .theater-actions .button-row > .icon-button {
     transition: none;
     animation: none;
   }

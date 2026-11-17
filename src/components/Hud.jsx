@@ -7,8 +7,6 @@ import {
   RotateCw,
   SkipBack,
   SkipForward,
-  Volume2,
-  VolumeX,
   Captions,
   AudioLines,
   ListVideo,
@@ -32,7 +30,7 @@ import { hudHidden } from "../../core/hud-layout.mjs";
 import { SEPARATE_HIDDEN } from "../../core/hud.mjs";
 import { qualityChips } from "../../core/player-tuning.mjs";
 import { startLine } from "../../core/torrent-engine.mjs";
-import { hudKey, pointerFocus } from "../../core/hotkeys.mjs";
+import { hudKey, pointerFocus, quietBinding } from "../../core/hotkeys.mjs";
 import { useInterfaceLanguage } from "../lib/language.js";
 import {
   ChapterNow,
@@ -41,6 +39,7 @@ import {
   EndsAt,
   TimeCounter,
   VolumeControl,
+  VolumeOsd,
   useChapters,
 } from "./PlayerBar.jsx";
 import { useSpaceHold } from "../lib/use-space-hold.js";
@@ -101,10 +100,12 @@ export default function Hud() {
   const [sleepMenu, setSleepMenu] = useState(false);
   // GLSL presets (Anime4K's modes, FSRCNNX, the viewer's chain) by name.
   const [shaderMenu, setShaderMenu] = useState(false);
-  // The volume popup while the controls sleep (Harbor's volume OSD).
-  const [volumePopup, setVolumePopup] = useState(0);
-  const [volumeReveal, setVolumeReveal] = useState(0);
+  // The round level in the middle after a key or the wheel (issue #147).
+  const [volumeOsd, setVolumeOsd] = useState(0);
   const lastVolume = useRef(null);
+  // When the bar's own slider or mute button last changed the sound: the
+  // viewer is looking at it, so the round level stays away.
+  const barVolume = useRef(0);
   const idle = useRef();
   const click = useRef();
   // Holding the picture plays faster until it is let go (Harbor's gesture).
@@ -152,7 +153,8 @@ export default function Hud() {
       if (!binding) return;
       e.preventDefault();
       act("playerKey", { binding });
-      wake();
+      // Volume and mute keys show only the round level (issue #147).
+      if (!quietBinding(binding, state?.hotkeys)) wake();
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -323,29 +325,29 @@ export default function Hud() {
     sleepMenu ||
     shaderMenu ||
     player.loading;
-  // A volume change (a key, the wheel) shows itself in the bottom bar
-  // (issue #139): with the controls up, the volume slider unfolds for a
-  // moment; while they sleep, a small pill at the volume's corner, never the
-  // large display over the picture (MPV's own is off too: no-osd).
+  // A volume or mute change that did not come from the bar (a key, the
+  // wheel, MPV's own window) shows a small round level in the middle of the
+  // picture (issue #147): the controls stay as they were and the slider
+  // stays folded. MPV's own bar is off for those keys (no-osd, #139). The
+  // first report of a viewing is its starting level, not a change.
   useEffect(() => {
-    const volume = Math.round(player.volume ?? -1);
+    const now = {
+      video: player.videoId || "",
+      volume: Math.round(player.volume ?? -1),
+      muted: !!player.muted,
+    };
     const was = lastVolume.current;
-    lastVolume.current = volume;
-    if (was === null || was === volume || volume < 0) return;
-    if (shown) return setVolumeReveal(Date.now());
-    if (settings.volumeOsd === false) return;
-    setVolumePopup(Date.now());
-  }, [player.volume]);
+    lastVolume.current = now;
+    if (!was || was.video !== now.video || now.volume < 0) return;
+    if (was.volume === now.volume && was.muted === now.muted) return;
+    if (Date.now() - barVolume.current < 800) return;
+    setVolumeOsd(Date.now());
+  }, [player.volume, player.muted, player.videoId]);
   useEffect(() => {
-    if (!volumeReveal) return;
-    const timer = setTimeout(() => setVolumeReveal(0), 1300);
+    if (!volumeOsd) return;
+    const timer = setTimeout(() => setVolumeOsd(0), 1100);
     return () => clearTimeout(timer);
-  }, [volumeReveal]);
-  useEffect(() => {
-    if (!volumePopup) return;
-    const timer = setTimeout(() => setVolumePopup(0), 1300);
-    return () => clearTimeout(timer);
-  }, [volumePopup]);
+  }, [volumeOsd]);
   const series = player.mediaType === "series";
   // Main hides the pointer itself (CSS cursor alone does not in this window).
   useEffect(() => {
@@ -498,7 +500,7 @@ export default function Hud() {
       Math.min(maxVolume, (player.volume || 0) + (e.deltaY < 0 ? 5 : -5)),
     );
     command("volume", volume);
-    wake();
+    // The round level shows it; the controls stay as they were (#147).
   };
   const seekTo = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -717,20 +719,12 @@ export default function Hud() {
           onError={setNotice}
         />
       )}
-      {volumePopup > 0 && (
-        <div
-          className="hud-volume-pill"
-          key={volumePopup}
-          dir="ltr"
-          role="status"
-        >
-          {player.muted || !player.volume ? (
-            <VolumeX size={15} />
-          ) : (
-            <Volume2 size={15} />
-          )}
-          <b>{Math.round(player.volume || 0)}%</b>
-        </div>
+      {volumeOsd > 0 && (
+        <VolumeOsd
+          volume={player.volume}
+          muted={!!player.muted}
+          stamp={volumeOsd}
+        />
       )}
       {(holding || space.holding) && (
         <div className="hud-hold" aria-live="polite">
@@ -1002,9 +996,14 @@ export default function Hud() {
                 volume={player.volume || 0}
                 max={maxVolume}
                 muted={!!player.muted}
-                onMute={() => command("mute")}
-                onChange={(value) => command("volume", value)}
-                reveal={volumeReveal > 0}
+                onMute={() => {
+                  barVolume.current = Date.now();
+                  command("mute");
+                }}
+                onChange={(value) => {
+                  barVolume.current = Date.now();
+                  command("volume", value);
+                }}
               />
             )}
             <TimeCounter player={player} className="hud-time" />

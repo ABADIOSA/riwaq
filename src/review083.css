@@ -33,7 +33,13 @@
 .player-menu {
   position: fixed;
   z-index: 60;
-  min-width: 230px;
+  /* As wide as its longest item (issue #150), never wider than the
+     window; notes below an item wrap inside that width instead of
+     widening it (src/downloads-quality.css). */
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  max-width: min(320px, calc(100vw - 16px));
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -51,6 +57,7 @@
   width: 100%;
   justify-content: flex-start;
   text-align: var(--align-start);
+  white-space: nowrap;
   padding: 9px 12px;
   border: 0;
   border-radius: 8px;
@@ -66,6 +73,10 @@
 .player-menu button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+/* With a note under an item, room for two short lines rather than five. */
+.player-menu:has(> p) {
+  min-width: 210px;
 }
 .player-menu hr {
   border: 0;

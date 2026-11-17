@@ -304,6 +304,23 @@ export function hudKey(event, bindings) {
 }
 
 /**
+ * Actions that change only the sound (issue #147): their keys show the
+ * small round level in the middle of the picture and never wake the
+ * controls or unfold the volume slider.
+ */
+export const QUIET_ACTIONS = new Set(["volumeUp", "volumeDown", "mute"]);
+
+/**
+ * Whether a binding hudKey returned runs only quiet actions. A key bound to
+ * a quiet action and another one too (a viewer's clash) still wakes them.
+ */
+export function quietBinding(binding, hotkeys = []) {
+  if (!binding || !Array.isArray(hotkeys)) return false;
+  const ids = hotkeys.filter((h) => h?.binding === binding).map((h) => h.id);
+  return ids.length > 0 && ids.every((id) => QUIET_ACTIONS.has(id));
+}
+
+/**
  * The button a pointer press left focused, or null. Chromium focuses a
  * clicked button, and Space or Enter would then press it again (skip, next
  * episode, the panel) instead of pausing; the HUD blurs it after the press.
