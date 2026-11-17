@@ -82,6 +82,8 @@ const allowed = new Set([
   "collectionsCopyNuvio",
   "collectionsSaveNuvio",
   "importNuvioCollections",
+  "collectionArtPick",
+  "collectionArt",
   "nuvioScan",
   "nuvioPickBackup",
   "nuvioImport",

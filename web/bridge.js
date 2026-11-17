@@ -37,6 +37,8 @@ import {
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
 import { frStyleUrl } from "../core/badge-look.mjs";
+import { ART_MAX_BYTES, referencedArt } from "../core/collection-art.mjs";
+import { artObjectUrl, browserArtStore } from "./collection-art.js";
 import { artworkHost } from "../core/artwork.mjs";
 import {
   FIVE,
@@ -797,6 +799,12 @@ export async function startBridge({ version, store }) {
     return { report, text };
   }
 
+  // Pictures no profile's collections name any more are deleted (after a
+  // short grace, core/collection-art.mjs).
+  const sweepArt = () =>
+    browserArtStore
+      .sweep(referencedArt(client.allCollections()))
+      .catch(() => {});
   const methods = {
     musicLocalLibrary: async (a) => {
       await music.tagSome(a?.profileId);
@@ -1387,7 +1395,11 @@ export async function startBridge({ version, store }) {
       return true;
     },
     openUpdate: () => openExternal(client.updates.releaseUrl()),
-    collectionsEdit: (a) => client.collectionsEdit(a || {}),
+    collectionsEdit: (a) => {
+      const result = client.collectionsEdit(a || {});
+      sweepArt();
+      return result;
+    },
     collectionCatalogs: () => client.collectionCatalogs(),
     collectionFolder: (a) =>
       client.collectionFolder({
@@ -1413,10 +1425,34 @@ export async function startBridge({ version, store }) {
         JSON.stringify(toNuvio(client.state.collections || []), null, 2),
         "application/json",
       ),
-    importNuvioCollections: (a) =>
-      client.importNuvioCollections({
+    importNuvioCollections: (a) => {
+      const result = client.importNuvioCollections({
         text: typeof a?.text === "string" ? a.text : "",
-      }),
+        mode: typeof a?.mode === "string" ? a.mode : "merge",
+        only: Array.isArray(a?.only) ? a.only : undefined,
+      });
+      sweepArt();
+      return result;
+    },
+    // A picture for a collection or folder from this computer, kept in
+    // this browser (web/collection-art.js); the page gets "local:<id>".
+    collectionArtPick: async () => {
+      client.profiles.gate("library");
+      const file = await pickFile({
+        accept: "image/gif,image/png,image/jpeg,image/webp",
+      });
+      if (!file) return null;
+      if (file.size > ART_MAX_BYTES)
+        throw new Error("الصورة أكبر من 8 ميغابايت");
+      const { ref, type, width, height } = await browserArtStore.add(
+        new Uint8Array(await file.arrayBuffer()),
+      );
+      return { ref, type, width, height };
+    },
+    collectionArt: async (a) => {
+      client.profiles.gate("library");
+      return artObjectUrl(String(a?.id || ""));
+    },
     nuvioPickBackup: async () => {
       client.profiles.gate("settings");
       const file = await pickFile({ accept: ".zip,application/zip" });

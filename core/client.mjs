@@ -82,9 +82,11 @@ import {
   availableCatalogs,
   editCollections,
   fromNuvio,
+  importCollections,
   mergeCollections,
   resolveCatalog,
 } from "./collections.mjs";
+import { presetCollection } from "./collection-presets.mjs";
 import { nuvioProfile } from "./nuvio.mjs";
 import {
   FEED_PREFIX,
@@ -739,8 +741,30 @@ export class Client {
     if (added) this.persist();
     return added;
   }
+  /** Every profile's collections, for the local pictures' sweep. */
+  allCollections() {
+    const buckets = Object.values(this.profiles?.store?.data || {});
+    return [
+      ...(this.state.collections || []),
+      ...buckets.flatMap((b) =>
+        Array.isArray(b?.collections) ? b.collections : [],
+      ),
+    ];
+  }
   collectionsEdit(input) {
     this.profiles.gate("library");
+    // A Riwaq template (core/collection-presets.mjs): added, or updated in
+    // place when it is already here (its IDs are stable), never copied.
+    if (input?.action === "preset") {
+      const { collections } = importCollections(
+        this.state.collections || [],
+        [presetCollection(String(input.preset || ""))],
+        { mode: "merge" },
+      );
+      this.state.collections = collections;
+      this.persist();
+      return this.publicState();
+    }
     this.state.collections = editCollections(
       this.state.collections || [],
       input,
@@ -841,23 +865,39 @@ export class Client {
     this.persist();
     return this.publicState();
   }
-  /** Nuvio's collections JSON pasted from any Nuvio app (phone, TV, desktop). */
-  importNuvioCollections({ text } = {}) {
+  /**
+   * Nuvio's collections JSON pasted from any Nuvio app (phone, TV, desktop),
+   * into this profile: merged by ID (the default), added as copies, or in
+   * place of every collection, for all of the file's collections or the
+   * ones the viewer picked. The report says what was imported, updated,
+   * replaced, left at a limit and which sources Riwaq cannot read yet.
+   */
+  importNuvioCollections({ text, mode, only } = {}) {
     this.profiles.gate("library");
     if (typeof text !== "string" || !text.trim() || text.length > 4_000_000)
       throw new Error("الصق نص مجموعات نوفيو أولاً");
     const converted = fromNuvio(text);
-    const merged = mergeCollections(
+    const pick = Array.isArray(only)
+      ? only.filter((id) => typeof id === "string").slice(0, 200)
+      : undefined;
+    const done = importCollections(
       this.state.collections || [],
       converted.collections,
+      { mode, only: pick },
     );
-    this.state.collections = merged.collections;
+    this.state.collections = done.collections;
     this.persist();
     return {
       result: {
-        collections: merged.added,
+        collections: done.report.added + done.report.updated,
+        added: done.report.added,
+        updated: done.report.updated,
+        replaced: done.report.replaced,
+        skipped: done.report.skipped,
         folders: converted.folders,
         skippedSources: converted.skipped,
+        unsupported: converted.report.unsupported.slice(0, 50),
+        over: converted.report.over,
       },
       state: this.publicState(),
     };

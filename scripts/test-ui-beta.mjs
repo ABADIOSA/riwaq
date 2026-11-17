@@ -126,6 +126,50 @@ const frJson = (folder) =>
     })),
   });
 
+// Kaptain's Reality TV folder (the task's example): its still and its
+// moving cover, answered here. A 1×1 GIF is a real GIF.
+const KBASE = "https://raw.githubusercontent.com/ImKaptain/nuvio-assets/main";
+const STILL = `${KBASE}/Genres/Reality%20TV/Reality_TV_Base.png`;
+const MOVING = `${KBASE}/Genres/Reality%20TV/Reality_TV_Hover.gif`;
+const BROKEN_GIF = "https://broken.example/cover.gif";
+const GIF = Buffer.from(
+  "R0lGODlhAQABAPAAAP8AAP///yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==",
+  "base64",
+);
+const gifRequests = [];
+const NUVIO_FILE = JSON.stringify([
+  {
+    id: "kaptain-genres",
+    title: "Genres",
+    backdropImageUrl: STILL,
+    viewMode: "TABBED_GRID",
+    folders: [
+      {
+        id: "folder-KQEZGAMF",
+        title: "Reality TV",
+        tileShape: "LANDSCAPE",
+        hideTitle: true,
+        focusGifEnabled: true,
+        focusGifUrl: MOVING,
+        coverImageUrl: STILL,
+        focusGlowEnabled: true,
+        sources: [
+          {
+            provider: "tmdb",
+            tmdbSourceType: "DISCOVER",
+            mediaType: "TV",
+            title: "New Series",
+            sortBy: "primary_release_date.desc",
+            filters: { year: 2026, withGenres: "10764", voteCountGte: 10 },
+          },
+          { provider: "simkl", listId: 42, title: "Not here yet" },
+        ],
+      },
+      { id: "folder-2", title: "Second", coverImageUrl: STILL, sources: [] },
+    ],
+  },
+]);
+
 const browser = await chromium.launch({
   executablePath: process.env.RIWAQ_CHROMIUM || undefined,
   // Real scrollbars, as on Windows (headless hides them by default).
@@ -139,6 +183,17 @@ const outside = [];
 await context.route(/^https?:\/\//, (route) => {
   const url = route.request().url();
   if (new URL(url).hostname === "127.0.0.1") return route.continue();
+  if (url === STILL)
+    return route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: png(60, 120, 200),
+    });
+  if (url === MOVING) {
+    gifRequests.push(url);
+    return route.fulfill({ status: 200, contentType: "image/gif", body: GIF });
+  }
+  if (url === BROKEN_GIF) return route.abort("failed");
   if (url.startsWith(FR)) {
     const name = url.slice(FR.length);
     if (name === "badges-frost.json")
@@ -551,6 +606,268 @@ await check(
     await shot("wheel-compact-en");
   },
 );
+
+// --- Collections: moving covers, the Nuvio import, templates ---------------
+// The room's list: from an open collection through "All collections",
+// from elsewhere through its destination.
+const collectionsRoom = async () => {
+  if (await page.locator(".collection-view").count())
+    await page.locator(".collection-hero .text-button").first().click();
+  else if (!(await page.locator(".collections-page").count()))
+    await page.locator(".riwaq-destinations > button").nth(3).click();
+  await page.locator(".collections-page").waitFor();
+  await settle();
+};
+// Opened with the keyboard and the pointer parked in a corner, so no card
+// starts its GIF just because the opening click left the pointer on it.
+const openReality = async () => {
+  await collectionsRoom();
+  await page.mouse.move(5, 5);
+  const open = page
+    .locator(".collection-card", { hasText: "Genres" })
+    .locator(".collection-open");
+  await open.focus();
+  await page.keyboard.press("Enter");
+  await page.locator(".folder-gallery .folder-tile").first().waitFor();
+  await page.mouse.move(5, 5);
+  await settle();
+};
+
+for (const lang of ["en", "ar"])
+  await check(
+    `collections ${lang}: a Nuvio file imports with a preview and a report`,
+    async () => {
+      await call("collectionsEdit", {
+        action: "remove",
+        collectionId: "nuvio-kaptain-genres",
+      }).catch(() => {});
+      await restart({ uiLanguage: lang, reduceMotion: false });
+      await collectionsRoom();
+      await page.locator(".collections-page .page-heading .secondary").click();
+      await page.locator(".nuvio-options button").nth(2).click();
+      await page.locator(".nuvio-paste").fill(NUVIO_FILE);
+      await page.locator(".nuvio-modal .button-row .primary").click();
+      await page.locator(".nuvio-preview").waitFor();
+      assert.equal(await page.locator(".nuvio-pick input:checked").count(), 1);
+      assert.equal(await page.locator(".nuvio-mode input:checked").count(), 1);
+      assert.equal(
+        await page
+          .locator(".nuvio-mode label.selected input")
+          .evaluate((el) => el.checked),
+        true,
+      );
+      await shot(`nuvio-preview-${lang}`);
+      await page.locator(".nuvio-modal .button-row .primary").click();
+      await page.locator(".nuvio-report").waitFor();
+      const report = await page.locator(".nuvio-report").textContent();
+      assert.match(report, /1\s*(new|جديدة)/, report);
+      await page.locator(".nuvio-unsupported summary").waitFor();
+      await shot(`nuvio-report-${lang}`);
+      await page.locator(".nuvio-modal .primary").last().click();
+      const saved = (await call("init")).collections.find(
+        (c) => c.id === "nuvio-kaptain-genres",
+      );
+      const folder = saved.folders[0];
+      assert.equal(folder.cover, STILL);
+      assert.equal(folder.gif, MOVING);
+      assert.equal(folder.hideTitle, true);
+      assert.equal(folder.unsupported.length, 1);
+    },
+  );
+
+await check(
+  "collections: the GIF plays only under the pointer or focus",
+  async () => {
+    await restart({ uiLanguage: "en", reduceMotion: false });
+    gifRequests.length = 0;
+    await openReality();
+    const tile = page.locator(".folder-gallery .folder-tile").first();
+    assert.equal(await tile.locator(".art-still").getAttribute("src"), STILL);
+    assert.equal(await tile.locator(".art-gif").count(), 0);
+    assert.equal(gifRequests.length, 0, "not loaded before it is wanted");
+    // The name is hidden on the card but stays its accessible name.
+    assert.equal(await tile.getAttribute("aria-label"), "Reality TV");
+    assert.equal(await tile.locator("strong").count(), 0);
+    await tile.hover();
+    await tile.locator(".art-gif").waitFor();
+    assert.equal(await tile.locator(".art-gif").getAttribute("src"), MOVING);
+    assert.equal(
+      await tile.locator(".art-still").count(),
+      1,
+      "the still stays under it",
+    );
+    await shot("folder-gif-hover-en");
+    await page.mouse.move(5, 5);
+    await settle(200);
+    assert.equal(
+      await tile.locator(".art-gif").count(),
+      0,
+      "it stops on leave",
+    );
+    // Keyboard focus plays it too; the other card stays still.
+    await tile.focus();
+    await tile.locator(".art-gif").waitFor();
+    assert.equal(
+      await page
+        .locator(".folder-gallery .folder-tile")
+        .nth(1)
+        .locator(".art-gif")
+        .count(),
+      0,
+    );
+    await page.keyboard.press("Tab");
+    await settle(200);
+    assert.equal(await tile.locator(".art-gif").count(), 0);
+  },
+);
+
+await check(
+  "collections: reduced motion and a broken GIF keep the still",
+  async () => {
+    await restart({ uiLanguage: "en", reduceMotion: true });
+    gifRequests.length = 0;
+    await openReality();
+    const tile = page.locator(".folder-gallery .folder-tile").first();
+    await tile.hover();
+    await settle(500);
+    assert.equal(await tile.locator(".art-gif").count(), 0);
+    assert.equal(gifRequests.length, 0);
+    // A moving cover that fails to load: the still stays, nothing blanks.
+    const saved = (await call("init")).collections.find(
+      (c) => c.id === "nuvio-kaptain-genres",
+    );
+    await call("collectionsEdit", {
+      action: "folderUpdate",
+      collectionId: saved.id,
+      folderId: saved.folders[0].id,
+      gif: BROKEN_GIF,
+    });
+    await restart({ reduceMotion: false });
+    await openReality();
+    await tile.hover();
+    await settle(600);
+    assert.equal(await tile.locator(".art-gif").count(), 0);
+    assert.equal(await tile.locator(".art-still").getAttribute("src"), STILL);
+    await call("collectionsEdit", {
+      action: "folderUpdate",
+      collectionId: saved.id,
+      folderId: saved.folders[0].id,
+      gif: MOVING,
+    });
+  },
+);
+
+await check(
+  "collections: the editor previews the card and refuses a .gifv",
+  async () => {
+    await restart({ uiLanguage: "en", reduceMotion: false });
+    await openReality();
+    await page
+      .locator(".collection-hero .button-row .secondary")
+      .first()
+      .click();
+    await page.locator(".folder-look").waitFor();
+    assert.equal(
+      await page.locator(".folder-look-preview .folder-tile").count(),
+      2,
+    );
+    // The "under the pointer" preview plays the GIF without a pointer.
+    await page
+      .locator(".folder-look-preview figure")
+      .nth(1)
+      .locator(".art-gif")
+      .waitFor();
+    const gifInput = page.getByRole("textbox", { name: "Moving cover (GIF)" });
+    await gifInput.fill("https://i.imgur.com/clip.gifv");
+    await gifInput.press("Enter");
+    await page.locator(".art-error").waitFor();
+    const folder = (await call("init")).collections.find(
+      (c) => c.id === "nuvio-kaptain-genres",
+    ).folders[0];
+    assert.equal(folder.gif, MOVING, "the GIF already set stays");
+    await shot("folder-editor-en");
+  },
+);
+
+await check(
+  "collections: templates add whole, and the gallery switches layout",
+  async () => {
+    await restart({ uiLanguage: "en" });
+    await collectionsRoom();
+    await page
+      .locator(".preset-card", { hasText: "World cinema" })
+      .locator("button")
+      .click();
+    await page.locator(".collection-hero").waitFor();
+    const world = (await call("init")).collections.find(
+      (c) => c.id === "riwaq-preset-international",
+    );
+    assert.equal(world.folders.length, 12);
+    assert.ok(world.folders.every((f) => f.tmdb.length >= 3));
+    // Added again: updated in place, never copied.
+    await collectionsRoom();
+    await page
+      .locator(".preset-card", { hasText: "World cinema" })
+      .locator("button")
+      .click();
+    await page.locator(".collection-hero").waitFor();
+    assert.equal(
+      (await call("init")).collections.filter(
+        (c) => c.id === "riwaq-preset-international",
+      ).length,
+      1,
+    );
+    await collectionsRoom();
+    assert.ok(
+      (await page
+        .locator(".collection-grid .collection-card.cinematic")
+        .count()) >= 2,
+    );
+    await shot("collections-grid-en");
+    await page.locator(".collections-toolbar [role=radio]").nth(1).click();
+    await page.locator(".collection-row .collection-card").first().waitFor();
+    await shot("collections-row-en");
+    await call("settings", { collectionsLayout: "grid" });
+  },
+);
+
+for (const lang of ["ar", "en"])
+  for (const scheme of ["light", "dark"])
+    await check(
+      `collections ${lang} ${scheme}: cards stay readable at 390–1440 px`,
+      async () => {
+        await restart({
+          uiLanguage: lang,
+          appearance: {
+            ...((await call("init")).settings.appearance || {}),
+            mode: scheme,
+          },
+        });
+        // Below 761 px the wheel lives in a drawer: arrive first, then
+        // narrow the window.
+        await collectionsRoom();
+        for (const width of [1440, 1024, 768, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          await settle(300);
+          const overflow = await page.evaluate(
+            () => document.documentElement.scrollWidth - innerWidth,
+          );
+          assert.ok(overflow <= 0, `${width}px: ${overflow}px sideways`);
+          const info = page.locator(".collection-card-info").first();
+          const color = await info.evaluate((el) => getComputedStyle(el).color);
+          assert.equal(color, "rgb(255, 255, 255)");
+          if (width === 1440 || width === 390)
+            await shot(`collections-${lang}-${scheme}-${width}`);
+        }
+        await page.setViewportSize({ width: 1440, height: 900 });
+      },
+    );
+await call("settings", {
+  appearance: {
+    ...((await call("init")).settings.appearance || {}),
+    mode: "dark",
+  },
+});
 
 const unexpected = outside.filter((u) => u.startsWith(FR));
 if (unexpected.length) problems.push(`FR-Badges not answered: ${unexpected}`);

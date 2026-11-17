@@ -1,6 +1,6 @@
 # Riwaq Privacy Policy
 
-**Version 1.0 · Effective 1 November 2026** · [النسخة العربية](PRIVACY.ar.md)
+**Version 1.1 · Effective 17 November 2026** · [النسخة العربية](PRIVACY.ar.md)
 
 This policy explains what information the Riwaq app handles, where it goes and what you can do about it. It describes the Riwaq desktop app for Windows, the Riwaq web edition and the optional Riwaq account service, as they exist in the version of the code published alongside this file.
 
@@ -37,6 +37,7 @@ Unless you turn on a feature that sends it somewhere (sections 4 and 5), the fol
 | Keys and sign-ins you add: TMDB, OMDb, MDBList, Fanart.tv, TheIntroDB, debrid services, AI providers, Trakt, Simkl, AniList, Spotify, Stremio, Jellyfin/Emby, live TV sources, Discord and Telegram notification targets | Encrypted state |
 | Downloads for offline viewing, their posters and the torrent cache | Riwaq's private folder in your user profile (`AppData\Roaming\Riwaq` on Windows) |
 | Local music library paths, screenshots, MPV's last log | Riwaq's folder on your device |
+| Pictures you choose from your computer for a collection or folder (cover, moving GIF, backdrop, logo) | A copy in Riwaq's folder (`collection-art`), named by a random ID; in the web edition, your browser's IndexedDB. Never in backups, the account or a Nuvio export |
 | Error log for the diagnostic report | Memory only, cleared when the app closes |
 
 **Encryption on the device.** On Windows, Riwaq's state is encrypted with Electron `safeStorage`, which uses Windows DPAPI tied to your Windows account; Riwaq refuses to store it unencrypted. In the web edition, state is sealed with AES-256-GCM under a non-extractable WebCrypto key kept in your browser's IndexedDB; a browser that cannot do this keeps nothing. Downloads, screenshots and caches are ordinary files protected by your operating system's file permissions, not by Riwaq's encryption.
@@ -92,6 +93,8 @@ Riwaq connects to the services below **from your device**. Their handling of you
 - **Discord Rich Presence** (off by default): shares what you are watching (or a generic line, or nothing, as you choose) with your Discord app and contacts on Discord.
 - **Discord or Telegram notifications** (off by default): send short messages about viewing events (such as a title you started or finished) to the webhook or bot you configure.
 - **Live TV:** your own playlist or Xtream sources are contacted with the credentials you provide.
+- **FR-Badges styles** (Settings → Sources & library → Stream badges, only if you choose FR Glass, FR Frost or Minimal): Riwaq downloads that style's file from GitHub (`raw.githubusercontent.com`), and the badge pictures then load from GitHub whenever sources are shown. GitHub receives your network address and the usual request information, under GitHub's privacy statement. Riwaq's own badge looks (Riwaq default, Liquid Glass) fetch nothing.
+- **Collection pictures by address:** a cover, moving GIF, backdrop or logo you enter as an HTTPS address (or that comes in a Nuvio file) loads from that address when the collection is shown, which tells that server your network address. A moving GIF loads only when you point at or focus its card.
 
 ### 5.3 App updates and announcements
 

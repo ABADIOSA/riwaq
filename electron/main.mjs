@@ -25,7 +25,7 @@ import {
   copyFileSync,
   statSync,
 } from "node:fs";
-import { lstat, readdir, rm } from "node:fs/promises";
+import { lstat, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
@@ -58,6 +58,8 @@ import {
 import { DEBRID } from "../core/services.mjs";
 import { fetchPackText } from "../core/badges.mjs";
 import { frStyleUrl } from "../core/badge-look.mjs";
+import { ART_MAX_BYTES, referencedArt } from "../core/collection-art.mjs";
+import { dataUrl, fileArtStore } from "./collection-art.mjs";
 import { artworkHost } from "../core/artwork.mjs";
 import {
   FIVE,
@@ -348,6 +350,17 @@ function torrents() {
  * torrent-cache are touched (never a link, never offline downloads, which
  * live in userData/offline and offline-torrent-cache).
  */
+// Pictures chosen from this computer for collections (electron/
+// collection-art.mjs): kept under userData by opaque ID; a file no
+// profile's collections name any more is deleted.
+let artStore = null;
+const collectionArtStore = () =>
+  (artStore ||= fileArtStore(join(app.getPath("userData"), "collection-art")));
+const sweepCollectionArt = () =>
+  collectionArtStore()
+    .sweep(referencedArt(client.allCollections()))
+    .catch((error) => logError("collection-art", error));
+
 async function sweepTorrentCache() {
   if ((client.state.settings.torrentCache || "viewing") !== "viewing") return;
   const dir = join(app.getPath("userData"), "torrent-cache");
@@ -2546,7 +2559,37 @@ const methods = {
     await shell.openExternal(client.updates.releaseUrl());
     return true;
   },
-  collectionsEdit: (a) => client.collectionsEdit(a || {}),
+  collectionsEdit: (a) => {
+    const result = client.collectionsEdit(a || {});
+    sweepCollectionArt();
+    return result;
+  },
+  // A picture for a collection or folder from this computer: the native
+  // dialog picks it, the bytes decide what it is (core/collection-art.mjs),
+  // and the page gets back only "local:<id>". Behind the library lock.
+  collectionArtPick: async () => {
+    client.profiles.gate("library");
+    const picked = await dialog.showOpenDialog(window, {
+      title: t("اختر صورة للمجموعة"),
+      properties: ["openFile"],
+      filters: [
+        { name: t("الصور"), extensions: ["gif", "png", "jpg", "jpeg", "webp"] },
+      ],
+    });
+    const path = picked.canceled ? "" : picked.filePaths[0];
+    if (!path) return null;
+    if ((await stat(path)).size > ART_MAX_BYTES)
+      throw new Error("الصورة أكبر من 8 ميغابايت");
+    const { ref, type, width, height } = await collectionArtStore().add(
+      await readFile(path),
+    );
+    return { ref, type, width, height };
+  },
+  collectionArt: async (a) => {
+    client.profiles.gate("library");
+    const found = await collectionArtStore().read(String(a?.id || ""));
+    return found ? dataUrl(found) : "";
+  },
   collectionCatalogs: () => client.collectionCatalogs(),
   collectionFolder: (a) =>
     client.collectionFolder({
@@ -2583,10 +2626,16 @@ const methods = {
     );
     return true;
   },
-  importNuvioCollections: (a) =>
-    client.importNuvioCollections({
+  importNuvioCollections: (a) => {
+    const result = client.importNuvioCollections({
       text: typeof a?.text === "string" ? a.text : "",
-    }),
+      mode: typeof a?.mode === "string" ? a.mode : "merge",
+      only: Array.isArray(a?.only) ? a.only : undefined,
+    });
+    // Replacing collections can leave a chosen picture unnamed.
+    sweepCollectionArt();
+    return result;
+  },
   /**
    * Looks for Nuvio Desktop's data on this PC. Only the known stores are
    * read; the folder comes from the environment, never from the interface.
@@ -2928,6 +2977,7 @@ app
       // Finish deleting old pieces before the renderer can request a new
       // engine. An rm already in flight cannot be stopped by torrentHost.
       await sweepTorrentCache().catch((error) => logError("torrent", error));
+      sweepCollectionArt();
       const look = drawnLook();
       // Windows switching between light and dark repaints the native bar.
       nativeTheme.on("updated", applyTitleOverlay);

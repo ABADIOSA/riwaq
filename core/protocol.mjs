@@ -238,6 +238,8 @@ export const DEFAULT_SETTINGS = {
   // the viewer asks the picker to remember them.
   sourceFacetsRemember: false,
   sourceFacets: {},
+  // The collections room as a grid of cards or one horizontal row.
+  collectionsLayout: "grid",
   // Streaming services the viewer pays for, shown as home rows.
   streamingServices: [],
   // Series: hide episode titles not reached yet.
@@ -608,6 +610,7 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     streamOrder: ["riwaq", "addon"],
     streamOrderInside: ["addon", "riwaq"],
     badgeLook: BADGE_LOOKS,
+    collectionsLayout: ["grid", "row"],
     titleTheme: ["artwork", "genre", "off"],
     themeSong: ["auto", "button", "off"],
     themeSongSource: ["auto", "previews"],

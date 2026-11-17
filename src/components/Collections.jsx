@@ -9,6 +9,7 @@ import {
   Download,
   FolderPlus,
   Folders,
+  HardDrive,
   LayoutGrid,
   Link2,
   Maximize2,
@@ -33,12 +34,25 @@ import {
   useScrollRow,
 } from "./UI.jsx";
 import {
+  IMPORT_MODES,
+  LIMITS,
+  LOCAL_ART,
+  artUrl,
   SHAPES,
   TMDB_PRESETS,
+  fromNuvio,
   parseTmdbSource,
   parseTraktSource,
   titlePlaces,
 } from "../../core/collections.mjs";
+import { presetCards } from "../../core/collection-presets.mjs";
+import {
+  CollectionArt,
+  FolderTile,
+  useActive,
+  useArt,
+  useReducedMotion,
+} from "./CollectionArt.jsx";
 import { sourceLabel } from "../../core/collection-sources.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
 import { watchedTitles, withoutWatched } from "../../core/library.mjs";
@@ -76,6 +90,14 @@ const COLLECTIONS = {
   other: "{n} مجموعة",
 };
 const ADDONS = forms("إضافة", "إضافتان", "إضافات", "إضافة");
+const PINNED = {
+  zero: "لا شيء على الرئيسية",
+  one: "واحدة على الرئيسية",
+  two: "اثنتان على الرئيسية",
+  few: "{n} على الرئيسية",
+  many: "{n} على الرئيسية",
+  other: "{n} على الرئيسية",
+};
 ADDONS.one = "إضافة واحدة";
 const REPOS = forms("مستودع", "مستودعان", "مستودعات", "مستودعاً", "مستودع");
 const TOOLS = forms("أداة", "أداتان", "أدوات", "أداة");
@@ -126,11 +148,12 @@ const titleCount = (c) =>
 /** A folder or collection face: its cover, or its emoji on the accent. */
 export function Face({ item, className = "" }) {
   const [broken, setBroken] = useState(false);
+  const cover = useArt(item.cover || item.backdrop || "");
   return (
     <span className={`collection-face ${className}`}>
-      {item.cover && !broken ? (
+      {cover && !broken ? (
         <img
-          src={item.cover}
+          src={cover}
           alt=""
           loading="lazy"
           onError={() => setBroken(true)}
@@ -144,16 +167,17 @@ export function Face({ item, className = "" }) {
 
 /** Pinned collections on the home page, one row of folder tiles each. */
 export function PinnedCollections({ state, onOpen }) {
+  const reduced = useReducedMotion(state.settings?.reduceMotion);
   const pinned = (state.collections || []).filter(
     (c) => c.pinned && c.folders.length,
   );
   if (!pinned.length) return null;
   return pinned.map((c) => (
-    <PinnedCollection key={c.id} c={c} onOpen={onOpen} />
+    <PinnedCollection key={c.id} c={c} onOpen={onOpen} reduced={reduced} />
   ));
 }
 
-function PinnedCollection({ c, onOpen }) {
+function PinnedCollection({ c, onOpen, reduced }) {
   const row = useScrollRow();
   return (
     <section className="rail pinned-collection">
@@ -173,14 +197,12 @@ function PinnedCollection({ c, onOpen }) {
       </RowHeading>
       <ScrollRow className="folder-row" row={row}>
         {c.folders.map((f) => (
-          <button
+          <FolderTile
             key={f.id}
-            className={`folder-tile shape-${f.shape}`}
+            folder={f}
+            reduced={reduced}
             onClick={() => onOpen(c.id, f.id)}
-          >
-            <Face item={f} />
-            <strong dir="auto">{f.title}</strong>
-          </button>
+          />
         ))}
       </ScrollRow>
     </section>
@@ -204,6 +226,8 @@ export default function CollectionsPage({
   const open = collections.find((c) => c.id === target?.id);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ emoji: "", title: "" });
+  // Before the early return: hooks run in the same order every render.
+  const reduced = useReducedMotion(state.settings.reduceMotion);
   if (open)
     return (
       <CollectionView
@@ -220,6 +244,18 @@ export default function CollectionsPage({
         onBack={() => setTarget(null)}
       />
     );
+  const layout = state.settings.collectionsLayout === "row" ? "row" : "grid";
+  const cards = collections.map((c, i) => (
+    <CollectionCard
+      key={c.id}
+      c={c}
+      first={i === 0}
+      last={i === collections.length - 1}
+      reduced={reduced}
+      onOpen={() => setTarget({ id: c.id })}
+      update={update}
+    />
+  ));
   const create = async (input) => {
     const next = await update("collectionsEdit", {
       action: "create",
@@ -289,68 +325,38 @@ export default function CollectionsPage({
       )}
       {collections.length ? (
         <>
-          <div className="collection-grid">
-            {collections.map((c, i) => (
-              <div key={c.id} className="collection-card">
+          <div className="collections-toolbar">
+            <span className="muted">
+              {arabicCount(collections.length, COLLECTIONS)} ·{" "}
+              {arabicCount(collections.filter((c) => c.pinned).length, PINNED)}
+            </span>
+            <div
+              className="segmented"
+              role="radiogroup"
+              aria-label="عرض المجموعات"
+            >
+              {[
+                ["grid", LayoutGrid, "شبكة"],
+                ["row", Rows3, "صف أفقي"],
+              ].map(([id, Icon, label]) => (
                 <button
-                  className="collection-open"
-                  onClick={() => setTarget({ id: c.id })}
+                  key={id}
+                  role="radio"
+                  aria-checked={layout === id}
+                  className={layout === id ? "selected" : ""}
+                  title={label}
+                  onClick={() => update("settings", { collectionsLayout: id })}
                 >
-                  <Face item={c} className="large" />
-                  <span>
-                    <strong dir="auto">
-                      {c.emoji && !c.cover ? "" : c.emoji} {c.title}
-                    </strong>
-                    <small>
-                      {arabicCount(c.folders.length, FOLDERS)} ·{" "}
-                      {arabicCount(titleCount(c), TITLES)}
-                    </small>
-                  </span>
+                  <Icon size={16} />
                 </button>
-                <div className="collection-tools">
-                  <button
-                    title={c.pinned ? "إلغاء التثبيت" : "ثبّت على الرئيسية"}
-                    className={c.pinned ? "on" : ""}
-                    onClick={() =>
-                      update("collectionsEdit", {
-                        action: "update",
-                        collectionId: c.id,
-                        pinned: !c.pinned,
-                      })
-                    }
-                  >
-                    {c.pinned ? <Pin size={15} /> : <PinOff size={15} />}
-                  </button>
-                  <button
-                    title="قدّمها"
-                    disabled={i === 0}
-                    onClick={() =>
-                      update("collectionsEdit", {
-                        action: "move",
-                        collectionId: c.id,
-                        direction: "up",
-                      })
-                    }
-                  >
-                    <ArrowUp size={15} />
-                  </button>
-                  <button
-                    title="أخّرها"
-                    disabled={i === collections.length - 1}
-                    onClick={() =>
-                      update("collectionsEdit", {
-                        action: "move",
-                        collectionId: c.id,
-                        direction: "down",
-                      })
-                    }
-                  >
-                    <ArrowDown size={15} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+          {layout === "row" ? (
+            <ScrollRow className="collection-row">{cards}</ScrollRow>
+          ) : (
+            <div className="collection-grid">{cards}</div>
+          )}
           <div className="collection-share">
             <span>شارك ترتيبك مع نوفيو أو احتفظ به:</span>
             <button
@@ -396,7 +402,196 @@ export default function CollectionsPage({
           </span>
         </Empty>
       )}
+      <PresetGallery
+        collections={collections}
+        tmdb={(state.providers || []).some(
+          (p) => p.id === "tmdb" && p.configured && p.enabled,
+        )}
+        update={update}
+        notice={notice}
+        onOpen={(id) => setTarget({ id })}
+      />
     </div>
+  );
+}
+
+/**
+ * A collection in the gallery: a wide card with its backdrop (its own
+ * cover, else its first folder's), its logo or name over a glass band, and
+ * its tools as glass chips. The first folder's moving cover plays only
+ * while this card is hovered or focused.
+ */
+function CollectionCard({ c, first, last, reduced, onOpen, update }) {
+  const { active, props } = useActive();
+  const lead =
+    c.folders.find((f) => f.backdrop || f.cover || f.gif) || c.folders[0];
+  const art = c.cover
+    ? { cover: c.cover, emoji: c.emoji }
+    : {
+        cover: lead?.backdrop || lead?.cover,
+        gif: lead?.gif,
+        gifOn: lead?.gifOn,
+        emoji: c.emoji || lead?.emoji,
+      };
+  const logo = useArt(c.logo || "");
+  const [logoBroken, setLogoBroken] = useState(false);
+  const move = (direction) =>
+    update("collectionsEdit", {
+      action: "move",
+      collectionId: c.id,
+      direction,
+    });
+  return (
+    <div
+      className={`collection-card cinematic ${active ? "is-active" : ""}`}
+      {...props}
+    >
+      <button
+        type="button"
+        className="collection-open"
+        aria-label={`${c.title}، ${arabicCount(c.folders.length, FOLDERS)}`}
+        onClick={onOpen}
+      >
+        <CollectionArt
+          item={art}
+          active={active}
+          reduced={reduced}
+          wide
+          className="collection-backdrop"
+        />
+        <span className="collection-card-info">
+          {logo && !logoBroken ? (
+            <img
+              className="collection-logo"
+              src={logo}
+              alt=""
+              referrerPolicy="no-referrer"
+              onError={() => setLogoBroken(true)}
+            />
+          ) : (
+            <strong dir="auto">
+              {c.emoji && <span className="pinned-emoji">{c.emoji}</span>}
+              {c.title}
+            </strong>
+          )}
+          <small>
+            {arabicCount(c.folders.length, FOLDERS)} ·{" "}
+            {arabicCount(titleCount(c), TITLES)}
+            {c.pinned ? " · على الرئيسية" : ""}
+          </small>
+        </span>
+      </button>
+      <div className="collection-tools">
+        <button
+          type="button"
+          className="lg-chip"
+          title={c.pinned ? "إلغاء التثبيت" : "ثبّت على الرئيسية"}
+          aria-label={c.pinned ? "إلغاء التثبيت" : "ثبّت على الرئيسية"}
+          aria-pressed={c.pinned}
+          onClick={() =>
+            update("collectionsEdit", {
+              action: "update",
+              collectionId: c.id,
+              pinned: !c.pinned,
+            })
+          }
+        >
+          {c.pinned ? <Pin size={15} /> : <PinOff size={15} />}
+        </button>
+        <button
+          type="button"
+          className="lg-chip"
+          title="قدّمها"
+          aria-label="قدّمها"
+          disabled={first}
+          onClick={() => move("up")}
+        >
+          <ArrowUp size={15} />
+        </button>
+        <button
+          type="button"
+          className="lg-chip"
+          title="أخّرها"
+          aria-label="أخّرها"
+          disabled={last}
+          onClick={() => move("down")}
+        >
+          <ArrowDown size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Riwaq's templates (core/collection-presets.mjs): eight collections of
+ * TMDB queries, added (or brought up to date) with one press. They read
+ * with the viewer's TMDB key; without one the gallery says so first.
+ */
+function PresetGallery({ collections, tmdb, update, notice, onOpen }) {
+  const cards = useMemo(() => presetCards(), []);
+  const [busy, setBusy] = useState("");
+  const have = new Set(collections.map((c) => c.id));
+  const add = async (card) => {
+    setBusy(card.id);
+    const next = await update("collectionsEdit", {
+      action: "preset",
+      preset: card.id,
+    });
+    setBusy("");
+    if (!next) return;
+    const id = `riwaq-preset-${card.id}`;
+    notice(
+      have.has(id)
+        ? `حُدّثت «${card.title}» من قالبها`
+        : `أُضيفت «${card.title}» إلى مجموعاتك`,
+    );
+    onOpen(id);
+  };
+  return (
+    <section className="preset-gallery" aria-labelledby="preset-gallery-title">
+      <div className="section-heading">
+        <div>
+          <h2 id="preset-gallery-title">قوالب رِواق</h2>
+          <span>
+            مجموعات جاهزة من استعلامات TMDB تعدّلها كما تشاء: السينما العالمية،
+            تلفزيون الواقع، العائلة، الوثائقيات وغيرها.
+          </span>
+        </div>
+      </div>
+      {!tmdb && (
+        <p className="inline-warning">
+          القوالب تقرأ من TMDB بمفتاحك. أضف مفتاح TMDB في «مصادر البيانات»
+          لتمتلئ مجلداتها؛ بدونه تبقى المجلدات وتقول ما ينقصها.
+        </p>
+      )}
+      <div className="preset-grid">
+        {cards.map((card) => {
+          const added = have.has(`riwaq-preset-${card.id}`);
+          return (
+            <article key={card.id} className="preset-card">
+              <span className="preset-emoji" aria-hidden="true">
+                {card.emoji}
+              </span>
+              <b>{card.title}</b>
+              <small>
+                {arabicCount(card.folders, FOLDERS)} ·{" "}
+                {arabicCount(card.sources, SOURCES)}
+              </small>
+              <button
+                type="button"
+                className={added ? "secondary small" : "primary small"}
+                aria-busy={busy === card.id}
+                disabled={!!busy}
+                onClick={() => add(card)}
+              >
+                {added ? "حدّثها" : "أضفها"}
+              </button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -419,6 +614,10 @@ function CollectionView({
   );
   const [editing, setEditing] = useState(false);
   const [newFolder, setNewFolder] = useState("");
+  const reduced = useReducedMotion(state.settings.reduceMotion);
+  const heroArt = useArt(collection.cover || "");
+  const heroLogo = useArt(collection.logo || "");
+  const [logoBroken, setLogoBroken] = useState(false);
   const folder =
     collection.folders.find((f) => f.id === folderId) || collection.folders[0];
   const watched = state.settings.hideWatched
@@ -438,18 +637,27 @@ function CollectionView({
     <div className="page-body collection-view">
       <div
         className="collection-hero"
-        style={
-          collection.cover
-            ? { backgroundImage: `url("${collection.cover}")` }
-            : undefined
-        }
+        style={heroArt ? { backgroundImage: `url("${heroArt}")` } : undefined}
       >
         <div className="collection-hero-inner">
           <button className="text-button" onClick={onBack}>
             <ArrowRight size={16} /> كل المجموعات
           </button>
           {editing ? (
-            <CollectionFields collection={collection} edit={edit} />
+            <CollectionFields
+              collection={collection}
+              edit={edit}
+              notice={notice}
+            />
+          ) : heroLogo && !logoBroken ? (
+            <h1 className="collection-hero-logo">
+              <img
+                src={heroLogo}
+                alt={collection.title}
+                referrerPolicy="no-referrer"
+                onError={() => setLogoBroken(true)}
+              />
+            </h1>
           ) : (
             <h1 dir="auto">
               {collection.emoji && (
@@ -506,7 +714,29 @@ function CollectionView({
           </div>
         </div>
       </div>
-      {(collection.view === "tabs" || editing) && (
+      {collection.view === "tabs" &&
+        !editing &&
+        collection.folders.length > 0 && (
+          // The folders as cards (their covers, moving on hover or focus);
+          // choosing one shows it below.
+          <ScrollRow
+            className="folder-gallery"
+            role="tablist"
+            aria-label="مجلدات المجموعة"
+          >
+            {collection.folders.map((f) => (
+              <FolderTile
+                key={f.id}
+                folder={f}
+                reduced={reduced}
+                role="tab"
+                selected={f.id === folder?.id}
+                onClick={() => setFolderId(f.id)}
+              />
+            ))}
+          </ScrollRow>
+        )}
+      {editing && (
         <div className="folder-tabs" role="tablist">
           {collection.folders.map((f) => (
             <button
@@ -586,6 +816,8 @@ function CollectionView({
                 collection={collection}
                 folder={folder}
                 edit={edit}
+                notice={notice}
+                reduced={reduced}
                 onRemoved={() => setFolderId("")}
               />
             )}
@@ -625,11 +857,11 @@ function Field({ label, value, onCommit, ...props }) {
   );
 }
 
-function CollectionFields({ collection, edit }) {
+function CollectionFields({ collection, edit, notice }) {
   return (
     <div className="collection-fields">
       <Field
-        label="الرمز"
+        label="رمز تعبيري"
         className="emoji-input"
         maxLength={8}
         value={collection.emoji}
@@ -641,18 +873,136 @@ function CollectionFields({ collection, edit }) {
         value={collection.title}
         onCommit={(title) => title.trim() && edit({ action: "update", title })}
       />
-      <Field
-        label="صورة الغلاف (رابط https)"
-        dir="ltr"
-        maxLength={2000}
+      <ArtField
+        label="الخلفية (رابط https أو صورة من جهازك)"
         value={collection.cover}
+        notice={notice}
         onCommit={(cover) => edit({ action: "update", cover })}
+      />
+      <ArtField
+        label="شعار المجموعة"
+        value={collection.logo}
+        notice={notice}
+        onCommit={(logo) => edit({ action: "update", logo })}
       />
     </div>
   );
 }
 
-function FolderEditor({ collection, folder, edit, onRemoved }) {
+/**
+ * A picture field: an HTTPS address typed in, or a picture chosen from this
+ * computer (the native dialog; Riwaq keeps it and the field shows only that
+ * it is local). Empty clears it.
+ */
+function ArtField({ label, value, onCommit, notice }) {
+  const local = typeof value === "string" && LOCAL_ART.test(value);
+  const [error, setError] = useState("");
+  const pick = async () => {
+    try {
+      const picked = await call("collectionArtPick");
+      if (picked?.ref) onCommit(picked.ref);
+    } catch (e) {
+      notice?.(e.message);
+    }
+  };
+  return (
+    <div className="collection-field art-field">
+      <span>{label}</span>
+      <div className="art-field-row">
+        {local ? (
+          <span className="art-local">
+            <HardDrive size={14} aria-hidden="true" /> صورة من هذا الجهاز
+          </span>
+        ) : (
+          <ArtInput
+            value={value}
+            onCommit={onCommit}
+            label={label}
+            setError={setError}
+          />
+        )}
+        <button
+          type="button"
+          className="lg-chip"
+          title="اختر صورة من جهازك"
+          aria-label={`${label}: اختر صورة من جهازك`}
+          onClick={pick}
+        >
+          <HardDrive size={14} />
+        </button>
+        {value && (
+          <button
+            type="button"
+            className="lg-chip"
+            title="أزل الصورة"
+            aria-label={`${label}: أزل الصورة`}
+            onClick={() => onCommit("")}
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      {error && (
+        <small className="art-error" role="alert">
+          {error}
+        </small>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The address part of an ArtField: commits on blur or Enter. An address
+ * Riwaq would not keep (not HTTPS, a .gifv or a video) is refused here with
+ * a reason, so the picture already set stays.
+ */
+function ArtInput({ value, onCommit, label, setError }) {
+  const [text, setText] = useState(value || "");
+  const [invalid, setInvalid] = useState(false);
+  useEffect(() => setText(value || ""), [value]);
+  const commit = () => {
+    const next = text.trim();
+    if (next === (value || "")) {
+      setInvalid(false);
+      return setError("");
+    }
+    if (next && !artUrl(next)) {
+      setInvalid(true);
+      setError(
+        /\.(gifv|mp4|m4v|webm|mov|mkv|avi)(\?|#|$)/i.test(next)
+          ? "هذا مقطع فيديو وليس صورة؛ اختر رابط صورة GIF أو PNG أو JPEG أو WebP."
+          : "استخدم رابط صورة يبدأ بـ https وبلا اسم مستخدم أو كلمة مرور.",
+      );
+      setText(value || "");
+      return;
+    }
+    setInvalid(false);
+    setError("");
+    onCommit(next);
+  };
+  return (
+    <input
+      dir="ltr"
+      maxLength={2000}
+      aria-label={label}
+      aria-invalid={invalid}
+      placeholder="https://…"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
+  );
+}
+
+function FolderEditor({
+  collection,
+  folder,
+  edit,
+  notice,
+  reduced,
+  onRemoved,
+}) {
   const [catalogs, setCatalogs] = useState(null);
   const [link, setLink] = useState("");
   const [linkMedia, setLinkMedia] = useState("movie");
@@ -700,13 +1050,6 @@ function FolderEditor({ collection, folder, edit, onRemoved }) {
             title.trim() && folderEdit({ action: "folderUpdate", title })
           }
         />
-        <Field
-          label="غلاف المجلد (رابط https)"
-          dir="ltr"
-          maxLength={2000}
-          value={folder.cover}
-          onCommit={(cover) => folderEdit({ action: "folderUpdate", cover })}
-        />
         <label className="collection-field">
           <span>شكل البطاقة</span>
           <select
@@ -723,6 +1066,12 @@ function FolderEditor({ collection, folder, edit, onRemoved }) {
           </select>
         </label>
       </div>
+      <FolderLook
+        folder={folder}
+        reduced={reduced}
+        notice={notice}
+        set={(patch) => folderEdit({ action: "folderUpdate", ...patch })}
+      />
       <div className="folder-sources">
         <h3>مصادر المجلد</h3>
         {folder.catalogs.length ? (
@@ -946,6 +1295,94 @@ function FolderEditor({ collection, folder, edit, onRemoved }) {
 }
 
 /** Hand-picked titles in the viewer's order, then each catalog's row. */
+/**
+ * How a folder's card looks (Nuvio's folder fields): the still cover, the
+ * moving cover and whether it may play, the backdrop, the title logo, the
+ * glow and hiding the name, with the card drawn still and as it looks
+ * under the pointer, so a change shows before it is used.
+ */
+function FolderLook({ folder, reduced, notice, set }) {
+  const toggle = (key, on, title, text) => (
+    <label className="look-toggle">
+      <input
+        type="checkbox"
+        checked={!!on}
+        onChange={(e) => set({ [key]: e.target.checked })}
+      />
+      <span>
+        <b>{title}</b>
+        <small>{text}</small>
+      </span>
+    </label>
+  );
+  return (
+    <section className="folder-look lg-panel" aria-label="مظهر بطاقة المجلد">
+      <div className="folder-look-fields">
+        <ArtField
+          label="الغلاف الثابت"
+          value={folder.cover}
+          notice={notice}
+          onCommit={(cover) => set({ cover })}
+        />
+        <ArtField
+          label="الغلاف المتحرك (GIF)"
+          value={folder.gif}
+          notice={notice}
+          onCommit={(gif) => set({ gif })}
+        />
+        <ArtField
+          label="الخلفية الكبيرة"
+          value={folder.backdrop}
+          notice={notice}
+          onCommit={(backdrop) => set({ backdrop })}
+        />
+        <ArtField
+          label="شعار العنوان"
+          value={folder.logo}
+          notice={notice}
+          onCommit={(logo) => set({ logo })}
+        />
+        {folder.gif &&
+          toggle(
+            "gifOn",
+            folder.gifOn !== false,
+            "شغّل الغلاف المتحرك",
+            "يتحرك عند مرور المؤشر أو التركيز بلوحة المفاتيح فقط، ولا يتحرك مع «تقليل الحركة».",
+          )}
+        {toggle(
+          "glow",
+          folder.glow,
+          "توهّج عند التركيز",
+          "هالة بلون السمة حول البطاقة المختارة.",
+        )}
+        {toggle(
+          "hideTitle",
+          folder.hideTitle,
+          "أخفِ الاسم",
+          "حين يقول الغلاف أو الشعار الاسم. يبقى الاسم لقارئ الشاشة.",
+        )}
+        <p className="subtle">
+          ملف ‎.gifv أو مقطع فيديو لا يُقبل غلافاً متحركاً: يجب أن يكون صورة
+          GIF. الصور من جهازك تبقى عليه، ولا تنتقل في النسخ الاحتياطي ولا الحساب
+          ولا ملف نوفيو.
+        </p>
+      </div>
+      <div className="folder-look-preview" aria-label="معاينة">
+        <figure>
+          <FolderTile folder={folder} reduced={reduced} forceActive={false} />
+          <figcaption>ثابت</figcaption>
+        </figure>
+        <figure>
+          <FolderTile folder={folder} reduced={reduced} forceActive />
+          <figcaption>
+            {reduced ? "عند التمرير (الحركة مقللة)" : "عند التمرير"}
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+  );
+}
+
 function FolderContent({
   collection,
   folder,
@@ -1298,9 +1735,23 @@ export function NuvioLink({ act, setState, notice, onClose }) {
     setResult(r.result);
     setStep("done");
   };
+  // The pasted file is read here first (the same reading main does), so
+  // the viewer sees what is in it and chooses before anything is saved.
+  const [peek, setPeek] = useState(null);
+  const [only, setOnly] = useState([]);
+  const [mode, setMode] = useState("merge");
+  const preview = () => {
+    try {
+      const read = fromNuvio(text);
+      setPeek({ ...read, error: "" });
+      setOnly(read.collections.map((c) => c.id));
+    } catch (e) {
+      setPeek({ error: e.message });
+    }
+  };
   const paste = async () => {
     setBusy(true);
-    const r = await act("importNuvioCollections", { text });
+    const r = await act("importNuvioCollections", { text, mode, only });
     setBusy(false);
     if (!r) return;
     setState(r.state);
@@ -1345,16 +1796,44 @@ export function NuvioLink({ act, setState, notice, onClose }) {
             rows={8}
             placeholder='[{"id": "...", "title": "...", "folders": [...]}]'
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setPeek(null);
+            }}
           />
+          {peek?.error && <p className="inline-warning">{peek.error}</p>}
+          {peek && !peek.error && (
+            <NuvioPreview
+              peek={peek}
+              only={only}
+              setOnly={setOnly}
+              mode={mode}
+              setMode={setMode}
+            />
+          )}
           <div className="button-row">
-            <button
-              className="primary"
-              disabled={!text.trim() || busy}
-              onClick={paste}
-            >
-              استورد المجموعات
-            </button>
+            {peek && !peek.error ? (
+              <button
+                className="primary"
+                disabled={!only.length || busy}
+                aria-busy={busy}
+                onClick={paste}
+              >
+                {mode === "replace"
+                  ? "استبدل مجموعاتي بها"
+                  : mode === "add"
+                    ? "أضفها نسخاً جديدة"
+                    : "استورد ودمج"}
+              </button>
+            ) : (
+              <button
+                className="primary"
+                disabled={!text.trim() || busy}
+                onClick={preview}
+              >
+                اعرض ما في الملف
+              </button>
+            )}
             <button className="secondary" onClick={() => setStep("start")}>
               رجوع
             </button>
@@ -1511,10 +1990,50 @@ export function NuvioLink({ act, setState, notice, onClose }) {
               موقعها أو أنها متوقفة.
             </p>
           )}
+          {(result.added !== undefined || result.updated !== undefined) && (
+            <ul className="nuvio-report">
+              <li>
+                <b>{result.added || 0}</b> جديدة
+              </li>
+              <li>
+                <b>{result.updated || 0}</b> حُدّثت
+              </li>
+              {result.replaced > 0 && (
+                <li>
+                  <b>{result.replaced}</b> استُبدلت
+                </li>
+              )}
+              {result.skipped > 0 && (
+                <li>
+                  {`${result.skipped} لم تتسع (الحد ${LIMITS.collections} مجموعة و${LIMITS.folders} مجلد)`}
+                </li>
+              )}
+            </ul>
+          )}
+          {result.over &&
+            result.over.collections +
+              result.over.folders +
+              result.over.sources >
+              0 && (
+              <p className="inline-warning">
+                {`تجاوز الملف حدود رِواق: ${result.over.collections} مجموعة و${result.over.folders} مجلداً و${result.over.sources} مصدراً لم تنتقل (الحد ${LIMITS.collections} مجموعة، ${LIMITS.folders} مجلد لكل مجموعة، ${LIMITS.catalogs} مصدراً من كل نوع لكل مجلد).`}
+              </p>
+            )}
           {result.skippedSources > 0 && (
-            <p className="subtle">
-              {n(result.skippedSources, SOURCES)} من TMDB أو Trakt لم ينتقل.
-            </p>
+            <details className="nuvio-unsupported">
+              <summary>
+                {n(result.skippedSources, SOURCES)} لا يقرؤها رِواق بعد؛ حُفظت
+                كما هي وتعود في ملف نوفيو
+              </summary>
+              <ul>
+                {(result.unsupported || []).map((u, i) => (
+                  <li key={i} dir="auto">
+                    {u.collection} ← {u.folder}: {u.title || u.provider}{" "}
+                    <small>({u.provider})</small>
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
           <button
             className="primary"
@@ -1528,5 +2047,94 @@ export function NuvioLink({ act, setState, notice, onClose }) {
         </>
       )}
     </Modal>
+  );
+}
+
+const MODE_TEXT = {
+  merge: [
+    "دمج",
+    "المجموعة الموجودة تتحدّث مجلداً مجلداً ومجلداتك الأخرى تبقى؛ الجديدة تُضاف. الاستيراد مرة ثانية لا يكرر شيئاً.",
+  ],
+  add: ["إضافة نسخ", "تُضاف نسخة جديدة بجانب مجموعاتك حتى لو كانت موجودة."],
+  replace: [
+    "استبدال",
+    "تحل المجموعات المختارة محل كل مجموعاتك في هذا الملف الشخصي.",
+  ],
+};
+
+/** What a pasted Nuvio file holds, which of it to bring, and how. */
+function NuvioPreview({ peek, only, setOnly, mode, setMode }) {
+  const { report } = peek;
+  const over =
+    report.over.collections + report.over.folders + report.over.sources;
+  return (
+    <div className="nuvio-preview">
+      <p className="muted">
+        {`في الملف ${peek.collections.length} مجموعة و${report.folders} مجلداً و${report.sources} مصدراً يقرؤه رِواق.`}
+        {report.unsupported.length > 0 &&
+          ` ${report.unsupported.length} مصدراً لا يقرؤه بعد سيُحفظ كما هو.`}
+      </p>
+      {over > 0 && (
+        <p className="inline-warning">
+          {`لن يتسع كله: ${report.over.collections} مجموعة و${report.over.folders} مجلداً و${report.over.sources} مصدراً فوق حدود رِواق.`}
+        </p>
+      )}
+      <fieldset className="nuvio-pick">
+        <legend>المجموعات</legend>
+        {peek.collections.map((c) => (
+          <label key={c.id}>
+            <input
+              type="checkbox"
+              checked={only.includes(c.id)}
+              onChange={(e) =>
+                setOnly(
+                  e.target.checked
+                    ? [...only, c.id]
+                    : only.filter((id) => id !== c.id),
+                )
+              }
+            />
+            <span dir="auto">
+              <b>{c.title}</b>
+              <small>{arabicCount(c.folders.length, FOLDERS)}</small>
+            </span>
+          </label>
+        ))}
+        {peek.collections.length > 1 && (
+          <button
+            type="button"
+            className="text-button"
+            onClick={() =>
+              setOnly(
+                only.length === peek.collections.length
+                  ? []
+                  : peek.collections.map((c) => c.id),
+              )
+            }
+          >
+            {only.length === peek.collections.length
+              ? "ألغِ الكل"
+              : "اختر الكل"}
+          </button>
+        )}
+      </fieldset>
+      <fieldset className="nuvio-mode">
+        <legend>طريقة الاستيراد</legend>
+        {IMPORT_MODES.map((id) => (
+          <label key={id} className={mode === id ? "selected" : ""}>
+            <input
+              type="radio"
+              name="nuvio-mode"
+              checked={mode === id}
+              onChange={() => setMode(id)}
+            />
+            <span>
+              <b>{MODE_TEXT[id][0]}</b>
+              <small>{MODE_TEXT[id][1]}</small>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+    </div>
   );
 }

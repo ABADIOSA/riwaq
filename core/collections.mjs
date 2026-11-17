@@ -49,6 +49,24 @@ export function coverUrl(value) {
     return "";
   }
 }
+/**
+ * Artwork for a collection or folder (cover, moving cover, backdrop, logo):
+ * an HTTPS image address, or a picture the viewer chose from their own
+ * computer, kept by Riwaq under an opaque ID ("local:" and 32 hex digits;
+ * never a path). A ".gifv" (or other video) address is not an image an
+ * <img> can show, whatever its name says: it is refused rather than turned
+ * into something it is not.
+ */
+export const LOCAL_ART = /^local:[a-f\d]{32}$/;
+const VIDEO_EXT = /\.(gifv|mp4|m4v|webm|mov|mkv|avi)(?:[?#]|$)/i;
+export function artUrl(value) {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (LOCAL_ART.test(text)) return text;
+  const url = coverUrl(text);
+  if (!url || VIDEO_EXT.test(new URL(url).pathname)) return "";
+  return url;
+}
 const emojiOf = (value) => {
   const text = line(value, 16);
   // One grapheme is the intent; a few code points allow flags and joiners.
@@ -137,6 +155,10 @@ const NUMBER_FILTERS = {
   year: [1870, 2200],
   withRuntimeGte: [0, 1000],
   withRuntimeLte: [0, 1000],
+  // Riwaq's own: released within the last N days, counted from the day
+  // the row is asked for, so a "New" row stays new in later years
+  // (core/collection-sources.mjs tmdbRequest).
+  recentDays: [1, 3650],
 };
 function cleanFilters(input) {
   if (!input || typeof input !== "object") return undefined;
@@ -213,6 +235,31 @@ function cleanTrakt(source) {
   };
 }
 const traktKey = (t) => `${t.list}|${t.media}`;
+/**
+ * A source Riwaq cannot read, kept as plain data so an export gives it back
+ * as it came: strings, numbers, booleans and null, in objects and lists at
+ * most four deep, 40 keys, 60 items and 500 characters a string. Nothing in
+ * it is ever run or fetched.
+ */
+export function plainCopy(value, depth = 0) {
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") return value.slice(0, 500);
+  if (depth >= 4 || typeof value !== "object") return undefined;
+  if (Array.isArray(value))
+    return value
+      .slice(0, 60)
+      .map((v) => plainCopy(v, depth + 1))
+      .filter((v) => v !== undefined);
+  const out = {};
+  for (const [key, v] of Object.entries(value).slice(0, 40)) {
+    if (!/^[\w.-]{1,60}$/.test(key) || key === "__proto__") continue;
+    const copy = plainCopy(v, depth + 1);
+    if (copy !== undefined) out[key] = copy;
+  }
+  return out;
+}
+
 /** Adds cleaned, unique entries up to the per-folder limit. */
 function collect(input, clean, key) {
   const out = [];
@@ -277,10 +324,14 @@ function cleanFolder(folder) {
   const unsupported = (
     Array.isArray(folder.unsupported) ? folder.unsupported : []
   )
-    .map((u) => ({
-      provider: line(u?.provider, 30),
-      title: line(u?.title, 80),
-    }))
+    .map((u) => {
+      const raw = plainCopy(u?.raw);
+      return {
+        provider: line(u?.provider, 30),
+        title: line(u?.title, 80),
+        ...(raw && typeof raw === "object" ? { raw } : {}),
+      };
+    })
     .filter((u) => u.provider)
     .slice(0, LIMITS.catalogs);
   const titles = [];
@@ -298,14 +349,38 @@ function cleanFolder(folder) {
     id: ID.test(folder.id || "") ? folder.id : newId(),
     title,
     emoji: emojiOf(folder.emoji),
-    cover: coverUrl(folder.cover),
+    cover: artUrl(folder.cover),
     shape: SHAPES.includes(folder.shape) ? folder.shape : "poster",
+    ...folderLook(folder),
     catalogs,
     tmdb,
     trakt,
     ...(unsupported.length ? { unsupported } : {}),
     titles,
   };
+}
+
+/**
+ * How a folder's card looks beyond its cover (Nuvio's folder fields): the
+ * moving cover shown on hover or focus, and whether it may play; a large
+ * backdrop for its page; a title logo; the glow around a focused card; and
+ * hiding the typed name (a cover or logo that already says it). Only what
+ * is set is kept, so older folders keep their shape.
+ */
+function folderLook(folder) {
+  const out = {};
+  const gif = artUrl(folder.gif);
+  if (gif) {
+    out.gif = gif;
+    out.gifOn = folder.gifOn !== false;
+  }
+  const backdrop = artUrl(folder.backdrop);
+  if (backdrop) out.backdrop = backdrop;
+  const logo = artUrl(folder.logo);
+  if (logo) out.logo = logo;
+  if (folder.glow === true) out.glow = true;
+  if (folder.hideTitle === true) out.hideTitle = true;
+  return out;
 }
 
 function cleanCollection(collection) {
@@ -320,11 +395,13 @@ function cleanCollection(collection) {
     if (clean && !folders.some((f) => f.id === clean.id)) folders.push(clean);
     if (folders.length >= LIMITS.folders) break;
   }
+  const logo = artUrl(collection.logo);
   return {
     id: ID.test(collection.id || "") ? collection.id : newId(),
     title,
     emoji: emojiOf(collection.emoji),
-    cover: coverUrl(collection.cover),
+    cover: artUrl(collection.cover),
+    ...(logo ? { logo } : {}),
     pinned: collection.pinned === true,
     view: VIEWS.includes(collection.view) ? collection.view : "tabs",
     folders,
@@ -405,7 +482,7 @@ export function editCollections(list, input = {}) {
       const index = at(input.collectionId);
       const current = collections[index];
       const patch = {};
-      for (const key of ["title", "emoji", "cover", "view"])
+      for (const key of ["title", "emoji", "cover", "logo", "view"])
         if (input[key] !== undefined) patch[key] = input[key];
       // An empty rename keeps the current name rather than failing.
       if (patch.title !== undefined && !line(patch.title, 80))
@@ -438,7 +515,18 @@ export function editCollections(list, input = {}) {
     case "folderUpdate":
       return withFolder((folder) => {
         const current = { ...folder };
-        for (const key of ["title", "emoji", "cover", "shape"])
+        for (const key of [
+          "title",
+          "emoji",
+          "cover",
+          "shape",
+          "gif",
+          "gifOn",
+          "backdrop",
+          "logo",
+          "glow",
+          "hideTitle",
+        ])
           if (input[key] !== undefined) folder[key] = input[key];
         if (!line(folder.title, 80)) folder.title = current.title;
         return folder;
@@ -569,12 +657,35 @@ const nuvioId = (id) => {
           .replace(/[^\w-]/g, "")
           .slice(-58)
       : "";
+  // Riwaq's own export carries IDs that already went through here: keep
+  // them, so importing it back updates rather than copies.
+  if (/^nuvio-[\w-]+$/.test(safe)) return safe;
   return safe ? `nuvio-${safe}` : undefined;
 };
 
+const NUVIO_SHAPES = {
+  poster: "POSTER",
+  landscape: "LANDSCAPE",
+  square: "SQUARE",
+};
+const shapeFrom = (value) => {
+  const shape = String(value || "poster").toLowerCase();
+  return shape === "wide" ? "landscape" : shape;
+};
+const bool = (value) => (typeof value === "boolean" ? value : undefined);
+
+/**
+ * Nuvio's collections JSON into Riwaq collections. Every display field
+ * comes across on its own (cover, moving cover and whether it plays, hero
+ * backdrop, title logo, focus glow, hidden title, tile shape), so a moving
+ * cover never stands in for the still one. Sources Riwaq cannot read are
+ * kept as they came and named in the report, never dropped quietly; what
+ * did not fit a limit is counted too.
+ */
 export function fromNuvio(input) {
   let data = input;
   if (typeof data === "string") {
+    if (data.length > 4_000_000) throw new Error("ملف مجموعات نوفيو كبير جداً");
     try {
       data = JSON.parse(data);
     } catch {
@@ -590,122 +701,186 @@ export function fromNuvio(input) {
         ? [data]
         : data;
   if (!Array.isArray(data)) throw new Error("ملف مجموعات نوفيو غير صالح");
+  const report = {
+    sources: 0,
+    unsupported: [],
+    over: { collections: 0, folders: 0, sources: 0 },
+    unnamed: 0,
+  };
+  report.over.collections = Math.max(0, data.length - LIMITS.collections);
   let skipped = 0;
-  const collections = data.map((c) => ({
-    id: nuvioId(c?.id),
-    title: c?.title,
-    cover: c?.backdropImageUrl,
-    pinned: c?.pinToTop === true,
-    view: String(c?.viewMode || "").toUpperCase() === "ROWS" ? "rows" : "tabs",
-    folders: (Array.isArray(c?.folders) ? c.folders : []).map((f, fi) => {
-      const sources =
-        Array.isArray(f?.sources) && f.sources.length
-          ? f.sources
-          : (Array.isArray(f?.catalogSources) ? f.catalogSources : []).map(
-              (s) => ({ ...s, provider: "addon" }),
-            );
-      const catalogs = [];
-      const tmdb = [];
-      const trakt = [];
-      const unsupported = [];
-      const skip = (s) => {
-        skipped++;
-        unsupported.push({
-          provider: String(s?.provider || "addon").toLowerCase(),
-          title: s?.title || s?.catalogId || "",
-        });
-      };
-      for (const s of sources) {
-        const provider = String(s?.provider || "addon").toLowerCase();
-        const media = /^(tv|series)$/i.test(String(s?.mediaType || ""))
-          ? "tv"
-          : "movie";
-        if (provider === "tmdb") {
-          const t = cleanTmdb({
-            kind: String(s?.tmdbSourceType || "discover").toLowerCase(),
-            id: s?.tmdbId,
-            media,
-            sort: s?.sortBy,
-            title: s?.title,
-            filters: s?.filters,
-          });
-          if (t) tmdb.push(t);
-          else skip(s);
-        } else if (provider === "trakt") {
-          const t = cleanTrakt({
-            list: s?.traktListId,
-            media,
-            sort: s?.sortBy,
-            how: s?.sortHow,
-            title: s?.title,
-          });
-          if (t) trakt.push(t);
-          else skip(s);
-        } else {
-          const c = cleanCatalog({
-            addon: typeof s?.addonId === "string" ? s.addonId : "",
-            type: typeof s?.type === "string" ? s.type : "",
-            catalog: typeof s?.catalogId === "string" ? s.catalogId : "",
-            genre: s?.genre && s.genre !== "none" ? s.genre : "",
-          });
-          if (c && provider === "addon") catalogs.push(c);
-          else skip(s);
+  const collections = data.slice(0, LIMITS.collections).map((c) => {
+    const folderList = Array.isArray(c?.folders) ? c.folders : [];
+    report.over.folders += Math.max(0, folderList.length - LIMITS.folders);
+    return {
+      id: nuvioId(c?.id),
+      title: c?.title,
+      cover: c?.backdropImageUrl,
+      pinned: c?.pinToTop === true,
+      view:
+        String(c?.viewMode || "").toUpperCase() === "ROWS" ? "rows" : "tabs",
+      folders: folderList.slice(0, LIMITS.folders).map((f, fi) => {
+        const sources =
+          Array.isArray(f?.sources) && f.sources.length
+            ? f.sources
+            : (Array.isArray(f?.catalogSources) ? f.catalogSources : []).map(
+                (s) => ({ ...s, provider: "addon" }),
+              );
+        const catalogs = [];
+        const tmdb = [];
+        const trakt = [];
+        const unsupported = [];
+        const folderName =
+          (typeof f?.title === "string" && f.title.trim()) ||
+          sources.find((s) => typeof s?.title === "string" && s.title.trim())
+            ?.title ||
+          `مجلد ${fi + 1}`;
+        const skip = (s) => {
+          skipped++;
+          const entry = {
+            provider: String(s?.provider || "addon").toLowerCase(),
+            title: s?.title || s?.catalogId || "",
+          };
+          if (report.unsupported.length < 200)
+            report.unsupported.push({
+              ...entry,
+              collection: String(c?.title || ""),
+              folder: folderName,
+            });
+          unsupported.push({ ...entry, raw: plainCopy(s) });
+        };
+        const keep = (list, item) => {
+          if (list.length >= LIMITS.catalogs) report.over.sources++;
+          else {
+            list.push(item);
+            report.sources++;
+          }
+        };
+        for (const s of sources) {
+          const provider = String(s?.provider || "addon").toLowerCase();
+          const media = /^(tv|series)$/i.test(String(s?.mediaType || ""))
+            ? "tv"
+            : "movie";
+          if (provider === "tmdb") {
+            const t = cleanTmdb({
+              kind: String(s?.tmdbSourceType || "discover").toLowerCase(),
+              id: s?.tmdbId,
+              media,
+              sort: s?.sortBy,
+              title: s?.title,
+              filters: s?.filters,
+            });
+            if (t) keep(tmdb, t);
+            else skip(s);
+          } else if (provider === "trakt") {
+            const t = cleanTrakt({
+              list: s?.traktListId,
+              media,
+              sort: s?.sortBy,
+              how: s?.sortHow,
+              title: s?.title,
+            });
+            if (t) keep(trakt, t);
+            else skip(s);
+          } else {
+            const cat = cleanCatalog({
+              addon: typeof s?.addonId === "string" ? s.addonId : "",
+              type: typeof s?.type === "string" ? s.type : "",
+              catalog: typeof s?.catalogId === "string" ? s.catalogId : "",
+              genre: s?.genre && s.genre !== "none" ? s.genre : "",
+            });
+            if (cat && provider === "addon") keep(catalogs, cat);
+            else skip(s);
+          }
         }
-      }
-      // Nuvio lets a folder hide its name behind a cover or logo, and such a
-      // folder may have none at all; it still needs a name here to be kept.
-      const named =
-        (typeof f?.title === "string" && f.title.trim()) ||
-        sources.find((s) => typeof s?.title === "string" && s.title.trim())
-          ?.title ||
-        `مجلد ${fi + 1}`;
-      return {
-        id: nuvioId(f?.id),
-        title: named,
-        emoji: f?.coverEmoji,
-        cover: [f?.coverImageUrl, f?.heroBackdropUrl, f?.focusGifUrl]
-          .map(coverUrl)
-          .find(Boolean),
-        shape:
-          String(f?.tileShape || "poster").toLowerCase() === "wide"
-            ? "landscape"
-            : String(f?.tileShape || "poster").toLowerCase(),
-        catalogs,
-        tmdb,
-        trakt,
-        unsupported,
-      };
-    }),
-  }));
+        // Nuvio lets a folder hide its name behind a cover or logo, and such
+        // a folder may have none at all; it still needs a name here.
+        if (!(typeof f?.title === "string" && f.title.trim())) report.unnamed++;
+        return {
+          id: nuvioId(f?.id),
+          title: folderName,
+          emoji: f?.coverEmoji,
+          cover: f?.coverImageUrl,
+          gif: f?.focusGifUrl,
+          gifOn: bool(f?.focusGifEnabled),
+          backdrop: f?.heroBackdropUrl,
+          logo: f?.titleLogoUrl,
+          glow: f?.focusGlowEnabled === true,
+          hideTitle: f?.hideTitle === true,
+          shape: shapeFrom(f?.tileShape),
+          catalogs,
+          tmdb,
+          trakt,
+          unsupported,
+        };
+      }),
+    };
+  });
   const clean = cleanCollections(collections);
   return {
     collections: clean,
     folders: clean.reduce((n, c) => n + c.folders.length, 0),
     skipped,
+    report: {
+      ...report,
+      collections: clean.length,
+      folders: clean.reduce((n, c) => n + c.folders.length, 0),
+      invalid: Math.min(data.length, LIMITS.collections) - clean.length,
+    },
   };
 }
 
 /**
+ * Filters for Nuvio: a period counted back from today ("recentDays") also
+ * goes as the date it means today, which Nuvio understands; reading the
+ * file back, the period wins again.
+ */
+function nuvioFilters(filters) {
+  if (!filters) return null;
+  if (!filters.recentDays || filters.releaseDateGte) return filters;
+  return { ...filters, releaseDateGte: daysAgo(filters.recentDays) };
+}
+export const daysAgo = (days, now = Date.now()) =>
+  new Date(now - days * 86400000).toISOString().slice(0, 10);
+
+/** A picture as Nuvio can read it: an address, never a local file. */
+const exportArt = (value) => (value && !LOCAL_ART.test(value) ? value : null);
+
+/**
  * Riwaq collections as Nuvio JSON, so the arrangement can go back the other
- * way. Hand-picked titles have no Nuvio equivalent and are left out.
+ * way with every display field. Hand-picked titles have no Nuvio
+ * equivalent and are left out; pictures chosen from this computer stay on
+ * it (their fields are null); sources Riwaq could not read go back as they
+ * came.
  */
 export function toNuvio(collections) {
   return cleanCollections(collections).map((c) => ({
     id: c.id,
     title: c.title,
-    backdropImageUrl: c.cover || null,
+    backdropImageUrl: exportArt(c.cover),
     pinToTop: c.pinned,
     viewMode: c.view === "rows" ? "ROWS" : "TABBED_GRID",
     showAllTab: true,
     folders: c.folders
-      .filter((f) => f.catalogs.length || f.tmdb.length || f.trakt.length)
+      .filter(
+        (f) =>
+          f.catalogs.length ||
+          f.tmdb.length ||
+          f.trakt.length ||
+          f.unsupported?.length,
+      )
       .map((f) => ({
         id: f.id,
         title: f.title,
-        coverImageUrl: f.cover || null,
+        coverImageUrl: exportArt(f.cover),
+        focusGifUrl: exportArt(f.gif),
+        focusGifEnabled: f.gif ? f.gifOn !== false : false,
+        heroBackdropUrl: exportArt(f.backdrop),
+        titleLogoUrl: exportArt(f.logo),
+        focusGlowEnabled: f.glow === true,
         coverEmoji: f.emoji || null,
-        tileShape: f.shape,
-        hideTitle: false,
+        tileShape: NUVIO_SHAPES[f.shape] || "POSTER",
+        hideTitle: f.hideTitle === true,
         sources: [
           ...f.catalogs.map((s) => ({
             provider: "addon",
@@ -721,7 +896,7 @@ export function toNuvio(collections) {
             mediaType: t.media === "tv" ? "TV" : "MOVIE",
             sortBy: t.sort,
             title: t.title || null,
-            filters: t.filters || null,
+            filters: nuvioFilters(t.filters),
           })),
           ...f.trakt.map((t) => ({
             provider: "trakt",
@@ -731,6 +906,9 @@ export function toNuvio(collections) {
             sortHow: t.how,
             title: t.title || null,
           })),
+          ...(f.unsupported || [])
+            .filter((u) => u.raw && typeof u.raw === "object")
+            .map((u) => u.raw),
         ],
       })),
   }));
@@ -738,16 +916,60 @@ export function toNuvio(collections) {
 
 /** Imported collections join the viewer's; a re-import updates the one with its ID. */
 export function mergeCollections(current, incoming) {
-  const out = cleanCollections(current);
-  let added = 0;
-  for (const c of cleanCollections(incoming)) {
-    if (out.length >= LIMITS.collections) break;
-    const existing = out.findIndex((x) => x.id === c.id);
-    if (existing >= 0) out[existing] = c;
-    else out.push(c);
-    added++;
+  const { collections, report } = importCollections(current, incoming, {
+    mode: "merge",
+  });
+  return { collections, added: report.added + report.updated };
+}
+
+export const IMPORT_MODES = ["merge", "add", "replace"];
+
+/**
+ * Bringing collections in, as the viewer chose:
+ * - merge (the default): a collection already here (same ID) is updated
+ *   folder by folder: imported folders replace theirs, the viewer's own
+ *   folders stay; others are added. Importing the same file twice changes
+ *   nothing more.
+ * - add: copies with new IDs, beside whatever is here.
+ * - replace: the imported collections take the place of all of them.
+ * `only` limits it to some of the file's collections. The report counts
+ * what was added, updated, replaced and left out at the limit.
+ */
+export function importCollections(current, incoming, { mode, only } = {}) {
+  const how = IMPORT_MODES.includes(mode) ? mode : "merge";
+  const pick = Array.isArray(only) ? new Set(only.map(String)) : null;
+  const chosen = cleanCollections(incoming).filter(
+    (c) => !pick || pick.has(c.id),
+  );
+  const report = { added: 0, updated: 0, replaced: 0, skipped: 0 };
+  let out = cleanCollections(current);
+  if (how === "replace") {
+    report.replaced = out.length;
+    out = [];
   }
-  return { collections: out, added };
+  for (const c of chosen) {
+    const existing = how === "merge" ? out.findIndex((x) => x.id === c.id) : -1;
+    if (existing >= 0) {
+      const mine = out[existing];
+      const folders = [...mine.folders];
+      for (const f of c.folders) {
+        const at = folders.findIndex((x) => x.id === f.id);
+        if (at >= 0) folders[at] = f;
+        else if (folders.length < LIMITS.folders) folders.push(f);
+        else report.skipped++;
+      }
+      out[existing] = { ...c, folders };
+      report.updated++;
+      continue;
+    }
+    if (out.length >= LIMITS.collections) {
+      report.skipped++;
+      continue;
+    }
+    out.push(how === "add" ? { ...c, id: newId() } : c);
+    report.added++;
+  }
+  return { collections: cleanCollections(out), report };
 }
 
 /**
