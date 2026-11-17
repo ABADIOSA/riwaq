@@ -1,5 +1,13 @@
 # Verification — Riwaq
 
+## 2026-11-18 — PR #155 remediation after Codex's independent review (unreleased, draft)
+
+- Same branch `claude/loving-noether-3jcr1i`, new commits on top of the reviewed head `98c3088` (no force push). Every finding's cause, change, test and limit: [docs/REVIEW-PR-155.md](docs/REVIEW-PR-155.md). Nothing merged, tagged, versioned or published.
+- Run on Linux by Claude (Node 22.23.5, the pre-installed Chromium through Playwright) on the committed code `48f6196`: **`npm test` 1100 pass, 1 Windows-only skip, 0 fail** (1101 tests); `npm run check`; `npm run build`; `npm run build:web`. Chromium: new `scripts/test-ui-review155.mjs` **17/17** (F1, F2 ×3, F4, F5, F6, F8 ×5, F9 ×2, F10 ar/en at 390–1440 px, #147), `test-ui-beta` **20/20** (now against the real pinned FR Frost file), `test-ui-feedback` **26/26** (its stub HUD now reports the level the slider sent, as MPV does), `test-ui-overhaul` **17/17**, `test-ui-browse` **39/39**, `test-hud-keys` OK, the complete web smoke OK; no page errors in any.
+- Before/after: the new unit files run against `98c3088` (a worktree with them copied in) pass 1 of 25 collection/source tests (the one about keeping the list's order); the profile and artwork files cannot load there (the profile-bound APIs did not exist). `scripts/test-ui-review155.mjs` against `98c3088`'s builds: 2/17 (a control, and the FR switch check, which passes there only because that build fetches the unpinned `main/` file the script does not serve).
+- Real data read here: FR-Badges' three Lite files at the pinned commit `3fae65b…3901` through the new fetcher (195 rules and 24 chip pictures each, sizes and SHA-256 as pinned; two picture URLs answered 200). The checks answer FR and image hosts locally; the app's own background requests were refused as in the other suites.
+- **Not run (no Windows here):** Electron, MPV, the native HUD (`test-player-hud`, whose title-click check was made diagnostic, not changed in meaning), NTFS links and junctions, DPAPI, the native picture dialog, packaging, installers, live TMDB (the four "Based on" keyword IDs stay unverified), screen readers, touch, real hardware.
+
 ## 2026-11-17 — issues #144–#154, badge appearance, collections with moving covers (unreleased)
 
 - Branch `claude/loving-noether-3jcr1i` from main `3e9945f` (0.55.0 Beta). [Every issue, cause, change, evidence and limit](docs/BETA-2026-11-17.md); before/after screenshots in `docs/beta-2026-11-17/` (same fixtures).
