@@ -8,11 +8,12 @@
 //
 // UI_ONLY=<pattern> runs some checks. Screenshots land in .cache/ui-beta.
 import { createServer } from "node:http";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { deflateSync } from "node:zlib";
 import assert from "node:assert/strict";
 import { loadPlaywright, startUiFixture } from "./fixtures/ui-browse-addon.mjs";
+import { FR_BASE } from "../core/badge-look.mjs";
 
 const { chromium } = loadPlaywright();
 const site = resolve(process.env.RIWAQ_WEB_DIST || "dist-web");
@@ -101,30 +102,16 @@ function png(r, g, b) {
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
-const FR = "https://raw.githubusercontent.com/farizmohd70/FR-Badges/main/";
-const frJson = (folder) =>
-  JSON.stringify({
-    filters: [
-      ["res-4k", "resolution", "4K UHD", "(?i)\\b(2160p|4k)\\b", "4k-uhd"],
-      ["dv", "dynamic-range", "Dolby Vision", "(?i)\\b(dv|dovi)\\b", "dv"],
-      ["truehd", "audio-codec", "Dolby TrueHD", "(?i)\\btrue-?hd\\b", "truehd"],
-      ["hevc", "video-codec", "HEVC / H.265", "(?i)\\b(hevc|x265)\\b", "hevc"],
-      ["rd", "debrid", "Real-Debrid", "(?i)\\[rd\\+?\\]", "rd"],
-      ["broken", "editions", "Broken Picture", "(?i)\\bremux\\b", "broken"],
-    ].map(([id, groupId, name, pattern, file]) => ({
-      id,
-      groupId,
-      name,
-      pattern,
-      imageURL: `${FR}${folder}/${file}.png`,
-      tagColor: "#00000000",
-      borderColor: "#00000000",
-      textColor: "#00000000",
-      tagStyle: "filled and bordered",
-      isEnabled: true,
-      type: "filter",
-    })),
-  });
+// FR-Badges at the commit Riwaq pins (core/badge-look.mjs FR_BASE). The
+// app checks the file's size and SHA-256, so a stand-in would be refused:
+// the real pinned FR Frost file is answered from scripts/fixtures (MIT,
+// credited in THIRD-PARTY.md), and its pictures with a local PNG, one of
+// them failing on purpose (the 7.1 badge) to show the text fallback.
+const FR = FR_BASE;
+const FR_FROST = readFileSync(
+  new URL("./fixtures/fr-badges-frost.json", import.meta.url),
+);
+const BROKEN_FR = "Badges-Frost/7-1.png";
 
 // Kaptain's Reality TV folder (the task's example): its still and its
 // moving cover, answered here. A 1×1 GIF is a real GIF.
@@ -199,10 +186,10 @@ await context.route(/^https?:\/\//, (route) => {
     if (name === "badges-frost.json")
       return route.fulfill({
         status: 200,
-        contentType: "application/json",
-        body: frJson("Badges-Frost"),
+        contentType: "text/plain; charset=utf-8",
+        body: FR_FROST,
       });
-    if (/broken\.png$/.test(name)) return route.abort("failed");
+    if (name === BROKEN_FR) return route.abort("failed");
     if (name.endsWith(".png"))
       return route.fulfill({
         status: 200,
@@ -497,7 +484,7 @@ await check(
     // built-in HEVC chip gives way to the HEVC picture.
     await remux.locator("img.badge-art").first().waitFor();
     await remux
-      .locator("em.tag-fallback", { hasText: "Broken Picture" })
+      .locator("em.tag-fallback", { hasText: "7.1 Surround" })
       .waitFor();
     const texts = await remux
       .locator(".stream-info small em")

@@ -402,11 +402,26 @@ try {
       async () => Math.abs((await snapshot()).player.volume - 85) <= 2,
       "slider arrow changes volume once, without seeking",
     );
+    // Codex's first Windows run read "not paused" right after this click
+    // (PR #155 review); a sequential rerun passed. The state is settled
+    // first, so a pause lost earlier (a late Space tap, a stage click) is
+    // named as such, and checked again past the stage's click delay
+    // (CLICK_MS, 230 ms), so a click that reached the stage is caught too.
+    await waitFor(
+      async () => (await snapshot()).player.pause === true,
+      "playback is paused before the title click (precondition)",
+    );
     await nativeHudClick(app, hud, hud.locator(".hud-title"), 0.5);
     assert.equal(
       (await snapshot()).player.pause,
       true,
       "title click preserves paused playback before Space",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    assert.equal(
+      (await snapshot()).player.pause,
+      true,
+      "title click preserves paused playback past the stage click delay",
     );
     await nativeHudKey(app, 32);
     await waitFor(

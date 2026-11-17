@@ -1408,9 +1408,19 @@ await check(
       await hud.hover(".volume-button");
       await hud.waitForTimeout(250);
       await hud.locator(".volume-control").click();
+      // MPV reports the level the slider sent (the round level tells the
+      // bar's changes apart by their values, PR #155 review), so the stub
+      // answers with that value, as the player would.
+      const sent = await hud.evaluate(
+        () =>
+          window.__calls
+            .filter(([m, a]) => m === "playerCommand" && a?.action === "volume")
+            .at(-1)?.[1]?.value,
+      );
+      assert.ok(Number.isFinite(sent), "the slider sent a level");
       await hud.evaluate(
-        (player) => window.__emit("player", { ...player, volume: 40 }),
-        player,
+        ([player, volume]) => window.__emit("player", { ...player, volume }),
+        [player, sent],
       );
       await hud.waitForTimeout(200);
       assert.equal(await osd.count(), 0, "no round level for the slider");
