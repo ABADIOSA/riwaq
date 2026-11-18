@@ -3,7 +3,7 @@
 An optional Riwaq account carries a viewer's data between the Windows app on several PCs and the web edition. Nothing changes for a viewer who never makes one. Accounts are end-to-end encrypted: the service stores data it cannot read.
 
 - Client: `core/account.mjs` (`AccountHub`, on `client.account`), `core/sync-merge.mjs`, the Settings page `src/components/settings/AccountPage.jsx` (Settings → الحسابات والربط → حساب رِواق).
-- Service: `server/accounts/` — a Cloudflare Worker (`worker.mjs`) with a D1 database (`migrations/`), deployed by `.github/workflows/accounts.yml`.
+- Service: `server/accounts/` — a Cloudflare Worker (entry `worker.mjs`, which exports only its handlers; the service is `service.mjs`) with a D1 database (`migrations/`), deployed by `.github/workflows/accounts.yml`. Audit of the live resources and their integrity: [CLOUDFLARE-DATABASE-AUDIT-2026-11-18.md](CLOUDFLARE-DATABASE-AUDIT-2026-11-18.md).
 - Address: `core/account-server.mjs` (`ACCOUNT_SERVER`): `https://riwaq-accounts.abadiosa2007.workers.dev`, the Worker's name on the project's workers.dev subdomain. An empty value turns accounts off (the page then says they are coming and nothing is sent). Tests and development set `RIWAQ_ACCOUNT_SERVER` (main's environment, or the web build's).
 
 ## What syncs
@@ -39,7 +39,7 @@ The session token (random, 32 bytes) and the data key live in the device's encry
 
 ## The service
 
-`server/accounts/worker.mjs`, `/v1/…`:
+`server/accounts/service.mjs` (through `worker.mjs`), `/v1/…`:
 
 | | |
 | --- | --- |
@@ -50,7 +50,9 @@ The session token (random, 32 bytes) and the data key live in the device's encry
 | `POST password` | old and new proofs; other sessions end |
 | `POST logout`, `DELETE account` | |
 
-Limits: usernames `^[a-z0-9][a-z0-9_.-]{2,31}$`; about 5 MB of sealed data (stored in 1.5 MB text pieces, since a D1 row holds 2 MB and returns BLOBs as arrays); 20 devices per account; sessions end after 180 days unused; 10 failed sign-ins per account and 30 per address in 15 minutes; 5 sign-ups per address an hour. Addresses are kept only as peppered hashes, and only in the attempt counters. Browsers may call it only from `ALLOWED_ORIGINS`; the desktop sends no Origin. Bodies are never logged.
+Limits: usernames `^[a-z0-9][a-z0-9_.-]{2,31}$`; about 5 MB of sealed data (stored in 1.5 MB text pieces, since a D1 row holds 2 MB and returns BLOBs as arrays); 20 devices per account; sessions end after 180 days unused; 10 failed sign-ins per account and 30 per address in 15 minutes; 5 sign-ups per address an hour. Addresses are kept only as peppered hashes, and only in the attempt counters. Browsers may call it only from `ALLOWED_ORIGINS`; the desktop sends no Origin. Bodies are never logged, and are read piece by piece up to their limit (`readBounded`).
+
+Integrity (database audit 2026-11-18): a session is written only while its account exists, in the same transaction, and one older than its account (or without one) is refused and removed, so a deleted name registered again is never opened by an old device; an upload writes its pieces only while the account is still at the device's base, and its last step removes every piece not of the current revision, all of them once the account is gone; the daily cron (`cleanup`) removes usage past 31 days, expired counters, sessions idle past 180 days and rows without their account.
 
 Cloudflare's free plan (100k requests and 100k database row writes a day) suits a small audience; each upload writes a few rows. Watch the dashboard and move to the paid Workers plan before that becomes tight.
 

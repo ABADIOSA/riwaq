@@ -114,3 +114,77 @@ fetcher here, not through a running Riwaq); live TMDB, including the
 "Based on" keyword IDs 818, 9672, 9717 and 41645, which remain
 **unverified** community values; screen readers, touch, forced colours on
 real displays; real-hardware performance.
+
+---
+
+# Third pass — Codex's second review (2026-11-18)
+
+Codex re-reviewed at `b9d946e` on Windows x64 (Node 24.19.0) and returned
+**NO-GO** again: F4 and F10 fixed; F1, F2, F3, F5–F9 partial; ten new
+findings R1–R10. This pass answers them on the same branch, new commits on
+top of `b9d946e`, no force push. It also covers the Cloudflare audit the
+owner asked for (docs/CLOUDFLARE-DATABASE-AUDIT-2026-11-18.md). The
+decision stays with the next independent review.
+
+The review's evidence (`Riwaq-PR155-Second-Review-AR.md`,
+`Riwaq-PR155-Second-Evidence.zip`) was read in full and extracted outside
+the repository. Its harnesses were read before use; the collections
+contract (`check-collections.mjs`, in-memory) and the source fixtures were
+run against this tree; nothing from it is committed. Its cases are now
+permanent tests (`tests/review-pr155-round2.test.mjs`, 32;
+`scripts/test-ui-review155-round2.mjs`, 8 in Chromium).
+
+## Before and after
+
+- `scripts/test-ui-review155-round2.mjs` against `b9d946e`'s build:
+  **1/8** (only the control that proves the APNG fixture animates), with
+  React #300 page errors; here **8/8**, no page errors.
+- Codex's `check-collections.mjs` on this tree: 15 of 16. The one left is
+  the harness's own expectation that Add returns quietly for a malformed
+  keyword; Add now throws the same named refusal as Update (`fields:
+  ["withKeywords"]`), which is what R9 asked for.
+- `tests/accounts-integrity.test.mjs` against the previous Worker: CF1 ×2,
+  CF2 ×3, CF4 and the plan check fail; here all pass.
+
+## R1–R10
+
+| ID | Cause | Change | Test |
+| --- | --- | --- | --- |
+| **R1 · P2** an open folder deleted by a state update blanked the app | `useArt` (two hooks) ran after `if (!folder) return …`, so the render after the folder vanished had fewer hooks: React #300. | Every hook of `FolderPage` runs before its "folder is gone" page, with optional values. That page keeps its Back button. | Chromium R1 ×2 (folder removed; its whole collection removed) through the real state event path, no React error; unit check that no hook follows the early return. |
+| **R2 · P2** a saved `nuvio-riwaq-curated` came back as `curated` and was merged as a copy | Export stripped `nuvio-` and import read the remaining `riwaq-` as Riwaq's own namespace: the mapping was not reversible. | `exportId` writes the Nuvio form only when `nuvioId` reads it back to the same ID, otherwise `riwaq-<stored ID>`, which reads back whole. `nuvioId(exportId(id)) === id` for every stored ID. | Property test over native, imported, nested and long IDs (collections and folders); merge/Replace idempotent for the legacy ID. |
+| **R3 · P2** a slow FR download replaced a newer choice | Only the profile was checked when the file arrived; the page's `busy` lived and died with the page. | Every choice takes the next number (`badgeChoice`): `settings` with `badgeLook`/`badgesOn` (Riwaq, Liquid Glass, Off) counts, and so does each FR download; a download that finishes after a newer choice throws `LOOK_SUPERSEDED` and writes nothing; the page does not show it as an error. Also bound to the activation (F2). | Frost→Glass with Glass first; Frost pending → page closed → Off; Minimal pending → Liquid; failure then success. |
+| **R4 · P2** Update brought back a folder removed from a template added before `tplFolders` | Without the marker, "known" was the folders present now, so a removed one looked new. | A legacy instance counts every template folder without `since` as known; folders a template gains later carry `since` and come in. Unstamped folders whose queries still equal the template's are stamped and follow it from now on; edited ones stay the viewer's. The marker is written on that update. | Legacy fixture: the removed folder stays out on two updates; untouched folder stamped, edited one kept, a `since` folder added. |
+| **R5 · P2** "No English subs", «بدون ترجمة عربية», "English subtitles", "Not  cached" and a plain "Not cached" link misread | No negation handling; `[-\s]?` allowed one space only; the English-subtitles pattern stopped at "sub"; "not cached" alone made a source Debrid. | `affirms(text, rx)`: a match right after no/without/w/o/non/sans/بدون/بلا/من غير/غير (optionally "subs"/"ترجمة") does not count; used for Arabic subtitles and dubs, the Arabic hint, language words and English subtitles. `[-\s]*` in "not cached". Cache words make a source Debrid only beside a Debrid sign (mark, name or ⚡). | The reviewer's fixtures through `Client.getStreams` and the facets (cached, uncached, unconfirmed, direct, enSub, arSub, unknown), plus DTS:X, 5.0 and TrueHD kept. |
+| **R6 · P2** repeats squeezed out a unique source; the report named sources of folders left out | Duplicates counted against the 40-source limit before `cleanCollections` removed them; the client filtered unsupported rows by collection only. | `fromNuvio` drops a repeat before the limit (`report.repeated`); `importCollections` reports the folders it actually wrote (`report.written`), and the client lists unsupported sources of those only. | 40 repeats + 1 unique; a merge at the folder limit reporting only the kept folder. |
+| **R7 · P2** a remote APNG named `.png` moved in a still slot under Reduced Motion | `StillImage` used a canvas only for GIF/WebP by name or type. | Every picture but a JPEG (by name or data type) is drawn as its first frame on a canvas (`surelyStill`), whatever its name or host. | Chromium R7: the reviewer's two-frame APNG at `cover.png` stays one fingerprint over six captures with and without Reduced Motion; control: the same file animates in an `<img>`. |
+| **R8 · P3** a broken logo hid a sibling's good one | `logoBroken` was a flag in a component reused across folders. | The failed address is kept, not a flag (`brokenLogo === logo`), on the folder page and the folder tile; a late error from the old logo cannot hide the new one. | Chromium R8: broken → sibling with a good logo shows it → back shows the name. |
+| **R9 · P2** separator-only lists, fractional years, impossible or reversed dates accepted; Add dropped a bad keyword silently | The ID pattern was a character class; numbers were range-checked only; dates by shape; Add skipped `tmdbFilterProblems`. | Lists are numbers joined by `,`/`|` (a trailing separator is tidied); year, votes and days are whole; dates are real days; "from" after "to" is refused for dates, rating and runtime. Add and Update share `checkedTmdb`; the error carries `fields`. The form runs the same check, marks the fields (`aria-invalid`), names them in a sentence, keeps what was typed and sends nothing. | Every case refused by Add and Update with the same fields, state unchanged; valid values saved identically; Chromium R9 (named fields, `aria-invalid`, nothing saved, then a valid save). |
+| **R10 · P2** a failed Replace could be written by a later save | The state was replaced before `persist`; a throwing writer left memory changed, and the next unrelated save wrote it. | `client.commit(keys, change)`: on a failed save the named parts go back (memory and bucket) before the error is thrown. Used by Replace and every collection import, collection edits and templates, `settings`, badge styles and the Nuvio Desktop import's profile parts. | Failed Replace (twice) → memory, next save, a restart and the backup payload hold the old collections; failed edit, template and settings; pictures still readable; the other profile untouched. |
+
+## F1–F10 after this pass
+
+- **F1** the remaining gap (paste Replace not bound to its preview's owner, R10) is closed: the preview carries `profileSession` and the import is transactional.
+- **F2** activations, not only IDs: `Profiles.epoch` advances on every switch (even back), re-lock, removal of the active profile and restore; `profiles.session()` reaches the page; `claim`/`holds` check it at the start and after every await, with the Settings or library lock re-checked at the write. Covered: Remember, Undo (kept per activation), FR styles, the Nuvio Desktop import (also re-checks the Settings lock), the paste import, picture picks (grant at commit, removed if refused) and reads (re-checked after the disk read). An earlier test that expected B's FR download to land after five A↔B round trips now expects it refused; that is the change the review asked for.
+- **F3** R4 above; merge rules unchanged.
+- **F5** R5 above. Not done: live addon wording beyond the fixtures.
+- **F6** R3 above. The Off option's short title is unchanged (its description says what it keeps).
+- **F7** R2 and R6 above.
+- **F8** R7 and R8 above.
+- **F9** R9 above. The four "Based on" keyword IDs stay unverified (no TMDB here).
+- **F4, F10** untouched; their checks still pass (ui-review155 F4, F10 ar/en).
+
+## Artwork ownership and the sweep
+
+- Picks: `collectionArtPick` claims the activation before the dialog and checks it (and the library lock) after the dialog, after the read and at the grant; a pick that lost its activation is deleted at once (`ArtStore.forget`). `canReadArt` requires the pick's activation.
+- Reads: `collectionArt` checks the activation and lock again after the disk/IndexedDB read and before answering.
+- Caches: the renderer's `localCache` is cleared per activation (`forgetLocalArt` on `profiles.session`); the web's object URLs are revoked on profile switch, lock and deletion (`forgetArtUrls`).
+- Sweep: the backend's `remove(id, guard)` runs the last reference check in the same turn as the irreversible step (`unlinkSync` on the desktop; the IndexedDB delete request on the web). References are written synchronously by the client, so nothing can name a picture between that check and its removal. Sweeps run one after another.
+- Not proven here: NTFS reparse points in the parent folders and a writable-directory swap (Windows only); no cross-profile read was ever demonstrated, before or after.
+
+## Cloudflare
+
+See docs/CLOUDFLARE-DATABASE-AUDIT-2026-11-18.md: inventory, CF1–CF5 (two P2), fixes in `server/accounts/`, measurements, and the deployment steps that wait for the owner. Nothing was changed on the live account.
+
+## Not verified in this pass
+
+Windows, Electron, MPV, the native HUD and picture dialog, NTFS, DPAPI, packaging and upgrade (none here; Codex's Windows runs were at `b9d946e`). Node 24 (the container has 22.23.5; running a downloaded Node 24 was not permitted). Live TMDB, live addons, live FR-Badges pictures in the app. The Worker on Cloudflare's edge and a remote D1 (only workerd + local D1 here).
