@@ -278,8 +278,9 @@ const ARABIC_HARDSUB_RX = /هارد\s*سب|hard\s*sub|hardsub|hc[-. ]?sub|hardco
 const ARABIC_ANY_RX = /عرب|arabic|\bara\b/i;
 // English subtitles, as addons write them ("English subs", "Eng sub",
 // "English subtitles", "Subs: English", "subbed in English").
+// Fourth pass (N5): "subbed in English" and "subtitles in English" too.
 export const EN_SUB_RX =
-  /\b(?:eng(?:lish)?[-. :]*(?:subs?|subtitles?|subbed)|(?:subs?|subtitles?)[-. :]*eng(?:lish)?)\b/i;
+  /\b(?:eng(?:lish)?[-. :]*(?:subs?|subtitles?|subbed)|(?:subs?|subtitles?|subbed)[-. :]*(?:in[-. ]+)?eng(?:lish)?)\b/i;
 
 /**
  * Whether `text` states what `rx` finds, rather than its absence (PR #155
@@ -290,22 +291,52 @@ export const EN_SUB_RX =
  * the words do not matter.
  */
 export function affirms(text, rx) {
+  return readings(text, rx).some((denied) => !denied);
+}
+/**
+ * Stricter, for a fact about one track (third review, N5): `text` states
+ * it only when some match affirms it and NONE denies it. A source that
+ * says both ("English subtitles · No English subs") is believed in its
+ * denial, as a source that says both "cached" and "not cached" is.
+ */
+export function states(text, rx) {
+  const found = readings(text, rx);
+  return found.length > 0 && found.every((denied) => !denied);
+}
+/**
+ * For each match of `rx`, whether it is denied: by a negation right
+ * before it ("No English subs", "بدون ترجمة عربية") or right after it,
+ * past an optional track word ("English subtitles unavailable", "English:
+ * none", "ترجمة عربية غير متوفرة"). Spaces, line breaks and marks between
+ * the words do not matter.
+ */
+function readings(text, rx) {
   const flags = rx.flags.includes("g") ? rx.flags : `${rx.flags}g`;
-  for (const match of String(text || "").matchAll(
-    new RegExp(rx.source, flags),
-  )) {
-    const before = text
-      .slice(Math.max(0, match.index - 24), match.index)
-      .replace(/[\s\-_.:·|,()[\]]+/g, " ")
-      .trimEnd();
-    if (!NEGATION_RX.test(before)) return true;
+  const all = String(text || "");
+  const out = [];
+  for (const match of all.matchAll(new RegExp(rx.source, flags))) {
+    const tidy = (part) => part.replace(/[\s\-_.:·|,()[\]]+/g, " ");
+    const before = tidy(
+      all.slice(Math.max(0, match.index - 24), match.index),
+    ).trimEnd();
+    const after = tidy(
+      all.slice(
+        match.index + match[0].length,
+        match.index + match[0].length + 32,
+      ),
+    ).trimStart();
+    out.push(NEGATION_RX.test(before) || DENIED_AFTER_RX.test(after));
   }
-  return false;
+  return out;
 }
 // The negation, possibly followed by the kind of track it denies ("بدون
 // ترجمة عربية", "no subs English").
 const NEGATION_RX =
   /(?:^|[\s])(?:no|without|w\/o|non|sans|بدون|بلا|من غير|غير)(?: (?:subs?|subtitles?|dub|ترجمة|ترجمه|دبلجة))?$/i;
+// What follows a fact to deny it, possibly after the kind of track it
+// names ("English subtitles unavailable", "Subs: English — not included").
+const DENIED_AFTER_RX =
+  /^(?:(?:subs?|subtitles?|audio|dub|track|ترجمة|ترجمه|دبلجة|عربية) )?(?:(?:is|are) )?(?:unavailable|not (?:available|included|provided)|missing|none|n\/a|غير (?:متوفرة|متوفر|متاحة|متاح|موجودة|موجود)|لا (?:يوجد|توجد))(?:$|[\s])/i;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lower = (value) => String(value || "").toLowerCase();
@@ -583,8 +614,9 @@ export function parseStream(stream = {}) {
   const episode = parseEpisode(text);
   const { debrid, cached, uncached } = parseDebrid(text);
   const languages = parseLanguages(text);
-  const arabicSub = affirms(text, ARABIC_SUB_RX);
-  const arabicDub = affirms(text, ARABIC_DUB_RX);
+  // A track fact said and denied in one source counts as denied (N5).
+  const arabicSub = states(text, ARABIC_SUB_RX);
+  const arabicDub = states(text, ARABIC_DUB_RX);
   const arabicHint =
     arabicSub ||
     arabicDub ||

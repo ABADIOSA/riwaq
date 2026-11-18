@@ -258,7 +258,31 @@ export function tmdbFilterProblems(input) {
  * contradicts another is refused by name, before the list changes.
  */
 function checkedTmdb(source) {
-  const problems = tmdbFilterProblems(source?.filters);
+  if (!source || typeof source !== "object" || Array.isArray(source))
+    fail("مصدر TMDB غير صالح");
+  // Fourth pass (N11): what the viewer typed is checked as typed, never
+  // swapped for a default: an unknown kind, media type or order, or a
+  // filter name Riwaq does not know, is refused by name.
+  const given = (value) =>
+    value !== undefined && value !== null && String(value).trim() !== "";
+  const problems = [];
+  if (!TMDB_KINDS.includes(String(source.kind || "").toLowerCase()))
+    problems.push("kind");
+  if (given(source.media) && !MEDIA.includes(source.media))
+    problems.push("media");
+  if (given(source.sort) && !TMDB_SORTS.includes(source.sort))
+    problems.push("sort");
+  const filters = source.filters;
+  if (
+    filters !== undefined &&
+    filters !== null &&
+    (typeof filters !== "object" || Array.isArray(filters))
+  )
+    problems.push("filters");
+  else if (filters)
+    for (const key of Object.keys(filters))
+      if (!FILTERS[key] && !NUMBER_FILTERS[key]) problems.push(key);
+  problems.push(...tmdbFilterProblems(filters));
   if (problems.length) {
     const error = new Error(`قيمة غير صالحة في: ${problems.join(", ")}`);
     error.fields = problems;
@@ -688,8 +712,9 @@ export function editCollections(list, input = {}) {
     case "tmdbAdd":
       return withFolder((folder) => {
         const clean = checkedTmdb(input.source);
+        // Said, not passed off as added (fourth pass, N11), as Update says.
         if (folder.tmdb.some((t) => tmdbKey(t) === tmdbKey(clean)))
-          return folder;
+          fail("في المجلد مصدر بنفس الاستعلام");
         if (folder.tmdb.length >= LIMITS.catalogs)
           fail("وصلت إلى الحد الأقصى من مصادر TMDB في المجلد");
         folder.tmdb = [...folder.tmdb, clean];
@@ -819,6 +844,20 @@ const nuvioId = (id) => {
  * Stored IDs are at most 64 characters of [\w-], which nuvioId's Riwaq
  * form accepts whole.
  */
+/**
+ * The other reading of a Riwaq-form ID in a file written before the
+ * second review's export (third review, N3): "riwaq-curated" from such a
+ * file may name Riwaq's "curated", or a stored "nuvio-riwaq-curated" that
+ * the old export wrote without its prefix. Both cannot be told apart from
+ * the file, so the import asks (legacyMatches). Undefined when the ID has
+ * only one reading.
+ */
+export const legacyId = (id) => {
+  if (typeof id !== "string" || !/^riwaq-[\w-]{1,64}$/.test(id))
+    return undefined;
+  const other = `nuvio-${id.replace(/[^\w-]/g, "").slice(-58)}`;
+  return other === nuvioId(id) ? undefined : other;
+};
 export const exportId = (id) => {
   const nuvio = /^nuvio-([\w-]+)$/.exec(id);
   return nuvio && nuvioId(nuvio[1]) === id ? nuvio[1] : `riwaq-${id}`;
@@ -896,6 +935,9 @@ export function fromNuvio(input) {
     // The same counts for each collection, by the ID it will have, so an
     // import of some of the file reports only what was chosen (F7).
     byCollection: {},
+    // A collection's or folder's other reading (legacyId), by the ID it
+    // will have: "<collection>" and "<collection>/<folder>" (N3).
+    aliases: {},
   };
   report.over.collections = Math.max(0, data.length - LIMITS.collections);
   let skipped = 0;
@@ -918,6 +960,14 @@ export function fromNuvio(input) {
       `f|${cid}`,
       report,
     );
+    const alias = (entry, id, key) => {
+      const other = legacyId(entry?.id);
+      if (other && id === nuvioId(entry.id)) report.aliases[key] = other;
+    };
+    alias(c, cid, cid);
+    folderList
+      .slice(0, LIMITS.folders)
+      .forEach((f, fi) => alias(f, folderIds[fi], `${cid}/${folderIds[fi]}`));
     return {
       id: cid,
       title: c?.title,
@@ -945,7 +995,15 @@ export function fromNuvio(input) {
         // A source Riwaq cannot read is kept as it came, up to the same
         // per-folder limit as the others; one over it is counted as over,
         // never as kept (F7).
+        // The same unread source twice is kept once too (fourth pass, N6).
+        const unread = new Set();
         const skip = (s) => {
+          const raw = JSON.stringify(plainCopy(s));
+          if (unread.has(raw)) {
+            report.repeated++;
+            return;
+          }
+          unread.add(raw);
           if (unsupported.length >= LIMITS.catalogs) {
             report.over.sources++;
             mine.over.sources++;
@@ -969,10 +1027,14 @@ export function fromNuvio(input) {
         };
         // The same source twice in one folder is kept once, before the
         // limit is counted, so repeats never push a different source out
-        // (second review, R6).
+        // (second review, R6). "The same" is what the folder's own clean-up
+        // (cleanFolder) counts as the same: a TMDB query by its kind, ID
+        // or filters and media, whatever its label; a Trakt list by list
+        // and media; a catalog by addon, type, ID and genre (fourth pass,
+        // N6: copies under other labels once used up the limit first).
         const seen = new Set();
-        const keep = (list, item) => {
-          const key = JSON.stringify(item);
+        const keep = (list, item, identity) => {
+          const key = `${list === tmdb ? "t" : list === trakt ? "k" : "c"}|${identity(item)}`;
           if (seen.has(key)) {
             report.repeated++;
             return;
@@ -1001,7 +1063,7 @@ export function fromNuvio(input) {
               title: s?.title,
               filters: s?.filters,
             });
-            if (t) keep(tmdb, t);
+            if (t) keep(tmdb, t, tmdbKey);
             else skip(s);
           } else if (provider === "trakt") {
             const t = cleanTrakt({
@@ -1011,7 +1073,7 @@ export function fromNuvio(input) {
               how: s?.sortHow,
               title: s?.title,
             });
-            if (t) keep(trakt, t);
+            if (t) keep(trakt, t, traktKey);
             else skip(s);
           } else {
             const cat = cleanCatalog({
@@ -1020,7 +1082,7 @@ export function fromNuvio(input) {
               catalog: typeof s?.catalogId === "string" ? s.catalogId : "",
               genre: s?.genre && s.genre !== "none" ? s.genre : "",
             });
-            if (cat && provider === "addon") keep(catalogs, cat);
+            if (cat && provider === "addon") keep(catalogs, cat, catalogKey);
             else skip(s);
           }
         }
@@ -1229,7 +1291,33 @@ function mergeCollection(mine, theirs) {
  * added, updated, replaced and left out at a limit, and the folders and
  * unread sources actually written.
  */
-export function importCollections(current, incoming, { mode, only } = {}) {
+/**
+ * The file's chosen collections that may be one of the viewer's under the
+ * older reading of their ID (third review, N3): not here under the ID the
+ * file gives, but here under the other one. A merge asks the viewer which
+ * it is (`legacy` in importCollections) instead of guessing: updating the
+ * wrong collection would overwrite it, adding a copy would duplicate it.
+ */
+export function legacyMatches(current, converted, only) {
+  const list = cleanCollections(current);
+  const pick = Array.isArray(only) ? new Set(only.map(String)) : null;
+  const aliases = converted?.report?.aliases || {};
+  const out = [];
+  for (const c of converted?.collections || []) {
+    if (pick && !pick.has(c.id)) continue;
+    if (list.some((x) => x.id === c.id)) continue;
+    const mine = list.find((x) => x.id === aliases[c.id]);
+    if (mine)
+      out.push({ id: c.id, title: c.title, match: mine.id, mine: mine.title });
+  }
+  return out;
+}
+
+export function importCollections(
+  current,
+  incoming,
+  { mode, only, aliases = {}, legacy = {} } = {},
+) {
   const how = IMPORT_MODES.includes(mode) ? mode : "merge";
   const all = cleanCollections(incoming);
   const pick = Array.isArray(only) ? new Set(only.map(String)) : null;
@@ -1267,14 +1355,37 @@ export function importCollections(current, incoming, { mode, only } = {}) {
     report.unsupported += folder.unsupported?.length || 0;
     report.written.push(`${from}/${folder.id}`);
   };
+  // A collection the file may name by an older reading (N3): the viewer's
+  // answer decides, and without one nothing changes.
+  const asked = [];
   for (const c of chosen) {
-    const existing = how === "merge" ? out.findIndex((x) => x.id === c.id) : -1;
+    if (how !== "merge" || out.some((x) => x.id === c.id)) continue;
+    const other = aliases[c.id];
+    if (!other || !out.some((x) => x.id === other)) continue;
+    if (legacy[c.id] !== "match" && legacy[c.id] !== "copy")
+      asked.push(c.title);
+  }
+  if (asked.length)
+    fail(
+      `اختر لكل مجموعة من نسخة أقدم: تحديث مجموعتك أم إضافتها نسخة جديدة (${asked.join("، ")})`,
+    );
+  for (const c of chosen) {
+    let existing = how === "merge" ? out.findIndex((x) => x.id === c.id) : -1;
+    const older = existing < 0 && legacy[c.id] === "match";
+    if (older) existing = out.findIndex((x) => x.id === aliases[c.id]);
     if (existing >= 0) {
       const mine = out[existing];
       const folders = [...mine.folders];
       for (const f of c.folders) {
-        const at = folders.findIndex((x) => x.id === f.id);
+        let at = folders.findIndex((x) => x.id === f.id);
+        // Its folders by their older reading too, once the viewer said it
+        // is the same collection.
+        if (at < 0 && older) {
+          const other = aliases[`${c.id}/${f.id}`];
+          at = other ? folders.findIndex((x) => x.id === other) : -1;
+        }
         if (at >= 0) {
+          // mergeFolder keeps the viewer's folder ID.
           folders[at] = mergeFolder(folders[at], f);
           wrote(f, c.id);
         } else if (folders.length < LIMITS.folders) {
@@ -1282,9 +1393,9 @@ export function importCollections(current, incoming, { mode, only } = {}) {
           wrote(f, c.id);
         } else report.skipped++;
       }
-      out[existing] = { ...mergeCollection(mine, c), folders };
+      out[existing] = { ...mergeCollection(mine, c), id: mine.id, folders };
       report.updated++;
-      report.ids.push(c.id);
+      report.ids.push(mine.id);
       continue;
     }
     if (out.length >= LIMITS.collections) {
@@ -1367,16 +1478,22 @@ export function applyTemplate(current, template) {
     if (f.tpl !== queriesOf(f.tmdb)) return f;
     return { ...f, tmdb: t.tmdb, tpl: queriesOf(t.tmdb) };
   });
+  let deferred = 0;
   for (const t of tpl.folders)
-    if (
-      !known.has(t.id) &&
-      !folders.some((f) => f.id === t.id) &&
-      folders.length < LIMITS.folders
-    )
-      folders.push(stamp(t));
+    if (!known.has(t.id) && !folders.some((f) => f.id === t.id)) {
+      if (folders.length < LIMITS.folders) folders.push(stamp(t));
+      else deferred++;
+    }
+  // Known from now on: what the viewer already knew (kept or removed) and
+  // what is here now. A folder new in the template that did not fit at the
+  // folder limit is NOT marked known, so the next update brings it in once
+  // there is room (fourth pass, N4: it was marked known and never came).
+  const tplFolders = ids.filter(
+    (id) => known.has(id) || folders.some((f) => f.id === id),
+  );
   const next = [...list];
-  next[index] = { ...mine, tplFolders: ids, folders };
-  return { collections: cleanCollections(next), added: false };
+  next[index] = { ...mine, tplFolders, folders };
+  return { collections: cleanCollections(next), added: false, deferred };
 }
 
 /**

@@ -1878,6 +1878,7 @@ export default function App() {
             setState={setState}
             notice={notice}
             session={state.profiles?.session}
+            collections={state.collections}
             onClose={() => setNuvioOpen(false)}
           />
         )}

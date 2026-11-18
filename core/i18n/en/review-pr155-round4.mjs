@@ -15,4 +15,12 @@ export default {
   // N12: the desktop's pictures folder replaced by a link.
   "مجلد صور المجموعات ليس مجلداً عادياً":
     "The collection pictures folder is not an ordinary folder",
+  // N3: collections of an older Riwaq file that may be the viewer's own.
+  "من نسخة أقدم من رِواق": "From an older Riwaq",
+  "هذه المجموعات قد تكون مجموعاتك نفسها، كتبها رِواق أقدم بمعرّف آخر. اختر لكل منها قبل الاستيراد.":
+    "These may be your own collections, written by an older Riwaq under another ID. Choose for each before importing.",
+  "حدّث مجموعتي «{name}»": "Update my collection “{name}”",
+  "أضفها مجموعة جديدة": "Add it as a new collection",
+  "اختر لكل مجموعة من نسخة أقدم: تحديث مجموعتك أم إضافتها نسخة جديدة ({name})":
+    "For each collection from an older file, choose: update your collection or add it as a new copy ({name})",
 };

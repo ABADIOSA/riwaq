@@ -1488,6 +1488,7 @@ export async function startBridge({ version, store }) {
           text: typeof a?.text === "string" ? a.text : "",
           mode: typeof a?.mode === "string" ? a.mode : "merge",
           only: Array.isArray(a?.only) ? a.only : undefined,
+          legacy: a?.legacy,
           profileId:
             a?.profileId === undefined ? undefined : String(a.profileId),
           profileSession: a?.profileSession,

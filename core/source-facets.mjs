@@ -17,7 +17,7 @@
  */
 
 import { languageOf } from "./subtitles.mjs";
-import { EN_SUB_RX, affirms } from "./stream-engine.mjs";
+import { EN_SUB_RX, states } from "./stream-engine.mjs";
 
 // The name, the title and the addon's separate description: a fact named
 // only in the description (TrueHD, English subtitles) is still a fact
@@ -239,8 +239,10 @@ export const FACET_GROUPS = [
       const langs = Array.isArray(s.languages) ? s.languages : [];
       if (s.arabicSub) out.push("arSub");
       if (s.arabicDub) out.push("arDub");
-      // Stated, not denied: "No English subs" is not English subtitles (R5).
-      if (affirms(text(s), EN_SUB_RX)) out.push("enSub");
+      // Stated, not denied: "No English subs" is not English subtitles (R5),
+      // nor is "English subtitles unavailable", nor a source that says both
+      // (fourth pass, N5).
+      if (states(text(s), EN_SUB_RX)) out.push("enSub");
       if (MULTI_RX.test(text(s)) || langs.length > 2) out.push("multi");
       if (langs.includes("en")) out.push("en");
       for (const l of langs)

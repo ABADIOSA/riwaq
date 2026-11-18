@@ -151,6 +151,15 @@ function subtitleFormat(url) {
  * Sets a key on a map that must not grow for the whole session: re-setting
  * moves it to the newest end, and the oldest entries beyond `limit` go.
  */
+/** The viewer's answers for older-file collections: "match" or "copy". */
+function legacyChoices(input) {
+  const out = {};
+  if (!input || typeof input !== "object" || Array.isArray(input)) return out;
+  for (const [id, choice] of Object.entries(input).slice(0, 200))
+    if (typeof id === "string" && (choice === "match" || choice === "copy"))
+      out[id] = choice;
+  return out;
+}
 /**
  * A Nuvio import whose profile parts were not written (refused, or the
  * write failed and was rolled back) after some addons were installed: the
@@ -1256,7 +1265,14 @@ export class Client {
    * ones the viewer picked. The report says what was imported, updated,
    * replaced, left at a limit and which sources Riwaq cannot read yet.
    */
-  importNuvioCollections({ text, mode, only, profileId, profileSession } = {}) {
+  importNuvioCollections({
+    text,
+    mode,
+    only,
+    legacy,
+    profileId,
+    profileSession,
+  } = {}) {
     this.profiles.gate("library");
     // The preview belongs to the activation that pasted it (second
     // review, F2): Replace from another profile, or after a switch back,
@@ -1278,7 +1294,14 @@ export class Client {
       const result = importCollections(
         this.state.collections || [],
         converted.collections,
-        { mode, only: pick },
+        {
+          mode,
+          only: pick,
+          // A collection from an older Riwaq file that may be one of the
+          // viewer's: their answer, per collection (third review, N3).
+          aliases: converted.report.aliases,
+          legacy: legacyChoices(legacy),
+        },
       );
       this.state.collections = result.collections;
       return result;

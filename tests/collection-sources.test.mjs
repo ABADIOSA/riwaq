@@ -201,11 +201,17 @@ test("pasted TMDB and Trakt addresses become sources", () => {
     ...ids,
     source: { kind: "company", id: 420 },
   });
-  list = editCollections(list, {
-    action: "tmdbAdd",
-    ...ids,
-    source: { kind: "company", id: 420 },
-  });
+  // The same query again is refused by name, never passed off as added
+  // (PR #155 fourth pass, N11); the folder keeps it once.
+  assert.throws(
+    () =>
+      editCollections(list, {
+        action: "tmdbAdd",
+        ...ids,
+        source: { kind: "company", id: 420 },
+      }),
+    /في المجلد مصدر بنفس الاستعلام/,
+  );
   list = editCollections(list, {
     action: "traktAdd",
     ...ids,

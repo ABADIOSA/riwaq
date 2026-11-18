@@ -42,6 +42,7 @@ import {
   TMDB_PRESETS,
   TMDB_SORTS,
   fromNuvio,
+  legacyMatches,
   parseTmdbSource,
   parseTraktSource,
   titlePlaces,
@@ -2031,7 +2032,14 @@ function DiscoverForm({ source, onSave, onCancel }) {
  * Linking with Nuvio: read Nuvio Desktop's data on this PC or its backup,
  * pick a profile and what to bring, or paste collections from any Nuvio app.
  */
-export function NuvioLink({ act, setState, notice, onClose, session }) {
+export function NuvioLink({
+  act,
+  setState,
+  notice,
+  onClose,
+  session,
+  collections = [],
+}) {
   const [step, setStep] = useState("start");
   const [scan, setScan] = useState(null);
   const [profile, setProfile] = useState(0);
@@ -2076,6 +2084,17 @@ export function NuvioLink({ act, setState, notice, onClose, session }) {
   const [peek, setPeek] = useState(null);
   const [only, setOnly] = useState([]);
   const [mode, setMode] = useState("merge");
+  // Collections of an older Riwaq file that may be the viewer's own under
+  // another reading of their ID (third review, N3): the viewer says which.
+  const [legacy, setLegacy] = useState({});
+  const matches = useMemo(
+    () =>
+      peek && !peek.error && mode === "merge"
+        ? legacyMatches(collections, peek, only)
+        : [],
+    [peek, mode, only, collections],
+  );
+  const unanswered = matches.some((m) => !legacy[m.id]);
   const preview = () => {
     try {
       const read = fromNuvio(text);
@@ -2083,6 +2102,7 @@ export function NuvioLink({ act, setState, notice, onClose, session }) {
       // the import after a switch, even back to it (second review, F2).
       setPeek({ ...read, error: "", session });
       setOnly(read.collections.map((c) => c.id));
+      setLegacy({});
     } catch (e) {
       setPeek({ error: e.message });
     }
@@ -2093,6 +2113,7 @@ export function NuvioLink({ act, setState, notice, onClose, session }) {
       text,
       mode,
       only,
+      legacy,
       profileSession: peek?.session ?? session,
     });
     setBusy(false);
@@ -2154,11 +2175,45 @@ export function NuvioLink({ act, setState, notice, onClose, session }) {
               setMode={setMode}
             />
           )}
+          {matches.length > 0 && (
+            <fieldset className="nuvio-pick nuvio-legacy">
+              <legend>من نسخة أقدم من رِواق</legend>
+              <p className="muted">
+                هذه المجموعات قد تكون مجموعاتك نفسها، كتبها رِواق أقدم بمعرّف
+                آخر. اختر لكل منها قبل الاستيراد.
+              </p>
+              {matches.map((m) => (
+                <div key={m.id} className="studio-field" role="radiogroup">
+                  <span dir="auto">
+                    <b>{m.title}</b>
+                  </span>
+                  <label>
+                    <input
+                      type="radio"
+                      name={`legacy-${m.id}`}
+                      checked={legacy[m.id] === "match"}
+                      onChange={() => setLegacy({ ...legacy, [m.id]: "match" })}
+                    />
+                    <span dir="auto">{`حدّث مجموعتي «${m.mine}»`}</span>
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name={`legacy-${m.id}`}
+                      checked={legacy[m.id] === "copy"}
+                      onChange={() => setLegacy({ ...legacy, [m.id]: "copy" })}
+                    />
+                    <span>أضفها مجموعة جديدة</span>
+                  </label>
+                </div>
+              ))}
+            </fieldset>
+          )}
           <div className="button-row">
             {peek && !peek.error ? (
               <button
                 className="primary"
-                disabled={!only.length || busy}
+                disabled={!only.length || busy || unanswered}
                 aria-busy={busy}
                 onClick={paste}
               >
