@@ -262,6 +262,12 @@ intermittent #110 failure was the check reading the restored focus in the
 same turn App restores it in the next frame; it now waits for that frame
 (bounded) and asserts the same. Six full smoke runs here passed.
 
+GitHub's own "Check source" job had failed on every head of this PR since
+`98c3088` for another reason, before any browser test: `ubuntu-latest` is
+now Ubuntu 26.04 and Playwright 1.56.1 stops with "does not support
+chromium on ubuntu26.04-x64" (`npm test`, the format check and both builds
+had passed in it). The job is pinned to `ubuntu-24.04`.
+
 ## Not verified in this pass
 
 Windows, Electron, MPV, the native HUD and picture dialog, NTFS links and
