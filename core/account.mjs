@@ -393,14 +393,22 @@ export class AccountHub {
     this.client.persist();
   }
 
-  /** Bind asynchronous sign-in to this attempt and the originating profile. */
+  /**
+   * Binds asynchronous sign-in to this attempt and to the ACTIVATION of the
+   * profile it started under (fifth pass, Q10), not only its ID: A → B → A,
+   * a re-lock (even unlocked again) and a restore each start a new
+   * activation, and an attempt begun under the old one can then neither
+   * sign this device in nor write. Checked after every wait and before
+   * anything is kept.
+   */
   attempt() {
     const epoch = ++this.epoch;
-    const owner = this.client.profiles.store.active;
+    const profiles = this.client.profiles;
+    const ticket = profiles.ticket();
     return () => {
-      if (this.epoch !== epoch || this.client.profiles.store.active !== owner)
+      if (this.epoch !== epoch || !profiles.holds(ticket))
         throw new Error("تغيّرت جلسة الحساب؛ أعد المحاولة");
-      this.client.profiles.gate("settings");
+      profiles.gate("settings");
     };
   }
 

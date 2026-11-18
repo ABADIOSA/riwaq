@@ -1214,6 +1214,16 @@ export class Client {
     };
     if (parts.addons) {
       for (const addon of data.addons.slice(0, 100)) {
+        // Before each addon (fifth pass, Q10), not only before the loop and
+        // after it: once the activation that started the import is over
+        // (a switch, even back, a re-lock, a restore) no further addon is
+        // started. One already installed stays (the household's shared
+        // list) and the report says how many.
+        try {
+          this.holds(ticket, "settings");
+        } catch (error) {
+          throw nuvioPartial(error, result.addons);
+        }
         let key;
         try {
           key = keyFor(normalizeAddon(addon.url));
