@@ -180,7 +180,7 @@ test("N3: a current export of the same collection round-trips with no question",
   );
 });
 
-test("N3: the Client asks through the same paste import, and Add copies and Replace never ask", () => {
+test("N3: paste import asks for Merge and ignores the old choice in Add or Replace", () => {
   const c = new Client({ load: () => ({}), save: () => {} });
   c.state.collections = stored();
   c.persist();
@@ -211,12 +211,16 @@ test("N3: the Client asks through the same paste import, and Add copies and Repl
   c.importNuvioCollections({
     text: B9D946E_EXPORT,
     mode: "add",
+    legacy: { curated: "match" },
     profileSession: session,
   });
   assert.equal(c.state.collections.length, 2);
+  assert.deepEqual(c.state.collections[0], stored()[0]);
+  assert.notEqual(c.state.collections[1].id, "curated");
   c.importNuvioCollections({
     text: B9D946E_EXPORT,
     mode: "replace",
+    legacy: { curated: "match" },
     profileSession: session,
   });
   assert.deepEqual(

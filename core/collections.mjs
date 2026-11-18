@@ -1376,7 +1376,7 @@ export function importCollections(
     );
   for (const c of chosen) {
     let existing = how === "merge" ? out.findIndex((x) => x.id === c.id) : -1;
-    const older = existing < 0 && legacy[c.id] === "match";
+    const older = how === "merge" && existing < 0 && legacy[c.id] === "match";
     if (older) existing = out.findIndex((x) => x.id === aliases[c.id]);
     if (existing >= 0) {
       const mine = out[existing];
