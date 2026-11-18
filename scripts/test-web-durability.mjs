@@ -562,6 +562,192 @@ try {
     );
     await context.close();
   }
+
+  // 10. Q6 (fifth pass, the reviewer's case): a refused removal of an
+  // inactive profile B with a collection and a picture of this computer.
+  // B stays in memory and on disk, no unrelated save drops it, the sweep
+  // keeps its picture, and a written retry removes it.
+  {
+    const { context, page } = await fresh();
+    const art = "c".repeat(32);
+    const ids = await page.evaluate(
+      async ({ id }) => {
+        const call = window.riwaq.call;
+        const created = await call("profileCreate", { name: "Profile B" });
+        const a = created.profiles.active;
+        const b = created.profiles.list.find((p) => p.id !== a).id;
+        await call("profileSwitch", { id: b });
+        await call("collectionsEdit", { action: "create", title: "Only in B" });
+        const { state } = await call("hudSnapshot");
+        await call("collectionsEdit", {
+          action: "update",
+          collectionId: state.collections[0].id,
+          cover: `local:${id}`,
+        });
+        const db = await new Promise((resolve, reject) => {
+          const req = indexedDB.open("riwaq-collection-art", 1);
+          req.onupgradeneeded = () => req.result.createObjectStore("art");
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+        await new Promise((resolve, reject) => {
+          const t = db.transaction("art", "readwrite");
+          const bytes = Uint8Array.from(
+            atob(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==",
+            ),
+            (ch) => ch.charCodeAt(0),
+          );
+          t.objectStore("art").put(
+            {
+              blob: new Blob([bytes], { type: "image/png" }),
+              mime: "image/png",
+              at: Date.now() - 30 * 60_000,
+            },
+            id,
+          );
+          t.oncomplete = resolve;
+          t.onabort = () => reject(t.error);
+        });
+        db.close();
+        await call("profileSwitch", { id: a });
+        return { a, b };
+      },
+      { id: art },
+    );
+    const profileIds = () =>
+      page.evaluate(async () => {
+        const { state } = await window.riwaq.call("hudSnapshot");
+        return state.profiles.list.map((p) => p.id);
+      });
+    const removal = {
+      method: "profileRemove",
+      args: { id: ids.b },
+    };
+    for (const kind of ["abort-after-success", "abort"]) {
+      const outcome = await failNextWrite(page, kind, removal);
+      const memory = await profileIds();
+      await reload(page);
+      const disk = await profileIds();
+      check(
+        `10 Q6 ${kind}: the refused removal is refused, and B stays in memory and on disk`,
+        outcome.refused && memory.includes(ids.b) && disk.includes(ids.b),
+        JSON.stringify({ outcome, memory, disk }),
+      );
+    }
+    await failNextWrite(page, "abort-after-success", removal);
+    await call(page, "settings", { uiLanguage: "en" });
+    await page.waitForTimeout(1500); // any sweep has run
+    await reload(page);
+    const after = await page.evaluate(
+      async ({ b, ref }) => {
+        const call = window.riwaq.call;
+        const { state } = await call("hudSnapshot");
+        const listed = state.profiles.list.some((p) => p.id === b);
+        const english = state.settings.uiLanguage === "en";
+        const switched = await call("profileSwitch", { id: b });
+        const { state: inB } = await call("hudSnapshot");
+        return {
+          listed,
+          english,
+          active: switched.profiles.active === b,
+          collections: inB.collections.map((c) => c.title),
+          cover: inB.collections[0]?.cover === ref,
+          image: !!(await call("collectionArt", { id: ref })),
+        };
+      },
+      { b: ids.b, ref: `local:${art}` },
+    );
+    check(
+      "10 Q6: after an unrelated save and reload, B, its collection and its picture are all kept",
+      after.listed &&
+        after.english &&
+        after.active &&
+        JSON.stringify(after.collections) === '["Only in B"]' &&
+        after.cover &&
+        after.image,
+      JSON.stringify(after),
+    );
+    await call(page, "profileSwitch", { id: ids.a });
+    await call(page, "profileRemove", { id: ids.b });
+    await reload(page);
+    const gone = await profileIds();
+    check(
+      "10 Q6: a written retry removes B for good",
+      !gone.includes(ids.b) && gone.includes(ids.a),
+      JSON.stringify(gone),
+    );
+    await context.close();
+  }
+
+  // 11. Q6: a refused removal of the ACTIVE, PIN-protected profile puts it
+  // back as on disk, locked, under a new activation; a refused switch
+  // returns to the previous profile, locked; refused create and rename are
+  // undone. The page is shown what is kept.
+  {
+    const { context, page } = await fresh();
+    const outcome = await page.evaluate(async () => {
+      const call = window.riwaq.call;
+      const created = await call("profileCreate", { name: "Profile B" });
+      const a = created.profiles.active;
+      const b = created.profiles.list.find((p) => p.id !== a).id;
+      await call("profileSwitch", { id: b });
+      await call("profilePin", { id: b, pin: "4321" });
+      return { a, b };
+    });
+    const session = () =>
+      page.evaluate(async () => {
+        const { state } = await window.riwaq.call("hudSnapshot");
+        return state.profiles;
+      });
+    const before = await session();
+    const removed = await failNextWrite(page, "abort-after-success", {
+      method: "profileRemove",
+      args: { id: outcome.b },
+    });
+    const kept = await session();
+    check(
+      "11 Q6: a refused removal of the active profile leaves it active, locked, in a new activation",
+      removed.refused &&
+        kept.active === outcome.b &&
+        kept.unlocked === false &&
+        kept.session !== before.session,
+      JSON.stringify({ removed, before: before.session, kept }),
+    );
+    await call(page, "profileUnlock", { pin: "4321" });
+    const switched = await failNextWrite(page, "abort", {
+      method: "profileSwitch",
+      args: { id: outcome.a },
+    });
+    const back = await session();
+    check(
+      "11 Q6: a refused switch returns to the previous profile, locked",
+      switched.refused && back.active === outcome.b && back.unlocked === false,
+      JSON.stringify({ switched, back }),
+    );
+    const made = await failNextWrite(page, "abort", {
+      method: "profileCreate",
+      args: { name: "Never kept" },
+    });
+    const renamed = await failNextWrite(page, "request-error", {
+      method: "profileUpdate",
+      args: { id: outcome.a, name: "Renamed" },
+    });
+    await call(page, "settings", { uiLanguage: "en" });
+    await reload(page);
+    const final = await session();
+    check(
+      "11 Q6: refused create and rename are undone and no later save writes them",
+      made.refused &&
+        renamed.refused &&
+        final.list.length === 2 &&
+        !final.list.some(
+          (p) => p.name === "Never kept" || p.name === "Renamed",
+        ),
+      JSON.stringify({ made, renamed, names: final.list.map((p) => p.name) }),
+    );
+    await context.close();
+  }
 } finally {
   await browser.close();
 }

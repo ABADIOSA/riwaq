@@ -2159,9 +2159,12 @@ const methods = {
       stopLocalMusic();
       await player.stop();
     }
-    // Its downloads go with it (electron/offline.mjs).
+    // Its downloads go with it (electron/offline.mjs). They are files on
+    // disk, deleted for good with their records before the profile goes
+    // (never a record without its file, or a file without its record); the
+    // profile itself and its local songs go in one write, put back whole
+    // when that write is refused (fifth pass, Q6).
     await offline?.forgetProfile(a.id);
-    if (client.state.localMusic) delete client.state.localMusic[a.id];
     return client.profiles.remove(a);
   },
   profileSwitch: async (a) => {
@@ -3424,10 +3427,15 @@ app
           !Object.hasOwn(methods, method)
         )
           return { ok: false, error: "الطلب غير مسموح" };
+        const writes = client?.writes;
         try {
           return { ok: true, value: await methods[method](args) };
         } catch (error) {
           logError(`ipc:${method}`, error);
+          // A refused write was undone (Client.commit, Profiles.transact):
+          // the page is shown what is actually kept, as the web's onUndo
+          // does, including a profile that came back locked (fifth pass).
+          if (client && client.writes !== writes) broadcast();
           if (process.env.RIWAQ_SMOKE)
             console.error(`Smoke IPC ${method}: ${error.stack}`);
           return { ok: false, error: cleanError(error) };

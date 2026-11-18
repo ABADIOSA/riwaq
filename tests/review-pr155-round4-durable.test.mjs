@@ -204,16 +204,20 @@ test("N1: an edit refused after a profile switch goes back into its own profile,
   release();
   await assert.rejects(refused);
   await assert.rejects(later, /حفظاً سبقه/);
-  // B is active; its collection was built after the refusal and rolled back.
-  assert.deepEqual(titles(c.state.collections), []);
-  assert.deepEqual(titles(c.profiles.store.data[a].collections), ["A's own"]);
+  // B's collection was built after the refusal and went back into B's own
+  // bucket. Since the fifth pass (Q6) the switch is a commit too, built on
+  // the refused write, so it is undone with them: A is active again, as on
+  // disk, under a new activation.
+  assert.deepEqual(titles(c.profiles.store.data[b].collections), []);
+  assert.equal(c.profiles.store.active, a);
+  assert.deepEqual(titles(c.state.collections), ["A's own"]);
   await c.durable().catch(() => {});
   c.settings({ uiLanguage: "en" });
   await c.durable();
   const kept = onDisk();
   assert.deepEqual(titles(kept.profiles.data[a].collections), ["A's own"]);
   assert.deepEqual(titles(kept.profiles.data[b].collections), []);
-  assert.equal(kept.profiles.active, b);
+  assert.equal(kept.profiles.active, a);
 });
 
 test("N1: plain saves made while a refused commit is written go out again; the commit does not", async () => {
