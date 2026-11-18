@@ -188,3 +188,91 @@ See docs/CLOUDFLARE-DATABASE-AUDIT-2026-11-18.md: inventory, CF1–CF5 (two P2),
 ## Not verified in this pass
 
 Windows, Electron, MPV, the native HUD and picture dialog, NTFS, DPAPI, packaging and upgrade (none here; Codex's Windows runs were at `b9d946e`). Node 24 (the container has 22.23.5; running a downloaded Node 24 was not permitted). Live TMDB, live addons, live FR-Badges pictures in the app. The Worker on Cloudflare's edge and a remote D1 (only workerd + local D1 here).
+
+# Fourth pass — Codex's third review (2026-11-18)
+
+Codex re-reviewed at `72e2ffc` on Windows x64 (Node 24.19.0) and returned
+**NO-GO** for the code merge, the Cloudflare deployment, the merge action
+and a Windows beta: one P1 (N1), seven P2 (N2–N7, N9, N12), three P3 (N8,
+N10, N11); CF1 and CF2 still partial; the merge would deploy production.
+This pass answers them on the same branch, new commits on top of
+`72e2ffc` (`5604436`…), no force push, nothing merged, tagged, versioned
+(still 0.55.0) or published, PR still a draft. It is the author's account;
+the decision stays with the next independent review.
+
+- Environment: Linux container, **Node 24.22.3** (`/opt/node24`; earlier
+  passes had 22), Playwright's Chromium 157.0.8103.78, Wrangler 4.141.0 with
+  workerd 2026-09-25 installed outside the repository. No Windows,
+  Electron, MPV, NTFS or DPAPI here.
+- The review (`Riwaq-PR155-Third-Review-AR.md`) and its evidence
+  (`Riwaq-PR155-Third-Evidence.zip`, 187 entries, paths checked before
+  extraction) were read in full and kept outside the repository. Its
+  harnesses were read before use and run against disposable stores only;
+  their exit code 0 records observations, so their JSON was read, not the
+  exit code.
+
+## Reproduced before changing anything
+
+- **N1**: Codex's `check-web-persistence.mjs` on `72e2ffc`'s build, in
+  Chromium 157: the aborted vault write answered `replyCount: 1`, the
+  reload showed the old collection, an unrelated language save made the
+  refused Replace durable, and the sweep deleted the aged picture
+  (`imageDelivered: false`) — exactly the review's JSON.
+- **N9, N3, N4, N5, N6, N11**: the reviewer's fixtures are the tests below;
+  each failed (or could not run, a missing export) on `72e2ffc`.
+- **Web smoke**: the masthead overlap reproduced here with a fixed clock
+  (below); it depends on the hour, which is why it looked intermittent.
+
+## N1–N12
+
+| ID | Cause | Change | Test |
+| --- | --- | --- | --- |
+| N1 P1 | `web/store.js` queued each save, swallowed every failure (`catch → failed = true`) and returned nothing, so `Client.commit` saw success and kept the change in memory; the next save wrote it. The bridge swept pictures right after the synchronous call, from memory. A manual abort rejected with `null`. | `core/durable.mjs`: one write at a time from a snapshot taken when the write starts; a save resolves only on the transaction's `complete` and rejects on `abort`/`error` with a real error. A commit hands its undo; a refused write undoes it and every commit built on it, newest first, before any later snapshot. `Client.persist` returns the write; `commit` undoes into the profile that owned it, even after a switch. Every user edit is a commit (addons, hotkeys, favourites, history, queue, taste, providers, series memory, Nuvio plugins; a backup restore undoes whole). The bridge answers a call that wrote only once it is durable; the sweep runs after a durable change and keeps memory ∪ durable ∪ in-flight references. | `tests/review-pr155-round4-durable.test.mjs` (16, async store with refusals). `scripts/test-web-durability.mjs`, Chromium, real sealed IndexedDB: Codex's abort, a request error (`ConstraintError`), abort after the request succeeded, two concurrent edits, the sweep, a real `QuotaExceededError` (CDP quota), a page reloaded mid-write, a late picture read: **24/24** here, **5/23** on `72e2ffc` (case 9 was added after). |
+| N2 P2 | The import wrote collections/library/plugins in one commit, then the TMDB key in a second save; an addon whose write failed stayed in memory. | Each addon is its own durable commit (`install` waits for it) and is counted only when kept; Nuvio's disabled state goes in the same write. Collections, library, plugins and the key are **one** commit (`DataHub.stage`). A failure after addons were installed says so: `… · لم يُحفظ ما اخترته … أما الإضافات المثبّتة (n) فمحفوظة`, `error.installedAddons`. | Same file: refusal of the last write, of an addon's write, desktop synchronous failure, a switch during installs, retry, restart. |
+| N3 P2 | `b9d946e`'s export wrote a stored `nuvio-riwaq-curated` as `riwaq-curated`, indistinguishable from Riwaq's own `curated`. | `legacyId`/`report.aliases` keep the older reading; `legacyMatches` lists file collections that are here only under it; a merge refuses without the viewer's answer, and the paste preview asks per collection: update mine (in place, folders by their older IDs too, local pictures and hand-picked titles kept) or add a new one. Current exports never ask; Add and Replace never ask. | `tests/review-pr155-round4-collections.test.mjs`, with a real `b9d946e` export as fixture. |
+| N4 P2 | `applyTemplate` stored every template folder ID in `tplFolders`, including one that did not fit. | Only folders known before or present now are marked known; one deferred at the limit is counted (`deferred`) and arrives when there is room; removed folders stay removed. | Same file. |
+| N5 P2 | Negation was read only before a fact; any one affirmed match won; "subbed in English" was not matched. | `states()` for track facts: a match denied before or after its words ("unavailable", "not included", "none", "N/A", "غير متوفرة") does not count, and a source that both says and denies is believed in its denial (as for "cached"). `EN_SUB_RX` reads "subbed/subtitles in English". Language mentions keep `affirms`. Used for `enSub`, `arabicSub`, `arabicDub`. | Same file, through `Client.getStreams` and the facets. |
+| N6 P2 | Admission keyed sources by the whole serialized object (labels included). | Admission uses the cleaner's own keys (`tmdbKey`, `traktKey`, `catalogKey`); identical unread sources once too. | Same file (the reviewer's 40 + 1 fixture, and through the Client). |
+| N7 P2 | `surelyStill` trusted a `.jpg` path. | Only Riwaq's own JPEG data URLs (typed from sniffed bytes) skip the canvas. | `scripts/test-ui-review155-round2.mjs`: APNG named `.jpg` and behind a real `.jpg` redirect, Reduce and normal; Codex's `still-frames.mjs`: 13/13 still in both modes. |
+| N8 P3 | The canvas path loaded at mount and drew at 960 px. | One shared `IntersectionObserver` (300 px, `scrollMargin`) defers loading; drawn at the element's size × density (cover), ≤ 2560 px. | Same script: cards 600 px below the screen not requested before scrolling, requested after; Codex's offscreen run: the target is no longer requested. |
+| N9 P2 | GET read the revision, then the pieces, in two statements. | Revision, size and pieces in **one** statement bound to the account instance; the whole is checked (indices, length = size) and read again up to three times, else 503 `try_again`, never a 200 with old/empty data; a cheap revision-only read still answers 204/304 first. | `tests/accounts-instances.test.mjs` (Codex's pause point; missing pieces; deletion during a pull; 7 MB round trip). |
+| N10 P3 | The canvas kept its pixels when the address changed; a failed backdrop had no fallback. | A new address clears the canvas at once; failures reach `onError`; the hero drops a failed backdrop (tied to its address, keyed remount). | Same UI script (N10); Codex's `folder-transitions.mjs`: the sampled pixel after the failure is the hero's own background `[16,14,12]`, not the previous `[58,10,9]`. |
+| N11 P3 | `cleanTmdb` silently replaced unknown media/sort and dropped unknown filter names; duplicate Add returned the folder unchanged. | `checkedTmdb` refuses an unknown kind, media, order, filter name or non-object filters by name (`error.fields`); a duplicate Add is refused like Update ("في المجلد مصدر بنفس الاستعلام"). | Same collections file; `tests/collection-sources.test.mjs` now expects the refusal. |
+| N12 P2 | Interface calls could name only a profile ID or nothing; Nuvio ZIP/Desktop previews had no owner; an account sync kept the activation; a late picture read could cache an object URL after the cache was cleared. | `Client.claimSession` at the IPC boundary (main and web bridge) for the picture picker, paste import, badge styles, filter edits and every Nuvio preview step; previews hold their ticket and the import/diagnostics refuse after a switch (even back) or re-lock, before any install. `AccountHub.apply` renews the activation. Web: object URLs carry a generation; a late read makes none; reads are shared; any activation change (restore, sync, removal too) lets them go. Desktop: the pictures folder itself must not be a link/junction. | `tests/review-pr155-round4-sessions.test.mjs` (6), Chromium case 9 (late read after a switch: no URL). |
+
+## Cloudflare (CF1, CF2, N9) and the deployment gate
+
+See docs/CLOUDFLARE-DATABASE-AUDIT-2026-11-18.md, "Fourth pass": migration
+0003 (account instances and credential generations), every write bound to
+them in its own transaction, the one-statement pull, released clients
+across the migration, workerd, and the new manual, fail-closed deploy
+workflow. Production was only **read** (schema, migration names, Worker
+list); nothing was written, deployed or migrated.
+
+## Web smoke
+
+Codex's `test-web.mjs` failure ("header controls must not overlap", both
+heads) is a real defect: at 980 px in English the utilities spilled 8–15 px
+over the search box whenever the prayer chip read "Dhuhr 12:08 PM" or
+"Maghrib 5:41 PM" (UTC 03–09 and 13–14 here). The outer masthead columns
+are now `minmax(max-content, 1fr)`; screens from 1100 px up are
+pixel-identical before and after in both languages, and a deterministic
+check (six fixed hours, en/ar, 1440–780 px) fails on the old CSS. The
+intermittent #110 failure was the check reading the restored focus in the
+same turn App restores it in the next frame; it now waits for that frame
+(bounded) and asserts the same. Six full smoke runs here passed.
+
+## Not verified in this pass
+
+Windows, Electron, MPV, the native HUD and picture dialog, NTFS links and
+junctions on a real volume, DPAPI, packaging, installers and upgrade (Codex's
+Windows runs were at `72e2ffc`, not at these commits). Firefox (not
+installed here; Codex's Firefox frames were at `72e2ffc`). The Worker on
+Cloudflare's edge, a remote D1, D1 Time Travel and a staging environment
+(none exists; production untouched). Whether the repository has an
+`accounts-production` environment with required reviewers (a settings
+matter outside the repository; not checked from here). Live TMDB, live
+addons, live FR-Badges pictures in the app. Fire-and-forget saves that are
+not user edits (a playback position, a provider's rotated token) are still
+retried with the next save rather than rolled back, by design: undoing a
+rotated single-use token would sign the viewer out.

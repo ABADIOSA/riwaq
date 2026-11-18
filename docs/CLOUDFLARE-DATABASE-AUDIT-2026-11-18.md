@@ -89,3 +89,154 @@ Synthetic database on Node's SQLite (the same Worker code, previous vs new): a s
 - The Cloudflare tools available here (the Workers Bindings server, marked deprecated) list and query D1, list Workers, KV and R2 and read a Worker's code. They do not show secrets, routes, cron state, Worker versions, deployments, the plan, analytics or Time Travel; those were not checked.
 - The D1 query tool can write; only `SELECT`, `PRAGMA`-free schema reads and `EXPLAIN QUERY PLAN` were sent. One aggregate that touched `_cf_KV` was refused by D1 (`SQLITE_AUTH`) and re-run without it.
 - No staging exists, so nothing ran against a remote D1; the local workerd runtime stood in. Real edge latency and D1's remote behaviour under concurrent requests were not measured.
+
+# Fourth pass — after Codex's third review (2026-11-18)
+
+Codex marked CF3 and CF5 fixed, CF1 and CF2 partial, found N9 (a pull
+returning an old revision with no data while another device uploaded) and
+judged the deploy workflow unsafe to merge. This pass closes them in code
+and tests. **Production was not changed**: the live account was only read
+(below); no migration, deploy, secret, session or row was touched. Sections
+G and H above describe the previous plan and are **superseded** by J–L.
+
+## J. What changed
+
+- **Migration `0003_account_instances.sql` (additive).** `users.account_id`
+  (random, never reused; unique index) and `users.auth_gen` (credential
+  generation, default 0); `sessions.account_id` and `sessions.auth_gen`.
+  Every existing account gets an instance; every session not older than its
+  account takes that instance at generation 0, so every device stays signed
+  in; a session older than its account (a lost race of old) gets none and
+  stays refused. No table is rebuilt, no row deleted.
+- **CF1, sessions.** A session is issued only while the account is still the
+  instance and generation whose secret was just checked, inside the same
+  transaction (sign-up, sign-in, recovery). It is valid only for that
+  instance and generation, never by username or by comparing clocks (edge
+  clocks may differ, so a re-created account could look "older"). A password
+  change or a recovery is one transaction bound to the instance, the
+  generation and the salt it writes (two changes racing from one generation
+  would otherwise both reach the same next number); it signs every other
+  device out and moves this one to the new generation.
+- **CF2, writes.** Every statement of an upload and of an account deletion
+  requires the account's instance and generation **and the session itself**
+  at commit time. A revoked session (another device's sign-out of it), a
+  password change, a deletion or a new account of the same name during the
+  upload writes nothing and is answered 401; a newer revision of the same
+  account is still 409 with the revision. D1 runs a batch as one SQL
+  transaction (Cloudflare D1 docs, "batch"), which `local.mjs` mirrors.
+- **N9, reads.** The pull first reads the revision alone (204 at 0, 304 when
+  unchanged: one row), then revision, size and pieces in **one** statement
+  bound to the instance; a single statement reads one committed state. The
+  result is checked whole (consecutive indices, length = stored size) and
+  read again up to three times; otherwise 503 `try_again`, never a 200 with
+  an old revision or no data. Released apps treat 503 as a failed sync and
+  try again later.
+- **The window between migration and deploy.** The previous Worker names its
+  columns, so it keeps working on the migrated schema; rows it writes then
+  (NULL instance) are adopted by the new Worker on their next request and by
+  the daily clean-up, which also removes sessions whose instance or
+  generation no longer matches.
+- `local.mjs` applies each migration once, recorded in `d1_migrations` as
+  Wrangler does, so a file database from an earlier run takes only 0003.
+
+## K. Verified here
+
+- `tests/accounts-instances.test.mjs` (19), each race landed exactly where it
+  falls: sign-in racing deletion + re-registration, a password change, a
+  recovery; recovery racing a password change; a session from a deleted
+  account against a new one created with an earlier clock; two sign-ins; an
+  old-generation session; uploads racing sign-out, a password change from
+  another device, deletion + re-registration; deletion racing recovery;
+  concurrent uploads; a failed batch; the pull racing an upload (Codex's
+  pause point) → 200 with revision 2 and its whole data; missing pieces →
+  503; deletion during a pull → 401; a 7 MB envelope; migration 0003 on rows
+  written by the previous Worker, before and after migrating. With
+  `accounts-integrity` (16), `accounts-server`, `account` and the workflow
+  test: **65/65**.
+- `scripts/test-accounts-released.mjs`: the released apps' own `core/`
+  (git archive of v0.40.0, v0.54.0, v0.55.0) sign up and sync against the
+  v0.55.0 Worker on the 0001–0002 schema, migration 0003 is applied while
+  that Worker still serves (a sign-in happens in the window), then this
+  Worker takes over the same database: the established sessions survive;
+  login, pull, push, 409 conflict, logout, password change (other devices
+  signed out), recovery, deletion and a fresh sign-up all work: **3/3**,
+  also with 72e2ffc's Worker as the previous one.
+- `scripts/test-accounts-workerd.mjs`, Wrangler 4.141.0 + workerd 2026-09-25,
+  local D1 only (throwaway config, random database ID, no Cloudflare
+  variables): 0001–0002 applied, rows written as the previous Worker writes
+  them, 0003 applied (its `randomblob`, `ALTER TABLE` and unique index run on
+  D1's SQLite), a second apply applies nothing, the legacy session pulls and
+  pushes, 409/304, sign-up, password change, deletion, the scheduled
+  clean-up, and the deploy workflow's own live smoke against this local
+  Worker, leaving no account behind: **16/16**.
+- Codex's account sync contract, as a permanent test: the pull racing the
+  upload no longer returns `200 / revision 1 / 0 bytes`.
+
+## L. Production, read only
+
+Through the Cloudflare tools (deprecated Workers Bindings server), only
+`SELECT` and a schema read, `rows_written: 0`:
+
+- D1 `riwaq-accounts` (`d5118240-a4d6-4abd-bcbd-ec9ce544c18a`): applied
+  migrations `0001_accounts.sql`, `0002_usage.sql`; `users`, `sessions` and
+  `chunks` have exactly the columns 0001 defines (no `account_id`), as 0003
+  expects.
+- One Worker, `riwaq-accounts`, last modified 2026-10-18 — before this PR;
+  production runs neither 72e2ffc's Worker nor this one.
+
+## M. Deployment gate
+
+- `.github/workflows/accounts.yml` is **tests only** (push to `main`, pull
+  requests, manual): the Node suites, the released apps across 0003, the
+  Worker in workerd with a local D1. No token, no secret, no remote command:
+  merging PR #155 deploys nothing.
+- `.github/workflows/accounts-deploy.yml` is the only path to production:
+  `workflow_dispatch` only, refused unless on `main` and started by the
+  repository owner, `environment: accounts-production`, the typed
+  confirmation `deploy <first 7 of the commit>`, the D1 ID and the expected
+  pending migrations typed, `dry_run` on by default. Read-only preflight
+  before any change (token's account; exactly one `riwaq-accounts` with that
+  ID — never created; pending migrations exactly as typed; `AUTH_PEPPER`
+  present — never generated; current deployments and the Time Travel
+  bookmark into the run's summary), then a bundle (`--dry-run`). Only with
+  `dry_run` off: migrations, deploy (`bash -e -o pipefail`, so a failing
+  Wrangler fails the step even through `tee`), the reported address must be
+  `https://riwaq-accounts.abadiosa2007.workers.dev`, health must answer
+  `"ok":true` within a minute, then the live throwaway-account test.
+- `tests/accounts-workflow.test.mjs` pins all of it (it fails on 72e2ffc's
+  workflow); actionlint 1.7.12 reports nothing on every workflow.
+- **Not verified:** whether the repository has an `accounts-production`
+  environment with required reviewers, and whether `CLOUDFLARE_API_TOKEN` is
+  an environment secret. Until the owner configures both (Settings →
+  Environments → New environment `accounts-production` → Required reviewers:
+  ABADIOSA; move the token into it), the environment approves nothing by
+  itself; the manual trigger, the owner check and the typed confirmation
+  still hold.
+
+## N. Deploying it (each step needs the owner's explicit approval)
+
+1. Merge PR #155 when its review allows (deploys nothing now).
+2. Actions → *Account service (deploy to production)* → Run workflow on
+   `main`: confirmation `deploy <sha7>`, database ID
+   `d5118240-a4d6-4abd-bcbd-ec9ce544c18a`, migrations
+   `0003_account_instances.sql`, **dry run on**. Read the summary: account,
+   database, pending list, pepper present, current deployment, bookmark.
+3. Run it again with dry run **off**. Order: migration 0003 (the previous
+   Worker keeps working on it), deploy, health, live smoke.
+4. After: `/v1/health`; Workers logs for a day; after the first 02:17 UTC
+   run, read-only counts: `users WHERE account_id IS NULL` = 0, sessions
+   without an instance only for sessions older than their account.
+5. If the deploy step fails after the migration: production keeps the
+   previous Worker on the migrated schema (it works there; §J). Fix and
+   re-run; nothing to roll back in the data.
+6. Rollback of the Worker: `wrangler rollback` to the version in the summary.
+   The previous Worker reads and writes the migrated schema; sessions and
+   accounts made by the new Worker keep working with it (it ignores the new
+   columns), and the new Worker adopts anything it writes meanwhile. A
+   Worker rollback does not undo what the clean-up deleted (expired counters,
+   sessions idle 180 days, sessions of another instance or generation).
+7. The columns of 0003 are never dropped as part of a rollback (D1 has no
+   down migrations here, and dropping them would end the binding). D1 Time
+   Travel to the bookmark is a last resort for damaged data: it restores the
+   whole database and loses every later write, and needs writes stopped and
+   a separate decision.
