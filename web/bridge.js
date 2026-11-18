@@ -179,6 +179,9 @@ export async function startBridge({ version, store }) {
     client.usage.start(() => document.visibilityState === "visible"),
   );
   const broadcast = () => emit("state", client.publicState());
+  // Commits the browser refused were rolled back (core/durable.mjs): the
+  // page is shown the state that is actually kept.
+  store.onUndo = () => broadcast();
   client.updates = new WebUpdates(client, {
     current: version,
     onChange: broadcast,
@@ -807,11 +810,24 @@ export async function startBridge({ version, store }) {
   }
 
   // Pictures no profile's collections name any more are deleted (after a
-  // short grace, core/collection-art.mjs).
-  const sweepArt = () =>
-    browserArtStore
-      .sweep(() => referencedArt(client.allCollections()))
-      .catch(() => {});
+  // short grace, core/collection-art.mjs). What memory names, what the last
+  // durable write named and what the write under way names are all kept, so
+  // a change the browser has not committed (or refused) never lets a
+  // picture go that the kept state still shows (third review, N1).
+  const keptArt = () => {
+    const out = referencedArt(client.allCollections());
+    for (const set of store.durableArt?.() || [])
+      for (const id of set) out.add(id);
+    return out;
+  };
+  const sweepArt = () => browserArtStore.sweep(keptArt).catch(() => {});
+  // A change that names or drops pictures is swept only once it is
+  // durable; a refused one throws before any clean-up.
+  const sweepAfter = async (result) => {
+    await client.durable();
+    sweepArt();
+    return result;
+  };
   const methods = {
     musicLocalLibrary: async (a) => {
       await music.tagSome(a?.profileId);
@@ -872,7 +888,7 @@ export async function startBridge({ version, store }) {
         },
         (url) => fetchFrStyle(url),
       );
-      await store.settled();
+      await client.durable();
       return done;
     },
     streamFilterEdit: async (a) => {
@@ -882,7 +898,7 @@ export async function startBridge({ version, store }) {
         action: String(a?.action || ""),
         id: String(a?.id || ""),
       });
-      await store.settled();
+      await client.durable();
       return done;
     },
     copyThemeCode: async (a) => {
@@ -1052,10 +1068,14 @@ export async function startBridge({ version, store }) {
     removeAddons: (a) => client.removeAddons({ keys: a?.keys }),
     settings: async (a) => {
       const state = client.settings(a, player?.state);
-      player.applyCueStyle();
       // A successful settings response must survive an immediate reload,
-      // including on browsers where encryption/IndexedDB writes are slower.
-      await store.settled();
+      // including on browsers where encryption/IndexedDB writes are slower;
+      // a refused write throws here, already rolled back (N1).
+      try {
+        await client.durable();
+      } finally {
+        player.applyCueStyle();
+      }
       return state;
     },
     providerSave: (a) => client.dataHub.save(a),
@@ -1420,11 +1440,7 @@ export async function startBridge({ version, store }) {
       return true;
     },
     openUpdate: () => openExternal(client.updates.releaseUrl()),
-    collectionsEdit: (a) => {
-      const result = client.collectionsEdit(a || {});
-      sweepArt();
-      return result;
-    },
+    collectionsEdit: (a) => sweepAfter(client.collectionsEdit(a || {})),
     collectionCatalogs: () => client.collectionCatalogs(),
     collectionFolder: (a) =>
       client.collectionFolder({
@@ -1450,17 +1466,17 @@ export async function startBridge({ version, store }) {
         JSON.stringify(toNuvio(client.state.collections || []), null, 2),
         "application/json",
       ),
-    importNuvioCollections: (a) => {
-      const result = client.importNuvioCollections({
-        text: typeof a?.text === "string" ? a.text : "",
-        mode: typeof a?.mode === "string" ? a.mode : "merge",
-        only: Array.isArray(a?.only) ? a.only : undefined,
-        profileId: a?.profileId === undefined ? undefined : String(a.profileId),
-        profileSession: a?.profileSession,
-      });
-      sweepArt();
-      return result;
-    },
+    importNuvioCollections: (a) =>
+      sweepAfter(
+        client.importNuvioCollections({
+          text: typeof a?.text === "string" ? a.text : "",
+          mode: typeof a?.mode === "string" ? a.mode : "merge",
+          only: Array.isArray(a?.only) ? a.only : undefined,
+          profileId:
+            a?.profileId === undefined ? undefined : String(a.profileId),
+          profileSession: a?.profileSession,
+        }),
+      ),
     // A picture for a collection or folder from this computer, kept in
     // this browser (web/collection-art.js); the page gets "local:<id>".
     // As on the desktop: a still slot refuses an animated file (F8), the
@@ -1718,7 +1734,12 @@ export async function startBridge({ version, store }) {
     call: async (method, args) => {
       if (!Object.hasOwn(methods, method)) throw new Error("الطلب غير مسموح");
       try {
-        return copy(await methods[method](copy(args)));
+        // A call that wrote is answered once the browser committed the
+        // write, and fails (rolled back) when it did not (N1).
+        const writes = client.writes;
+        const out = await methods[method](copy(args));
+        if (client.writes !== writes) await client.durable();
+        return copy(out);
       } catch (error) {
         logError(`ipc:${method}`, error);
         throw new Error(cleanError(error));

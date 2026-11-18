@@ -313,7 +313,12 @@ test("F2: a Nuvio import whose addons install across A → B → A writes nothin
     types: ["movie"],
     catalogs: [{ id: "featured", type: "movie" }],
   });
-  await assert.rejects(run, { message: PROFILE_CHANGED });
+  // Fourth pass (N2): the refusal also names the addon that stayed.
+  await assert.rejects(run, (error) => {
+    assert.ok(error.message.startsWith(PROFILE_CHANGED));
+    assert.equal(error.installedAddons, 1);
+    return true;
+  });
   assert.deepEqual(c.state.collections, before);
 });
 

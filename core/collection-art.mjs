@@ -207,6 +207,20 @@ export function referencedArt(collections) {
 }
 
 /**
+ * Every "local:" picture a whole saved state names: the live collections
+ * and every profile's bucket (what a snapshot of Client.state holds).
+ */
+export function stateArt(state) {
+  const buckets = Object.values(state?.profiles?.data || {});
+  return referencedArt([
+    ...(Array.isArray(state?.collections) ? state.collections : []),
+    ...buckets.flatMap((b) =>
+      Array.isArray(b?.collections) ? b.collections : [],
+    ),
+  ]);
+}
+
+/**
  * The store over an injected backend:
  *   write(id, bytes, mime), read(id) → { bytes, mime } | null,
  *   remove(id, guard) → whether it removed, list() → [{ id, at }] (at: when

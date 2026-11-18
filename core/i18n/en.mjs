@@ -28,6 +28,7 @@ import settingsRooms from "./en/settings-rooms.mjs";
 import feedback202611 from "./en/feedback-2026-11.mjs";
 import beta202611 from "./en/beta-2026-11.mjs";
 import reviewPr155 from "./en/review-pr155.mjs";
+import reviewPr155Round4 from "./en/review-pr155-round4.mjs";
 
 export default {
   ...core,
@@ -55,6 +56,7 @@ export default {
   ...feedback202611,
   ...beta202611,
   ...reviewPr155,
+  ...reviewPr155Round4,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",
