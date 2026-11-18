@@ -178,7 +178,20 @@ export async function startBridge({ version, store }) {
   window.addEventListener("pageshow", () =>
     client.usage.start(() => document.visibilityState === "visible"),
   );
-  const broadcast = () => emit("state", client.publicState());
+  // Object addresses of pictures belong to one profile activation: every
+  // change of it (a switch, a lock, a restore, an account sync, a removal)
+  // lets them all go, not only the switch and the lock (third review, N12).
+  let artSession = client.profiles.session();
+  const followArtSession = () => {
+    const now = client.profiles.session();
+    if (now === artSession) return;
+    artSession = now;
+    forgetArtUrls();
+  };
+  const broadcast = () => {
+    followArtSession();
+    emit("state", client.publicState());
+  };
   // Commits the browser refused were rolled back (core/durable.mjs): the
   // page is shown the state that is actually kept.
   store.onUndo = () => broadcast();
@@ -1248,7 +1261,9 @@ export async function startBridge({ version, store }) {
         await player.stop();
       }
       music.forget(a.id);
-      return client.profiles.remove(a);
+      const state = client.profiles.remove(a);
+      followArtSession();
+      return state;
     },
     profileSwitch: async (a) => {
       client.profiles.check({ ...a, intent: "switch" });
@@ -1526,6 +1541,7 @@ export async function startBridge({ version, store }) {
     },
     collectionArt: async (a) => {
       client.profiles.gate("library");
+      followArtSession();
       const ticket = client.profiles.ticket();
       const ref = `local:${String(a?.id || "").replace(/^local:/, "")}`;
       if (!client.canReadArt(ref)) return "";
@@ -1625,6 +1641,7 @@ export async function startBridge({ version, store }) {
         passphrase,
       });
       pendingBackup = null;
+      followArtSession();
       return state;
     },
     backupCancel: () => {

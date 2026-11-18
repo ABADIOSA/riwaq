@@ -32,34 +32,76 @@ export function useReducedMotion(setting = false) {
 }
 
 /**
- * Whether a picture is certain to have one frame: only JPEG, by its data
- * type or its name. A still slot draws everything else through a canvas
- * (PR #155 second review, R7): an APNG named ".png", an animated WebP or
- * AVIF, an address with no extension or one that lies about its type all
- * move in an <img>, whatever the motion setting.
+ * Whether a picture is certain to have one frame. Only a JPEG data URL
+ * qualifies: the only data URLs here are Riwaq's own pictures from this
+ * computer, typed by main (or the web store) from their sniffed bytes. A
+ * name proves nothing (PR #155 third review, N7: an APNG at an address
+ * ending ".jpg", directly or after a redirect, moved in a still slot), so
+ * every other picture is drawn through a canvas.
  */
 export function surelyStill(src) {
-  if (typeof src !== "string" || !src) return false;
-  if (/^data:image\/jpe?g[;,]/i.test(src)) return true;
-  if (/^(data|blob):/i.test(src)) return false;
-  try {
-    return /\.(jpe?g|jfif)$/i.test(new URL(src).pathname);
-  } catch {
-    return false;
-  }
+  return typeof src === "string" && /^data:image\/jpe?g[;,]/i.test(src);
 }
-// The longest side a frozen still is kept at: sharp on a card or a hero at
-// twice the pixel density, without holding a full-size bitmap per card.
-const STILL_MAX = 960;
+// A still is drawn at the size its element shows it, at the screen's
+// density, enough to cover the box as `object-fit: cover` would (N8: a
+// fixed 960 px longest side blurred a full-width hero and still held a
+// large bitmap for a small card), never above the picture's own size or
+// STILL_MAX a side; STILL_FALLBACK when the element has no size yet.
+const STILL_MAX = 2560;
+const STILL_FALLBACK = 960;
+function stillScale(element, width, height) {
+  const box = element?.getBoundingClientRect?.();
+  const longest = Math.max(width, height);
+  const cap = STILL_MAX / longest;
+  if (!box?.width || !box?.height)
+    return Math.min(1, cap, STILL_FALLBACK / longest);
+  const dpr = Math.min(3, globalThis.devicePixelRatio || 1);
+  const cover = Math.max(box.width / width, box.height / height) * dpr;
+  return Math.min(1, cap, cover);
+}
+
+// One observer for every lazy still (N8): a picture is asked for only
+// when its element comes near the screen, as a lazy <img> is, so a long
+// grid does not download and decode what nobody scrolled to.
+const nearWaiters = new Map();
+let nearObserver = null;
+function whenNear(element, run) {
+  if (typeof IntersectionObserver !== "function") {
+    run();
+    return () => {};
+  }
+  nearObserver ||= new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const go = nearWaiters.get(entry.target);
+        nearWaiters.delete(entry.target);
+        nearObserver.unobserve(entry.target);
+        go?.();
+      }
+    },
+    // scrollMargin reaches into scrolling rows and pages where supported.
+    { rootMargin: "300px", scrollMargin: "300px" },
+  );
+  nearWaiters.set(element, run);
+  nearObserver.observe(element);
+  return () => {
+    nearWaiters.delete(element);
+    nearObserver.unobserve(element);
+  };
+}
 
 /**
  * A picture in a still slot (a cover, a backdrop, a logo): never moves,
- * whatever the motion setting (PR #155 review, F8, R7). Anything but a
- * JPEG is drawn once into a canvas, which shows the first frame (the
- * canvas rule for animated images: GIF, APNG, WebP, AVIF), at most
- * STILL_MAX a side; a JPEG is a plain image. A picture from another site
- * draws without being read back (no CORS needed). The loader is let go
- * once drawn or when the element goes.
+ * whatever the motion setting (PR #155 review, F8, R7, N7). Every picture
+ * but Riwaq's own JPEGs is drawn once into a canvas, which shows the first
+ * frame of an animated image (GIF, APNG, WebP, AVIF), at the element's
+ * size; a picture from another site draws without being read back (no
+ * CORS needed). Lazy (the default) waits until the element is near the
+ * screen (N8). A new address clears the previous picture at once, so a
+ * slow or failed one never leaves another folder's picture showing, and a
+ * failure is reported to `onError` (N10). The loader is let go once drawn
+ * or when the element goes.
  */
 export function StillImage({
   src,
@@ -74,38 +116,52 @@ export function StillImage({
   failed.current = onError;
   useEffect(() => {
     if (!moving) return;
+    const c = canvas.current;
+    // Whatever the canvas showed belongs to the previous address.
+    if (c) {
+      c.width = 0;
+      c.height = 0;
+      delete c.dataset.ready;
+      delete c.dataset.failed;
+    }
     let live = true;
-    const img = new Image();
+    let img = null;
     const release = () => {
+      if (!img) return;
       img.onload = img.onerror = null;
       img.removeAttribute("src");
     };
-    img.decoding = "async";
-    img.referrerPolicy = "no-referrer";
-    img.onload = () => {
-      const c = canvas.current;
-      if (live && c && img.naturalWidth && img.naturalHeight) {
-        const scale = Math.min(
-          1,
-          STILL_MAX / Math.max(img.naturalWidth, img.naturalHeight),
-        );
-        c.width = Math.max(1, Math.round(img.naturalWidth * scale));
-        c.height = Math.max(1, Math.round(img.naturalHeight * scale));
-        c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
-        c.dataset.ready = "1";
-      }
-      release();
+    const load = () => {
+      if (!live) return;
+      img = new Image();
+      img.decoding = "async";
+      img.referrerPolicy = "no-referrer";
+      img.onload = () => {
+        const el = canvas.current;
+        if (live && el && img.naturalWidth && img.naturalHeight) {
+          const scale = stillScale(el, img.naturalWidth, img.naturalHeight);
+          el.width = Math.max(1, Math.round(img.naturalWidth * scale));
+          el.height = Math.max(1, Math.round(img.naturalHeight * scale));
+          el.getContext("2d")?.drawImage(img, 0, 0, el.width, el.height);
+          el.dataset.ready = "1";
+        }
+        release();
+      };
+      img.onerror = () => {
+        release();
+        if (!live) return;
+        if (canvas.current) canvas.current.dataset.failed = "1";
+        failed.current?.();
+      };
+      img.src = src;
     };
-    img.onerror = () => {
-      release();
-      if (live) failed.current?.();
-    };
-    img.src = src;
+    const stop = lazy && c ? whenNear(c, load) : (load(), () => {});
     return () => {
       live = false;
+      stop();
       release();
     };
-  }, [src, moving]);
+  }, [src, moving, lazy]);
   if (!moving)
     return (
       <img

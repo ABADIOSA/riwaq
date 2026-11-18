@@ -60,6 +60,8 @@ export default function FolderPage({
   // with a good logo shows it at once, and a late error from the previous
   // folder's logo cannot hide the new one (PR #155 second review, R8).
   const [brokenLogo, setBrokenLogo] = useState("");
+  // Tied to the address that failed, like the logo (N10).
+  const [brokenHero, setBrokenHero] = useState("");
   // Every hook runs before the "folder is gone" page below, in the same
   // order on every render: a sync or another window deleting the open
   // folder once threw React #300 here and blanked the app (R1).
@@ -176,11 +178,15 @@ export default function FolderPage({
         {/* The folder's own backdrop when it has one, else its still
             cover; a picture from this computer through its ID; never
             moving (PR #155 review, F8). */}
-        {heroArt && (
+        {/* A backdrop that fails leaves the hero's own background, never
+            the previous folder's picture (third review, N10). */}
+        {heroArt && brokenHero !== heroArt && (
           <StillImage
+            key={heroArt}
             className="folder-hero-backdrop"
             src={heroArt}
             lazy={false}
+            onError={() => setBrokenHero(heroArt)}
           />
         )}
         <div className="folder-hero-inner">

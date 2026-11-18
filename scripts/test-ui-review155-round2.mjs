@@ -12,6 +12,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 import { loadPlaywright, startUiFixture } from "./fixtures/ui-browse-addon.mjs";
 import { bytesOf } from "./fixtures/moving-images.mjs";
@@ -28,6 +29,28 @@ const APNG = `${IMG}cover.png`;
 const GOOD_LOGO = `${IMG}good-logo.png`;
 const BROKEN_LOGO = `${IMG}missing-logo.png`;
 const STILL = `${IMG}still.png`;
+// Fourth pass (N7, N8, N10): an APNG at an address ending ".jpg", one
+// reached through a ".jpg" redirect, a backdrop that fails, a large PNG.
+const APNG_JPG = `${IMG}disguised.jpg`;
+// A real redirect (a routed 302 is not followed for an image), from a
+// local server, to a two-frame APNG.
+const redirector = createServer((req, res) => {
+  if (req.url === "/redirect.jpg") {
+    res.writeHead(302, { Location: "/redirect-target.png" });
+    return res.end();
+  }
+  res.writeHead(200, {
+    "Content-Type": "image/png",
+    "Cache-Control": "no-store",
+  });
+  res.end(bytesOf("apng"));
+});
+await new Promise((r) => redirector.listen(0, "127.0.0.1", r));
+const REDIRECT_JPG = `${IMG}redirect.jpg`;
+const REDIRECT_TARGET = `http://127.0.0.1:${redirector.address().port}/redirect.jpg`;
+const BROKEN_BACKDROP = `${IMG}backdrop-missing.png`;
+const LARGE = (n) => `${IMG}large-${n}.png`;
+const requested = [];
 
 const browser = await chromium.launch({
   executablePath: process.env.RIWAQ_CHROMIUM || undefined,
@@ -49,13 +72,21 @@ async function open({ reducedMotion = "no-preference" } = {}) {
   await context.route(/^https?:\/\//, async (route) => {
     const url = route.request().url();
     if (new URL(url).hostname === "127.0.0.1") return route.continue();
-    if (url === APNG)
+    requested.push(url);
+    // The cover's own address (HTTPS, as covers must be) answers with a
+    // redirect to the local server's ".jpg", which redirects again.
+    if (url === REDIRECT_JPG)
+      return route.fulfill({
+        status: 302,
+        headers: { Location: REDIRECT_TARGET },
+      });
+    if (url === APNG || url === APNG_JPG)
       return route.fulfill({
         status: 200,
         contentType: "image/png",
         body: bytesOf("apng"),
       });
-    if (url === GOOD_LOGO || url === STILL)
+    if (url === GOOD_LOGO || url === STILL || url.startsWith(`${IMG}large-`))
       return route.fulfill({
         status: 200,
         contentType: "image/png",
@@ -256,6 +287,115 @@ for (const reducedMotion of ["reduce", "no-preference"])
       assert.equal(seen.size, 1, `${seen.size} different frames`);
     },
   );
+// N7: a name or a redirect proves nothing about a picture's frames.
+for (const [label, src] of [
+  ["named .jpg", APNG_JPG],
+  ["behind a .jpg redirect", REDIRECT_JPG],
+])
+  for (const reducedMotion of ["reduce", "no-preference"])
+    await check(
+      `N7 a remote two-frame APNG ${label} stays still (${reducedMotion})`,
+      async () => {
+        await open({ reducedMotion });
+        await freshCollection([{ title: "APNG", cover: src, backdrop: src }]);
+        await openFolderPage();
+        const hero = page.locator(".folder-hero-backdrop");
+        await hero.waitFor();
+        assert.equal(await hero.evaluate((el) => el.tagName), "CANVAS");
+        await page.waitForFunction(
+          () =>
+            document.querySelector(".folder-hero-backdrop")?.dataset.ready ===
+            "1",
+        );
+        const seen = new Set();
+        for (let i = 0; i < 6; i++) {
+          seen.add(await fingerprint(hero));
+          await page.waitForTimeout(150);
+        }
+        assert.equal(seen.size, 1, `${seen.size} different frames`);
+      },
+    );
+
+// N10: a backdrop that fails leaves the hero's own background, never the
+// previous folder's picture.
+await check(
+  "N10 a folder whose backdrop fails shows no picture of the folder before it",
+  async () => {
+    await open();
+    await freshCollection([
+      { title: "With backdrop", backdrop: STILL },
+      { title: "Broken backdrop", backdrop: BROKEN_BACKDROP },
+    ]);
+    await openFolderPage();
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".folder-hero-backdrop")?.dataset.ready === "1",
+    );
+    await page
+      .locator(".folder-siblings button", { hasText: "Broken backdrop" })
+      .click();
+    await page
+      .getByRole("heading", { name: "Broken backdrop", exact: true })
+      .waitFor();
+    await page.waitForFunction(
+      () => !document.querySelector(".folder-hero-backdrop"),
+      null,
+      { timeout: 4000 },
+    );
+    assert.ok(requested.includes(BROKEN_BACKDROP));
+    await shot("n10-broken-backdrop");
+    // And back: the good one draws again.
+    await page
+      .locator(".folder-siblings button", { hasText: "With backdrop" })
+      .click();
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".folder-hero-backdrop")?.dataset.ready === "1",
+    );
+  },
+);
+
+// N8: a still far off the screen is not asked for until it comes near.
+await check(
+  "N8 a collection card far off the screen is not downloaded before scrolling",
+  async () => {
+    await open();
+    for (const c of (await call("init")).collections || [])
+      await edit({ action: "remove", collectionId: c.id });
+    for (let i = 0; i < 24; i++) {
+      const st = await edit({ action: "create", title: `Card ${i}` });
+      const c = st.collections.find((x) => x.title === `Card ${i}`);
+      await edit({ action: "update", collectionId: c.id, cover: LARGE(i) });
+    }
+    await page.goto(siteUrl);
+    await page.locator(".app").waitFor();
+    if (await page.locator(".whats-new").count())
+      await page.locator(".whats-new .primary").click();
+    requested.length = 0;
+    await page.locator(".riwaq-destinations > button").nth(3).click();
+    await page.locator(".collection-card").first().waitFor();
+    await page.waitForTimeout(800);
+    const cards = page.locator(".collection-card");
+    const total = await cards.count();
+    assert.ok(total >= 24, `${total} cards`);
+    const far = await cards.evaluateAll((list) => {
+      const h = innerHeight;
+      return list
+        .map((el, i) => [i, el.getBoundingClientRect().top])
+        .filter(([, top]) => top > h + 600)
+        .map(([i]) => i);
+    });
+    assert.ok(far.length > 0, "some cards are far below the screen");
+    const asked = new Set(requested);
+    const early = far.filter((i) => asked.has(LARGE(i)));
+    assert.deepEqual(early, [], "far cards were downloaded before scrolling");
+    // Scrolled to, they load.
+    await cards.nth(far.at(-1)).scrollIntoViewIfNeeded();
+    await page.waitForTimeout(800);
+    assert.ok(requested.includes(LARGE(far.at(-1))));
+  },
+);
+
 await check("R7 control: the same APNG moves in an <img>", async () => {
   await open({ reducedMotion: "no-preference" });
   await page.goto(siteUrl);
@@ -375,6 +515,7 @@ await check(
 
 await browser.close();
 fixture.close();
+redirector.close();
 const passed = results.filter((r) => r.pass).length;
 writeFileSync(
   join(output, "results.json"),
