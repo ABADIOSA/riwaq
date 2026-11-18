@@ -868,9 +868,19 @@ try {
     .filter({ has: page.locator('img[src*="last-train"]') })
     .first();
   await quickPoster.click({ button: "right" });
+  // Force the favorite's IndexedDB write to finish after the pointer action.
+  await page.evaluate(() => {
+    const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+    crypto.subtle.encrypt = async (...args) => {
+      crypto.subtle.encrypt = encrypt;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return encrypt(...args);
+    };
+  });
   await page
     .getByRole("menuitem", { name: "أضف إلى مكتبتي", exact: true })
     .click();
+  await page.locator(".poster-actions").waitFor({ state: "detached" });
   assert.ok(
     (await call("init")).favorites.some((m) => m.id === "webfix:last-train"),
   );
