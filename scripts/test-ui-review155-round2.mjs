@@ -396,6 +396,52 @@ await check(
   },
 );
 
+await check(
+  "N8 horizontal folder gallery reveals and loads offscreen artwork",
+  async () => {
+    await open({ reducedMotion: "reduce" });
+    await call("settings", { reduceMotion: true });
+    await page.setViewportSize({ width: 980, height: 840 });
+    await freshCollection(
+      Array.from({ length: 14 }, (_, i) => ({
+        title: `Folder ${i + 1}`,
+        cover: LARGE(i),
+      })),
+    );
+    await page.reload();
+    requested.length = 0;
+    await page.locator(".riwaq-destinations > button").nth(3).click();
+    await page.locator(".collection-open").click();
+    const gallery = page.locator(".folder-gallery");
+    const last = gallery.getByRole("tab", { name: "Folder 14" });
+    const next = page
+      .locator(".scroll-row-wrap")
+      .filter({ has: gallery })
+      .locator(".rail-arrows button")
+      .last();
+    await last.waitFor();
+    await next.waitFor();
+    assert.ok(
+      await last.evaluate((tile) => {
+        const row = tile.closest(".folder-gallery").getBoundingClientRect();
+        const box = tile.getBoundingClientRect();
+        return box.left - row.right > 600 || row.left - box.right > 600;
+      }),
+      "the last folder starts beyond the lazy loading margin",
+    );
+    assert.equal(requested.includes(LARGE(13)), false);
+    await next.click();
+    await page.waitForFunction(
+      () => Math.abs(document.querySelector(".folder-gallery").scrollLeft) > 0,
+      null,
+      { timeout: 3000 },
+    );
+    await last.scrollIntoViewIfNeeded();
+    await last.locator(".art-still[data-ready='1']").waitFor();
+    assert.ok(requested.includes(LARGE(13)));
+  },
+);
+
 // The masthead with the prayer chip at every next prayer of a day (fourth
 // pass: Codex's web smoke failed at 980 px in English whenever the chip
 // read "Dhuhr 12:08 PM" or "Maghrib 5:41 PM"; it depended on the hour).

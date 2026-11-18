@@ -431,6 +431,7 @@
 .folder-gallery {
   display: flex;
   gap: 16px;
+  overflow-x: auto;
   padding: 6px 2px 14px;
 }
 .folder-gallery .folder-tile {
