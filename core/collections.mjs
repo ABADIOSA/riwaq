@@ -215,10 +215,14 @@ function cleanFilters(input) {
     if (rule.test(value)) out[key] = value;
   }
   for (const [key, [min, max]] of Object.entries(NUMBER_FILTERS)) {
-    const n = Number(input[key]);
+    const value = input[key];
     if (
-      input[key] !== null &&
-      input[key] !== undefined &&
+      typeof value !== "number" &&
+      (typeof value !== "string" || !value.trim())
+    )
+      continue;
+    const n = Number(value);
+    if (
       Number.isFinite(n) &&
       (!WHOLE_NUMBERS.has(key) || Number.isInteger(n)) &&
       n >= min &&
@@ -239,11 +243,11 @@ export function tmdbFilterProblems(input) {
   const problems = Object.entries(input)
     .filter(
       ([key, value]) =>
-        (FILTERS[key] || NUMBER_FILTERS[key]) &&
+        (Object.hasOwn(FILTERS, key) || Object.hasOwn(NUMBER_FILTERS, key)) &&
         value !== null &&
         value !== undefined &&
-        String(value).trim() !== "" &&
-        !(key in kept),
+        (typeof value !== "string" || value.trim() !== "") &&
+        !Object.hasOwn(kept, key),
     )
     .map(([key]) => key);
   for (const [from, to] of RANGES) {
@@ -281,7 +285,8 @@ function checkedTmdb(source) {
     problems.push("filters");
   else if (filters)
     for (const key of Object.keys(filters))
-      if (!FILTERS[key] && !NUMBER_FILTERS[key]) problems.push(key);
+      if (!Object.hasOwn(FILTERS, key) && !Object.hasOwn(NUMBER_FILTERS, key))
+        problems.push(key);
   problems.push(...tmdbFilterProblems(filters));
   if (problems.length) {
     const error = new Error(`قيمة غير صالحة في: ${problems.join(", ")}`);

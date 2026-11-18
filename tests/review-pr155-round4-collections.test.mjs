@@ -478,6 +478,12 @@ test("N11: an unknown media type, order or filter name is refused by name, for A
         { kind: "discover", filters: { withoutKeyword: "18" } },
         "withoutKeyword",
       ],
+      [{ kind: "discover", filters: { toString: "18" } }, "toString"],
+      [
+        { kind: "discover", filters: { voteAverageGte: false } },
+        "voteAverageGte",
+      ],
+      [{ kind: "discover", filters: { voteAverageGte: [] } }, "voteAverageGte"],
       [{ kind: "discover", filters: "18" }, "filters"],
       [{ kind: "nonsense" }, "kind"],
     ]) {
@@ -517,6 +523,23 @@ test("N11: valid values still save as typed; a duplicate Add says so", () => {
     filters: { withGenres: "35", year: "" },
   })[0].folders[0].tmdb;
   assert.equal(cleared.filters.withGenres, "35");
+});
+
+test("N11: empty numeric fields clear instead of saving a zero, and an explicit zero is kept", () => {
+  for (const action of ["tmdbAdd", "tmdbUpdate"]) {
+    const select = (field) =>
+      edit(action, {
+        kind: "discover",
+        filters: { withGenres: "35", voteAverageLte: field },
+      })[0].folders[0].tmdb.at(-1);
+    for (const empty of ["", "   "])
+      assert.deepEqual(select(empty).filters, { withGenres: "35" });
+    for (const zero of [0, "0"])
+      assert.deepEqual(select(zero).filters, {
+        withGenres: "35",
+        voteAverageLte: 0,
+      });
+  }
 });
 
 test("N11: the Client refuses a duplicate Add without writing", () => {
