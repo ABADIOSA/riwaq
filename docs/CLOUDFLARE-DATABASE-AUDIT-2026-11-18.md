@@ -240,3 +240,106 @@ Through the Cloudflare tools (deprecated Workers Bindings server), only
    Travel to the bookmark is a last resort for damaged data: it restores the
    whole database and loses every later write, and needs writes stopped and
    a separate decision.
+
+# Fifth pass — after Codex's fourth review (2026-11-18)
+
+Codex marked CF3 and CF5 fixed and CF1, CF2 and CF4 partial, and found Q9
+in the source: three places where the Worker checked a session and then
+acted in statements that did not prove it again, and a storage failure
+answered as a conflict. This pass closes Q9 in `server/accounts/service.mjs`
+with no schema change (migration 0003 is unchanged) and leaves the
+deployment gate (§M) as it was. **Production was not changed**: it was only
+read (§R).
+
+## O. What changed (Q9)
+
+- **Legacy session binding (CF1).** A session issued before 0003 (or by the
+  previous Worker in the window after it) was bound by reading its account
+  a second time and updating the session by its token alone. Between the
+  two reads the account could be deleted and its name taken again; the old
+  session was then bound to the new account. Demonstrated on `215c3de` by a
+  staged local race: the stale session read the new owner's sealed data
+  (200) and overwrote it. Now one transaction gives an account the previous
+  Worker left without an instance its instance, then binds the session to
+  the instance and generation the account has **at that write**, only while
+  that account is not newer than the session; the session is read again and
+  only what was written decides. A password change or a recovery deletes
+  the session in its own transaction (before or after this one, never half
+  way), so neither can be crossed. A session older than its account stays
+  refused, as before; a valid one keeps working.
+- **Reads (N9 kept).** Both statements of a pull — the revision alone (204,
+  304) and revision, size and pieces together — now also require the
+  generation and the session itself, so a sign-out (even from another tab),
+  a password change, a recovery or a deletion landing after the check
+  answers 401, never 200, 204 or 304. The single-statement read of N9 is
+  unchanged.
+- **The upload's clean-up (CF2).** Its last statement deleted older pieces
+  by name and revision whatever the upload's outcome. It now runs only when
+  this transaction moved the account to the next revision (the size and time
+  it wrote, the instance, the generation, the session still valid). A
+  refused, conflicting or signed-out upload deletes nothing; current pieces
+  were never at risk; anything a crash leaves behind is the daily clean-up's
+  (unchanged).
+- **Errors.** A batch that throws (D1 failed; the transaction rolled back)
+  answers **503 `try_again`**, not 409: released apps and this one treat it
+  as a failed sync and try later. A genuine conflict stays 409 with the
+  revision; a session that ended stays 401.
+
+## P. Verified here
+
+- `tests/accounts-round5-boundaries.test.mjs` (22), each race landed between
+  the session read and the statement that acts: legacy binding with nothing
+  racing (migrated and unmigrated account); a legacy session older than its
+  account; binding racing deletion + re-registration, a password change and
+  a recovery; pulls of data, of nothing (204) and of an unchanged revision
+  (304) racing a sign-out, a password change on another device, a recovery
+  and a deletion; a pull racing another device's upload of the same account
+  (still one committed state); uploads racing a sign-out and a password
+  change; a conflicting upload; a failed batch. **16 fail on `215c3de`**,
+  all pass here. The fourth-pass test of a failed batch now expects 503.
+- All account suites (`accounts-instances`, `-integrity`, `-workflow`,
+  `-server`, `account`, `-round5-boundaries`): **87/87**.
+- `scripts/test-accounts-released.mjs` (v0.40.0, v0.54.0, v0.55.0 clients
+  across the previous Worker, migration 0003 while it serves, and this
+  Worker): **3/3**, and 3/3 with `72e2ffc` as the previous Worker.
+- `scripts/test-accounts-workerd.mjs`, Wrangler 4.141.0, local D1 only:
+  **16/16** (0003 on legacy rows, the legacy session pulls and pushes,
+  409/304, password change, deletion, the scheduled clean-up, the deploy's
+  live smoke against the local Worker).
+- Codex's `workerd-independent.py` (Linux copy: its Windows `taskkill` and
+  `CREATE_NO_WINDOW` replaced by a process group kill), `72e2ffc`'s Worker
+  serving while 0003 is applied, then this Worker over the same local D1:
+  **21/21** — earlier session and latest revision kept, the window's account
+  and session adopted to their own instance, 200 and 409 for two writes at
+  one base, eight overlapping reads during a 7 MiB upload all
+  self-consistent, a missing piece answers 503.
+
+## Q. Compatibility and the deployment gate
+
+- No new migration. 0003 and the window behaviour of §J hold: the previous
+  Worker keeps working on the migrated schema, and the rows it writes are
+  bound by this Worker's new, atomic adoption or the daily clean-up.
+- The cron (§J, CF4) is unchanged; Codex's capacity concern about full daily
+  scans stands, and production's size today makes it moot (§R), not solved.
+- `accounts.yml` stays tests only; `accounts-deploy.yml` stays the only,
+  manual, owner-started path (§M). Nothing here runs either against
+  Cloudflare.
+- **Owner configuration still needed before any deployment** (not done or
+  verified here): the `accounts-production` GitHub environment with
+  required reviewers, the Cloudflare token as an environment-scoped secret
+  (and any repository-level token removed or narrowed), and branch
+  protection on `main` if wanted. Creating the environment is not an
+  approval to deploy.
+
+## R. Production, read only
+
+Through the Cloudflare tools, `SELECT` only, `rows_written: 0`,
+`changed_db: false`:
+
+- D1 `riwaq-accounts`: applied migrations `0001_accounts.sql` and
+  `0002_usage.sql` only (0003 not applied).
+- Counts only: 2 accounts, 7 sessions; 0 sessions without an account, 0
+  sessions older than their account. Migration 0003 would therefore bind
+  every session; no ambiguous legacy session exists there today, and its
+  backfill is a handful of rows.
+- One Worker, `riwaq-accounts`, last modified 2026-10-18 — before this PR.

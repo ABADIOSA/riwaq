@@ -282,3 +282,79 @@ addons, live FR-Badges pictures in the app. Fire-and-forget saves that are
 not user edits (a playback position, a provider's rotated token) are still
 retried with the next save rather than rolled back, by design: undoing a
 rotated single-use token would sign the viewer out.
+
+# Fifth pass — Codex's fourth review (2026-11-18)
+
+Codex re-reviewed at `a6a480e` on Windows x64 (Node 24.19.0), fixed six
+small findings itself (Q1–Q5, Q11: `2677c5d`, `ccb0ac3`, `eb2ae38`,
+`438fbb6`, `87466c3`, `215c3de`) and returned **NO-GO** on two confirmed
+P1s (Q6, Q7) and three P2s (Q8, Q9, Q10). This pass answers those five on
+the same branch, new commits on top of `215c3de` (`c5a958a`…), Codex's six
+commits kept as they are, no force push, nothing merged, tagged, versioned
+(still 0.55.0) or published, PR still a draft. It is the author's account;
+the decision stays with the next independent review.
+
+- Environment: Linux container, Node 22.23.5 for the work and **Node
+  24.22.3** (`/opt/node24`) for the final runs, Playwright's Chromium
+  157.0.8103.78, Wrangler 4.141.0 outside the repository. No Windows,
+  Electron, MPV, NTFS or DPAPI here.
+- The review (`Riwaq-PR155-Fourth-Review-AR.md`) and its evidence
+  (`Riwaq-PR155-Fourth-Evidence.zip`, 378 entries, paths checked before
+  extraction) were read and kept outside the repository. Its harnesses were
+  read before use and run only against disposable stores and local
+  services; their exit code 0 records observations, so their JSON was read.
+
+## Reproduced before changing anything
+
+- **Q6**: Codex's `check-durability.mjs` case is Chromium case 10 of
+  `scripts/test-web-durability.mjs`; Codex's own run on `a6a480e` recorded
+  `existsInMemory: false`, `existsAfterUnrelatedSave: false`.
+- **Q7**: Codex's `sync-pending-write.mjs` on `215c3de` here, both modes:
+  `uploadedBeforeStorageResolved: true`, `locallyRolledBack: true`,
+  `secondDeviceReceivedRefusedEdit: true` (favorite addition and collection
+  removal), as in the review.
+- **Q9**: Codex called it a source inference. A race staged here between
+  the session read and the legacy binding (`tests/accounts-round5-
+  boundaries.test.mjs`) demonstrates it on `215c3de`: a pre-0003 session of
+  an account deleted and re-registered by someone else answered **200 with
+  the new owner's sealed data**, was bound to the new account, and its next
+  upload **overwrote the new owner's data** (`OBSERVED-WRITE {"again":200,
+  "overwrite":200,"ownerSees":"overwritten by the old session"}`). Local
+  fixture only; production has no such session today (below).
+- **Q8**: Codex's case with the actual `b9d946e` exporter on `215c3de`:
+  `previewQuestions: 0`, and Merge kept `["nuvio-riwaq-folder", "folder"]`
+  whatever was chosen.
+- **Q10**: source inference in the review; the tests below fail on
+  `215c3de` where they say.
+
+## Q6–Q10
+
+| ID | Cause | Change | Test |
+| --- | --- | --- | --- |
+| Q6 P1 | `Profiles.remove` (and `create`, `update`, `switch`, `setPin`) changed the store and saved plainly. A refused write (the web's vault later; the desktop's synchronous throw at once) left the change in memory, and the next unrelated save wrote it. | `Profiles.transact`: validate, change, hand DurableWriter (or the desktop's throw) an undo scoped to the change — the removed entry and bucket at their place, the touched fields, the PIN record, the previous active profile. An undo restores data, never authority: where the active profile moves back it is a new activation (older tickets never hold again) and a profile with a PIN comes back locked, even if it was unlocked before. A profile's local songs go in the same write. Main broadcasts the kept state after an undone call (as the web's `onUndo`). | `tests/review-pr155-round5-durability.test.mjs` (8 Q6 tests: inactive and active removal, desktop throw with local songs, wrong PIN/locked, removal + settings refused together, create/update/PIN, switch, A→B→A with a pending removal; all but the PIN guard fail on `215c3de`). Chromium, real sealed IndexedDB (`scripts/test-web-durability.mjs` cases 10–11): B with a collection and a picture survives abort-after-success and abort, reload, a language save and the sweep; a written retry removes it; the active PIN profile comes back locked in a new activation; refused switch, create and rename undone. Codex's harness now: `existsInMemory: true`, `existsAfterUnrelatedSave: true`. |
+| Q7 P1 | `AccountHub.run` collected the live state while a commit's write was out; `Client.persist` also scheduled the push before the write answered. | `Client.persist` tracks each commit whose write answers later; `Client.atRest(step)` runs a synchronous step when none is out, the check and the step in one turn. Sync's merge, the application of the account's data and the collection of what goes up are one step, so nothing that may yet be undone is sent and the account's data is never put over a write still out. A commit's write settles on its own, so nothing waits on something waiting for it; one still out after 15 s makes the sync give up for now with a sentence. The web backup is sealed the same way. Plain saves (a position, a token a provider already rotated) are never undone and may sync — policy tested. | Same file, 13 Q7 tests with the real account service and two devices: favorite, collection removal, setting and profile removal, each refused (no upload, no new revision, device B unchanged) and kept (one upload after it is durable, a second sync sends nothing, B receives it); several commits; flush/scheduled push and a stuck write; the account's data waiting for a write, 409 and retry; a backup; the token policy. 17 of the file's 21 fail on `215c3de`. Codex's harness (release adapted to happen while sync waits): `uploadedBeforeStorageResolved: false`, `uploadedAfterRefusal: 0`, `secondDeviceReceivedRefusedEdit: false`; unmodified, its sync now stops after 15 s with "still being saved" instead of sending. |
+| Q8 P2 | The older-reading question (N3) covered collections only; under a collection matched by its own ID a `b9d946e` folder `riwaq-folder` (stored `nuvio-riwaq-folder`) was added again. | `legacyMatches` also lists such folders, by ID only (`fromNuvio`'s `<collection>/<folder>` aliases, never by name); Merge refuses until each is answered; update merges into the viewer's folder (its ID, pictures, hand-picked titles kept); copy adds the file's folder under its own ID, so a repeated Merge updates that copy. Add, Replace and today's exports ask nothing. The preview's panel shows folder rows built as its collection rows, the Update label naming the collection. | `tests/review-pr155-round5-collections.test.mjs` (6; 4 fail on `215c3de`, 2 guards); Chromium check in `scripts/test-ui-review155.mjs` (Arabic and English: question shown, Import held until answered, one folder kept); Codex's case with the actual `b9d946e` exporter: asked once, update keeps one folder on a repeat, copy keeps both. |
+| Q9 P2 | See the database audit, "Fifth pass": legacy binding by a second read, GET reads without the generation and session, the upload's clean-up unconditioned, a failed batch answered 409. | Proved in the statement that acts; 503 for storage failures. | `tests/accounts-round5-boundaries.test.mjs` (22; 16 fail on `215c3de`). |
+| Q10 P2 | `AccountHub.attempt` compared the active profile's ID and its own counter; `importNuvio` checked its ticket before and after the addon loop only. | `attempt` takes the activation ticket and checks it (with the counter and the Settings lock) after every wait and before anything is kept; the Nuvio loop checks before each addon: none starts after the activation ends, the one already installing finishes (shared list) and is reported. Password change and account deletion keep their checks (same account bag, Settings open): a sync that applies the account's data renews the activation, and refusing them for it would protect nothing. | `tests/review-pr155-round5-sessions.test.mjs` (6; 5 fail on `215c3de`): sign-in and recovery replies landing after A→B→A, a re-lock and a restore sign nothing in; a late older sign-in never replaces a newer one; a three-addon import stops after the first; a live import installs the rest once. |
+
+One earlier test changed its expectation: the N1 test "an edit refused
+after a profile switch goes back into its own profile" assumed the switch
+was a plain save surviving the refused write before it; it is a commit
+built on that write now, undone with it (A active again, as on disk).
+
+## Not verified in this pass
+
+Windows, Electron, MPV, the native HUD, the native picture dialog, NTFS,
+DPAPI and the desktop's real `profile.bin` writes (the desktop path was run
+through a synchronous throwing store in Node, not Electron), packaging,
+installers and upgrade: Codex's Windows results were at `215c3de` and do
+not cover these commits. Firefox. The Worker on Cloudflare's edge, a remote
+D1, Time Travel, a staging environment (none exists). Whether the
+`accounts-production` environment exists with required reviewers (Codex's
+public read found none). A sync that waits 15 s for a stuck IndexedDB write
+was tested in Node only. IPC methods that still save plainly — Stremio
+import, live TV favourites and sources, provider and integration keys —
+report a refused web write as a failure but keep the change in memory and
+write it with the next snapshot (and it may sync); they are never undone,
+so no device diverges, but their reply does not match what is kept until
+that later write. Not changed in this pass.
