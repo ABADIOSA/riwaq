@@ -276,6 +276,36 @@ const ARABIC_DUB_RX =
   /مدبلج|مدبلجة|دبلجة|دوبلاج|مدبلجه|arabic\s*dub|dub\s*arabic|aradub|\bدبلجه\b/i;
 const ARABIC_HARDSUB_RX = /هارد\s*سب|hard\s*sub|hardsub|hc[-. ]?sub|hardcoded/i;
 const ARABIC_ANY_RX = /عرب|arabic|\bara\b/i;
+// English subtitles, as addons write them ("English subs", "Eng sub",
+// "English subtitles", "Subs: English", "subbed in English").
+export const EN_SUB_RX =
+  /\b(?:eng(?:lish)?[-. :]*(?:subs?|subtitles?|subbed)|(?:subs?|subtitles?)[-. :]*eng(?:lish)?)\b/i;
+
+/**
+ * Whether `text` states what `rx` finds, rather than its absence (PR #155
+ * second review, R5): a match right after "no", "without", "w/o", "non",
+ * "sans", "بدون", "بلا", "من غير" or "غير" is a negation ("No English
+ * subs", "بدون ترجمة عربية", "غير مترجم"), and the fact counts only if
+ * some other match is not negated. Spaces, line breaks and marks between
+ * the words do not matter.
+ */
+export function affirms(text, rx) {
+  const flags = rx.flags.includes("g") ? rx.flags : `${rx.flags}g`;
+  for (const match of String(text || "").matchAll(
+    new RegExp(rx.source, flags),
+  )) {
+    const before = text
+      .slice(Math.max(0, match.index - 24), match.index)
+      .replace(/[\s\-_.:·|,()[\]]+/g, " ")
+      .trimEnd();
+    if (!NEGATION_RX.test(before)) return true;
+  }
+  return false;
+}
+// The negation, possibly followed by the kind of track it denies ("بدون
+// ترجمة عربية", "no subs English").
+const NEGATION_RX =
+  /(?:^|[\s])(?:no|without|w\/o|non|sans|بدون|بلا|من غير|غير)(?: (?:subs?|subtitles?|dub|ترجمة|ترجمه|دبلجة))?$/i;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lower = (value) => String(value || "").toLowerCase();
@@ -508,21 +538,29 @@ function parseDebrid(text) {
   // An addon that says a source is not cached is believed over any
   // positive word or mark beside it: "[RD] Not cached" once counted as
   // cached because it holds the word (PR #155 review, F5). Three states:
-  // cached, not cached (said so), and unknown (neither said).
-  if (
-    (bracket && /^(download|dl)$/i.test(bracket[2] || "")) ||
-    UNCACHED_RX.test(text)
-  )
+  // cached, not cached (said so), and unknown (neither said). Saying
+  // "cached" or "not cached" makes a source Debrid only beside a sign of
+  // a Debrid service (its mark or name, or ⚡, the cache sign of Debrid
+  // addons): a plain link that says "Not cached" is a plain link (second
+  // review, R5).
+  const provider = !!slug || /⚡/.test(text);
+  if (bracket && /^(download|dl)$/i.test(bracket[2] || ""))
     return { debrid: slug, cached: false, uncached: true };
+  if (UNCACHED_RX.test(text))
+    return provider
+      ? { debrid: slug, cached: false, uncached: true }
+      : { debrid: "", cached: false, uncached: false };
   const cached =
     (!!bracket && bracket[2] === "+") ||
     /⚡/.test(text) ||
-    /\b(cached|instant)\b/i.test(text) ||
-    /مخزّن|مخزن/.test(text);
+    (provider &&
+      (/\b(cached|instant)\b/i.test(text) || /مخزّن|مخزن/.test(text)));
   return { debrid: slug, cached, uncached: false };
 }
+// Any run of spaces, line breaks or a dash between the words (R5:
+// "Not  cached", "Not\n cached").
 const UNCACHED_RX =
-  /\b(?:not|non|un)[-\s]?(?:cached|instant)\b|غير\s*(?:مخزّن|مخزن)/i;
+  /\b(?:not|non|un)[-\s]*(?:cached|instant)\b|غير\s*(?:مخزّن|مخزن)/i;
 
 function parseLanguages(text) {
   const languages = new Set();
@@ -533,8 +571,9 @@ function parseLanguages(text) {
     if (ARAB_COUNTRIES.has(code)) languages.add("ar");
     else if (COUNTRY_LANGUAGE[code]) languages.add(COUNTRY_LANGUAGE[code]);
   }
+  // "No English subs" names no language the source has (R5).
   for (const [rx, code] of LANGUAGE_WORDS)
-    if (rx.test(text)) languages.add(code);
+    if (affirms(text, rx)) languages.add(code);
   return [...languages];
 }
 
@@ -544,12 +583,12 @@ export function parseStream(stream = {}) {
   const episode = parseEpisode(text);
   const { debrid, cached, uncached } = parseDebrid(text);
   const languages = parseLanguages(text);
-  const arabicSub = ARABIC_SUB_RX.test(text);
-  const arabicDub = ARABIC_DUB_RX.test(text);
+  const arabicSub = affirms(text, ARABIC_SUB_RX);
+  const arabicDub = affirms(text, ARABIC_DUB_RX);
   const arabicHint =
     arabicSub ||
     arabicDub ||
-    ARABIC_ANY_RX.test(text) ||
+    affirms(text, ARABIC_ANY_RX) ||
     languages.includes("ar");
   if (arabicHint && !languages.includes("ar")) languages.push("ar");
   const group = parseGroup(text);

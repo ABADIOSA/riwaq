@@ -1753,7 +1753,11 @@ const methods = {
   // active one (PR #155 review, F2). No address comes from the renderer.
   badgeStyleApply: (a) =>
     client.applyBadgeStyle(
-      { look: String(a?.look || ""), profileId: a?.profileId },
+      {
+        look: String(a?.look || ""),
+        profileId: a?.profileId,
+        profileSession: a?.profileSession,
+      },
       (url) => fetchFrStyle(url),
     ),
   // Deleting a saved stream filter and its Undo, on the current list of
@@ -1761,6 +1765,7 @@ const methods = {
   streamFilterEdit: (a) =>
     client.streamFilterEdit({
       profileId: a?.profileId,
+      profileSession: a?.profileSession,
       action: String(a?.action || ""),
       id: String(a?.id || ""),
     }),
@@ -2585,10 +2590,12 @@ const methods = {
   // from that handle, a regular file of at most 8 MB (readArtFile).
   collectionArtPick: async (a) => {
     client.profiles.gate("library");
-    const owner = client.profiles.store.active;
-    client.sameProfile(
-      a?.profileId === undefined ? undefined : String(a.profileId),
-    );
+    // The activation that opened the dialog, checked again after every
+    // await and at the grant itself (second review: artwork ownership).
+    const ticket = client.claim({
+      profileId: a?.profileId === undefined ? undefined : String(a.profileId),
+      profileSession: a?.profileSession,
+    });
     const picked = await dialog.showOpenDialog(window, {
       title: t("اختر صورة للمجموعة"),
       properties: ["openFile"],
@@ -2598,14 +2605,21 @@ const methods = {
     });
     const path = picked.canceled ? "" : picked.filePaths[0];
     if (!path) return null;
-    if (client.profiles.store.active !== owner)
-      throw new Error(PROFILE_CHANGED);
-    client.profiles.gate("library");
+    client.holds(ticket, "library");
     const bytes = await readArtFile(path, ART_MAX_BYTES);
+    client.holds(ticket, "library");
     const { ref, type, width, height } = await collectionArtStore().add(bytes, {
       still: a?.slot !== "moving",
     });
-    client.notePickedArt(ref);
+    try {
+      client.notePickedArt(ref, ticket);
+    } catch (error) {
+      // Kept for no one: removed now rather than at the next sweep.
+      await collectionArtStore()
+        .forget(ref)
+        .catch(() => {});
+      throw error;
+    }
     // A picture picked and never saved goes at the next sweep after its
     // grace period, even if nothing else happens meanwhile.
     setTimeout(sweepCollectionArt, ART_GRACE_MS + 60_000).unref?.();
@@ -2614,9 +2628,15 @@ const methods = {
   // Only a picture this profile's collections name (or it just picked).
   collectionArt: async (a) => {
     client.profiles.gate("library");
+    const ticket = client.profiles.ticket();
     const ref = `local:${String(a?.id || "").replace(/^local:/, "")}`;
     if (!client.canReadArt(ref)) return "";
     const found = await collectionArtStore().read(ref);
+    // The read awaited the disk: the picture goes only to the activation
+    // that asked, if it may still read it (second review).
+    if (!client.profiles.holds(ticket) || client.profiles.isLocked("library"))
+      return "";
+    if (!client.canReadArt(ref)) return "";
     return found ? dataUrl(found) : "";
   },
   collectionCatalogs: () => client.collectionCatalogs(),
@@ -2660,6 +2680,8 @@ const methods = {
       text: typeof a?.text === "string" ? a.text : "",
       mode: typeof a?.mode === "string" ? a.mode : "merge",
       only: Array.isArray(a?.only) ? a.only : undefined,
+      profileId: a?.profileId === undefined ? undefined : String(a.profileId),
+      profileSession: a?.profileSession,
     });
     // Replacing collections can leave a chosen picture unnamed.
     sweepCollectionArt();

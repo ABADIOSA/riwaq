@@ -15,6 +15,12 @@ export default {
   "تغيّر الملف الشخصي قبل اكتمال هذا التغيير؛ لم يُحفظ شيء":
     "The profile changed before this finished; nothing was saved",
   "المرشح غير موجود": "That filter is not there",
+  // Second review, R9: the Discover form names what it refused.
+  "لم يُحفظ شيء. صحّح: {name}. الأرقام مفصولة بفاصلة أو |، والسنة عدد صحيح، والتاريخ يوم حقيقي لا يسبق «من» فيه «إلى».":
+    "Nothing was saved. Correct: {name}. Numbers are separated by a comma or |, a year is a whole number, and a date is a real day, with “to” not before “from”.",
+  // Second review, R3: a slower style download after a newer choice.
+  "اخترت غير ذلك قبل اكتمال هذا؛ بقي اختيارك الأحدث":
+    "You chose something else before this finished; your newer choice stays",
   // The pinned FR-Badges download.
   "تعذّر الوصول إلى ملف النمط": "Could not reach the style file",
   "لم يُتح ملف النمط (HTTP {n})": "The style file was not available (HTTP {n})",

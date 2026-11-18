@@ -70,6 +70,9 @@ const FR_PACKS = new Set(Object.values(FR_STYLES).map((s) => s.pack));
 export const FR_MAX_BYTES = 512 * 1024;
 
 export const isFrLook = (look) => Object.hasOwn(FR_STYLES, look);
+/** Said when a newer look was chosen before a style finished (R3). */
+export const LOOK_SUPERSEDED =
+  "اخترت غير ذلك قبل اكتمال هذا؛ بقي اختيارك الأحدث";
 
 /** The one address a look may fetch, or "". */
 export const frStyleUrl = (look) =>

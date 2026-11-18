@@ -209,7 +209,10 @@ export function referencedArt(collections) {
 /**
  * The store over an injected backend:
  *   write(id, bytes, mime), read(id) → { bytes, mime } | null,
- *   remove(id), list() → [{ id, at }] (at: when it was written, ms).
+ *   remove(id, guard) → whether it removed, list() → [{ id, at }] (at: when
+ *   it was written, ms). `remove` calls `guard()`, when given, in the same
+ *   turn as the irreversible step (an unlink, an IndexedDB delete) and
+ *   keeps the picture when it answers false.
  */
 export class ArtStore {
   constructor(backend, { now = () => Date.now() } = {}) {
@@ -234,12 +237,21 @@ export class ArtStore {
     if (!id) return null;
     return (await this.backend.read(id)) || null;
   }
+  /** Deletes one picture now, whatever its age (a pick nobody may keep). */
+  async forget(ref) {
+    const id = artId(ref);
+    if (id) await this.backend.remove(id);
+  }
   /**
    * Deletes what `referenced` does not name, past the grace period.
    * `referenced` may be a function giving the set as it is now: it is
    * asked again just before each file goes, so a restore or a re-link that
    * lands while the sweep awaits the store keeps its picture (PR #155
-   * review: cleanup and concurrency).
+   * review: cleanup and concurrency). The last check runs in the same turn
+   * as the delete itself (the backend's `guard`), with no await between
+   * them, and every reference is written synchronously by the client, so
+   * nothing can name a picture between that check and its removal (second
+   * review). Sweeps run one at a time.
    */
   async sweep(referenced) {
     const now = () =>
@@ -248,14 +260,18 @@ export class ArtStore {
         : referenced instanceof Set
           ? referenced
           : new Set(referenced);
-    let removed = 0;
-    for (const { id, at } of await this.backend.list()) {
-      if (!validArtId(id) || now().has(id)) continue;
-      if (this.now() - (Number(at) || 0) < ART_GRACE_MS) continue;
-      if (now().has(id)) continue;
-      await this.backend.remove(id);
-      removed++;
-    }
-    return removed;
+    const run = async () => {
+      let removed = 0;
+      for (const { id, at } of await this.backend.list()) {
+        if (!validArtId(id) || now().has(id)) continue;
+        if (this.now() - (Number(at) || 0) < ART_GRACE_MS) continue;
+        const gone = await this.backend.remove(id, () => !now().has(id));
+        if (gone !== false) removed++;
+      }
+      return removed;
+    };
+    const next = (this.sweeping || Promise.resolve()).then(run, run);
+    this.sweeping = next.catch(() => {});
+    return next;
   }
 }

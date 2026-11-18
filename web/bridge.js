@@ -41,7 +41,11 @@ import {
   ART_MAX_BYTES,
   referencedArt,
 } from "../core/collection-art.mjs";
-import { artObjectUrl, browserArtStore } from "./collection-art.js";
+import {
+  artObjectUrl,
+  browserArtStore,
+  forgetArtUrls,
+} from "./collection-art.js";
 import { artworkHost } from "../core/artwork.mjs";
 import {
   FIVE,
@@ -861,7 +865,11 @@ export async function startBridge({ version, store }) {
     // most); no address ever comes from the renderer. Only the text returns.
     badgeStyleApply: async (a) => {
       const done = await client.applyBadgeStyle(
-        { look: String(a?.look || ""), profileId: a?.profileId },
+        {
+          look: String(a?.look || ""),
+          profileId: a?.profileId,
+          profileSession: a?.profileSession,
+        },
         (url) => fetchFrStyle(url),
       );
       await store.settled();
@@ -870,6 +878,7 @@ export async function startBridge({ version, store }) {
     streamFilterEdit: async (a) => {
       const done = client.streamFilterEdit({
         profileId: a?.profileId,
+        profileSession: a?.profileSession,
         action: String(a?.action || ""),
         id: String(a?.id || ""),
       });
@@ -1210,12 +1219,14 @@ export async function startBridge({ version, store }) {
       client.profiles.check({ ...a, intent: "switch" });
       stopLocalMusic();
       await player.stop();
+      forgetArtUrls();
       return client.profiles.switch(a);
     },
     profilePin: (a) => client.profiles.setPin(a),
     profileUnlock: (a) => client.profiles.unlock(a?.pin),
     profileLock: () => {
       stopLocalMusic();
+      forgetArtUrls();
       return client.profiles.lock();
     },
     setHotkey: (a) => client.setHotkey(a),
@@ -1444,6 +1455,8 @@ export async function startBridge({ version, store }) {
         text: typeof a?.text === "string" ? a.text : "",
         mode: typeof a?.mode === "string" ? a.mode : "merge",
         only: Array.isArray(a?.only) ? a.only : undefined,
+        profileId: a?.profileId === undefined ? undefined : String(a.profileId),
+        profileSession: a?.profileSession,
       });
       sweepArt();
       return result;
@@ -1455,32 +1468,40 @@ export async function startBridge({ version, store }) {
     // picture is read only by a profile whose collections name it.
     collectionArtPick: async (a) => {
       client.profiles.gate("library");
-      const owner = client.profiles.store.active;
-      client.sameProfile(
-        a?.profileId === undefined ? undefined : String(a.profileId),
-      );
+      const ticket = client.claim({
+        profileId: a?.profileId === undefined ? undefined : String(a.profileId),
+        profileSession: a?.profileSession,
+      });
       const file = await pickFile({
         accept: "image/gif,image/png,image/jpeg,image/webp",
       });
       if (!file) return null;
-      if (client.profiles.store.active !== owner)
-        throw new Error(PROFILE_CHANGED);
-      client.profiles.gate("library");
+      client.holds(ticket, "library");
       if (file.size > ART_MAX_BYTES)
         throw new Error("الصورة أكبر من 8 ميغابايت");
-      const { ref, type, width, height } = await browserArtStore.add(
-        new Uint8Array(await file.arrayBuffer()),
-        { still: a?.slot !== "moving" },
-      );
-      client.notePickedArt(ref);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      client.holds(ticket, "library");
+      const { ref, type, width, height } = await browserArtStore.add(bytes, {
+        still: a?.slot !== "moving",
+      });
+      try {
+        client.notePickedArt(ref, ticket);
+      } catch (error) {
+        await browserArtStore.forget(ref).catch(() => {});
+        throw error;
+      }
       setTimeout(sweepArt, ART_GRACE_MS + 60_000);
       return { ref, type, width, height };
     },
     collectionArt: async (a) => {
       client.profiles.gate("library");
+      const ticket = client.profiles.ticket();
       const ref = `local:${String(a?.id || "").replace(/^local:/, "")}`;
       if (!client.canReadArt(ref)) return "";
-      return artObjectUrl(ref);
+      const url = await artObjectUrl(ref);
+      if (!client.profiles.holds(ticket) || client.profiles.isLocked("library"))
+        return "";
+      return client.canReadArt(ref) ? url : "";
     },
     nuvioPickBackup: async () => {
       client.profiles.gate("settings");

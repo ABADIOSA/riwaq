@@ -47,7 +47,40 @@ function matchesPin(record, pin) {
 export class Profiles {
   constructor(client) {
     this.client = client;
-    this.unlocked = false;
+    // The activation of the active profile (PR #155 second review, F2):
+    // every switch, re-lock and restore starts a new one, so work begun
+    // under an older one can never write, even when the same profile is
+    // active again (A → B → A, or locked and unlocked). Memory only.
+    this.epoch = 0;
+    this.appliedId = undefined;
+    this.open = false;
+  }
+  /** Whether the active profile's PIN was entered; a re-lock ends the activation. */
+  get unlocked() {
+    return this.open;
+  }
+  set unlocked(value) {
+    const next = !!value;
+    if (this.open && !next) this.epoch++;
+    this.open = next;
+  }
+  /** Starts a new activation of the active profile. */
+  renew() {
+    this.epoch++;
+  }
+  /** The active profile and its activation, as work started now names them. */
+  ticket() {
+    return { id: this.store.active, epoch: this.epoch };
+  }
+  /** The same, as the interface carries it (`profileSession`). */
+  session() {
+    return `${this.store.active}:${this.epoch}`;
+  }
+  /** True while `ticket` names the active profile's current activation. */
+  holds(ticket) {
+    return (
+      !!ticket && ticket.id === this.store.active && ticket.epoch === this.epoch
+    );
   }
   get store() {
     const state = this.client.state;
@@ -120,6 +153,10 @@ export class Profiles {
   }
   /** Points the live client state at the active profile's bucket. */
   apply() {
+    if (this.appliedId !== this.store.active) {
+      this.appliedId = this.store.active;
+      this.epoch++;
+    }
     const bucket = this.bucket();
     const state = this.client.state;
     state.favorites = bucket.favorites;
@@ -145,6 +182,7 @@ export class Profiles {
     const active = this.active();
     return {
       active: active?.id || "",
+      session: this.session(),
       unlocked: this.unlocked,
       list: this.store.list.map((profile) => ({
         id: profile.id,
@@ -257,6 +295,8 @@ export class Profiles {
     this.store.active = id;
     // A new profile starts locked even when the previous one was unlocked.
     this.unlocked = !profile.pin;
+    // Even back to the same profile: what was started before is not ours.
+    this.renew();
     this.apply();
     this.client.cache.clear();
     this.client.persist();

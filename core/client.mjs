@@ -29,7 +29,12 @@ import {
   sourceIdentity,
 } from "./series-memory.mjs";
 import { cleanBadgeRules, importBadgePack, ruleBadges } from "./badges.mjs";
-import { chooseFrStyle, frStyleUrl, isFrRule } from "./badge-look.mjs";
+import {
+  LOOK_SUPERSEDED,
+  chooseFrStyle,
+  frStyleUrl,
+  isFrRule,
+} from "./badge-look.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
 import { SpotifyHub } from "./spotify.mjs";
@@ -158,6 +163,8 @@ export const PROGRESS_SAVE_MS = 20000;
 /** Said when work for one profile finishes after another became active. */
 export const PROFILE_CHANGED =
   "تغيّر الملف الشخصي قبل اكتمال هذا التغيير؛ لم يُحفظ شيء";
+/** Said when a newer choice of the same setting arrived first (R3). */
+export const SUPERSEDED = LOOK_SUPERSEDED;
 const streamIdentity = (stream) =>
   JSON.stringify([
     stream.url,
@@ -625,17 +632,80 @@ export class Client {
    * once another profile is active, so it can never land in the wrong one
    * (PR #155 review, F2). The check sits here, where the state is
    * written, not only in React.
+   *
+   * A profile ID alone is not enough (second review, F2): A → B → A, or a
+   * re-lock and unlock, makes A active again, and a late write from A's
+   * earlier activation must still be refused. `profileSession` (the
+   * interface's copy of `profiles.session`) names the activation; where
+   * it is given it must match exactly. Returns a ticket for work that
+   * awaits before it writes, checked again with `holds`.
    */
-  sameProfile(profileId) {
-    if (profileId !== undefined && profileId !== this.profiles.store.active)
+  claim(input) {
+    const named = input && typeof input === "object" ? input : {};
+    if (named.profileSession !== undefined) {
+      if (String(named.profileSession ?? "") !== this.profiles.session())
+        throw new Error(PROFILE_CHANGED);
+    } else if (
+      named.profileId !== undefined &&
+      String(named.profileId ?? "") !== this.profiles.store.active
+    )
       throw new Error(PROFILE_CHANGED);
+    return this.profiles.ticket();
+  }
+  /**
+   * Refuses unless `ticket`'s activation is still the active one and, for
+   * a locked `room`, its PIN is still entered: called after every await,
+   * right before the write.
+   */
+  holds(ticket, room) {
+    if (!this.profiles.holds(ticket)) throw new Error(PROFILE_CHANGED);
+    if (room) this.profiles.gate(room);
+  }
+  sameProfile(profileId, profileSession) {
+    if (profileId === undefined && profileSession === undefined) return;
+    this.claim({ profileId, profileSession });
+  }
+  /**
+   * Changes the active profile's state and writes it as one step (PR #155
+   * second review, R10): when the write fails, the parts named in `keys`
+   * go back to what they were before, in memory and in the profile's
+   * bucket, and the error is thrown on. A later, unrelated save can then
+   * never write a change the viewer was told had failed.
+   */
+  commit(keys, change) {
+    const before = keys.map((key) => [
+      key,
+      this.state[key] === undefined
+        ? undefined
+        : structuredClone(this.state[key]),
+    ]);
+    try {
+      const out = change();
+      this.persist();
+      return out;
+    } catch (error) {
+      for (const [key, value] of before) this.state[key] = value;
+      this.profiles.capture();
+      throw error;
+    }
   }
   settings(input, playback) {
-    if (input && typeof input === "object" && "profileId" in input) {
-      const { profileId, ...rest } = input;
-      this.sameProfile(String(profileId ?? ""));
+    if (
+      input &&
+      typeof input === "object" &&
+      ("profileId" in input || "profileSession" in input)
+    ) {
+      const { profileId, profileSession, ...rest } = input;
+      this.claim({
+        profileId: "profileId" in input ? String(profileId ?? "") : undefined,
+        profileSession,
+      });
       input = rest;
     }
+    // A badge look chosen here (Riwaq's, Liquid Glass, Off) is newer than
+    // any FR style still downloading, which then may not land (R3).
+    if (input && ("badgeLook" in input || "badgesOn" in input))
+      this.badgeChoice = (this.badgeChoice || 0) + 1;
     // Remembered source filters are saved a moment after each change; one
     // that arrives after Remember was turned off is stale and is dropped.
     if (
@@ -654,8 +724,9 @@ export class Client {
       Number.isFinite(playback.volume)
     )
       input = { ...input, lastVolume: playback.volume };
-    this.state.settings = safeSettings(input, this.state.settings);
-    this.persist();
+    this.commit(["settings"], () => {
+      this.state.settings = safeSettings(input, this.state.settings);
+    });
     return this.publicState();
   }
   /**
@@ -664,11 +735,12 @@ export class Client {
    * the page held. The deleted filter waits here, per profile, for Undo;
    * an Undo for another profile, or one already used, changes nothing.
    */
-  streamFilterEdit({ profileId, action, id } = {}) {
-    this.sameProfile(String(profileId ?? ""));
-    const owner = this.profiles.store.active;
+  streamFilterEdit({ profileId, profileSession, action, id } = {}) {
+    this.claim({ profileId: String(profileId ?? ""), profileSession });
     const settings = this.state.settings;
-    const key = `${owner}|${String(id || "")}`;
+    // Kept per activation: an Undo from before a switch back, or before a
+    // re-lock, finds nothing (second review, F2).
+    const key = `${this.profiles.session()}|${String(id || "")}`;
     if (action === "remove") {
       const plan = removeFilter(
         settings.streamFilters,
@@ -705,17 +777,29 @@ export class Client {
    * from that profile's rules as they are when the file arrives. A switch
    * to another profile during the download leaves both untouched (F2).
    */
-  async applyBadgeStyle({ look, profileId } = {}, fetchText) {
-    const owner = this.profiles.store.active;
-    this.sameProfile(profileId === undefined ? undefined : String(profileId));
+  /**
+   * The last choice wins (second review, R3): every choice of a look,
+   * here or through `settings` (Riwaq's, Liquid Glass, Off), takes the
+   * next number, and a download that finishes after a newer choice, in
+   * any order and even after the Settings page was closed and opened
+   * again, is dropped with SUPERSEDED instead of bringing its style back.
+   */
+  async applyBadgeStyle({ look, profileId, profileSession } = {}, fetchText) {
+    const ticket = this.claim({
+      profileId: profileId === undefined ? undefined : String(profileId),
+      profileSession,
+    });
     const url = frStyleUrl(String(look || ""));
     if (!url) throw new Error("نمط غير معروف");
+    const choice = (this.badgeChoice = (this.badgeChoice || 0) + 1);
     const text = await fetchText(url);
-    if (this.profiles.store.active !== owner) throw new Error(PROFILE_CHANGED);
+    this.holds(ticket);
+    if (this.badgeChoice !== choice) throw new Error(SUPERSEDED);
     const pack = importBadgePack(text, undefined, { name: look });
     const { patch, report } = chooseFrStyle(this.state.settings, pack, look);
-    this.state.settings = safeSettings(patch, this.state.settings);
-    this.persist();
+    this.commit(["settings"], () => {
+      this.state.settings = safeSettings(patch, this.state.settings);
+    });
     return { state: this.publicState(), report };
   }
   /** Only actual player volume changes are saved; coalesce drag/key bursts. */
@@ -859,11 +943,16 @@ export class Client {
    * not enough (PR #155 review, security). Picks are kept per profile for
    * the store's grace period.
    */
-  notePickedArt(ref) {
+  notePickedArt(ref, ticket = this.profiles.ticket()) {
     const id = artId(ref);
     if (!id) return;
+    // The activation that picked it (second review, artwork ownership):
+    // granted at the commit point, after every await, never to whichever
+    // profile happens to be active when the file finished writing.
+    this.holds(ticket, "library");
     this.artPicks.set(id, {
-      profile: this.profiles.store.active,
+      profile: ticket.id,
+      epoch: ticket.epoch,
       at: Date.now(),
     });
     while (this.artPicks.size > 50)
@@ -876,7 +965,7 @@ export class Client {
     const pick = this.artPicks.get(id);
     return (
       !!pick &&
-      pick.profile === this.profiles.store.active &&
+      this.profiles.holds({ id: pick.profile, epoch: pick.epoch }) &&
       Date.now() - pick.at < ART_GRACE_MS
     );
   }
@@ -884,26 +973,25 @@ export class Client {
     this.profiles.gate("library");
     // An edit started before a profile switch (a picture picked while the
     // dialog was open) names its profile and is refused after it (F2).
-    if (input && "profileId" in input)
-      this.sameProfile(String(input.profileId ?? ""));
+    if (input && ("profileId" in input || "profileSession" in input))
+      this.claim({
+        profileId:
+          "profileId" in input ? String(input.profileId ?? "") : undefined,
+        profileSession: input.profileSession,
+      });
     // A Riwaq template (core/collection-presets.mjs): added, or updated in
     // place when it is already here (its IDs are stable), never copied.
     // The viewer's edits to it are kept (applyTemplate); at the collection
     // limit it is refused, so the interface never says it was added.
-    if (input?.action === "preset") {
-      const { collections } = applyTemplate(
-        this.state.collections || [],
-        presetCollection(String(input.preset || "")),
-      );
-      this.state.collections = collections;
-      this.persist();
-      return this.publicState();
-    }
-    this.state.collections = editCollections(
-      this.state.collections || [],
-      input,
-    );
-    this.persist();
+    this.commit(["collections"], () => {
+      this.state.collections =
+        input?.action === "preset"
+          ? applyTemplate(
+              this.state.collections || [],
+              presetCollection(String(input.preset || "")),
+            ).collections
+          : editCollections(this.state.collections || [], input);
+    });
     return this.publicState();
   }
   /**
@@ -916,9 +1004,10 @@ export class Client {
   async importNuvio(stores, { profile, parts = {} } = {}) {
     this.profiles.gate("settings");
     // Addons install with awaits; what belongs to a profile (collections,
-    // library, plugins, the key) is written only if the profile that
-    // started the import is still the active one (PR #155 review, F2).
-    const owner = this.profiles.store.active;
+    // library, plugins, the key) is written only if the activation that
+    // started the import is still the active one, with Settings still
+    // open (PR #155 review, F2; second review: A → B → A and re-locks).
+    const ticket = this.profiles.ticket();
     const index = Number(profile);
     if (!Number.isInteger(index) || index < 1)
       throw new Error("اختر ملف نوفيو");
@@ -955,10 +1044,30 @@ export class Client {
         }
       }
     }
-    if (this.profiles.store.active !== owner) {
+    try {
+      this.holds(ticket, "settings");
+    } catch (error) {
+      // Addons are the household's, shared by every profile: the ones
+      // installed meanwhile stay, and are saved.
       if (result.addons) this.persist();
-      throw new Error(PROFILE_CHANGED);
+      throw error;
     }
+    this.commit(["collections", "favorites", "nuvioPlugins"], () =>
+      this.importNuvioParts(data, parts, result),
+    );
+    if (parts.tmdbKey && data.tmdbKey) {
+      // The viewer's key in Riwaq wins; Nuvio's only fills an empty slot.
+      if (this.state.providers?.tmdb?.key) result.tmdbKey = "kept";
+      else {
+        this.dataHub.save({ id: "tmdb", key: data.tmdbKey, enabled: true });
+        result.tmdbKey = "imported";
+      }
+    }
+    this.cache.clear();
+    return { result, state: this.publicState() };
+  }
+  /** The profile's own parts of a Nuvio import, all in one write. */
+  importNuvioParts(data, parts, result) {
     if (parts.collections) {
       const merged = mergeCollections(
         this.state.collections || [],
@@ -988,17 +1097,6 @@ export class Client {
         result.plugins++;
       }
     }
-    if (parts.tmdbKey && data.tmdbKey) {
-      // The viewer's key in Riwaq wins; Nuvio's only fills an empty slot.
-      if (this.state.providers?.tmdb?.key) result.tmdbKey = "kept";
-      else {
-        this.dataHub.save({ id: "tmdb", key: data.tmdbKey, enabled: true });
-        result.tmdbKey = "imported";
-      }
-    }
-    this.cache.clear();
-    this.persist();
-    return { result, state: this.publicState() };
   }
   removeNuvioPlugin({ key }) {
     this.state.nuvioPlugins = (this.state.nuvioPlugins || []).filter(
@@ -1014,8 +1112,12 @@ export class Client {
    * ones the viewer picked. The report says what was imported, updated,
    * replaced, left at a limit and which sources Riwaq cannot read yet.
    */
-  importNuvioCollections({ text, mode, only } = {}) {
+  importNuvioCollections({ text, mode, only, profileId, profileSession } = {}) {
     this.profiles.gate("library");
+    // The preview belongs to the activation that pasted it (second
+    // review, F2): Replace from another profile, or after a switch back,
+    // is refused before anything changes.
+    this.claim({ profileId, profileSession });
     if (typeof text !== "string" || !text.trim() || text.length > 4_000_000)
       throw new Error("الصق نص مجموعات نوفيو أولاً");
     const converted = fromNuvio(text);
@@ -1025,13 +1127,19 @@ export class Client {
     const pick = Array.isArray(only)
       ? only.filter((id) => typeof id === "string").slice(0, 200)
       : undefined;
-    const done = importCollections(
-      this.state.collections || [],
-      converted.collections,
-      { mode, only: pick },
-    );
-    this.state.collections = done.collections;
-    this.persist();
+    // Written as one step: a failed save leaves the collections as they
+    // were in memory too, so nothing writes the rejected Replace later
+    // (second review, R10).
+    const done = this.commit(["collections"], () => {
+      const result = importCollections(
+        this.state.collections || [],
+        converted.collections,
+        { mode, only: pick },
+      );
+      this.state.collections = result.collections;
+      return result;
+    });
+    const written = new Set(done.report.written);
     // The report covers only the collections chosen, and what was kept
     // after the limits, not everything the file held (F7).
     const chosen = new Set(
@@ -1056,9 +1164,16 @@ export class Client {
         skipped: done.report.skipped,
         folders: done.report.folders,
         skippedSources: done.report.unsupported,
+        // Only sources of folders actually written: a folder left out at
+        // the limit is not described as kept (R6).
         unsupported: converted.report.unsupported
-          .filter((u) => chosen.has(u.collectionId))
+          .filter(
+            (u) =>
+              chosen.has(u.collectionId) &&
+              written.has(`${u.collectionId}/${u.folderId}`),
+          )
           .slice(0, 50),
+        repeated: converted.report.repeated,
         over,
         duplicates: converted.report.duplicates,
       },
@@ -1493,6 +1608,8 @@ export class Client {
     // state may survive: stream keys, metadata and live listings all reset.
     this.profiles.unlocked = false;
     this.profiles.ensure();
+    // Every profile was replaced: work started before belongs to none.
+    this.profiles.renew();
     this.streams.clear();
     this.subtitles.clear();
     this.subtitleInfo.clear();

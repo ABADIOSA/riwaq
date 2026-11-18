@@ -137,6 +137,19 @@ export const TRAKT_SORTS = [
   "votes",
 ];
 const MEDIA = ["movie", "tv"];
+/** A real calendar day as YYYY-MM-DD (2025-02-30 is not one). */
+const DATE = {
+  test(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!m) return false;
+    const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return (
+      day.getUTCFullYear() === +m[1] &&
+      day.getUTCMonth() === +m[2] - 1 &&
+      day.getUTCDate() === +m[3]
+    );
+  },
+};
 const positive = (value, max = 2_000_000_000) => {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 && n <= max ? n : null;
@@ -146,7 +159,9 @@ const positive = (value, max = 2_000_000_000) => {
  * These are the filters Nuvio's collections carry; a filter dropped here
  * would quietly turn a folder into TMDB's generic popular titles.
  */
-const IDS = /^[\d,|]{1,400}$/;
+// Numbers joined by "," (all of) or "|" (any of); a list of separators
+// alone, or an empty item between two, is no list (second review, R9).
+const IDS = /^(?=[\d,|]{1,400}$)\d{1,12}(?:[,|]\d{1,12})*$/;
 const FILTERS = {
   withGenres: IDS,
   withoutGenres: IDS,
@@ -161,8 +176,8 @@ const FILTERS = {
   withOriginalLanguage: /^[a-z]{2,3}([|,][a-z]{2,3}){0,30}$/,
   withOriginCountry: /^[A-Z]{2}([|,][A-Z]{2}){0,60}$/,
   watchRegion: /^[A-Z]{2}$/,
-  releaseDateGte: /^\d{4}-\d{2}-\d{2}$/,
-  releaseDateLte: /^\d{4}-\d{2}-\d{2}$/,
+  releaseDateGte: DATE,
+  releaseDateLte: DATE,
 };
 const NUMBER_FILTERS = {
   voteAverageGte: [0, 10],
@@ -176,13 +191,24 @@ const NUMBER_FILTERS = {
   // (core/collection-sources.mjs tmdbRequest).
   recentDays: [1, 3650],
 };
+// A year, a count of votes or days is whole; 2020.5 is no year (R9).
+const WHOLE_NUMBERS = new Set(["year", "voteCountGte", "recentDays"]);
+// "From" and "to" pairs: an edit with the start after the end is refused,
+// since TMDB would answer nothing (R9).
+const RANGES = [
+  ["releaseDateGte", "releaseDateLte"],
+  ["voteAverageGte", "voteAverageLte"],
+  ["withRuntimeGte", "withRuntimeLte"],
+];
 function cleanFilters(input) {
   if (!input || typeof input !== "object") return undefined;
   const out = {};
   for (const [key, rule] of Object.entries(FILTERS)) {
     if (typeof input[key] !== "string") continue;
-    // Written by hand in Nuvio, so spaces and letter case vary.
+    // Written by hand in Nuvio, so spaces and letter case vary, and a
+    // list may end with its separator.
     let value = input[key].replace(/\s+/g, "");
+    if (rule === IDS) value = value.replace(/^[,|]+|[,|]+$/g, "");
     if (key === "withOriginalLanguage") value = value.toLowerCase();
     if (key === "withOriginCountry" || key === "watchRegion")
       value = value.toUpperCase();
@@ -194,6 +220,7 @@ function cleanFilters(input) {
       input[key] !== null &&
       input[key] !== undefined &&
       Number.isFinite(n) &&
+      (!WHOLE_NUMBERS.has(key) || Number.isInteger(n)) &&
       n >= min &&
       n <= max
     )
@@ -209,7 +236,7 @@ function cleanFilters(input) {
 export function tmdbFilterProblems(input) {
   if (!input || typeof input !== "object") return [];
   const kept = cleanFilters(input) || {};
-  return Object.entries(input)
+  const problems = Object.entries(input)
     .filter(
       ([key, value]) =>
         (FILTERS[key] || NUMBER_FILTERS[key]) &&
@@ -219,6 +246,27 @@ export function tmdbFilterProblems(input) {
         !(key in kept),
     )
     .map(([key]) => key);
+  for (const [from, to] of RANGES) {
+    if (!(from in kept) || !(to in kept)) continue;
+    if (kept[from] > kept[to]) problems.push(from, to);
+  }
+  return [...new Set(problems)];
+}
+/**
+ * The one check of a TMDB source the viewer typed, for both adding and
+ * changing one (second review, R9): any filter that would be dropped or
+ * contradicts another is refused by name, before the list changes.
+ */
+function checkedTmdb(source) {
+  const problems = tmdbFilterProblems(source?.filters);
+  if (problems.length) {
+    const error = new Error(`قيمة غير صالحة في: ${problems.join(", ")}`);
+    error.fields = problems;
+    throw error;
+  }
+  const clean = cleanTmdb(source);
+  if (!clean) fail("مصدر TMDB غير صالح");
+  return clean;
 }
 export const TMDB_FILTER_KEYS = [
   ...Object.keys(FILTERS),
@@ -639,8 +687,7 @@ export function editCollections(list, input = {}) {
       });
     case "tmdbAdd":
       return withFolder((folder) => {
-        const clean = cleanTmdb(input.source);
-        if (!clean) fail("مصدر TMDB غير صالح");
+        const clean = checkedTmdb(input.source);
         if (folder.tmdb.some((t) => tmdbKey(t) === tmdbKey(clean)))
           return folder;
         if (folder.tmdb.length >= LIMITS.catalogs)
@@ -667,10 +714,7 @@ export function editCollections(list, input = {}) {
         const index = Number(input.index);
         if (!Number.isInteger(index) || !folder.tmdb[index])
           fail("المصدر غير موجود");
-        const problems = tmdbFilterProblems(input.source?.filters);
-        if (problems.length) fail(`قيمة غير صالحة في: ${problems.join(", ")}`);
-        const clean = cleanTmdb(input.source);
-        if (!clean) fail("مصدر TMDB غير صالح");
+        const clean = checkedTmdb(input.source);
         if (
           folder.tmdb.some(
             (t, i) => i !== index && tmdbKey(t) === tmdbKey(clean),
@@ -761,11 +805,25 @@ const nuvioId = (id) => {
   if (/^nuvio-[\w-]+$/.test(safe)) return safe;
   return safe ? `nuvio-${safe}` : undefined;
 };
-/** Riwaq's ID as Nuvio JSON carries it (the inverse of nuvioId). */
-const exportId = (id) => {
+/**
+ * Riwaq's ID as Nuvio JSON carries it, chosen so that reading it back
+ * (nuvioId) gives exactly the stored ID, whatever its prefixes (PR #155
+ * second review, R2):
+ * - An ID Riwaq made from a plain Nuvio ID ("nuvio-catalog") goes back as
+ *   Nuvio's own ("catalog"), so Nuvio keeps recognising it.
+ * - Any other ID goes in Riwaq's form, "riwaq-<stored ID>", which reads
+ *   back unchanged. That covers Riwaq's own IDs and stored IDs whose
+ *   Nuvio part would be read differently on the way back: a saved
+ *   "nuvio-riwaq-curated" (from a file whose ID was "riwaq-curated")
+ *   once came back as "curated" and was merged in as a second copy.
+ * Stored IDs are at most 64 characters of [\w-], which nuvioId's Riwaq
+ * form accepts whole.
+ */
+export const exportId = (id) => {
   const nuvio = /^nuvio-([\w-]+)$/.exec(id);
-  return nuvio ? nuvio[1] : `riwaq-${id}`;
+  return nuvio && nuvioId(nuvio[1]) === id ? nuvio[1] : `riwaq-${id}`;
 };
+export { nuvioId };
 /**
  * One ID per entry in a list: the entry's own (above), or one derived from
  * its place and title; a repeated ID gets a numbered suffix, so two entries
@@ -834,6 +892,7 @@ export function fromNuvio(input) {
     over: { collections: 0, folders: 0, sources: 0 },
     unnamed: 0,
     duplicates: 0,
+    repeated: 0,
     // The same counts for each collection, by the ID it will have, so an
     // import of some of the file reports only what was chosen (F7).
     byCollection: {},
@@ -903,11 +962,22 @@ export function fromNuvio(input) {
               ...entry,
               collection: String(c?.title || ""),
               collectionId: cid,
+              folderId: folderIds[fi],
               folder: folderName,
             });
           unsupported.push({ ...entry, raw: plainCopy(s) });
         };
+        // The same source twice in one folder is kept once, before the
+        // limit is counted, so repeats never push a different source out
+        // (second review, R6).
+        const seen = new Set();
         const keep = (list, item) => {
+          const key = JSON.stringify(item);
+          if (seen.has(key)) {
+            report.repeated++;
+            return;
+          }
+          seen.add(key);
           if (list.length >= LIMITS.catalogs) {
             report.over.sources++;
             mine.over.sources++;
@@ -1183,15 +1253,19 @@ export function importCollections(current, incoming, { mode, only } = {}) {
     folders: 0,
     unsupported: 0,
     ids: [],
+    // The file's folders actually written, as "<file collection ID>/<folder
+    // ID>", so a report names only what was kept (second review, R6).
+    written: [],
   };
   let out = cleanCollections(current);
   if (how === "replace") {
     report.replaced = out.length;
     out = [];
   }
-  const wrote = (folder) => {
+  const wrote = (folder, from) => {
     report.folders++;
     report.unsupported += folder.unsupported?.length || 0;
+    report.written.push(`${from}/${folder.id}`);
   };
   for (const c of chosen) {
     const existing = how === "merge" ? out.findIndex((x) => x.id === c.id) : -1;
@@ -1202,10 +1276,10 @@ export function importCollections(current, incoming, { mode, only } = {}) {
         const at = folders.findIndex((x) => x.id === f.id);
         if (at >= 0) {
           folders[at] = mergeFolder(folders[at], f);
-          wrote(f);
+          wrote(f, c.id);
         } else if (folders.length < LIMITS.folders) {
           folders.push(f);
-          wrote(f);
+          wrote(f, c.id);
         } else report.skipped++;
       }
       out[existing] = { ...mergeCollection(mine, c), folders };
@@ -1219,7 +1293,7 @@ export function importCollections(current, incoming, { mode, only } = {}) {
     }
     const added = how === "add" ? { ...c, id: newId() } : c;
     out.push(added);
-    c.folders.forEach(wrote);
+    for (const f of c.folders) wrote(f, c.id);
     report.added++;
     report.ids.push(added.id);
   }
@@ -1240,7 +1314,9 @@ const queriesOf = (tmdb) => stableHash(JSON.stringify(tmdb || []));
  *   template's current ones; one they edited keeps theirs; its name, look
  *   and hand-picked titles are always theirs. A folder new in the
  *   template is added; one the viewer removed stays removed; the viewer's
- *   own folders are untouched.
+ *   own folders are untouched. One added before `tplFolders` existed
+ *   keeps every folder it lacks out, except folders the template gained
+ *   later (marked `since` in core/collection-presets.mjs).
  * Returns the list and whether it was added or updated.
  */
 export function applyTemplate(current, template) {
@@ -1262,10 +1338,33 @@ export function applyTemplate(current, template) {
     };
   }
   const mine = list[index];
-  const known = new Set(mine.tplFolders || mine.folders.map((f) => f.id));
+  // A template added before Riwaq kept `tplFolders` (second review, R4)
+  // cannot say which of its folders the viewer removed, so every folder
+  // the template had when that marker was introduced counts as known: a
+  // removed one stays removed. Only a folder a template gains later (one
+  // with `since`) comes in, so nothing of the viewer's is brought back.
+  const legacy = !Array.isArray(mine.tplFolders);
+  const known = new Set(
+    legacy
+      ? [
+          ...mine.folders.map((f) => f.id),
+          ...(template?.folders || [])
+            .filter((f) => !f?.since)
+            .map((f) => f?.id),
+        ]
+      : mine.tplFolders,
+  );
   const folders = mine.folders.map((f) => {
     const t = tpl.folders.find((x) => x.id === f.id);
-    if (!t || !f.tpl || f.tpl !== queriesOf(f.tmdb)) return f;
+    if (!t) return f;
+    // Unstamped (the legacy template): queries still exactly the
+    // template's are the viewer's untouched copy and follow it from now
+    // on; edited ones stay the viewer's, unstamped.
+    if (!f.tpl)
+      return legacy && queriesOf(f.tmdb) === queriesOf(t.tmdb)
+        ? { ...f, tpl: queriesOf(t.tmdb) }
+        : f;
+    if (f.tpl !== queriesOf(f.tmdb)) return f;
     return { ...f, tmdb: t.tmdb, tpl: queriesOf(t.tmdb) };
   });
   for (const t of tpl.folders)

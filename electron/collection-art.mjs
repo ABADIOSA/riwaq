@@ -10,10 +10,9 @@ import {
   open,
   readdir,
   rename,
-  rm,
   writeFile,
 } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
   ArtStore,
@@ -101,9 +100,19 @@ export function fileArtStore(dir) {
         return null;
       }
     },
-    async remove(id) {
+    // The last reference check (`guard`) and the unlink run in one turn,
+    // with nothing awaited between them (second review: sweep races). An
+    // unlink removes a link itself, never what it points to.
+    async remove(id, guard) {
       const found = await find(id);
-      if (found) await rm(found.path, { force: true });
+      if (!found) return false;
+      if (guard && !guard()) return false;
+      try {
+        unlinkSync(found.path);
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+      return true;
     },
     async list() {
       let names = [];
