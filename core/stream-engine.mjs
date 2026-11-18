@@ -315,16 +315,14 @@ function readings(text, rx) {
   const all = String(text || "");
   const out = [];
   for (const match of all.matchAll(new RegExp(rx.source, flags))) {
-    const tidy = (part) => part.replace(/[\s\-_.:·|,()[\]]+/g, " ");
+    const tidy = (part) => part.replace(/[\s\-‐-―_.:·|,()[\]]+/g, " ");
     const before = tidy(
       all.slice(Math.max(0, match.index - 24), match.index),
     ).trimEnd();
-    const after = tidy(
-      all.slice(
-        match.index + match[0].length,
-        match.index + match[0].length + 32,
-      ),
-    ).trimStart();
+    const end = match.index + match[0].length;
+    // A separate label (for example, "Audio unavailable") cannot deny this track.
+    const suffix = all.slice(end, end + 32).split(/[·|;]/, 1)[0];
+    const after = tidy(suffix).trimStart();
     out.push(NEGATION_RX.test(before) || DENIED_AFTER_RX.test(after));
   }
   return out;

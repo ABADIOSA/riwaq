@@ -289,12 +289,14 @@ test("N5: denied after the words, said and denied, and 'subbed in English'", () 
     ["English subs: none", false],
     ["English subs N/A", false],
     ["English subtitles not included", false],
+    ["Subs: English — not included", false],
     ["English subtitles · No English subs", false],
     ["No English subs", false],
     ["Subbed in English", true],
     ["Subtitles in English", true],
     ["English subtitles", true],
     ["TrueHD · English subtitles · Français · Japanese", true],
+    ["English subtitles · Audio unavailable", true],
   ];
   for (const [text, expected] of cases)
     assert.equal(states(text, EN_SUB_RX), expected, text);
@@ -316,8 +318,10 @@ test("N5: through Client.getStreams and the facets, as the reviewer ran it", asy
   const fixtures = [
     ["contradictSubtitle", "English subtitles · No English subs"],
     ["postfixNegation", "English subtitles unavailable"],
+    ["dashNegation", "Subs: English — not included"],
     ["subbedInEnglish", "Subbed in English"],
     ["english", "English subtitles"],
+    ["separateAudio", "English subtitles · Audio unavailable"],
     ["negSubtitle", "No English subs"],
     ["multilingual", "TrueHD · English subtitles · Français · Japanese"],
     ["arabicNegative", "بدون ترجمة عربية"],
@@ -355,7 +359,12 @@ test("N5: through Client.getStreams and the facets, as the reviewer ran it", asy
   const names = applyFacets(streams, { language: ["enSub"] })
     .map((s) => s.name)
     .sort();
-  assert.deepEqual(names, ["english", "multilingual", "subbedInEnglish"]);
+  assert.deepEqual(names, [
+    "english",
+    "multilingual",
+    "separateAudio",
+    "subbedInEnglish",
+  ]);
 });
 
 /* N6: one query under several labels. */
