@@ -886,6 +886,13 @@ for (const uiLanguage of ["ar", "en"])
       await page.locator(".nuvio-legacy").waitFor();
       const rows = page.locator(".nuvio-legacy [role=radiogroup]");
       assert.equal(await rows.count(), 1);
+      assert.equal(
+        await page
+          .getByRole("radiogroup", { name: "My folder", exact: true })
+          .count(),
+        1,
+        "the legacy choice names the folder in the accessibility tree",
+      );
       const update = await rows.first().locator("label").first().innerText();
       assert.match(
         update,

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowRight,
@@ -2087,6 +2087,7 @@ export function NuvioLink({
   // Collections of an older Riwaq file that may be the viewer's own under
   // another reading of their ID (third review, N3): the viewer says which.
   const [legacy, setLegacy] = useState({});
+  const legacyGroupId = useId();
   const matches = useMemo(
     () =>
       peek && !peek.error && mode === "merge"
@@ -2183,9 +2184,14 @@ export function NuvioLink({
                   ? "هذه المجموعات أو المجلدات قد تكون نفسها عندك، كتبها رِواق أقدم بمعرّف آخر. اختر لكل منها قبل الاستيراد."
                   : "هذه المجموعات قد تكون مجموعاتك نفسها، كتبها رِواق أقدم بمعرّف آخر. اختر لكل منها قبل الاستيراد."}
               </p>
-              {matches.map((m) => (
-                <div key={m.id} className="studio-field" role="radiogroup">
-                  <span dir="auto">
+              {matches.map((m, index) => (
+                <div
+                  key={m.id}
+                  className="studio-field"
+                  role="radiogroup"
+                  aria-labelledby={`${legacyGroupId}-${index}`}
+                >
+                  <span id={`${legacyGroupId}-${index}`} dir="auto">
                     <b>{m.title}</b>
                   </span>
                   <label>
