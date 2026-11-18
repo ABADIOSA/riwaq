@@ -823,6 +823,94 @@ await check(
   },
 );
 
+// --- Q8 (fifth pass) ---------------------------------------------------------------
+for (const uiLanguage of ["ar", "en"])
+  await check(
+    `Q8 a b9d946e folder under a matching collection is asked about before Merge (${uiLanguage})`,
+    async () => {
+      for (const c of (await call("init")).collections)
+        await call("collectionsEdit", { action: "remove", collectionId: c.id });
+      // The viewer's collection "nuvio-parent" with its folder
+      // "nuvio-riwaq-folder", as an earlier Nuvio import stored them.
+      const st = await call("init");
+      await call("importNuvioCollections", {
+        text: JSON.stringify([
+          {
+            id: "parent",
+            title: "My collection",
+            folders: [
+              {
+                id: "nuvio-riwaq-folder",
+                title: "My folder",
+                sources: [
+                  {
+                    provider: "tmdb",
+                    tmdbSourceType: "discover",
+                    filters: { withGenres: "18" },
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+        mode: "replace",
+        profileSession: st.profiles.session,
+      });
+      await restart({ uiLanguage });
+      await collectionsRoom();
+      await page.locator(".collections-page .page-heading .secondary").click();
+      await page.locator(".nuvio-options button").nth(2).click();
+      // What b9d946e exported for it: "nuvio-riwaq-folder" as "riwaq-folder".
+      await page.locator(".nuvio-paste").fill(
+        JSON.stringify([
+          {
+            id: "parent",
+            title: "My collection",
+            folders: [
+              {
+                id: "riwaq-folder",
+                title: "My folder",
+                sources: [
+                  {
+                    provider: "tmdb",
+                    tmdbSourceType: "discover",
+                    filters: { withGenres: "18" },
+                  },
+                ],
+              },
+            ],
+          },
+        ]),
+      );
+      await page.locator(".nuvio-modal .button-row .primary").click();
+      await page.locator(".nuvio-legacy").waitFor();
+      const rows = page.locator(".nuvio-legacy [role=radiogroup]");
+      assert.equal(await rows.count(), 1);
+      const update = await rows.first().locator("label").first().innerText();
+      assert.match(
+        update,
+        uiLanguage === "en"
+          ? /Update my folder “My folder” in “My collection”/
+          : /حدّث مجلدي «My folder» في «My collection»/,
+      );
+      const import_ = page.locator(".nuvio-modal .button-row .primary");
+      assert.equal(await import_.isDisabled(), true, "unanswered: no import");
+      await rows.first().scrollIntoViewIfNeeded();
+      await shot(`q8-legacy-folder-${uiLanguage}`);
+      await rows.first().locator("label").first().click();
+      assert.equal(await import_.isDisabled(), false);
+      await import_.click();
+      await page.locator(".nuvio-report").waitFor();
+      const [mine] = (await call("init")).collections;
+      assert.deepEqual(
+        mine.folders.map((f) => f.id),
+        ["nuvio-riwaq-folder"],
+        "updated, not copied",
+      );
+      await page.keyboard.press("Escape");
+    },
+  );
+
 // --- F9 -----------------------------------------------------------------------------
 await check("F9 a template query is edited through its form", async () => {
   for (const c of (await call("init")).collections)

@@ -2179,8 +2179,9 @@ export function NuvioLink({
             <fieldset className="nuvio-pick nuvio-legacy">
               <legend>من نسخة أقدم من رِواق</legend>
               <p className="muted">
-                هذه المجموعات قد تكون مجموعاتك نفسها، كتبها رِواق أقدم بمعرّف
-                آخر. اختر لكل منها قبل الاستيراد.
+                {matches.some((m) => m.folder)
+                  ? "هذه المجموعات أو المجلدات قد تكون نفسها عندك، كتبها رِواق أقدم بمعرّف آخر. اختر لكل منها قبل الاستيراد."
+                  : "هذه المجموعات قد تكون مجموعاتك نفسها، كتبها رِواق أقدم بمعرّف آخر. اختر لكل منها قبل الاستيراد."}
               </p>
               {matches.map((m) => (
                 <div key={m.id} className="studio-field" role="radiogroup">
@@ -2194,7 +2195,11 @@ export function NuvioLink({
                       checked={legacy[m.id] === "match"}
                       onChange={() => setLegacy({ ...legacy, [m.id]: "match" })}
                     />
-                    <span dir="auto">{`حدّث مجموعتي «${m.mine}»`}</span>
+                    <span dir="auto">
+                      {m.folder
+                        ? `حدّث مجلدي «${m.mine}» في «${m.collection}»`
+                        : `حدّث مجموعتي «${m.mine}»`}
+                    </span>
                   </label>
                   <label>
                     <input
@@ -2203,7 +2208,9 @@ export function NuvioLink({
                       checked={legacy[m.id] === "copy"}
                       onChange={() => setLegacy({ ...legacy, [m.id]: "copy" })}
                     />
-                    <span>أضفها مجموعة جديدة</span>
+                    <span>
+                      {m.folder ? "أضفه مجلداً جديداً" : "أضفها مجموعة جديدة"}
+                    </span>
                   </label>
                 </div>
               ))}

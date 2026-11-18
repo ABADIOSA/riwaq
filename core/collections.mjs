@@ -1310,10 +1310,41 @@ export function legacyMatches(current, converted, only) {
   const out = [];
   for (const c of converted?.collections || []) {
     if (pick && !pick.has(c.id)) continue;
-    if (list.some((x) => x.id === c.id)) continue;
+    const same = list.find((x) => x.id === c.id);
+    if (same) {
+      // The collection is the viewer's by its own ID, but a folder of it may
+      // be one of theirs under the older reading of its ID (fifth pass,
+      // Q8): asked folder by folder, as "<collection>/<folder>".
+      for (const folder of legacyFolders(same, c, aliases)) out.push(folder);
+      continue;
+    }
     const mine = list.find((x) => x.id === aliases[c.id]);
     if (mine)
       out.push({ id: c.id, title: c.title, match: mine.id, mine: mine.title });
+  }
+  return out;
+}
+/**
+ * The folders of the file's collection `theirs` that are not in the
+ * viewer's `mine` under the ID the file gives, but are under the older
+ * reading of it (fromNuvio's "<collection>/<folder>" aliases). Never by
+ * name: only an ID the file itself can mean.
+ */
+function legacyFolders(mine, theirs, aliases) {
+  const out = [];
+  for (const f of Array.isArray(theirs?.folders) ? theirs.folders : []) {
+    if (mine.folders.some((x) => x.id === f.id)) continue;
+    const key = `${theirs.id}/${f.id}`;
+    const other = mine.folders.find((x) => x.id === aliases[key]);
+    if (other)
+      out.push({
+        id: key,
+        title: f.title,
+        match: other.id,
+        mine: other.title,
+        folder: true,
+        collection: mine.title,
+      });
   }
   return out;
 }
@@ -1363,16 +1394,29 @@ export function importCollections(
   // A collection the file may name by an older reading (N3): the viewer's
   // answer decides, and without one nothing changes.
   const asked = [];
+  const askedFolders = [];
+  const answered = (key) => legacy[key] === "match" || legacy[key] === "copy";
   for (const c of chosen) {
-    if (how !== "merge" || out.some((x) => x.id === c.id)) continue;
+    if (how !== "merge") continue;
+    const same = out.find((x) => x.id === c.id);
+    if (same) {
+      // Its folders by an older reading (Q8): the viewer's answer, per
+      // folder, decides; without one nothing changes.
+      for (const f of legacyFolders(same, c, aliases))
+        if (!answered(f.id)) askedFolders.push(f.title);
+      continue;
+    }
     const other = aliases[c.id];
     if (!other || !out.some((x) => x.id === other)) continue;
-    if (legacy[c.id] !== "match" && legacy[c.id] !== "copy")
-      asked.push(c.title);
+    if (!answered(c.id)) asked.push(c.title);
   }
   if (asked.length)
     fail(
       `اختر لكل مجموعة من نسخة أقدم: تحديث مجموعتك أم إضافتها نسخة جديدة (${asked.join("، ")})`,
+    );
+  if (askedFolders.length)
+    fail(
+      `اختر لكل مجلد من نسخة أقدم: تحديث مجلدك أم إضافته مجلداً جديداً (${askedFolders.join("، ")})`,
     );
   for (const c of chosen) {
     let existing = how === "merge" ? out.findIndex((x) => x.id === c.id) : -1;
@@ -1383,10 +1427,15 @@ export function importCollections(
       const folders = [...mine.folders];
       for (const f of c.folders) {
         let at = folders.findIndex((x) => x.id === f.id);
-        // Its folders by their older reading too, once the viewer said it
-        // is the same collection.
-        if (at < 0 && older) {
-          const other = aliases[`${c.id}/${f.id}`];
+        // Its folders by their older reading too: all of them once the
+        // viewer said it is the same collection; in a collection that is
+        // theirs by its own ID, each folder they said to update (Q8). A
+        // folder they said to copy is added as its own, under the file's
+        // ID, so merging the same file again updates that copy instead of
+        // adding another.
+        const key = `${c.id}/${f.id}`;
+        if (at < 0 && (older || legacy[key] === "match")) {
+          const other = aliases[key];
           at = other ? folders.findIndex((x) => x.id === other) : -1;
         }
         if (at >= 0) {
