@@ -338,8 +338,10 @@ test("CF2: a batch that fails inside its transaction leaves revision and data as
     batch([...statements, t.db.prepare("SELECT * FROM missing_table")]);
   const r = await t.put(token, 1, "second");
   t.db.batch = batch;
-  assert.equal(r.status, 409);
-  assert.equal(r.json.revision, 1);
+  // A database failure is not a conflict (fifth pass, Q9): 503, and the
+  // device tries again later; nothing was written.
+  assert.equal(r.status, 503);
+  assert.equal(r.json.error, "try_again");
   const pulled = await t.get(token);
   assert.equal(pulled.revision, "1");
   assert.equal(pulled.text, "first");

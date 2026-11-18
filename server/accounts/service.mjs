@@ -256,13 +256,9 @@ async function openSession(db, username, accountId, authGen, now) {
   if (made?.meta?.changes !== 1) refuse(401, "unauthorized");
   return token;
 }
-async function session(db, request, now) {
-  const token = /^Bearer (\S+)$/.exec(
-    request.headers.get("Authorization") || "",
-  )?.[1];
-  if (!token || !TOKEN.test(token)) refuse(401, "unauthorized");
-  const hash = await sha256(token);
-  const row = await db
+/** A session's row and its account's, as one statement reads them. */
+const sessionRow = (db, hash) =>
+  db
     .prepare(
       `SELECT s.username, s.seen_at, s.created_at, s.account_id, s.auth_gen,
          u.created_at AS since, u.account_id AS current_id,
@@ -272,6 +268,13 @@ async function session(db, request, now) {
     )
     .bind(hash)
     .first();
+async function session(db, request, now) {
+  const token = /^Bearer (\S+)$/.exec(
+    request.headers.get("Authorization") || "",
+  )?.[1];
+  if (!token || !TOKEN.test(token)) refuse(401, "unauthorized");
+  const hash = await sha256(token);
+  let row = await sessionRow(db, hash);
   if (!row) refuse(401, "unauthorized");
   const gone = async () => {
     await db
@@ -285,19 +288,40 @@ async function session(db, request, now) {
   if (row.account_id === null || row.account_id === undefined) {
     // Issued before migration 0003 (or by the Worker before this one in
     // the window after it): the old rule decides, a session not older
-    // than its account, and it is bound to that account's instance now.
+    // than its account. Fifth pass (Q9): the binding is proved where it is
+    // written. One transaction gives an account the Worker before 0003
+    // wrote its instance, then binds this session to the instance and the
+    // generation the account has AT THAT WRITE, and only while that
+    // account is not newer than the session. An account deleted and taken
+    // again since the first read (newer than the session) binds nothing,
+    // so an old session never moves to a new account of the same name;
+    // a password change or a recovery deletes the session in its own
+    // transaction, before or after this one, never half way.
     if (row.since > row.created_at) return gone();
-    const user = await adopt(db, await userRow(db, row.username));
-    if (!user) return gone();
-    await db
-      .prepare(
-        "UPDATE sessions SET account_id = ?1, auth_gen = ?2 WHERE token_hash = ?3 AND account_id IS NULL",
-      )
-      .bind(user.account_id, user.auth_gen, hash)
-      .run();
-    row.account_id = user.account_id;
-    row.auth_gen = user.auth_gen;
-  } else if (
+    await db.batch([
+      db
+        .prepare(
+          "UPDATE users SET account_id = ?1 WHERE username = ?2 AND account_id IS NULL",
+        )
+        .bind(randomText(16), row.username),
+      db
+        .prepare(
+          `UPDATE sessions SET
+             account_id = (SELECT u.account_id FROM users u WHERE u.username = sessions.username),
+             auth_gen = (SELECT u.auth_gen FROM users u WHERE u.username = sessions.username)
+           WHERE token_hash = ?1 AND account_id IS NULL
+             AND EXISTS (SELECT 1 FROM users u
+               WHERE u.username = sessions.username AND u.account_id IS NOT NULL
+                 AND u.created_at <= sessions.created_at)`,
+        )
+        .bind(hash),
+    ]);
+    // What was written decides, read again in one statement.
+    row = await sessionRow(db, hash);
+    if (!row || row.account_id === null || row.account_id === undefined)
+      return gone();
+  }
+  if (
     row.account_id !== row.current_id ||
     Number(row.auth_gen) !== Number(row.current_gen)
   )
@@ -548,11 +572,17 @@ async function routes(request, env, now) {
   if (method === "GET" && path === "/v1/data") {
     const seen = request.headers.get("If-None-Match");
     // The revision alone first, so an unchanged account costs one row.
+    // Fifth pass (Q9): every read of the account's data also requires,
+    // in the statement that reads it, the instance and generation this
+    // session was issued for and the session itself: a sign-out, a
+    // password change, a recovery or a deletion that lands after the
+    // session was checked answers 401, never 200, 204 or 304.
+    const authorized = `u.account_id = ?2 AND u.auth_gen = ?3 AND ${stillSigned("?4", "?2", "?3")}`;
     const head = await db
       .prepare(
-        "SELECT revision FROM users WHERE username = ?1 AND account_id = ?2",
+        `SELECT revision FROM users u WHERE u.username = ?1 AND ${authorized}`,
       )
-      .bind(username, accountId)
+      .bind(username, accountId, authGen, hash)
       .first();
     if (!head) refuse(401, "unauthorized");
     if (head.revision === 0)
@@ -570,10 +600,10 @@ async function routes(request, env, now) {
           `SELECT u.revision AS revision, u.size AS size, c.idx AS idx, c.data AS data
            FROM users u LEFT JOIN chunks c
              ON c.username = u.username AND c.revision = u.revision
-           WHERE u.username = ?1 AND u.account_id = ?2
+           WHERE u.username = ?1 AND ${authorized}
            ORDER BY c.idx`,
         )
-        .bind(username, accountId)
+        .bind(username, accountId, authGen, hash)
         .all();
       if (!results.length) refuse(401, "unauthorized");
       const revision = results[0].revision;
@@ -655,14 +685,32 @@ async function routes(request, env, now) {
           text.length,
           now,
         ),
-        db
-          .prepare(
-            "DELETE FROM chunks WHERE username = ?1 AND revision <> COALESCE((SELECT revision FROM users WHERE username = ?1), -1)",
-          )
-          .bind(username),
+        // Fifth pass (Q9): the clean-up of older pieces is this request's
+        // own, made only when THIS transaction moved the account to `next`
+        // (the revision, size and time it just wrote, the instance and
+        // generation, the session still valid). A refused, conflicting or
+        // signed-out upload deletes nothing; pieces of the current revision
+        // are never touched, and anything else a crash left behind is the
+        // daily clean-up's (cleanup below).
+        bound(
+          db.prepare(
+            `DELETE FROM chunks WHERE username = ?1 AND revision <> ?2
+               AND EXISTS (SELECT 1 FROM users WHERE username = ?1 AND revision = ?2
+                 AND size = ?4 AND updated_at = ?5 AND account_id = ?6 AND auth_gen = ?7)
+               AND ${stillSigned("?8", "?6", "?7")}`,
+          ),
+          username,
+          next,
+          base,
+          text.length,
+          now,
+        ),
       ]);
     } catch {
-      results = null;
+      // The database failed (the transaction rolled back): nothing was
+      // written, and it is not a conflict (fifth pass, Q9). The device
+      // tries again later.
+      refuse(503, "try_again");
     }
     const moved = results?.[pieces.length + 1]?.meta?.changes === 1;
     if (!moved) {
