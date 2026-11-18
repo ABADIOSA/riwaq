@@ -396,6 +396,67 @@ await check(
   },
 );
 
+// The masthead with the prayer chip at every next prayer of a day (fourth
+// pass: Codex's web smoke failed at 980 px in English whenever the chip
+// read "Dhuhr 12:08 PM" or "Maghrib 5:41 PM"; it depended on the hour).
+await check(
+  "masthead controls never overlap, whatever the next prayer says",
+  async () => {
+    const bad = [];
+    for (const language of ["en", "ar"])
+      for (const hour of [1, 5, 9, 13, 16, 20]) {
+        const ctx = await browser.newContext({
+          viewport: { width: 1440, height: 840 },
+        });
+        await ctx.route(/^https?:\/\//, (route) =>
+          new URL(route.request().url()).hostname === "127.0.0.1"
+            ? route.continue()
+            : route.abort("internetdisconnected"),
+        );
+        const p = await ctx.newPage();
+        await p.clock.setFixedTime(new Date(Date.UTC(2026, 10, 18, hour, 7)));
+        await p.goto(siteUrl);
+        await p.waitForFunction(() => window.riwaq);
+        await p.evaluate(async (lang) => {
+          await window.riwaq.call("onboardingComplete");
+          const st = await window.riwaq.call("init");
+          await window.riwaq.call("settings", {
+            seenVersion: st.update?.current,
+            uiLanguage: lang,
+            prayerOn: true,
+          });
+        }, language);
+        await p.reload();
+        await p.locator(".riwaq-masthead .prayer-chip").waitFor();
+        for (const width of [1440, 1100, 980, 860, 780]) {
+          await p.setViewportSize({ width, height: 840 });
+          await p.waitForTimeout(120);
+          const found = await p.locator(".riwaq-masthead").evaluate((h) => {
+            const items = [...h.children].map((el) => ({
+              name: String(el.className).split(" ")[0],
+              r: el.getBoundingClientRect(),
+            }));
+            const out = [];
+            for (let i = 0; i < items.length; i++)
+              for (let j = i + 1; j < items.length; j++) {
+                const a = items[i].r,
+                  b = items[j].r;
+                if (
+                  Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
+                  Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1
+                )
+                  out.push(`${items[i].name}/${items[j].name}`);
+              }
+            return out;
+          });
+          if (found.length) bad.push({ language, hour, width, found });
+        }
+        await ctx.close();
+      }
+    assert.deepEqual(bad, []);
+  },
+);
+
 await check("R7 control: the same APNG moves in an <img>", async () => {
   await open({ reducedMotion: "no-preference" });
   await page.goto(siteUrl);

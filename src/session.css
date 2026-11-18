@@ -903,10 +903,14 @@
 .app.experience-riwaq .riwaq-masthead {
   top: var(--window-offset);
   height: var(--masthead-height);
-  grid-template-columns: minmax(110px, 1fr) minmax(160px, 520px) minmax(
-      110px,
-      1fr
-    );
+  /* The outer columns are never narrower than what they hold: with a
+     long prayer chip ("Dhuhr 12:08 PM" at 980 px in English) a fixed
+     110 px minimum let the utilities spill over the search box (PR #155
+     fourth pass; Codex's web smoke, time-of-day dependent). While there is
+     room both stay equal, so the search keeps the window's centre. */
+  grid-template-columns:
+    minmax(max-content, 1fr) minmax(160px, 520px)
+    minmax(max-content, 1fr);
   /* Its content stays put while the scroll lock hides the page's
      scrollbar (issue #149, src/tokens.css). */
   padding-left: calc(20px + var(--lock-gutter-left, 0px));

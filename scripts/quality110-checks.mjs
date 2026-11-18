@@ -157,6 +157,23 @@ export async function qualityChecks({
         false,
         "Nothing stays inert after Back",
       );
+      // App gives focus and the offset back in the next animation frame
+      // (closeCatalogBrowser), after the page has gone: wait for that frame
+      // instead of reading in the same turn (PR #155 fourth pass: Codex's
+      // Windows run read it a frame early). Same assertion, bounded.
+      await button.evaluate(
+        (el) =>
+          new Promise((resolve, reject) => {
+            const until = performance.now() + 3000;
+            const look = () =>
+              el === document.activeElement
+                ? resolve()
+                : performance.now() > until
+                  ? reject(new Error("focus did not return to See all"))
+                  : requestAnimationFrame(look);
+            look();
+          }),
+      );
       assert.equal(
         await button.evaluate((el) => el === document.activeElement),
         true,

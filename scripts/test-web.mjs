@@ -696,6 +696,8 @@ try {
           const items = [...header.children].map((el) => {
             const r = el.getBoundingClientRect();
             return {
+              name: String(el.className).split(" ")[0],
+              text: el.innerText.replace(/\s+/g, " ").slice(0, 40),
               left: r.left,
               right: r.right,
               top: r.top,
@@ -720,7 +722,7 @@ try {
           assert.ok(
             Math.min(a.right, b.right) - Math.max(a.left, b.left) <= 1 ||
               Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) <= 1,
-            "header controls must not overlap",
+            `header controls must not overlap: ${JSON.stringify({ language, width, a, b })}`,
           );
         }
       if (width === 1440 || width === 390)
