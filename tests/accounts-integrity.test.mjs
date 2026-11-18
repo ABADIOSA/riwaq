@@ -11,7 +11,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { cleanup, handle } from "../server/accounts/service.mjs";
-import { sqliteD1 } from "../server/accounts/local.mjs";
+import { migrate, sqliteD1 } from "../server/accounts/local.mjs";
 
 const secret = (c) => c.repeat(43);
 const wrapped = "W".repeat(80);
@@ -175,7 +175,9 @@ test("CF2: an upload racing the account's deletion leaves no data, and the name 
   const token = await t.signup("abadi");
   t.beforeNextBatch(() => t.removeAccount("abadi"));
   const r = await t.put(token, 0, "sealed data");
-  assert.equal(r.status, 409);
+  // Fourth pass (CF2): the session's account is gone, so the device is
+  // told it is signed out (401), not that another revision won (409).
+  assert.equal(r.status, 401);
   assert.equal(await t.count("SELECT COUNT(*) AS n FROM chunks"), 0);
   // Before the fix the orphaned pieces at revision 1 made every upload
   // of a new account with this name conflict for ever.
@@ -404,33 +406,51 @@ test("duplicates: signing up twice keeps the first account", async () => {
 });
 
 test("migrations apply to an empty database and again without change", () => {
+  // As Wrangler applies them to D1: each file once, recorded in
+  // d1_migrations (0003 alters tables, so a second raw run would fail; a
+  // second tracked run applies nothing).
   const db = new DatabaseSync(":memory:");
-  const files = readdirSync(migrations)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
-  for (let pass = 0; pass < 2; pass++)
-    for (const file of files) db.exec(readFileSync(migrations + file, "utf8"));
+  migrate(db);
+  const once = db.prepare("SELECT name FROM d1_migrations ORDER BY id").all();
+  migrate(db);
+  assert.deepEqual(
+    db.prepare("SELECT name FROM d1_migrations ORDER BY id").all(),
+    once,
+  );
+  assert.deepEqual(
+    once.map((r) => r.name),
+    readdirSync(migrations)
+      .filter((f) => f.endsWith(".sql"))
+      .sort(),
+  );
   const tables = db
     .prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     )
     .all()
     .map((r) => r.name);
   assert.deepEqual(tables, [
     "attempts",
     "chunks",
+    "d1_migrations",
     "sessions",
     "usage_devices",
     "users",
   ]);
+  const columns = (table) =>
+    db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .map((c) => c.name);
+  assert.ok(columns("users").includes("account_id"));
+  assert.ok(columns("users").includes("auth_gen"));
+  assert.ok(columns("sessions").includes("account_id"));
+  assert.ok(columns("sessions").includes("auth_gen"));
 });
 
 test("every query a request makes reads by an index, never the whole table", () => {
   const db = new DatabaseSync(":memory:");
-  for (const file of readdirSync(migrations)
-    .filter((f) => f.endsWith(".sql"))
-    .sort())
-    db.exec(readFileSync(migrations + file, "utf8"));
+  migrate(db);
   const plan = (sql) =>
     db
       .prepare(`EXPLAIN QUERY PLAN ${sql}`)
@@ -446,6 +466,15 @@ test("every query a request makes reads by an index, never the whole table", () 
     "DELETE FROM chunks WHERE username = 'x' AND revision <> COALESCE((SELECT revision FROM users WHERE username = 'x'), -1)",
     "INSERT INTO chunks (username, revision, idx, data) SELECT 'x', 2, 0, 'd' WHERE EXISTS (SELECT 1 FROM users WHERE username = 'x' AND revision = 1)",
     "INSERT INTO sessions (token_hash, username, created_at, seen_at) SELECT 'h', 'x', 1, 1 WHERE EXISTS (SELECT 1 FROM users WHERE username = 'x')",
+    // Fourth pass: instance-bound sessions, writes and the one-statement read.
+    "SELECT s.username, s.seen_at, s.created_at, s.account_id, s.auth_gen, u.created_at AS since, u.account_id AS current_id, u.auth_gen AS current_gen FROM sessions s LEFT JOIN users u ON u.username = s.username WHERE s.token_hash = 'x'",
+    "SELECT revision FROM users WHERE username = 'x' AND account_id = 'i'",
+    "SELECT u.revision AS revision, u.size AS size, c.idx AS idx, c.data AS data FROM users u LEFT JOIN chunks c ON c.username = u.username AND c.revision = u.revision WHERE u.username = 'x' AND u.account_id = 'i' ORDER BY c.idx",
+    "INSERT INTO sessions (token_hash, username, created_at, seen_at, account_id, auth_gen) SELECT 'h', 'x', 1, 1, 'i', 0 WHERE EXISTS (SELECT 1 FROM users WHERE username = 'x' AND account_id = 'i' AND auth_gen = 0)",
+    "INSERT INTO chunks (username, revision, idx, data) SELECT 'x', 2, 0, 'd' WHERE EXISTS (SELECT 1 FROM users WHERE username = 'x' AND revision = 1 AND account_id = 'i' AND auth_gen = 0) AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = 'h' AND account_id = 'i' AND auth_gen = 0)",
+    "UPDATE users SET revision = 2, size = 1, updated_at = 1 WHERE username = 'x' AND EXISTS (SELECT 1 FROM users WHERE username = 'x' AND revision = 1 AND account_id = 'i' AND auth_gen = 0) AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = 'h' AND account_id = 'i' AND auth_gen = 0)",
+    "UPDATE users SET auth_gen = auth_gen + 1 WHERE username = 'x' AND account_id = 'i' AND auth_gen = 0 AND EXISTS (SELECT 1 FROM sessions WHERE token_hash = 'h' AND account_id = 'i' AND auth_gen = 0)",
+    "DELETE FROM sessions WHERE username = 'x' AND token_hash <> 'h' AND EXISTS (SELECT 1 FROM users WHERE username = 'x' AND account_id = 'i' AND auth_gen = 1)",
   ];
   for (const sql of perRequest) assert.doesNotMatch(plan(sql), /\bSCAN\b/, sql);
   // The per-request sweep of expired counters is gone: it scanned.

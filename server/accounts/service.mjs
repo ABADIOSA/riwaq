@@ -193,20 +193,58 @@ async function count(db, key, [, window], now) {
 }
 
 // --- Sessions ------------------------------------------------------------
+//
+// An account is an instance: a random `account_id` never reused, and a
+// credential generation `auth_gen` that a password change or a recovery
+// moves on (migration 0003; PR #155 third review, CF1/CF2). A username can
+// be deleted and taken again, so it is never the identity a session or a
+// write is bound to. A session records the instance and generation it was
+// issued for, and is valid only while the account still has both.
 
-async function openSession(db, username, now) {
+/** The SQL condition "the account `?u` is still instance `?i`, generation `?g`". */
+const instance = (u, i, g) =>
+  `EXISTS (SELECT 1 FROM users WHERE username = ${u} AND account_id = ${i} AND auth_gen = ${g})`;
+/**
+ * "This transaction's own credential change took effect": the instance at
+ * the generation it moved to WITH the salt it wrote. A generation alone is
+ * not enough: a password change and a recovery racing from the same
+ * generation both move it to the same next number.
+ */
+const changed = (u, i, g, salt) =>
+  `EXISTS (SELECT 1 FROM users WHERE username = ${u} AND account_id = ${i} AND auth_gen = ${g} AND auth_salt = ${salt})`;
+
+/**
+ * Gives an account written without an instance (by the Worker that ran
+ * before migration 0003, between the migration and this Worker's
+ * deployment) its instance, once.
+ */
+async function adopt(db, user) {
+  if (!user || user.account_id) return user;
+  await db
+    .prepare(
+      "UPDATE users SET account_id = ?1 WHERE username = ?2 AND account_id IS NULL",
+    )
+    .bind(randomText(16), user.username)
+    .run();
+  return userRow(db, user.username);
+}
+
+/**
+ * Issues a session for the account instance and generation whose secret
+ * was just checked, in one transaction that writes it only while the
+ * account is still that instance at that generation: a sign-in racing a
+ * deletion, a deletion and a new account of the same name, a password
+ * change or a recovery leaves no session (CF1).
+ */
+async function openSession(db, username, accountId, authGen, now) {
   const token = randomText(32);
-  // Only for an account that exists when the session is written, in the
-  // same transaction: a sign-in racing the account's deletion can no
-  // longer leave a session behind for a later account of the same name
-  // (database audit 2026-11-18, CF1).
   const [made] = await db.batch([
     db
       .prepare(
-        `INSERT INTO sessions (token_hash, username, created_at, seen_at)
-         SELECT ?1, ?2, ?3, ?3 WHERE EXISTS (SELECT 1 FROM users WHERE username = ?2)`,
+        `INSERT INTO sessions (token_hash, username, created_at, seen_at, account_id, auth_gen)
+         SELECT ?1, ?2, ?3, ?3, ?4, ?5 WHERE ${instance("?2", "?4", "?5")}`,
       )
-      .bind(await sha256(token), username, now),
+      .bind(await sha256(token), username, now, accountId, authGen),
     // A user keeps at most MAX_SESSIONS devices signed in; the oldest go.
     db
       .prepare(
@@ -224,38 +262,64 @@ async function session(db, request, now) {
   )?.[1];
   if (!token || !TOKEN.test(token)) refuse(401, "unauthorized");
   const hash = await sha256(token);
-  // A session belongs to the account as it was when the session began: one
-  // older than its account (left by an account of the same name that was
-  // deleted) or without one is removed and refused (CF1).
   const row = await db
     .prepare(
-      `SELECT s.username, s.seen_at, s.created_at, u.created_at AS since
+      `SELECT s.username, s.seen_at, s.created_at, s.account_id, s.auth_gen,
+         u.created_at AS since, u.account_id AS current_id,
+         u.auth_gen AS current_gen
        FROM sessions s LEFT JOIN users u ON u.username = s.username
        WHERE s.token_hash = ?1`,
     )
     .bind(hash)
     .first();
   if (!row) refuse(401, "unauthorized");
-  if (
-    row.since === null ||
-    row.since === undefined ||
-    row.since > row.created_at ||
-    now - row.seen_at > SESSION_DAYS * DAY
-  ) {
+  const gone = async () => {
     await db
       .prepare("DELETE FROM sessions WHERE token_hash = ?1")
       .bind(hash)
       .run();
     refuse(401, "unauthorized");
-  }
+  };
+  if (row.since === null || row.since === undefined) return gone();
+  if (now - row.seen_at > SESSION_DAYS * DAY) return gone();
+  if (row.account_id === null || row.account_id === undefined) {
+    // Issued before migration 0003 (or by the Worker before this one in
+    // the window after it): the old rule decides, a session not older
+    // than its account, and it is bound to that account's instance now.
+    if (row.since > row.created_at) return gone();
+    const user = await adopt(db, await userRow(db, row.username));
+    if (!user) return gone();
+    await db
+      .prepare(
+        "UPDATE sessions SET account_id = ?1, auth_gen = ?2 WHERE token_hash = ?3 AND account_id IS NULL",
+      )
+      .bind(user.account_id, user.auth_gen, hash)
+      .run();
+    row.account_id = user.account_id;
+    row.auth_gen = user.auth_gen;
+  } else if (
+    row.account_id !== row.current_id ||
+    Number(row.auth_gen) !== Number(row.current_gen)
+  )
+    // Another account of the same name, or a password changed since.
+    return gone();
   // Written at most once a day per device, to spare the database.
   if (now - row.seen_at > DAY)
     await db
       .prepare("UPDATE sessions SET seen_at = ?1 WHERE token_hash = ?2")
       .bind(now, hash)
       .run();
-  return { username: row.username, hash };
+  return {
+    username: row.username,
+    hash,
+    accountId: row.account_id,
+    authGen: Number(row.auth_gen),
+  };
 }
+
+/** The SQL condition "this session is still valid for that instance". */
+const stillSigned = (h, i, g) =>
+  `EXISTS (SELECT 1 FROM sessions WHERE token_hash = ${h} AND account_id = ${i} AND auth_gen = ${g})`;
 
 // --- Users ---------------------------------------------------------------
 
@@ -306,13 +370,14 @@ async function routes(request, env, now) {
     await count(db, addressKey("signup"), LIMITS.signupAddress, now);
     const authSalt = randomText(16);
     const recoverySalt = randomText(16);
+    const accountId = randomText(16);
     try {
       await db
         .prepare(
           `INSERT INTO users (username, auth_salt, auth_hash, wrapped_key,
              recovery_salt, recovery_hash, recovery_key, revision, size,
-             created_at, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 0, ?8, ?8)`,
+             created_at, updated_at, account_id, auth_gen)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 0, ?8, ?8, ?9, 0)`,
         )
         .bind(
           username,
@@ -323,13 +388,14 @@ async function routes(request, env, now) {
           await sha256(pepper, recoverySalt, recoveryAuth),
           recoveryKey,
           now,
+          accountId,
         )
         .run();
     } catch {
       refuse(409, "taken");
     }
     return reply(201, {
-      token: await openSession(db, username, now),
+      token: await openSession(db, username, accountId, 0, now),
       revision: 0,
     });
   }
@@ -343,14 +409,30 @@ async function routes(request, env, now) {
       (await limited(db, addressKey("login"), LIMITS.loginAddress, now))
     )
       refuse(429, "rate_limited");
-    const user = await userRow(db, username);
+    let user = await userRow(db, username);
     if (!(await proves(pepper, user?.auth_salt, user?.auth_hash, authSecret))) {
       await count(db, `login:${username}`, LIMITS.login, now);
       await count(db, addressKey("login"), LIMITS.loginAddress, now);
       refuse(401, "invalid_credentials");
     }
+    // The session is for the instance and generation this secret was
+    // checked against, never for whatever the name holds later (CF1).
+    const checked = { id: user.account_id, gen: user.auth_gen };
+    if (!checked.id) {
+      // Written before migration 0003's Worker: given its instance now,
+      // and only if it is still the account whose secret was checked.
+      const hashChecked = user.auth_hash;
+      user = await adopt(db, user);
+      if (
+        !user ||
+        user.auth_gen !== checked.gen ||
+        user.auth_hash !== hashChecked
+      )
+        refuse(401, "unauthorized");
+      checked.id = user.account_id;
+    }
     return reply(200, {
-      token: await openSession(db, username, now),
+      token: await openSession(db, username, checked.id, checked.gen, now),
       wrappedKey: user.wrapped_key,
       revision: user.revision,
     });
@@ -397,12 +479,23 @@ async function routes(request, env, now) {
       await count(db, `recover:${username}`, LIMITS.recover, now);
       refuse(401, "invalid_credentials");
     }
+    const known = await adopt(db, user);
+    if (!known || known.recovery_hash !== user.recovery_hash)
+      refuse(401, "invalid_credentials");
     const authSalt = randomText(16);
-    // A new password signs every device out.
-    await db.batch([
+    const token = randomText(32);
+    const gen = known.auth_gen;
+    // One transaction, bound to the instance and generation whose recovery
+    // code was checked (CF1): the new password, every device signed out,
+    // and this device's new session at the next generation. A deletion, a
+    // new account of the name, or a password changed meanwhile changes
+    // nothing and is refused.
+    const done = await db.batch([
       db
         .prepare(
-          "UPDATE users SET auth_salt = ?1, auth_hash = ?2, wrapped_key = ?3, updated_at = ?4 WHERE username = ?5",
+          `UPDATE users SET auth_salt = ?1, auth_hash = ?2, wrapped_key = ?3,
+             updated_at = ?4, auth_gen = auth_gen + 1
+           WHERE username = ?5 AND account_id = ?6 AND auth_gen = ?7`,
         )
         .bind(
           authSalt,
@@ -410,17 +503,39 @@ async function routes(request, env, now) {
           wrappedKey,
           now,
           username,
+          known.account_id,
+          gen,
         ),
-      db.prepare("DELETE FROM sessions WHERE username = ?1").bind(username),
+      db
+        .prepare(
+          `DELETE FROM sessions WHERE username = ?1 AND ${changed("?1", "?2", "?3", "?4")}`,
+        )
+        .bind(username, known.account_id, gen + 1, authSalt),
+      db
+        .prepare(
+          `INSERT INTO sessions (token_hash, username, created_at, seen_at, account_id, auth_gen)
+           SELECT ?1, ?2, ?3, ?3, ?4, ?5 WHERE ${changed("?2", "?4", "?5", "?6")}`,
+        )
+        .bind(
+          await sha256(token),
+          username,
+          now,
+          known.account_id,
+          gen + 1,
+          authSalt,
+        ),
     ]);
-    return reply(200, {
-      token: await openSession(db, username, now),
-      revision: user.revision,
-    });
+    if (done[0]?.meta?.changes !== 1 || done[2]?.meta?.changes !== 1)
+      refuse(401, "invalid_credentials");
+    return reply(200, { token, revision: known.revision });
   }
 
   // Everything below needs a signed-in device.
-  const { username, hash } = await session(db, request, now);
+  const { username, hash, accountId, authGen } = await session(
+    db,
+    request,
+    now,
+  );
 
   if (method === "POST" && path === "/v1/logout") {
     await db
@@ -431,20 +546,49 @@ async function routes(request, env, now) {
   }
 
   if (method === "GET" && path === "/v1/data") {
-    const user = await userRow(db, username);
-    if (!user) refuse(401, "unauthorized");
-    const revision = String(user.revision);
-    const headers = { "X-Riwaq-Revision": revision };
-    if (user.revision === 0) return reply(204, null, headers);
-    if (request.headers.get("If-None-Match") === revision)
-      return reply(304, null, headers);
-    const { results } = await db
+    const seen = request.headers.get("If-None-Match");
+    // The revision alone first, so an unchanged account costs one row.
+    const head = await db
       .prepare(
-        "SELECT data FROM chunks WHERE username = ?1 AND revision = ?2 ORDER BY idx",
+        "SELECT revision FROM users WHERE username = ?1 AND account_id = ?2",
       )
-      .bind(username, user.revision)
-      .all();
-    return reply(200, results.map((r) => r.data).join(""), headers);
+      .bind(username, accountId)
+      .first();
+    if (!head) refuse(401, "unauthorized");
+    if (head.revision === 0)
+      return reply(204, null, { "X-Riwaq-Revision": "0" });
+    if (seen === String(head.revision))
+      return reply(304, null, { "X-Riwaq-Revision": seen });
+    // Then the revision, its size and its pieces in ONE statement, so they
+    // come from one committed state (third review, N9): an upload landing
+    // between two reads once returned 200 with the old revision and no
+    // data. What is sent is checked whole before it goes; a state that
+    // does not add up is read again, and never sent as a success.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { results } = await db
+        .prepare(
+          `SELECT u.revision AS revision, u.size AS size, c.idx AS idx, c.data AS data
+           FROM users u LEFT JOIN chunks c
+             ON c.username = u.username AND c.revision = u.revision
+           WHERE u.username = ?1 AND u.account_id = ?2
+           ORDER BY c.idx`,
+        )
+        .bind(username, accountId)
+        .all();
+      if (!results.length) refuse(401, "unauthorized");
+      const revision = results[0].revision;
+      const headers = { "X-Riwaq-Revision": String(revision) };
+      if (revision === 0) return reply(204, null, headers);
+      if (seen === String(revision)) return reply(304, null, headers);
+      const pieces = results.filter((r) => r.data !== null);
+      const text = pieces.map((r) => r.data).join("");
+      const whole =
+        pieces.length > 0 &&
+        pieces.every((r, i) => r.idx === i) &&
+        text.length === results[0].size;
+      if (whole) return reply(200, text, headers);
+    }
+    refuse(503, "try_again");
   }
 
   if (method === "PUT" && path === "/v1/data") {
@@ -466,27 +610,51 @@ async function routes(request, env, now) {
       // moves only from that base; then every piece not of the current
       // revision goes, all of them when the account is gone (NULL once
       // matched nothing and left a deleted account's data behind).
-      const current =
-        "EXISTS (SELECT 1 FROM users WHERE username = ?1 AND revision = ?3)";
+      //
+      // Fourth pass (CF2): every statement also requires the account to be
+      // the instance and credential generation this session was issued
+      // for, and the session itself to be valid, at the moment the
+      // transaction runs: a deletion, a new account of the same name, a
+      // password change or a revoked session (another device's sign-out
+      // of this one) during the upload writes nothing.
+      const current = `EXISTS (SELECT 1 FROM users WHERE username = ?1 AND revision = ?3 AND account_id = ?6 AND auth_gen = ?7) AND ${stillSigned("?8", "?6", "?7")}`;
+      const bound = (statement, ...values) =>
+        statement.bind(...values, accountId, authGen, hash);
       results = await db.batch([
-        db
-          .prepare(
+        bound(
+          db.prepare(
             `DELETE FROM chunks WHERE username = ?1 AND revision = ?2 AND ${current}`,
-          )
-          .bind(username, next, base),
+          ),
+          username,
+          next,
+          base,
+          null,
+          null,
+        ),
         ...pieces.map((data, idx) =>
-          db
-            .prepare(
+          bound(
+            db.prepare(
               `INSERT INTO chunks (username, revision, idx, data)
                SELECT ?1, ?2, ?4, ?5 WHERE ${current}`,
-            )
-            .bind(username, next, base, idx, data),
+            ),
+            username,
+            next,
+            base,
+            idx,
+            data,
+          ),
         ),
-        db
-          .prepare(
-            "UPDATE users SET revision = ?1, size = ?2, updated_at = ?3 WHERE username = ?4 AND revision = ?5",
-          )
-          .bind(next, text.length, now, username, base),
+        bound(
+          db.prepare(
+            `UPDATE users SET revision = ?2, size = ?4, updated_at = ?5
+             WHERE username = ?1 AND ${current}`,
+          ),
+          username,
+          next,
+          base,
+          text.length,
+          now,
+        ),
         db
           .prepare(
             "DELETE FROM chunks WHERE username = ?1 AND revision <> COALESCE((SELECT revision FROM users WHERE username = ?1), -1)",
@@ -498,8 +666,18 @@ async function routes(request, env, now) {
     }
     const moved = results?.[pieces.length + 1]?.meta?.changes === 1;
     if (!moved) {
-      const user = await userRow(db, username);
-      refuse(409, "conflict", { revision: user?.revision ?? 0 });
+      // A session that ended meanwhile is told so; a newer revision of the
+      // same account is a conflict, as before.
+      const still = await db
+        .prepare(
+          `SELECT u.revision AS revision FROM users u
+           WHERE u.username = ?1 AND u.account_id = ?2 AND u.auth_gen = ?3
+             AND ${stillSigned("?4", "?2", "?3")}`,
+        )
+        .bind(username, accountId, authGen, hash)
+        .first();
+      if (!still) refuse(401, "unauthorized");
+      refuse(409, "conflict", { revision: still.revision ?? 0 });
     }
     return reply(200, { revision: next }, { "X-Riwaq-Revision": String(next) });
   }
@@ -512,16 +690,25 @@ async function routes(request, env, now) {
     if (await limited(db, `login:${username}`, LIMITS.login, now))
       refuse(429, "rate_limited");
     const user = await userRow(db, username);
-    if (!(await proves(pepper, user?.auth_salt, user?.auth_hash, authSecret))) {
+    if (
+      user?.account_id !== accountId ||
+      !(await proves(pepper, user?.auth_salt, user?.auth_hash, authSecret))
+    ) {
       await count(db, `login:${username}`, LIMITS.login, now);
       refuse(401, "invalid_credentials");
     }
     const authSalt = randomText(16);
-    // Other devices must sign in again with the new password.
-    await db.batch([
+    // One transaction, bound to this session's instance and generation
+    // (CF1): the new password and the next generation; every other device
+    // signed out; this device's session moved to the new generation. A
+    // sign-in that checked the old password meanwhile issues nothing.
+    const done = await db.batch([
       db
         .prepare(
-          "UPDATE users SET auth_salt = ?1, auth_hash = ?2, wrapped_key = ?3, updated_at = ?4 WHERE username = ?5",
+          `UPDATE users SET auth_salt = ?1, auth_hash = ?2, wrapped_key = ?3,
+             updated_at = ?4, auth_gen = auth_gen + 1
+           WHERE username = ?5 AND account_id = ?6 AND auth_gen = ?7
+             AND ${stillSigned("?8", "?6", "?7")}`,
         )
         .bind(
           authSalt,
@@ -529,13 +716,24 @@ async function routes(request, env, now) {
           wrappedKey,
           now,
           username,
+          accountId,
+          authGen,
+          hash,
         ),
       db
         .prepare(
-          "DELETE FROM sessions WHERE username = ?1 AND token_hash <> ?2",
+          `DELETE FROM sessions WHERE username = ?1 AND token_hash <> ?2
+             AND ${changed("?1", "?3", "?4", "?5")}`,
         )
-        .bind(username, hash),
+        .bind(username, hash, accountId, authGen + 1, authSalt),
+      db
+        .prepare(
+          `UPDATE sessions SET auth_gen = ?2 WHERE token_hash = ?1
+             AND ${changed("?3", "?4", "?2", "?5")}`,
+        )
+        .bind(hash, authGen + 1, username, accountId, authSalt),
     ]);
+    if (done[0]?.meta?.changes !== 1) refuse(401, "unauthorized");
     return reply(204, null);
   }
 
@@ -545,15 +743,39 @@ async function routes(request, env, now) {
     if (await limited(db, `login:${username}`, LIMITS.login, now))
       refuse(429, "rate_limited");
     const user = await userRow(db, username);
-    if (!(await proves(pepper, user?.auth_salt, user?.auth_hash, authSecret))) {
+    if (
+      user?.account_id !== accountId ||
+      !(await proves(pepper, user?.auth_salt, user?.auth_hash, authSecret))
+    ) {
       await count(db, `login:${username}`, LIMITS.login, now);
       refuse(401, "invalid_credentials");
     }
-    await db.batch([
-      db.prepare("DELETE FROM chunks WHERE username = ?1").bind(username),
-      db.prepare("DELETE FROM sessions WHERE username = ?1").bind(username),
-      db.prepare("DELETE FROM users WHERE username = ?1").bind(username),
+    // Only the instance this session belongs to, at its generation, with
+    // the session still valid; its data and sessions first (CF2).
+    const owned = `${instance("?1", "?2", "?3")} AND ${stillSigned("?4", "?2", "?3")}`;
+    const done = await db.batch([
+      db
+        .prepare(`DELETE FROM chunks WHERE username = ?1 AND ${owned}`)
+        .bind(username, accountId, authGen, hash),
+      db
+        .prepare(
+          `DELETE FROM sessions WHERE username = ?1 AND token_hash <> ?4 AND ${owned}`,
+        )
+        .bind(username, accountId, authGen, hash),
+      db
+        .prepare(
+          `DELETE FROM users WHERE username = ?1 AND account_id = ?2 AND auth_gen = ?3
+             AND ${stillSigned("?4", "?2", "?3")}`,
+        )
+        .bind(username, accountId, authGen, hash),
+      db
+        .prepare(
+          `DELETE FROM sessions WHERE token_hash = ?4 AND NOT EXISTS
+             (SELECT 1 FROM users WHERE username = ?1 AND account_id = ?2 AND auth_gen = ?3)`,
+        )
+        .bind(username, accountId, authGen, hash),
     ]);
+    if (done[2]?.meta?.changes !== 1) refuse(401, "unauthorized");
     return reply(204, null);
   }
 
@@ -596,8 +818,20 @@ export function cleanup(db, now = Date.now()) {
     db
       .prepare("DELETE FROM sessions WHERE seen_at < ?1")
       .bind(now - SESSION_DAYS * DAY),
+    // An account written by the Worker before migration 0003's (between
+    // the migration and this Worker's deployment) gets its instance.
     db.prepare(
-      "DELETE FROM sessions WHERE NOT EXISTS (SELECT 1 FROM users WHERE users.username = sessions.username AND users.created_at <= sessions.created_at)",
+      "UPDATE users SET account_id = lower(hex(randomblob(16))) WHERE account_id IS NULL",
+    ),
+    // A session is kept only while its account is the instance, at the
+    // generation, it was issued for; one issued before migration 0003 by
+    // the old rule (not older than its account).
+    db.prepare(
+      `DELETE FROM sessions WHERE NOT EXISTS (SELECT 1 FROM users u
+         WHERE u.username = sessions.username AND (
+           (sessions.account_id IS NOT NULL AND u.account_id = sessions.account_id
+              AND u.auth_gen = sessions.auth_gen)
+           OR (sessions.account_id IS NULL AND u.created_at <= sessions.created_at)))`,
     ),
     db.prepare(
       "DELETE FROM chunks WHERE NOT EXISTS (SELECT 1 FROM users WHERE users.username = chunks.username AND users.revision = chunks.revision)",
