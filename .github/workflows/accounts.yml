@@ -42,7 +42,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Test the service and the client against it
-        run: node --test tests/accounts-server.test.mjs tests/account.test.mjs
+        run: node --test tests/accounts-server.test.mjs tests/accounts-integrity.test.mjs tests/account.test.mjs
       - name: Check the Cloudflare token
         id: ready
         run: |

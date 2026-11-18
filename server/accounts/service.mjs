@@ -1,6 +1,8 @@
 import { usageRoute } from "./usage.mjs";
 /**
  * Riwaq accounts: a Cloudflare Worker with a D1 database (docs/ACCOUNTS.md).
+ * The Worker's entry is worker.mjs, which exports only its handlers; this
+ * module holds the service, for it and for the tests (local.mjs).
  *
  * Accounts are optional and end-to-end encrypted. The device derives two
  * secrets from the password (core/account.mjs): one proves the password to
@@ -120,11 +122,40 @@ const reply = (status, body, headers = {}) =>
     },
   );
 
-async function readJson(request) {
+/**
+ * The body as text, read piece by piece and cut off past `max` bytes, so
+ * a request without a Content-Length (chunked) cannot make the Worker hold
+ * more than the limit (database audit 2026-11-18, CF3).
+ */
+export async function readBounded(request, max) {
   const length = Number(request.headers.get("Content-Length") || 0);
-  if (length > MAX_JSON) refuse(413, "too_large");
-  const text = await request.text();
-  if (text.length > MAX_JSON) refuse(413, "too_large");
+  if (length > max) refuse(413, "too_large");
+  const reader = request.body?.getReader();
+  if (!reader) return "";
+  const parts = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > max) refuse(413, "too_large");
+      parts.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  const all = new Uint8Array(bytes);
+  let at = 0;
+  for (const part of parts) {
+    all.set(part, at);
+    at += part.byteLength;
+  }
+  return new TextDecoder().decode(all);
+}
+
+async function readJson(request) {
+  const text = await readBounded(request, MAX_JSON);
   try {
     const body = JSON.parse(text);
     if (!body || typeof body !== "object" || Array.isArray(body)) throw 0;
@@ -165,10 +196,15 @@ async function count(db, key, [, window], now) {
 
 async function openSession(db, username, now) {
   const token = randomText(32);
-  await db.batch([
+  // Only for an account that exists when the session is written, in the
+  // same transaction: a sign-in racing the account's deletion can no
+  // longer leave a session behind for a later account of the same name
+  // (database audit 2026-11-18, CF1).
+  const [made] = await db.batch([
     db
       .prepare(
-        "INSERT INTO sessions (token_hash, username, created_at, seen_at) VALUES (?1, ?2, ?3, ?3)",
+        `INSERT INTO sessions (token_hash, username, created_at, seen_at)
+         SELECT ?1, ?2, ?3, ?3 WHERE EXISTS (SELECT 1 FROM users WHERE username = ?2)`,
       )
       .bind(await sha256(token), username, now),
     // A user keeps at most MAX_SESSIONS devices signed in; the oldest go.
@@ -179,6 +215,7 @@ async function openSession(db, username, now) {
       )
       .bind(username, MAX_SESSIONS),
   ]);
+  if (made?.meta?.changes !== 1) refuse(401, "unauthorized");
   return token;
 }
 async function session(db, request, now) {
@@ -187,12 +224,24 @@ async function session(db, request, now) {
   )?.[1];
   if (!token || !TOKEN.test(token)) refuse(401, "unauthorized");
   const hash = await sha256(token);
+  // A session belongs to the account as it was when the session began: one
+  // older than its account (left by an account of the same name that was
+  // deleted) or without one is removed and refused (CF1).
   const row = await db
-    .prepare("SELECT username, seen_at FROM sessions WHERE token_hash = ?1")
+    .prepare(
+      `SELECT s.username, s.seen_at, s.created_at, u.created_at AS since
+       FROM sessions s LEFT JOIN users u ON u.username = s.username
+       WHERE s.token_hash = ?1`,
+    )
     .bind(hash)
     .first();
   if (!row) refuse(401, "unauthorized");
-  if (now - row.seen_at > SESSION_DAYS * DAY) {
+  if (
+    row.since === null ||
+    row.since === undefined ||
+    row.since > row.created_at ||
+    now - row.seen_at > SESSION_DAYS * DAY
+  ) {
     await db
       .prepare("DELETE FROM sessions WHERE token_hash = ?1")
       .bind(hash)
@@ -241,12 +290,6 @@ async function routes(request, env, now) {
       count,
       addressKey,
     });
-  // Expired counters go now and then.
-  if (Math.random() < 0.02)
-    await db
-      .prepare("DELETE FROM attempts WHERE reset_at < ?1")
-      .bind(now)
-      .run();
 
   if (method === "GET" && path === "/v1/health")
     return reply(200, { ok: true, version: API_VERSION });
@@ -407,27 +450,37 @@ async function routes(request, env, now) {
   if (method === "PUT" && path === "/v1/data") {
     const base = Number(request.headers.get("X-Riwaq-Base"));
     if (!Number.isInteger(base) || base < 0) refuse(400, "bad_request");
-    if (Number(request.headers.get("Content-Length") || 0) > MAX_DATA)
-      refuse(413, "too_large");
-    const text = await request.text();
-    if (!text || text.length > MAX_DATA)
-      refuse(text ? 413 : 400, text ? "too_large" : "bad_request");
+    const text = await readBounded(request, MAX_DATA);
+    if (!text) refuse(400, "bad_request");
     const next = base + 1;
     const pieces = [];
     for (let at = 0; at < text.length; at += CHUNK)
       pieces.push(text.slice(at, at + CHUNK));
     let results;
     try {
-      // One transaction: the new pieces, the revision moved only from the
-      // base this device saw, then every piece not of the current revision
-      // removed (the old data on success, the new pieces on a conflict).
+      // One transaction (database audit 2026-11-18, CF2): pieces left at
+      // the next revision by an older failure are cleared; the new pieces
+      // are written only while the account still exists at the base this
+      // device saw (a conflict or a deleted account writes nothing, where
+      // it once wrote every piece and deleted it again); the revision
+      // moves only from that base; then every piece not of the current
+      // revision goes, all of them when the account is gone (NULL once
+      // matched nothing and left a deleted account's data behind).
+      const current =
+        "EXISTS (SELECT 1 FROM users WHERE username = ?1 AND revision = ?3)";
       results = await db.batch([
+        db
+          .prepare(
+            `DELETE FROM chunks WHERE username = ?1 AND revision = ?2 AND ${current}`,
+          )
+          .bind(username, next, base),
         ...pieces.map((data, idx) =>
           db
             .prepare(
-              "INSERT INTO chunks (username, revision, idx, data) VALUES (?1, ?2, ?3, ?4)",
+              `INSERT INTO chunks (username, revision, idx, data)
+               SELECT ?1, ?2, ?4, ?5 WHERE ${current}`,
             )
-            .bind(username, next, idx, data),
+            .bind(username, next, base, idx, data),
         ),
         db
           .prepare(
@@ -436,14 +489,14 @@ async function routes(request, env, now) {
           .bind(next, text.length, now, username, base),
         db
           .prepare(
-            "DELETE FROM chunks WHERE username = ?1 AND revision <> (SELECT revision FROM users WHERE username = ?1)",
+            "DELETE FROM chunks WHERE username = ?1 AND revision <> COALESCE((SELECT revision FROM users WHERE username = ?1), -1)",
           )
           .bind(username),
       ]);
     } catch {
       results = null;
     }
-    const moved = results?.[pieces.length]?.meta?.changes === 1;
+    const moved = results?.[pieces.length + 1]?.meta?.changes === 1;
     if (!moved) {
       const user = await userRow(db, username);
       refuse(409, "conflict", { revision: user?.revision ?? 0 });
@@ -526,12 +579,28 @@ export async function handle(request, env, { now = Date.now() } = {}) {
   }
 }
 
-export default {
-  scheduled: (_event, env, context) =>
-    context.waitUntil(
-      env.DB.prepare("DELETE FROM usage_devices WHERE seen_at < ?1")
-        .bind(Date.now() - 31 * 86400000)
-        .run(),
+/**
+ * The daily clean-up (the cron in wrangler.toml), one transaction:
+ * usage records past 31 days; rate-limit counters whose window ended (a
+ * sweep that once ran on 2% of all requests and read the whole table
+ * each time, CF4); sessions unused for SESSION_DAYS, which were removed
+ * only when presented again; and any session or piece of data without
+ * its account (CF1, CF2: none exist today; this keeps it so).
+ */
+export function cleanup(db, now = Date.now()) {
+  return db.batch([
+    db
+      .prepare("DELETE FROM usage_devices WHERE seen_at < ?1")
+      .bind(now - 31 * DAY),
+    db.prepare("DELETE FROM attempts WHERE reset_at < ?1").bind(now),
+    db
+      .prepare("DELETE FROM sessions WHERE seen_at < ?1")
+      .bind(now - SESSION_DAYS * DAY),
+    db.prepare(
+      "DELETE FROM sessions WHERE NOT EXISTS (SELECT 1 FROM users WHERE users.username = sessions.username AND users.created_at <= sessions.created_at)",
     ),
-  fetch: (request, env) => handle(request, env),
-};
+    db.prepare(
+      "DELETE FROM chunks WHERE NOT EXISTS (SELECT 1 FROM users WHERE users.username = chunks.username AND users.revision = chunks.revision)",
+    ),
+  ]);
+}

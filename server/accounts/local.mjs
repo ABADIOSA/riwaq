@@ -10,7 +10,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createServer } from "node:http";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { handle } from "./worker.mjs";
+import { handle } from "./service.mjs";
 
 const migrations = fileURLToPath(new URL("./migrations/", import.meta.url));
 
