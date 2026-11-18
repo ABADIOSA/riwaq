@@ -669,7 +669,13 @@ await check(
     gifRequests.length = 0;
     await openReality();
     const tile = page.locator(".folder-gallery .folder-tile").first();
-    assert.equal(await tile.locator(".art-still").getAttribute("src"), STILL);
+    // A PNG may be an APNG: the still is its first frame on a canvas
+    // (PR #155 second review, R7), drawn before any GIF is asked for.
+    assert.equal(
+      await tile.locator(".art-still").evaluate((el) => el.tagName),
+      "CANVAS",
+    );
+    await tile.locator('.art-still[data-ready="1"]').waitFor();
     assert.equal(await tile.locator(".art-gif").count(), 0);
     assert.equal(gifRequests.length, 0, "not loaded before it is wanted");
     // The name is hidden on the card but stays its accessible name.
@@ -734,7 +740,13 @@ await check(
     await tile.hover();
     await settle(600);
     assert.equal(await tile.locator(".art-gif").count(), 0);
-    assert.equal(await tile.locator(".art-still").getAttribute("src"), STILL);
+    // A PNG may be an APNG: the still is its first frame on a canvas
+    // (PR #155 second review, R7), drawn before any GIF is asked for.
+    assert.equal(
+      await tile.locator(".art-still").evaluate((el) => el.tagName),
+      "CANVAS",
+    );
+    await tile.locator('.art-still[data-ready="1"]').waitFor();
     await call("collectionsEdit", {
       action: "folderUpdate",
       collectionId: saved.id,

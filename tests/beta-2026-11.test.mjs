@@ -141,7 +141,7 @@ test("no Harbor badge packs page; the badge engine and rules stay (#152)", () =>
   }
   assert.match(
     read("electron/main.mjs"),
-    /client\.applyBadgeStyle\(\s*\{ look: String\(a\?\.look \|\| ""\), profileId: a\?\.profileId \}/,
+    /client\.applyBadgeStyle\(\s*\{\s*look: String\(a\?\.look \|\| ""\),\s*profileId: a\?\.profileId,\s*profileSession: a\?\.profileSession,\s*\}/,
   );
   assert.match(
     read("core/client.mjs"),

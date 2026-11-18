@@ -253,8 +253,10 @@ test("F2: rapid switches and work from both profiles stay apart", async () => {
   }
   releases.forEach((r) => r());
   await assert.rejects(fromA, { message: PROFILE_CHANGED });
-  await fromB;
-  assert.equal(settingsOf(b).badgeLook, "fr-glass");
+  // B is active again, but as a new activation: what it started before the
+  // round trips no longer writes (second review, F2).
+  await assert.rejects(fromB, { message: PROFILE_CHANGED });
+  assert.equal(settingsOf(b).badgeLook, "riwaq");
   assert.deepEqual(settingsOf(b).streamFilters, []);
   assert.equal(settingsOf(a).badgeLook, "riwaq");
   assert.deepEqual(
@@ -277,7 +279,7 @@ test("F2: the interface binds every delayed write to its profile", () => {
   const details = read("src/components/Details.jsx");
   assert.match(
     details,
-    /update\("settings", \{ sourceFacets: next, profileId \}\)/,
+    /update\("settings", \{ sourceFacets: next, profileSession \}\)/,
   );
   assert.match(
     details,
@@ -286,11 +288,11 @@ test("F2: the interface binds every delayed write to its profile", () => {
   const pages = read("src/components/settings/SourcePages.jsx");
   assert.match(
     pages,
-    /act\("streamFilterEdit", \{\s*profileId,\s*action: "restore"/,
+    /act\("streamFilterEdit", \{\s*profileSession,\s*action: "restore"/,
   );
   assert.match(
     pages,
-    /call\("badgeStyleApply", \{\s*look,\s*profileId: state\.profiles\?\.active/,
+    /call\("badgeStyleApply", \{\s*look,\s*profileSession: state\.profiles\?\.session/,
   );
   assert.doesNotMatch(pages, /latestFilters|badgeStyleFetch/);
   for (const file of [

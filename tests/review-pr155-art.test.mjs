@@ -74,13 +74,15 @@ test("F8: the pickers say which slot they fill", () => {
   const collections = read("src/components/Collections.jsx");
   assert.match(
     collections,
-    /call\("collectionArtPick", \{ slot, profileId \}\)/,
+    /call\("collectionArtPick", \{ slot, profileSession \}\)/,
   );
   assert.match(collections, /value=\{folder\.gif\}[\s\S]{0,80}slot="moving"/);
   for (const file of ["electron/main.mjs", "web/bridge.js"]) {
     const source = read(file);
     assert.match(source, /still: a\?\.slot !== "moving"/, file);
-    assert.match(source, /client\.notePickedArt\(ref\)/, file);
+    // Granted to the activation that opened the chooser, after every await
+    // (second review).
+    assert.match(source, /client\.notePickedArt\(ref, ticket\)/, file);
     assert.match(source, /if \(!client\.canReadArt\(ref\)\) return "";/, file);
   }
 });
@@ -95,8 +97,11 @@ test("F8: every still slot draws through StillImage; the folder page uses its ba
   assert.match(collections, /<StillImage\s+className="collection-logo"/);
   const page = read("src/components/FolderPage.jsx");
   assert.doesNotMatch(page, /backgroundImage/);
-  assert.match(page, /useArt\(folder\.backdrop \|\| folder\.cover \|\| ""\)/);
-  assert.match(page, /useArt\(folder\.logo \|\| ""\)/);
+  assert.match(
+    page,
+    /useArt\(folder \? folder\.backdrop \|\| folder\.cover \|\| "" : ""\)/,
+  );
+  assert.match(page, /useArt\(folder\?\.logo \|\| ""\)/);
   assert.match(page, /className="folder-hero-logo"/);
 });
 

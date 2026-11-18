@@ -4,7 +4,7 @@ import { UsagePulse, USAGE_INTERVAL } from "../core/usage.mjs";
 import { Client } from "../core/client.mjs";
 import { collectBackup } from "../core/backup.mjs";
 import { sqliteD1 } from "../server/accounts/local.mjs";
-import { handle } from "../server/accounts/worker.mjs";
+import { handle } from "../server/accounts/service.mjs";
 import { AdminMetrics } from "../admin/metrics.mjs";
 import { AdminGithub } from "../admin/github.mjs";
 

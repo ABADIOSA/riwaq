@@ -188,6 +188,7 @@ test("import modes: merge by ID, add as copies, replace everything", () => {
     folders: 1,
     unsupported: 1,
     ids: ["nuvio-kaptain-genres"],
+    written: [`nuvio-kaptain-genres/${incoming[0].folders[0].id}`],
   });
   const genres = merged.collections.find(
     (c) => c.id === "nuvio-kaptain-genres",

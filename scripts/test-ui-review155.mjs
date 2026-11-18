@@ -341,8 +341,11 @@ await check(
   "F2 Undo after leaving Settings and switching: B untouched",
   async () => {
     await resetProfiles();
-    await restart({});
+    // Read before the page loads: settingsOf switches A → B → A behind the
+    // page's back, which since the second review ends the page's
+    // activation, as another window's switch would.
     const beforeB = pick(await settingsOf(B));
+    await restart({});
     await settingsPage("Stream filters");
     await page
       .getByRole("button", { name: "Delete the filter “A 4K”" })
@@ -742,14 +745,22 @@ await check(
     await page.locator(".folder-page-link").click();
     await page.locator(".folder-page").waitFor();
     await settle(500);
-    assert.equal(
-      await page.locator(".folder-hero-backdrop").getAttribute("src"),
-      BACKDROP,
+    // A PNG may be an APNG, so both are drawn as their first frame (second
+    // review, R7): canvases, drawn once loaded.
+    const backdrop = page.locator(".folder-hero-backdrop");
+    assert.equal(await backdrop.evaluate((el) => el.tagName), "CANVAS");
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".folder-hero-backdrop")?.dataset.ready === "1",
     );
-    const logo = page.locator(".folder-hero-logo img");
+    const logo = page.locator(".folder-hero-logo canvas");
     await logo.waitFor();
-    assert.equal(await logo.getAttribute("src"), LOGO);
-    assert.equal(await logo.getAttribute("alt"), "Frames");
+    await page.waitForFunction(
+      () =>
+        document.querySelector(".folder-hero-logo canvas")?.dataset.ready ===
+        "1",
+    );
+    assert.equal(await logo.getAttribute("aria-label"), "Frames");
     await shot("f8-folder-page");
   },
 );
@@ -845,7 +856,11 @@ await check("F9 a template query is edited through its form", async () => {
   await edit.click();
   await form.getByLabel("Keywords (TMDB numbers)").fill("nine");
   await form.getByRole("button", { name: "Save the query" }).click();
-  await page.locator(".toast", { hasText: "withKeywords" }).waitFor();
+  // Named in the form itself, where it was typed (second review, R9).
+  await form
+    .locator('[role="alert"]', { hasText: "Keywords (TMDB numbers)" })
+    .waitFor();
+  await form.getByRole("button", { name: "Cancel" }).click();
   assert.equal(
     (await call("init")).collections[0].folders[0].tmdb[0].filters.withKeywords,
     "9672",
