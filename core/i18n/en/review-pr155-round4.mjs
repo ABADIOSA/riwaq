@@ -12,4 +12,7 @@ export default {
   // N2: a Nuvio import whose profile parts were not written.
   "لم يُحفظ ما اخترته من نوفيو لهذا الملف الشخصي وبقي كما كان، أما الإضافات المثبّتة ({n}) فمحفوظة":
     "What you chose from Nuvio for this profile was not saved and stays as it was; the installed addons ({n}) are kept",
+  // N12: the desktop's pictures folder replaced by a link.
+  "مجلد صور المجموعات ليس مجلداً عادياً":
+    "The collection pictures folder is not an ordinary folder",
 };

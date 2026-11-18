@@ -473,6 +473,95 @@ try {
     );
     await context.close();
   }
+
+  // 9. N12: a picture read that lands after a profile switch makes no
+  // object address (none cached past the cleared cache, none leaked).
+  {
+    const { context, page } = await fresh();
+    const art = "d".repeat(32);
+    const outcome = await page.evaluate(
+      async ({ id }) => {
+        const call = window.riwaq.call;
+        await call("collectionsEdit", { action: "create", title: "Pictured" });
+        let { state } = await call("hudSnapshot");
+        await call("collectionsEdit", {
+          action: "update",
+          collectionId: state.collections[0].id,
+          cover: `local:${id}`,
+        });
+        const db = await new Promise((resolve, reject) => {
+          const req = indexedDB.open("riwaq-collection-art", 1);
+          req.onupgradeneeded = () => req.result.createObjectStore("art");
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+        await new Promise((resolve, reject) => {
+          const t = db.transaction("art", "readwrite");
+          t.objectStore("art").put(
+            {
+              blob: new Blob([new Uint8Array(8)], { type: "image/png" }),
+              mime: "image/png",
+              at: Date.now(),
+            },
+            id,
+          );
+          t.oncomplete = resolve;
+          t.onabort = () => reject(t.error);
+        });
+        db.close();
+        await call("profileCreate", { name: "B" });
+        ({ state } = await call("hudSnapshot"));
+        const a = state.profiles.active;
+        const b = state.profiles.list.find((p) => p.id !== a).id;
+        // The picture's read answers slowly; the switch lands meanwhile.
+        const get = IDBObjectStore.prototype.get;
+        let release;
+        const held = new Promise((r) => (release = r));
+        IDBObjectStore.prototype.get = function (...args) {
+          if (this.name !== "art") return get.apply(this, args);
+          IDBObjectStore.prototype.get = get;
+          const store = this;
+          let open = true;
+          const keep = () => {
+            if (open) store.count().onsuccess = keep;
+          };
+          keep();
+          const proxy = {};
+          held.then(() => {
+            open = false;
+            const req = get.apply(store, args);
+            req.onsuccess = (e) => {
+              proxy.result = req.result;
+              proxy.onsuccess?.(e);
+            };
+            req.onerror = (e) => proxy.onerror?.(e);
+          });
+          return proxy;
+        };
+        const created = [];
+        const create = URL.createObjectURL;
+        URL.createObjectURL = (blob) => {
+          const url = create.call(URL, blob);
+          created.push(url);
+          return url;
+        };
+        const reading = call("collectionArt", { id: `local:${id}` });
+        await new Promise((r) => setTimeout(r, 50));
+        await call("profileSwitch", { id: b });
+        release();
+        const answer = await reading;
+        URL.createObjectURL = create;
+        return { answer, created: created.length };
+      },
+      { id: art },
+    );
+    check(
+      "9 N12: a picture read that lands after a switch is not delivered and makes no address",
+      outcome.answer === "" && outcome.created === 0,
+      JSON.stringify(outcome),
+    );
+    await context.close();
+  }
 } finally {
   await browser.close();
 }

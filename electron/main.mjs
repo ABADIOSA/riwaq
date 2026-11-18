@@ -176,11 +176,25 @@ function stopLocalMusic() {
 let pendingBackup = null;
 // A Nuvio snapshot between its preview and the import, held in main only.
 let pendingNuvio = null;
-const nuvioReply = (stores, source) => {
+// The preview belongs to the activation that asked for it (third review,
+// N12): checked after the dialog or the scan, and again at the import.
+const nuvioReply = (stores, source, ticket) => {
+  client.holds(ticket, "settings");
   const profiles = nuvioPreview(stores);
   if (!profiles.length) throw new Error("لم نجد ملفات شخصية في بيانات نوفيو");
-  pendingNuvio = { token: randomBytes(16).toString("hex"), stores };
+  pendingNuvio = { token: randomBytes(16).toString("hex"), stores, ticket };
   return { token: pendingNuvio.token, source, profiles };
+};
+// The held preview for this token, while its activation is still active.
+const heldNuvio = (a) => {
+  if (!pendingNuvio || pendingNuvio.token !== a?.token)
+    throw new Error("اقرأ بيانات نوفيو من جديد");
+  client.claimSession(a);
+  if (!client.profiles.holds(pendingNuvio.ticket)) {
+    pendingNuvio = null;
+    throw new Error(PROFILE_CHANGED);
+  }
+  return pendingNuvio;
 };
 let watching = { active: false, pip: false, error: false };
 // What is playing from an addon stream: subtitle requests need its stream key.
@@ -1751,24 +1765,28 @@ const methods = {
   // (fetchFrStyle: one host and path, redirects re-checked, bounded), and
   // its badges join that profile's settings only while it is still the
   // active one (PR #155 review, F2). No address comes from the renderer.
-  badgeStyleApply: (a) =>
-    client.applyBadgeStyle(
+  badgeStyleApply: (a) => {
+    client.claimSession(a);
+    return client.applyBadgeStyle(
       {
         look: String(a?.look || ""),
         profileId: a?.profileId,
         profileSession: a?.profileSession,
       },
       (url) => fetchFrStyle(url),
-    ),
+    );
+  },
   // Deleting a saved stream filter and its Undo, on the current list of
   // the profile that asked (issue #153, F2).
-  streamFilterEdit: (a) =>
-    client.streamFilterEdit({
+  streamFilterEdit: (a) => {
+    client.claimSession(a);
+    return client.streamFilterEdit({
       profileId: a?.profileId,
       profileSession: a?.profileSession,
       action: String(a?.action || ""),
       id: String(a?.id || ""),
-    }),
+    });
+  },
   copyThemeCode: (a) => {
     const code = String(a?.code || "");
     if (!code.startsWith("RIWAQ-THEME-1:") || code.length > 6000)
@@ -2592,10 +2610,7 @@ const methods = {
     client.profiles.gate("library");
     // The activation that opened the dialog, checked again after every
     // await and at the grant itself (second review: artwork ownership).
-    const ticket = client.claim({
-      profileId: a?.profileId === undefined ? undefined : String(a.profileId),
-      profileSession: a?.profileSession,
-    });
+    const ticket = client.claimSession(a);
     const picked = await dialog.showOpenDialog(window, {
       title: t("اختر صورة للمجموعة"),
       properties: ["openFile"],
@@ -2676,6 +2691,7 @@ const methods = {
     return true;
   },
   importNuvioCollections: (a) => {
+    client.claimSession(a);
     const result = client.importNuvioCollections({
       text: typeof a?.text === "string" ? a.text : "",
       mode: typeof a?.mode === "string" ? a.mode : "merge",
@@ -2691,8 +2707,9 @@ const methods = {
    * Looks for Nuvio Desktop's data on this PC. Only the known stores are
    * read; the folder comes from the environment, never from the interface.
    */
-  nuvioScan: () => {
+  nuvioScan: (a) => {
     client.profiles.gate("settings");
+    const ticket = client.claimSession(a);
     if (process.platform !== "win32")
       throw new Error("البحث عن نوفيو متاح على ويندوز فقط");
     // Both Nuvio HTPC and the official Nuvio Desktop may be installed, and an
@@ -2716,13 +2733,14 @@ const methods = {
       if (Object.keys(stores).length && (!best || newest > best.newest))
         best = { stores, newest, label: folder.label };
     }
-    if (best) return nuvioReply(best.stores, best.label);
+    if (best) return nuvioReply(best.stores, best.label, ticket);
     throw new Error(
       "لم نجد نوفيو على هذا الجهاز. افتح نوفيو وسجّل دخولك مرة ليحفظ بياناتك، أو استخدم ملف النسخة الاحتياطية.",
     );
   },
-  nuvioPickBackup: async () => {
+  nuvioPickBackup: async (a) => {
     client.profiles.gate("settings");
+    const ticket = client.claimSession(a);
     const r = await dialog.showOpenDialog(window, {
       title: t("اختيار نسخة إعدادات نوفيو"),
       filters: [{ name: "Nuvio backup", extensions: ["zip"] }],
@@ -2731,14 +2749,15 @@ const methods = {
     if (r.canceled) return null;
     if (statSync(r.filePaths[0]).size > 200 * 1024 * 1024)
       throw new Error("الملف كبير جداً");
+    client.holds(ticket, "settings");
     return nuvioReply(
       readNuvioZip(readFileSync(r.filePaths[0])),
       basename(r.filePaths[0]),
+      ticket,
     );
   },
   nuvioImport: async (a) => {
-    if (!pendingNuvio || pendingNuvio.token !== a?.token)
-      throw new Error("اقرأ بيانات نوفيو من جديد");
+    const held = heldNuvio(a);
     const parts = {};
     for (const key of [
       "addons",
@@ -2748,24 +2767,26 @@ const methods = {
       "tmdbKey",
     ])
       parts[key] = a?.parts?.[key] === true;
-    const reply = await client.importNuvio(pendingNuvio.stores, {
-      profile: a?.profile,
-      parts,
-    });
     pendingNuvio = null;
-    broadcast();
-    return reply;
+    try {
+      return await client.importNuvio(held.stores, {
+        profile: a?.profile,
+        parts,
+        ticket: held.ticket,
+      });
+    } finally {
+      broadcast();
+    }
   },
   // A shape-only report of Nuvio's collections for troubleshooting; the
   // viewer chooses to copy it, and it carries no addresses or keys.
   nuvioDiagnostics: (a) => {
     client.profiles.gate("settings");
-    if (!pendingNuvio || pendingNuvio.token !== a?.token)
-      throw new Error("اقرأ بيانات نوفيو من جديد");
+    const held = heldNuvio(a);
     const index = Number(a?.profile);
     if (!Number.isInteger(index) || index < 1)
       throw new Error("اختر ملف نوفيو");
-    clipboard.writeText(nuvioDiagnostics(pendingNuvio.stores, index));
+    clipboard.writeText(nuvioDiagnostics(held.stores, index));
     return true;
   },
   removeNuvioPlugin: (a) =>

@@ -2045,9 +2045,11 @@ export function NuvioLink({ act, setState, notice, onClose, session }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  // The preview and the import belong to the activation that read them
+  // (third review, N12): main refuses either after a switch, even back.
   const read = async (method) => {
     setBusy(true);
-    const r = await act(method);
+    const r = await act(method, { profileSession: session });
     setBusy(false);
     if (!r) return;
     setScan(r);
@@ -2057,7 +2059,12 @@ export function NuvioLink({ act, setState, notice, onClose, session }) {
   const chosen = scan?.profiles.find((p) => p.index === profile);
   const run = async () => {
     setBusy(true);
-    const r = await act("nuvioImport", { token: scan.token, profile, parts });
+    const r = await act("nuvioImport", {
+      token: scan.token,
+      profile,
+      parts,
+      profileSession: session,
+    });
     setBusy(false);
     if (!r) return;
     setState(r.state);
@@ -2253,6 +2260,7 @@ export function NuvioLink({ act, setState, notice, onClose, session }) {
                   (await act("nuvioDiagnostics", {
                     token: scan.token,
                     profile,
+                    profileSession: session,
                   })) &&
                   notice(
                     "نُسخ تقرير التشخيص. الصقه للمطوّر؛ لا يحتوي روابط ولا مفاتيح.",

@@ -359,6 +359,10 @@ export class AccountHub {
         JSON.stringify(profiles.active()?.pin || null) === pin
           ? unlocked
           : !profiles.active()?.pin;
+      // The profile's data was replaced: work started before belongs to
+      // the old data, even when the same profile and PIN stay (third
+      // review, N12), as after a backup restore.
+      profiles.renew();
       client.cache.clear();
       client.persist();
     } finally {

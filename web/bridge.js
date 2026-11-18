@@ -714,11 +714,24 @@ export async function startBridge({ version, store }) {
   let pendingNuvio = null;
   let lastDiagnosis = null;
   const cueCache = new Map();
-  const nuvioReply = (stores, source) => {
+  // The preview belongs to the activation that asked for it (third
+  // review, N12), as on the desktop.
+  const nuvioReply = (stores, source, ticket) => {
+    client.holds(ticket, "settings");
     const profiles = nuvioPreview(stores);
     if (!profiles.length) throw new Error("لم نجد ملفات شخصية في بيانات نوفيو");
-    pendingNuvio = { token: randomHex(16), stores };
+    pendingNuvio = { token: randomHex(16), stores, ticket };
     return { token: pendingNuvio.token, source, profiles };
+  };
+  const heldNuvio = (a) => {
+    if (!pendingNuvio || pendingNuvio.token !== a?.token)
+      throw new Error("اقرأ بيانات نوفيو من جديد");
+    client.claimSession(a);
+    if (!client.profiles.holds(pendingNuvio.ticket)) {
+      pendingNuvio = null;
+      throw new Error(PROFILE_CHANGED);
+    }
+    return pendingNuvio;
   };
   const tooBig = (file, max, message) => {
     if (file.size > max) throw new Error(message);
@@ -880,6 +893,7 @@ export async function startBridge({ version, store }) {
     // its pinned file on GitHub is fetched (redirects re-checked, 3 MB at
     // most); no address ever comes from the renderer. Only the text returns.
     badgeStyleApply: async (a) => {
+      client.claimSession(a);
       const done = await client.applyBadgeStyle(
         {
           look: String(a?.look || ""),
@@ -892,6 +906,7 @@ export async function startBridge({ version, store }) {
       return done;
     },
     streamFilterEdit: async (a) => {
+      client.claimSession(a);
       const done = client.streamFilterEdit({
         profileId: a?.profileId,
         profileSession: a?.profileSession,
@@ -1466,8 +1481,9 @@ export async function startBridge({ version, store }) {
         JSON.stringify(toNuvio(client.state.collections || []), null, 2),
         "application/json",
       ),
-    importNuvioCollections: (a) =>
-      sweepAfter(
+    importNuvioCollections: (a) => {
+      client.claimSession(a);
+      return sweepAfter(
         client.importNuvioCollections({
           text: typeof a?.text === "string" ? a.text : "",
           mode: typeof a?.mode === "string" ? a.mode : "merge",
@@ -1476,7 +1492,8 @@ export async function startBridge({ version, store }) {
             a?.profileId === undefined ? undefined : String(a.profileId),
           profileSession: a?.profileSession,
         }),
-      ),
+      );
+    },
     // A picture for a collection or folder from this computer, kept in
     // this browser (web/collection-art.js); the page gets "local:<id>".
     // As on the desktop: a still slot refuses an animated file (F8), the
@@ -1484,10 +1501,7 @@ export async function startBridge({ version, store }) {
     // picture is read only by a profile whose collections name it.
     collectionArtPick: async (a) => {
       client.profiles.gate("library");
-      const ticket = client.claim({
-        profileId: a?.profileId === undefined ? undefined : String(a.profileId),
-        profileSession: a?.profileSession,
-      });
+      const ticket = client.claimSession(a);
       const file = await pickFile({
         accept: "image/gif,image/png,image/jpeg,image/webp",
       });
@@ -1519,19 +1533,21 @@ export async function startBridge({ version, store }) {
         return "";
       return client.canReadArt(ref) ? url : "";
     },
-    nuvioPickBackup: async () => {
+    nuvioPickBackup: async (a) => {
       client.profiles.gate("settings");
+      const ticket = client.claimSession(a);
       const file = await pickFile({ accept: ".zip,application/zip" });
       if (!file) return null;
+      client.holds(ticket, "settings");
       tooBig(file, 200 * 1024 * 1024, "الملف كبير جداً");
       return nuvioReply(
         readNuvioZip(new Uint8Array(await file.arrayBuffer())),
         file.name,
+        ticket,
       );
     },
     nuvioImport: async (a) => {
-      if (!pendingNuvio || pendingNuvio.token !== a?.token)
-        throw new Error("اقرأ بيانات نوفيو من جديد");
+      const held = heldNuvio(a);
       const parts = {};
       for (const key of [
         "addons",
@@ -1541,22 +1557,24 @@ export async function startBridge({ version, store }) {
         "tmdbKey",
       ])
         parts[key] = a?.parts?.[key] === true;
-      const reply = await client.importNuvio(pendingNuvio.stores, {
-        profile: a?.profile,
-        parts,
-      });
       pendingNuvio = null;
-      broadcast();
-      return reply;
+      try {
+        return await client.importNuvio(held.stores, {
+          profile: a?.profile,
+          parts,
+          ticket: held.ticket,
+        });
+      } finally {
+        broadcast();
+      }
     },
     nuvioDiagnostics: (a) => {
       client.profiles.gate("settings");
-      if (!pendingNuvio || pendingNuvio.token !== a?.token)
-        throw new Error("اقرأ بيانات نوفيو من جديد");
+      const held = heldNuvio(a);
       const index = Number(a?.profile);
       if (!Number.isInteger(index) || index < 1)
         throw new Error("اختر ملف نوفيو");
-      return copyText(nuvioDiagnostics(pendingNuvio.stores, index));
+      return copyText(nuvioDiagnostics(held.stores, index));
     },
     removeNuvioPlugin: (a) =>
       client.removeNuvioPlugin({

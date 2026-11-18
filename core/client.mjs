@@ -731,6 +731,18 @@ export class Client {
     if (!this.profiles.holds(ticket)) throw new Error(PROFILE_CHANGED);
     if (room) this.profiles.gate(room);
   }
+  /**
+   * The strict claim the interface's calls go through (third review, N12):
+   * the activation must be named. A profile ID alone cannot tell A from A
+   * after A → B → A, and a missing one would silently become whichever
+   * activation is current when the call lands, so both are refused.
+   */
+  claimSession(input) {
+    const session = input?.profileSession;
+    if (typeof session !== "string" || !session)
+      throw new Error(PROFILE_CHANGED);
+    return this.claim({ profileSession: session });
+  }
   sameProfile(profileId, profileSession) {
     if (profileId === undefined && profileSession === undefined) return;
     this.claim({ profileId, profileSession });
@@ -1121,13 +1133,17 @@ export class Client {
    * profile's; library titles join its library; plugin repositories are
    * listed, never run.
    */
-  async importNuvio(stores, { profile, parts = {} } = {}) {
+  async importNuvio(stores, { profile, parts = {}, ticket: given } = {}) {
     this.profiles.gate("settings");
     // Addons install with awaits; what belongs to a profile (collections,
     // library, plugins, the key) is written only if the activation that
     // started the import is still the active one, with Settings still
     // open (PR #155 review, F2; second review: A → B → A and re-locks).
-    const ticket = this.profiles.ticket();
+    // A preview names the activation it was read under (third review,
+    // N12): an import from it after a switch, even back, is refused before
+    // anything is installed.
+    const ticket = given || this.profiles.ticket();
+    this.holds(ticket, "settings");
     const index = Number(profile);
     if (!Number.isInteger(index) || index < 1)
       throw new Error("اختر ملف نوفيو");

@@ -62,11 +62,27 @@ export async function readArtFile(path, max) {
   }
 }
 
+/**
+ * The pictures' folder itself must be a real folder, never a link or a
+ * junction put in its place (third review, N12): every read, write, list
+ * and delete checks it first.
+ */
+async function realFolder(dir) {
+  const info = await lstat(dir);
+  if (info.isSymbolicLink() || !info.isDirectory())
+    throw new Error("مجلد صور المجموعات ليس مجلداً عادياً");
+}
+
 export function fileArtStore(dir) {
   // Only a regular file directly in the folder counts: a link or a folder
   // under a picture's name is never followed, read or deleted.
   const find = async (id) => {
     if (!validArtId(id)) return null;
+    try {
+      await realFolder(dir);
+    } catch {
+      return null;
+    }
     for (const ext of Object.keys(MIME)) {
       const path = join(dir, `${id}.${ext}`);
       try {
@@ -83,6 +99,7 @@ export function fileArtStore(dir) {
     async write(id, bytes, mime) {
       if (!validArtId(id) || !EXT[mime]) throw new Error("صورة غير صالحة");
       await mkdir(dir, { recursive: true });
+      await realFolder(dir);
       const path = join(dir, `${id}.${EXT[mime]}`);
       const tmp = `${path}.tmp`;
       await writeFile(tmp, bytes);
@@ -117,6 +134,7 @@ export function fileArtStore(dir) {
     async list() {
       let names = [];
       try {
+        await realFolder(dir);
         names = await readdir(dir);
       } catch {
         return [];

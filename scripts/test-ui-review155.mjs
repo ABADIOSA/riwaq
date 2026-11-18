@@ -872,6 +872,7 @@ await check(
   async () => {
     for (const c of (await call("init")).collections)
       await call("collectionsEdit", { action: "remove", collectionId: c.id });
+    // The interface always names its activation (fourth pass, N12).
     await call("importNuvioCollections", {
       text: JSON.stringify(
         Array.from({ length: 60 }, (_, i) => ({
@@ -881,6 +882,7 @@ await check(
         })),
       ),
       mode: "add",
+      profileSession: (await call("init")).profiles.session,
     });
     assert.equal((await call("init")).collections.length, 60);
     await restart({ uiLanguage: "en" });
