@@ -45,7 +45,9 @@ import {
   parseTmdbSource,
   parseTraktSource,
   titlePlaces,
+  tmdbFilterProblems,
 } from "../../core/collections.mjs";
+import { language, t } from "../../core/i18n.mjs";
 import { presetCards } from "../../core/collection-presets.mjs";
 import {
   CollectionArt,
@@ -648,7 +650,7 @@ function CollectionView({
               collection={collection}
               edit={edit}
               notice={notice}
-              profileId={state.profiles?.active}
+              profileSession={state.profiles?.session}
             />
           ) : heroLogo && !logoBroken ? (
             <h1 className="collection-hero-logo">
@@ -819,7 +821,7 @@ function CollectionView({
                 edit={edit}
                 notice={notice}
                 reduced={reduced}
-                profileId={state.profiles?.active}
+                profileSession={state.profiles?.session}
                 onRemoved={() => setFolderId("")}
               />
             )}
@@ -859,7 +861,7 @@ function Field({ label, value, onCommit, ...props }) {
   );
 }
 
-function CollectionFields({ collection, edit, notice, profileId }) {
+function CollectionFields({ collection, edit, notice, profileSession }) {
   return (
     <div className="collection-fields">
       <Field
@@ -879,14 +881,14 @@ function CollectionFields({ collection, edit, notice, profileId }) {
         label="الخلفية (رابط https أو صورة من جهازك)"
         value={collection.cover}
         notice={notice}
-        profileId={profileId}
+        profileSession={profileSession}
         onCommit={(cover) => edit({ action: "update", cover })}
       />
       <ArtField
         label="شعار المجموعة"
         value={collection.logo}
         notice={notice}
-        profileId={profileId}
+        profileSession={profileSession}
         onCommit={(logo) => edit({ action: "update", logo })}
       />
     </div>
@@ -904,7 +906,7 @@ function ArtField({
   onCommit,
   notice,
   slot = "still",
-  profileId,
+  profileSession,
 }) {
   const local = typeof value === "string" && LOCAL_ART.test(value);
   const { missing } = useArtState(local ? value : "");
@@ -914,7 +916,7 @@ function ArtField({
   // closes (F2).
   const pick = async () => {
     try {
-      const picked = await call("collectionArtPick", { slot, profileId });
+      const picked = await call("collectionArtPick", { slot, profileSession });
       if (picked?.ref) onCommit(picked.ref);
     } catch (e) {
       notice?.(e.message);
@@ -1019,7 +1021,7 @@ function FolderEditor({
   edit,
   notice,
   reduced,
-  profileId,
+  profileSession,
   onRemoved,
 }) {
   const [catalogs, setCatalogs] = useState(null);
@@ -1091,7 +1093,7 @@ function FolderEditor({
         folder={folder}
         reduced={reduced}
         notice={notice}
-        profileId={profileId}
+        profileSession={profileSession}
         set={(patch) => folderEdit({ action: "folderUpdate", ...patch })}
       />
       <div className="folder-sources">
@@ -1371,7 +1373,7 @@ function FolderEditor({
  * glow and hiding the name, with the card drawn still and as it looks
  * under the pointer, so a change shows before it is used.
  */
-function FolderLook({ folder, reduced, notice, set, profileId }) {
+function FolderLook({ folder, reduced, notice, set, profileSession }) {
   const toggle = (key, on, title, text) => (
     <label className="look-toggle">
       <input
@@ -1392,7 +1394,7 @@ function FolderLook({ folder, reduced, notice, set, profileId }) {
           label="الغلاف الثابت"
           value={folder.cover}
           notice={notice}
-          profileId={profileId}
+          profileSession={profileSession}
           onCommit={(cover) => set({ cover })}
         />
         <ArtField
@@ -1400,21 +1402,21 @@ function FolderLook({ folder, reduced, notice, set, profileId }) {
           value={folder.gif}
           notice={notice}
           slot="moving"
-          profileId={profileId}
+          profileSession={profileSession}
           onCommit={(gif) => set({ gif })}
         />
         <ArtField
           label="الخلفية الكبيرة"
           value={folder.backdrop}
           notice={notice}
-          profileId={profileId}
+          profileSession={profileSession}
           onCommit={(backdrop) => set({ backdrop })}
         />
         <ArtField
           label="شعار العنوان"
           value={folder.logo}
           notice={notice}
-          profileId={profileId}
+          profileSession={profileSession}
           onCommit={(logo) => set({ logo })}
         />
         {folder.gif &&
@@ -1809,8 +1811,26 @@ const ids = (value) =>
  * beyond the first) are kept as they are. Main checks every value again
  * (editCollections tmdbUpdate) and names a field it refuses.
  */
+// The form's field for each filter, with its label, so a refused value is
+// named and marked where it was typed (PR #155 second review, R9).
+const DISCOVER_FIELDS = {
+  withGenres: ["genres", "الأنواع"],
+  withKeywords: ["keywords", "الكلمات المفتاحية (أرقام TMDB)"],
+  withoutKeywords: ["withoutKeywords", "بدون الكلمات المفتاحية"],
+  year: ["year", "السنة"],
+  releaseDateGte: ["from", "من تاريخ"],
+  releaseDateLte: ["to", "إلى تاريخ"],
+  recentDays: ["recentDays", "آخر عدد من الأيام"],
+  voteCountGte: ["votes", "أقل عدد أصوات"],
+  voteAverageGte: ["rating", "أقل تقييم"],
+  withOriginalLanguage: ["language", "لغة العمل الأصلية"],
+  withOriginCountry: ["country", "بلد الإنتاج"],
+};
 function DiscoverForm({ source, onSave, onCancel }) {
   const f = source.filters || {};
+  // Fields refused by the same check main makes (tmdbFilterProblems): the
+  // form stays open with what was typed, and nothing is sent.
+  const [invalid, setInvalid] = useState([]);
   const [draft, setDraft] = useState(() => ({
     title: source.title || "",
     media: source.media === "tv" ? "tv" : "movie",
@@ -1828,7 +1848,10 @@ function DiscoverForm({ source, onSave, onCancel }) {
     language: f.withOriginalLanguage || "",
     country: f.withOriginCountry || "",
   }));
-  const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
+  const set = (patch) => {
+    setDraft((d) => ({ ...d, ...patch }));
+    setInvalid((list) => list.filter((key) => !(key in patch)));
+  };
   const genres = GENRES[draft.media];
   const save = () => {
     const filters = { ...f };
@@ -1849,6 +1872,14 @@ function DiscoverForm({ source, onSave, onCancel }) {
     put("voteAverageGte", draft.rating === "" ? "" : Number(draft.rating));
     put("withOriginalLanguage", draft.language.trim());
     put("withOriginCountry", draft.country.trim());
+    const refused = tmdbFilterProblems(filters).filter(
+      (key) => DISCOVER_FIELDS[key],
+    );
+    if (refused.length) {
+      setInvalid(refused.map((key) => DISCOVER_FIELDS[key][0]));
+      return;
+    }
+    setInvalid([]);
     onSave({
       kind: "discover",
       media: draft.media,
@@ -1862,11 +1893,15 @@ function DiscoverForm({ source, onSave, onCancel }) {
       <span>{label}</span>
       <input
         value={draft[key]}
+        aria-invalid={invalid.includes(key) || undefined}
         onChange={(e) => set({ [key]: e.target.value })}
         {...props}
       />
     </label>
   );
+  const refusedLabels = Object.values(DISCOVER_FIELDS)
+    .filter(([key]) => invalid.includes(key))
+    .map(([, label]) => t(label));
   return (
     <div
       className="discover-form lg-panel"
@@ -1970,6 +2005,16 @@ function DiscoverForm({ source, onSave, onCancel }) {
         رقم الكلمة المفتاحية من صفحتها في TMDB. ما لا يظهر هنا من الاستعلام
         (استوديوهات، شبكات، أشخاص، منصات) يبقى كما هو.
       </p>
+      {refusedLabels.length > 0 && (
+        <p className="inline-warning" role="alert">
+          {`لم يُحفظ شيء. صحّح: ${new Intl.ListFormat(
+            language() === "en" ? "en" : "ar",
+            { type: "conjunction" },
+          ).format(
+            refusedLabels,
+          )}. الأرقام مفصولة بفاصلة أو |، والسنة عدد صحيح، والتاريخ يوم حقيقي لا يسبق «من» فيه «إلى».`}
+        </p>
+      )}
       <div className="button-row">
         <button type="button" className="primary" onClick={save}>
           <Check size={15} /> احفظ الاستعلام
@@ -1986,7 +2031,7 @@ function DiscoverForm({ source, onSave, onCancel }) {
  * Linking with Nuvio: read Nuvio Desktop's data on this PC or its backup,
  * pick a profile and what to bring, or paste collections from any Nuvio app.
  */
-export function NuvioLink({ act, setState, notice, onClose }) {
+export function NuvioLink({ act, setState, notice, onClose, session }) {
   const [step, setStep] = useState("start");
   const [scan, setScan] = useState(null);
   const [profile, setProfile] = useState(0);
@@ -2027,7 +2072,9 @@ export function NuvioLink({ act, setState, notice, onClose }) {
   const preview = () => {
     try {
       const read = fromNuvio(text);
-      setPeek({ ...read, error: "" });
+      // The preview belongs to the profile it was made in: main refuses
+      // the import after a switch, even back to it (second review, F2).
+      setPeek({ ...read, error: "", session });
       setOnly(read.collections.map((c) => c.id));
     } catch (e) {
       setPeek({ error: e.message });
@@ -2035,7 +2082,12 @@ export function NuvioLink({ act, setState, notice, onClose }) {
   };
   const paste = async () => {
     setBusy(true);
-    const r = await act("importNuvioCollections", { text, mode, only });
+    const r = await act("importNuvioCollections", {
+      text,
+      mode,
+      only,
+      profileSession: peek?.session ?? session,
+    });
     setBusy(false);
     if (!r) return;
     setState(r.state);

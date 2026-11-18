@@ -638,9 +638,12 @@ export default function Details({
     setFacets(next);
     clearTimeout(facetSave.current);
     if (!settings.sourceFacetsRemember) return;
-    const profileId = state.profiles?.active;
+    // The activation, not only the profile: a save still waiting when the
+    // viewer went to another profile and came back is refused (second
+    // review, F2).
+    const profileSession = state.profiles?.session;
     facetSave.current = setTimeout(
-      () => update("settings", { sourceFacets: next, profileId }),
+      () => update("settings", { sourceFacets: next, profileSession }),
       500,
     );
   };
@@ -649,7 +652,7 @@ export default function Details({
     update("settings", {
       sourceFacetsRemember: on,
       sourceFacets: on ? facets : {},
-      profileId: state.profiles?.active,
+      profileSession: state.profiles?.session,
     });
   };
   const counts = chipCounts(shown);

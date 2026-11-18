@@ -118,6 +118,7 @@ import { drawAppIcon } from "./lib/app-icon.js";
 import { useInterfaceLanguage } from "./lib/language.js";
 import { rememberScheme, useSystemDark } from "./lib/scheme.js";
 import { attachGridDrag } from "./lib/drag-scroll.js";
+import { forgetLocalArt } from "./components/CollectionArt.jsx";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -452,6 +453,9 @@ export default function App() {
     setCatalog("");
     setAddonCatalogs([]);
   }, [state.profiles?.active]);
+  // Collection pictures from this computer are fetched again for each
+  // activation of a profile (a switch, a lock, a restore).
+  useEffect(() => forgetLocalArt(), [state.profiles?.session]);
   const addonSignature = state.addons
     .map((a) => `${a.key}:${a.enabled}`)
     .join("|");
@@ -1873,6 +1877,7 @@ export default function App() {
             act={act}
             setState={setState}
             notice={notice}
+            session={state.profiles?.session}
             onClose={() => setNuvioOpen(false)}
           />
         )}

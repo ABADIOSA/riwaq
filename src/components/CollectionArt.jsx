@@ -32,15 +32,18 @@ export function useReducedMotion(setting = false) {
 }
 
 /**
- * Whether a picture address might move: a GIF or WebP by its name or data
- * type, or a picture from this computer in the web edition (an object
- * address says nothing of its type).
+ * Whether a picture is certain to have one frame: only JPEG, by its data
+ * type or its name. A still slot draws everything else through a canvas
+ * (PR #155 second review, R7): an APNG named ".png", an animated WebP or
+ * AVIF, an address with no extension or one that lies about its type all
+ * move in an <img>, whatever the motion setting.
  */
-export function mayMove(src) {
+export function surelyStill(src) {
   if (typeof src !== "string" || !src) return false;
-  if (/^data:image\/(gif|webp)/i.test(src) || /^blob:/i.test(src)) return true;
+  if (/^data:image\/jpe?g[;,]/i.test(src)) return true;
+  if (/^(data|blob):/i.test(src)) return false;
   try {
-    return /\.(gif|webp)$/i.test(new URL(src).pathname);
+    return /\.(jpe?g|jfif)$/i.test(new URL(src).pathname);
   } catch {
     return false;
   }
@@ -51,11 +54,12 @@ const STILL_MAX = 960;
 
 /**
  * A picture in a still slot (a cover, a backdrop, a logo): never moves,
- * whatever the motion setting (PR #155 review, F8). A picture that might
- * be animated is drawn once into a canvas, which shows the first frame
- * (the canvas rule for animated images), at most STILL_MAX a side;
- * anything else is a plain image. The loader is let go once drawn or when
- * the element goes.
+ * whatever the motion setting (PR #155 review, F8, R7). Anything but a
+ * JPEG is drawn once into a canvas, which shows the first frame (the
+ * canvas rule for animated images: GIF, APNG, WebP, AVIF), at most
+ * STILL_MAX a side; a JPEG is a plain image. A picture from another site
+ * draws without being read back (no CORS needed). The loader is let go
+ * once drawn or when the element goes.
  */
 export function StillImage({
   src,
@@ -65,7 +69,7 @@ export function StillImage({
   lazy = true,
 }) {
   const canvas = useRef(null);
-  const moving = mayMove(src);
+  const moving = !!src && !surelyStill(src);
   const failed = useRef(onError);
   failed.current = onError;
   useEffect(() => {
@@ -128,6 +132,14 @@ export function StillImage({
 // Pictures the viewer chose from this computer: Riwaq keeps them by an
 // opaque ID and hands back an address only it can serve. Cached per ID.
 const localCache = new Map();
+/**
+ * Forgets every picture fetched for the previous profile activation (a
+ * switch, a lock, a restore): the next profile asks main again, which
+ * checks it may read each one (PR #155 second review, artwork ownership).
+ */
+export function forgetLocalArt() {
+  localCache.clear();
+}
 export function useArt(src) {
   return useArtState(src).url;
 }
@@ -276,7 +288,10 @@ export function FolderTile({
   const { active, props } = useActive();
   const on = forceActive ?? active;
   const logo = useArt(folder.logo || "");
-  const [logoBroken, setLogoBroken] = useState(false);
+  // Tied to the address that failed (R8): a tile reused for another
+  // folder never keeps the previous one's broken logo.
+  const [brokenLogo, setBrokenLogo] = useState("");
+  const logoBroken = !!logo && brokenLogo === logo;
   const ref = useRef(null);
   return (
     <button
@@ -296,7 +311,7 @@ export function FolderTile({
         <StillImage
           className="folder-logo"
           src={logo}
-          onError={() => setLogoBroken(true)}
+          onError={() => setBrokenLogo(logo)}
         />
       ) : (
         !folder.hideTitle && (

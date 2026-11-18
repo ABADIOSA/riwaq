@@ -56,7 +56,16 @@ export default function FolderPage({
   const [sort, setSort] = useState("source");
   const [layout, setLayout] = useState("grid");
   const [loadingMore, setLoadingMore] = useState("");
-  const [logoBroken, setLogoBroken] = useState(false);
+  // The logo address that failed, not a flag: moving to a sibling folder
+  // with a good logo shows it at once, and a late error from the previous
+  // folder's logo cannot hide the new one (PR #155 second review, R8).
+  const [brokenLogo, setBrokenLogo] = useState("");
+  // Every hook runs before the "folder is gone" page below, in the same
+  // order on every render: a sync or another window deleting the open
+  // folder once threw React #300 here and blanked the app (R1).
+  const heroArt = useArt(folder ? folder.backdrop || folder.cover || "" : "");
+  const heroLogo = useArt(folder?.logo || "");
+  const logoBroken = !!heroLogo && brokenLogo === heroLogo;
   const signature = folder
     ? JSON.stringify([
         folder.catalogs,
@@ -159,8 +168,6 @@ export default function FolderPage({
     if (pick) onOpen(pick);
   };
   const siblings = collection.folders;
-  const heroArt = useArt(folder.backdrop || folder.cover || "");
-  const heroLogo = useArt(folder.logo || "");
   const loaded = folderItems(view).length;
 
   return (
@@ -193,7 +200,7 @@ export default function FolderPage({
                     src={heroLogo}
                     alt={folder.title}
                     lazy={false}
-                    onError={() => setLogoBroken(true)}
+                    onError={() => setBrokenLogo(heroLogo)}
                   />
                 </h1>
               ) : (

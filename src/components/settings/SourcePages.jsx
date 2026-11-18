@@ -11,7 +11,11 @@ import {
   patternProblem,
   ruleBadges,
 } from "../../../core/badges.mjs";
-import { chooseLook, isFrLook } from "../../../core/badge-look.mjs";
+import {
+  LOOK_SUPERSEDED,
+  chooseLook,
+  isFrLook,
+} from "../../../core/badge-look.mjs";
 import { call } from "../../lib/api.js";
 import { RuleBadge } from "../StreamBadge.jsx";
 
@@ -320,9 +324,11 @@ export function FiltersPage({ state, update, act, setState, notice }) {
   // even with this page closed, is refused there and changes neither
   // profile (PR #155 review, F2).
   const remove = async (filter) => {
-    const profileId = state.profiles?.active;
+    // The activation it was pressed in (second review, F2): an Undo after a
+    // switch away and back, or a re-lock, finds nothing to restore.
+    const profileSession = state.profiles?.session;
     const r = await act("streamFilterEdit", {
-      profileId,
+      profileSession,
       action: "remove",
       id: filter.id,
     });
@@ -332,7 +338,7 @@ export function FiltersPage({ state, update, act, setState, notice }) {
       label: "تراجع",
       run: async () => {
         const back = await act("streamFilterEdit", {
-          profileId,
+          profileSession,
           action: "restore",
           id: filter.id,
         });
@@ -546,7 +552,7 @@ function BadgeLookCard({ state, update, act, setState, notice }) {
     try {
       const r = await call("badgeStyleApply", {
         look,
-        profileId: state.profiles?.active,
+        profileSession: state.profiles?.session,
       });
       setState(r.state);
       const done = r.report;
@@ -557,9 +563,12 @@ function BadgeLookCard({ state, update, act, setState, notice }) {
           : `«${done.style}»: حُمّلت ${done.loaded} شارة و${done.pictures} صورة`,
       );
     } catch (e) {
-      setError(
-        `${e.message}. بقي المظهر كما كان؛ تحقق من الاتصال وحاول مرة ثانية.`,
-      );
+      // A newer choice won (made elsewhere, or after this page was closed
+      // and opened again): nothing failed and nothing changes (R3).
+      if (e.message !== LOOK_SUPERSEDED)
+        setError(
+          `${e.message}. بقي المظهر كما كان؛ تحقق من الاتصال وحاول مرة ثانية.`,
+        );
     }
     setBusy("");
   };
