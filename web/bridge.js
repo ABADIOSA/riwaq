@@ -1597,12 +1597,16 @@ export async function startBridge({ version, store }) {
       client.removeNuvioPlugin({
         key: typeof a?.key === "string" ? a.key : "",
       }),
-    backupExport: ({ passphrase, includeSecrets = false } = {}) => {
-      const { text, left } = client.exportBackup({
-        passphrase,
-        includeSecrets: includeSecrets === true,
-        app: version,
-      });
+    backupExport: async ({ passphrase, includeSecrets = false } = {}) => {
+      // Sealed once no commit's write is still out (fifth pass, Q7), so a
+      // backup never carries a change the vault may yet refuse.
+      const { text, left } = await client.atRest(() =>
+        client.exportBackup({
+          passphrase,
+          includeSecrets: includeSecrets === true,
+          app: version,
+        }),
+      );
       const stamp = new Date().toISOString().slice(0, 10);
       saveFile(`riwaq-backup-${stamp}.riwaq`, text);
       return { saved: true, left };

@@ -184,6 +184,11 @@ function boundedSet(map, key, value, limit) {
 // A position alone reaches the encrypted file at most this often (see
 // persistProgress); anything else is written at once.
 export const PROGRESS_SAVE_MS = 20000;
+// How long account sync and a backup wait for a commit still being written
+// before they give up for now (Client.atRest).
+const AT_REST_WAIT = 15000;
+export const STILL_SAVING =
+  "تغيير على هذا الجهاز ما زال يُحفظ؛ أعد المحاولة بعد لحظات";
 // The parts of the state each profile owns (core/profiles.mjs apply).
 const PROFILE_KEYS = new Set([
   "favorites",
@@ -370,12 +375,53 @@ export class Client {
     this.profiles.capture();
     this.writes = (this.writes || 0) + 1;
     const written = this.saveData(this.state, undo);
-    this.account?.touch();
-    if (written && typeof written.then === "function") {
+    const later = !!written && typeof written.then === "function";
+    if (later) {
       this.lastWrite = written;
-      return written;
+      // A commit whose write is still out (fifth pass, Q7): until it
+      // settles, the live state holds a change that may yet be undone, so
+      // account sync and a backup wait for it (atRest).
+      if (typeof undo === "function") {
+        const out = (this.commitsOut ||= new Set());
+        out.add(written);
+        const done = () => out.delete(written);
+        written.then(done, done);
+      }
     }
-    return undefined;
+    this.account?.touch();
+    return later ? written : undefined;
+  }
+  /**
+   * Runs `step`, which must not wait, at a moment when no commit's write is
+   * still out (fifth pass, Q7), and answers what it returns. The live state
+   * then holds only what is durable, or kept on purpose (a plain save, such
+   * as a position or a token a provider already rotated, is never undone):
+   * whatever `step` reads from it can leave the device. The check and
+   * `step` run in the same turn, so no commit can start between them. A
+   * commit's write settles on its own (the desktop's at once, the
+   * browser's when IndexedDB answers), so this never waits for anything
+   * that waits for it; one that is still out after `wait` ms makes this
+   * throw instead of reading it.
+   */
+  async atRest(step, { wait = AT_REST_WAIT } = {}) {
+    let expired = false;
+    let timer;
+    const late = new Promise((resolve) => {
+      // Not unref'd: it lives only while a commit is out, and is cleared.
+      timer = setTimeout(() => {
+        expired = true;
+        resolve();
+      }, wait);
+    });
+    try {
+      for (;;) {
+        if (!this.commitsOut?.size) return step();
+        if (expired) throw new Error(STILL_SAVING);
+        await Promise.race([Promise.allSettled([...this.commitsOut]), late]);
+      }
+    } finally {
+      clearTimeout(timer);
+    }
   }
   /**
    * Settles when the last write asked for is durable, and rejects when it

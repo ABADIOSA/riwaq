@@ -272,9 +272,12 @@ export class AccountHub {
       server = ACCOUNT_SERVER,
       request = accountFetch,
       now = () => Date.now(),
+      restWait,
     } = {},
   ) {
     this.client = client;
+    // How long a sync waits for a commit still being written (Client.atRest).
+    this.restWait = restWait;
     this.server = serverUrl(server);
     this.request = request;
     this.now = now;
@@ -700,52 +703,70 @@ export class AccountHub {
         if (this.bag !== bag) return this.client.publicState();
         const pulled = await this.pull(bag);
         if (this.bag !== bag) return this.client.publicState();
-        if (pulled.envelope) {
-          const remote = pulled.envelope.payload;
-          const secrets = bag.secretsChanged
-            ? bag.secrets
-            : !!pulled.envelope.secrets;
-          const local = this.collect(secrets);
-          const merged = merge3(bag.base, local, remote, { prefer });
-          if (!same(merged, local) && this.playbackActive()) {
-            this.deferred = true;
-            this.deferredPrefer = prefer;
-            this.error = "";
-            return this.client.publicState();
-          }
-          bag.secrets = secrets;
-          if (!same(merged, local)) {
-            this.apply(merged);
-            this.onChange("remote");
-          }
-          bag.base = remote;
-          bag.revision = pulled.revision;
-        } else if (pulled.revision === 0) {
-          bag.revision = 0;
-          bag.base = undefined;
-        }
-        this.deferred = false;
-        this.deferredPrefer = null;
-        const local = this.collect(bag.secrets);
-        if (
-          !bag.secretsChanged &&
-          bag.base !== undefined &&
-          same(local, bag.base)
-        ) {
-          bag.lastSync = this.now();
-          this.error = "";
-          this.client.persist();
-          return this.client.publicState();
-        }
-        const secrets = !!bag.secrets;
-        const text = sealData(Buffer.from(bag.key, "base64"), bag.username, {
-          format: "riwaq-sync",
-          version: 1,
-          secrets,
-          app: this.client.version || "",
-          at: this.now(),
-          payload: local,
-        });
+        // Merging, applying the account's data and taking what goes up all
+        // read the live state, so they run together at a moment when no
+        // commit's write is still out (fifth pass, Q7): a change this device
+        // may yet undo is never sent, and the account's data is never put
+        // over a change still being written. Nothing here waits.
+        const step = await this.client.atRest(
+          () => {
+            if (this.bag !== bag) return null;
+            if (pulled.envelope) {
+              const remote = pulled.envelope.payload;
+              const secrets = bag.secretsChanged
+                ? bag.secrets
+                : !!pulled.envelope.secrets;
+              const local = this.collect(secrets);
+              const merged = merge3(bag.base, local, remote, { prefer });
+              if (!same(merged, local) && this.playbackActive()) {
+                this.deferred = true;
+                this.deferredPrefer = prefer;
+                this.error = "";
+                return null;
+              }
+              bag.secrets = secrets;
+              if (!same(merged, local)) {
+                this.apply(merged);
+                this.onChange("remote");
+              }
+              bag.base = remote;
+              bag.revision = pulled.revision;
+            } else if (pulled.revision === 0) {
+              bag.revision = 0;
+              bag.base = undefined;
+            }
+            this.deferred = false;
+            this.deferredPrefer = null;
+            const local = this.collect(bag.secrets);
+            if (
+              !bag.secretsChanged &&
+              bag.base !== undefined &&
+              same(local, bag.base)
+            ) {
+              bag.lastSync = this.now();
+              this.error = "";
+              this.client.persist();
+              return null;
+            }
+            const secrets = !!bag.secrets;
+            const text = sealData(
+              Buffer.from(bag.key, "base64"),
+              bag.username,
+              {
+                format: "riwaq-sync",
+                version: 1,
+                secrets,
+                app: this.client.version || "",
+                at: this.now(),
+                payload: local,
+              },
+            );
+            return { local, secrets, text };
+          },
+          { wait: this.restWait },
+        );
+        if (!step) return this.client.publicState();
+        const { local, secrets, text } = step;
         const pushed = await this.api("PUT", "/v1/data", {
           token: bag.token,
           conflict: true,
