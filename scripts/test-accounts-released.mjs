@@ -20,8 +20,7 @@
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { handle as currentHandle } from "../server/accounts/service.mjs";
@@ -32,7 +31,11 @@ const PREVIOUS = process.env.RIWAQ_PREVIOUS_WORKER || "v0.55.0";
 const tags = process.argv.slice(2).length
   ? process.argv.slice(2)
   : ["v0.40.0", "v0.54.0", "v0.55.0"];
-const work = mkdtempSync(join(tmpdir(), "riwaq-released-"));
+// Extract beneath the checkout so released imports can resolve its node_modules
+// without needing directory symlink privileges on Windows.
+const cache = join(root, ".cache");
+mkdirSync(cache, { recursive: true });
+const work = mkdtempSync(join(cache, "riwaq-released-"));
 const extract = (ref, into, paths) => {
   execFileSync("git", [
     "-C",
@@ -43,10 +46,8 @@ const extract = (ref, into, paths) => {
     ref,
     ...paths,
   ]);
-  execFileSync("mkdir", ["-p", into]);
+  mkdirSync(into, { recursive: true });
   execFileSync("tar", ["-xf", `${into}.tar`, "-C", into]);
-  // Released code imports its own dependencies (buffer shims, etc.).
-  symlinkSync(join(root, "node_modules"), join(into, "node_modules"), "dir");
 };
 const results = [];
 try {
