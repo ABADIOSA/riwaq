@@ -7,8 +7,10 @@
  *   node scripts/test-accounts-released.mjs [tags…]   (default v0.40.0 v0.54.0 v0.55.0)
  *
  * For each released version, its own core/ (git archive of the tag) signs
- * up and syncs against the Worker of the reviewed head 72e2ffc on the
- * schema production has today (0001–0002); then migration 0003 is applied
+ * up and syncs against the previous Worker (by default the one released
+ * with v0.55.0, the code production runs; RIWAQ_PREVIOUS_WORKER names
+ * another commit, such as the reviewed head 72e2ffc) on the schema
+ * production has today (0001–0002); then migration 0003 is applied
  * while that old Worker keeps serving (the window between the workflow's
  * migration step and its deploy step); then this checkout's Worker takes
  * over the same database. The established session must survive, and every
@@ -26,7 +28,7 @@ import { handle as currentHandle } from "../server/accounts/service.mjs";
 import { sqliteD1 } from "../server/accounts/local.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const PREVIOUS = process.env.RIWAQ_PREVIOUS_WORKER || "72e2ffc";
+const PREVIOUS = process.env.RIWAQ_PREVIOUS_WORKER || "v0.55.0";
 const tags = process.argv.slice(2).length
   ? process.argv.slice(2)
   : ["v0.40.0", "v0.54.0", "v0.55.0"];
@@ -49,9 +51,14 @@ const extract = (ref, into, paths) => {
 const results = [];
 try {
   extract(PREVIOUS, join(work, "previous"), ["server", "package.json"]);
-  const { handle: previousHandle } = await import(
+  // The Worker's code moved from worker.mjs to service.mjs in PR #155.
+  const previousModule = await import(
     pathToFileURL(join(work, "previous/server/accounts/service.mjs"))
+  ).catch(
+    () =>
+      import(pathToFileURL(join(work, "previous/server/accounts/worker.mjs"))),
   );
+  const previousHandle = previousModule.handle;
   for (const tag of tags) {
     const dir = join(work, tag);
     extract(tag, dir, ["core", "package.json"]);
