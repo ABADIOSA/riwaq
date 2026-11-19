@@ -274,6 +274,10 @@ export class Integrations {
     if (!SERVICES.includes(id)) throw new Error("منصة غير معروفة");
     return ((this.client.state.integrations ||= {})[id] ||= {});
   }
+  /** True while `s` is the stored session for `id` (no entry is created). */
+  current(id, s) {
+    return this.client.state.integrations?.[id] === s;
+  }
   save({
     id,
     clientId,
@@ -436,19 +440,28 @@ export class Integrations {
       this.simklGeneration++;
       this.simklSession = null;
     }
+    // Seventh pass, W5: the token revoked is the one the provider honours
+    // when the disconnect is written. A refresh still out for this session
+    // finishes first, since it retires the token this session had.
     const revoke =
       id === "simkl" && s.token?.v2 && s.token.access_token
-        ? () =>
-            this.client
+        ? async () => {
+            if (this.simklRefreshing?.session === s)
+              await this.simklRefreshing.promise.catch(() => {});
+            const access = s.token?.access_token;
+            if (!access) return;
+            await this.client
               .request(
                 this.simklUrl("/oauth2/revoke", s),
                 FORM(
-                  { token: s.token.access_token, client_id: s.clientId },
+                  { token: access, client_id: s.clientId },
                   this.simklHeaders(s),
                 ),
               )
-              .catch(() => {})
+              .catch(() => {});
+          }
         : undefined;
+    const tokenAtDetach = s.token;
     if (id === "trakt") {
       this.session = null;
       // Disconnecting forgets the account's suggestions too.
@@ -476,6 +489,19 @@ export class Integrations {
       // entry is only what get() leaves).
       if (bag[id] && Object.keys(bag[id]).length) return;
       bag[id] = s;
+      // A refresh that answered while this disconnect was written left its
+      // token on `s` (the provider retired the old one), or ended the
+      // session. The session put back carries that, and is written again
+      // on its own (a plain save), never the spent token (W5).
+      if (s.token !== tokenAtDetach)
+        queueMicrotask(() => {
+          if (this.current(id, s))
+            try {
+              this.client.persist();
+            } catch {
+              // Written with the next save.
+            }
+        });
       if (
         addon &&
         !now.addons.some((a) => keyFor(a.transportUrl) === s.addonKey)
@@ -653,6 +679,7 @@ export class Integrations {
     ) {
       if (!this.refreshing)
         this.refreshing = (async () => {
+          const used = s.token.refresh_token;
           const token = await this.client
             .request(
               "https://auth.trakt.tv/oauth/token",
@@ -672,12 +699,18 @@ export class Integrations {
             });
           if (!token.access_token || !token.refresh_token)
             throw new Error("أعد ربط Trakt");
-          if (this.get("trakt") !== s)
+          // Seventh pass, W5: Trakt's refresh token is single use, so the
+          // new pair belongs to this session object even when a disconnect
+          // is being written (a refused one then puts back a working pair).
+          // Another refresh or a new sign-in since keeps its own.
+          if (s.token?.refresh_token !== used)
             throw new Error("تغير الحساب أثناء الطلب");
           s.token = {
             ...token,
             created_at: token.created_at || Math.floor(Date.now() / 1000),
           };
+          if (!this.current("trakt", s))
+            throw new Error("تغير الحساب أثناء الطلب");
           this.client.persist();
         })().finally(() => {
           this.refreshing = null;
@@ -807,6 +840,7 @@ export class Integrations {
     if (this.simklRefreshing?.session === s)
       return this.simklRefreshing.promise;
     const job = { session: s };
+    const used = s.token?.refresh_token;
     job.promise = (async () => {
       try {
         const token = await this.client.request(
@@ -821,7 +855,12 @@ export class Integrations {
           ),
         );
         if (!token?.access_token) throw new Error("HTTP 401");
-        if (this.get("simkl") !== s || !s.token) return;
+        // Seventh pass, W5: by now Simkl has retired the token this
+        // session had. The new one is kept on the session object whatever
+        // happened locally meanwhile: a disconnect being written puts it
+        // back with a working token if refused, and revokes this one if
+        // written. Only the current session is written now.
+        if (!s.token || s.token.refresh_token !== used) return;
         s.token = {
           ...s.token,
           ...token,
@@ -829,11 +868,17 @@ export class Integrations {
           created_at: Math.floor(Date.now() / 1000),
           v2: true,
         };
-        this.client.persist();
+        if (this.current("simkl", s)) this.client.persist();
       } catch (error) {
-        if ([400, 401].includes(error.status) && this.get("simkl") === s) {
+        if (
+          [400, 401].includes(error.status) &&
+          s.token &&
+          s.token.refresh_token === used
+        ) {
+          // Refused: this session is over wherever it is (a disconnect
+          // refused later puts it back without a token, asking to link).
           delete s.token;
-          this.client.persist();
+          if (this.current("simkl", s)) this.client.persist();
           throw new Error("انتهت جلسة Simkl. اربط الحساب من جديد.");
         }
         throw simklProblem(error);
