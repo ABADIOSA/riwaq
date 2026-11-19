@@ -94,5 +94,24 @@ export function lockScroll(...scrollers) {
   };
 }
 
+/**
+ * Issue #156: the page's start. A destination chosen in the navigation (or
+ * the logo) opens at its top, also when it is the page already shown. While
+ * something holds the lock (the title page or See all being closed by that
+ * same choice, the narrow drawer, a dialog), the offset its release puts
+ * back becomes the top, so the release lands there instead of where the old
+ * page was; otherwise the page goes there now, smoothly when asked.
+ */
+export function scrollPageToTop({ smooth = false } = {}) {
+  if (typeof window === "undefined") return;
+  if (saved) saved.y = 0;
+  if (holders.size) return;
+  window.scrollTo({
+    left: window.scrollX,
+    top: 0,
+    behavior: smooth ? "smooth" : "instant",
+  });
+}
+
 /** How many holders keep the page still (for tests). */
 export const scrollLocks = () => holders.size;

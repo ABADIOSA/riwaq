@@ -46,7 +46,7 @@ import {
   Music2,
 } from "lucide-react";
 import { api, call } from "./lib/api.js";
-import { lockScroll } from "./lib/scroll-lock.js";
+import { lockScroll, scrollPageToTop } from "./lib/scroll-lock.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
 import {
   IconButton,
@@ -772,7 +772,7 @@ export default function App() {
     const room = ["collections", "folder", "music"].includes(v) ? "library" : v;
     if (isLocked(room)) {
       setUnlockRoom(room);
-      return;
+      return false;
     }
     cancelAnimationFrame(titleFrame.current);
     cancelAnimationFrame(catalogFrame.current);
@@ -784,6 +784,7 @@ export default function App() {
     setCatalog("");
     setFilter("");
     setGroup("all");
+    return true;
   };
   const favorites = state.favorites;
   const uniqueProgress = useMemo(
@@ -1123,7 +1124,19 @@ export default function App() {
           folderFrom={folderFrom}
           navigate={(id) => {
             if (id === "settings") setSettingsTab("start");
-            navigate(id);
+            // Issue #156: a destination chosen here, or the logo, opens at
+            // its start, also when it is the page already shown (then the
+            // page glides up unless motion is reduced). Back from a title
+            // or See all keeps restoring where the viewer was.
+            const same = id === view && !selected && !browseOpen;
+            if (navigate(id))
+              scrollPageToTop({
+                smooth:
+                  same &&
+                  !state.settings.reduceMotion &&
+                  !window.matchMedia?.("(prefers-reduced-motion: reduce)")
+                    .matches,
+              });
           }}
           appearance={appearance}
           profile={activeProfile}
