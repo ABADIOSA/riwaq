@@ -354,6 +354,14 @@ export class OfflineLibrary {
     this.sweeping = null;
     this.sweepTimer = null;
     this.sweepRetries = 0;
+    // Seventh pass, W1: sweep requests are counted, and a pass covers the
+    // requests made before it started. A request made during a pass gets
+    // another pass with a fresh list, so a removal committed then is never
+    // answered from an older snapshot.
+    this.sweepAsked = 0;
+    // Entries a removal moved to the clean-up list but has not yet written
+    // durably: no pass touches their files until that removal says so.
+    this.uncommitted = new Set();
     // Downloads of removed profiles, written in the same encrypted write as
     // the removal and deleted from disk only after it (sixth pass, V1).
     // An entry leaves only when all its files are gone, so a file is never
@@ -780,8 +788,9 @@ export class OfflineLibrary {
    *    on disk without a record.
    *
    * `stop` stops playback when the profile is active (main's player).
-   * Answers the public state, with `offlineCleanup.pending` when files are
-   * still waiting to be deleted.
+   * Answers the public state, with `offlineCleanup.pending` when files of
+   * THIS removal are still waiting to be deleted (seventh pass, W1: another
+   * removal's leftovers are neither counted nor hidden here).
    */
   async removeProfile(args, { stop = async () => {} } = {}) {
     const profiles = this.client.profiles;
@@ -794,28 +803,37 @@ export class OfflineLibrary {
     // Held until its files are deleted: no download action for it starts
     // in between.
     const release = await this.prepareRetire(id);
+    let ids = [];
     try {
       // The profile may have become active while its download stopped.
       await stopIfActive();
+      ids = this.ownedIds(id);
+      for (const x of ids) this.uncommitted.add(x);
       const state = profiles.remove(args, { also: () => this.retire(id) });
       // A store that answers later than it is asked (the web's) is waited
       // for; the desktop's has answered already. Nothing is deleted before
       // the removal is durable.
       await this.client.durable();
-      const { pending } = await this.sweep();
+      for (const x of ids) this.uncommitted.delete(x);
+      // New entries get the whole retry budget (bounded per removal).
+      if (ids.length) this.sweepRetries = 0;
+      await this.sweep();
+      const pending = this.pendingOf(ids);
       return pending ? { ...state, offlineCleanup: { pending } } : state;
     } finally {
+      for (const x of ids) this.uncommitted.delete(x);
       release();
     }
   }
   /**
    * The same three steps for the downloads alone, the records' move
    * written on its own (and undone when that write is refused). Answers
-   * the sweep's `{ pending }`.
+   * `{ pending }` for this profile's own entries.
    */
   async forgetProfile(profileId) {
     const release = await this.prepareRetire(profileId);
     try {
+      const ids = this.ownedIds(profileId);
       const undo = this.retire(profileId);
       try {
         this.persist();
@@ -823,10 +841,29 @@ export class OfflineLibrary {
         undo();
         throw error;
       }
-      return await this.sweep();
+      if (ids.length) this.sweepRetries = 0;
+      await this.sweep();
+      return { pending: this.pendingOf(ids) };
     } finally {
       release();
     }
+  }
+  /** The valid download IDs a profile's records name. */
+  ownedIds(profileId) {
+    const bag = this.client.state.offline?.[profileId];
+    return [
+      ...new Set(
+        (Array.isArray(bag) ? bag : [])
+          .map((x) => x?.id)
+          .filter((x) => ID.test(x)),
+      ),
+    ];
+  }
+  /** How many of these IDs the clean-up list still holds. */
+  pendingOf(ids) {
+    const want = new Set(ids);
+    return (this.client.state.offlineTrash || []).filter((x) => want.has(x?.id))
+      .length;
   }
   /**
    * Step 1: freezes the profile's downloads for the removal. Throws, having
@@ -903,63 +940,30 @@ export class OfflineLibrary {
    * clean-up entry. Idempotent; one at a time. Never deletes a file a live
    * record names (such an entry is dropped), one being played, or anything
    * outside the downloads folder (only `<32 hex>` names inside it, each
-   * removed without following links). Answers `{ pending }`.
+   * removed without following links).
+   *
+   * Seventh pass, W1: calls never share a stale snapshot. One pass runs at
+   * a time; a call made while one runs is answered by the next pass, which
+   * reads the list again, so entries a second removal added during the
+   * first pass are deleted (or reported) before either caller is answered.
+   * The loop repeats only for calls made during a pass, never by itself,
+   * and a held file is retried by a timer at most SWEEP_RETRIES times.
+   * Answers `{ pending }` for the whole list after the last pass.
    */
   sweep() {
-    if (this.sweeping) return this.sweeping;
+    this.sweepAsked++;
     clearTimeout(this.sweepTimer);
     this.sweepTimer = null;
+    if (this.sweeping) return this.sweeping;
     this.sweeping = (async () => {
-      const state = this.client.state;
-      const live = new Set();
-      for (const bag of Object.values(state.offline || {}))
-        for (const item of Array.isArray(bag) ? bag : []) live.add(item?.id);
-      let pending = 0;
-      let changed = false;
-      for (const entry of [...(state.offlineTrash || [])]) {
-        const drop = () => {
-          state.offlineTrash = (state.offlineTrash || []).filter(
-            (x) => x !== entry,
-          );
-          changed = true;
-        };
-        if (!ID.test(entry?.id) || live.has(entry.id)) {
-          drop();
-          continue;
-        }
-        const id = entry.id;
-        if (
-          id === this.playing ||
-          this.using.has(id) ||
-          this.deleting.has(id)
-        ) {
-          pending++;
-          continue;
-        }
-        this.deleting.add(id);
-        try {
-          // remove()'s order: the poster before the media, so a rename in
-          // flight cannot leave a poster behind.
-          await this.deleteFile(`${this.posterPath(id)}.tmp`);
-          await this.deleteFile(this.posterPath(id));
-          await this.deleteFile(this.path(id, true));
-          await this.deleteFile(this.path(id));
-          this.artworkAttempted.delete(id);
-          drop();
-        } catch {
-          pending++;
-        } finally {
-          this.deleting.delete(id);
-        }
+      let done = 0;
+      let result;
+      while (done < this.sweepAsked) {
+        // This pass covers every call made before it reads the list.
+        done = this.sweepAsked;
+        result = await this.sweepPass();
       }
-      if (changed)
-        try {
-          this.persist();
-        } catch {
-          // The list as last written still names these: the next sweep
-          // finds their files gone and drops them again.
-        }
-      if (pending && this.sweepRetries < SWEEP_RETRIES) {
+      if (result.waiting && this.sweepRetries < SWEEP_RETRIES) {
         this.sweepRetries++;
         this.sweepTimer = setTimeout(() => {
           this.sweepTimer = null;
@@ -967,16 +971,83 @@ export class OfflineLibrary {
         }, SWEEP_RETRY_MS);
         this.sweepTimer.unref?.();
       }
-      return { pending };
+      return { pending: result.pending };
     })().finally(() => {
       this.sweeping = null;
     });
     return this.sweeping;
   }
+  /**
+   * One pass over the clean-up list as it stands now. `pending` counts
+   * every entry left; `waiting` those a later pass can finish (a held or
+   * playing file), not those whose removal is still being written.
+   */
+  async sweepPass() {
+    const state = this.client.state;
+    const liveNow = (id) =>
+      Object.values(state.offline || {}).some(
+        (bag) => Array.isArray(bag) && bag.some((item) => item?.id === id),
+      );
+    let pending = 0;
+    let waiting = 0;
+    let changed = false;
+    for (const entry of [...(state.offlineTrash || [])]) {
+      const drop = () => {
+        state.offlineTrash = (state.offlineTrash || []).filter(
+          (x) => x !== entry,
+        );
+        changed = true;
+      };
+      // Read at the entry, not once per pass: a record that names it now
+      // (a refused removal put back during this pass) keeps its files.
+      if (!ID.test(entry?.id) || liveNow(entry.id)) {
+        drop();
+        continue;
+      }
+      const id = entry.id;
+      if (this.uncommitted.has(id)) {
+        // Its removal answers for it once written (or puts it back).
+        pending++;
+        continue;
+      }
+      if (id === this.playing || this.using.has(id) || this.deleting.has(id)) {
+        pending++;
+        waiting++;
+        continue;
+      }
+      this.deleting.add(id);
+      try {
+        // remove()'s order: the poster before the media, so a rename in
+        // flight cannot leave a poster behind.
+        await this.deleteFile(`${this.posterPath(id)}.tmp`);
+        await this.deleteFile(this.posterPath(id));
+        await this.deleteFile(this.path(id, true));
+        await this.deleteFile(this.path(id));
+        this.artworkAttempted.delete(id);
+        drop();
+      } catch {
+        pending++;
+        waiting++;
+      } finally {
+        this.deleting.delete(id);
+      }
+    }
+    if (changed)
+      try {
+        this.persist();
+      } catch {
+        // The list as last written still names these: the next sweep
+        // finds their files gone and drops them again.
+      }
+    return { pending, waiting };
+  }
   async stop() {
     clearTimeout(this.sweepTimer);
     this.sweepTimer = null;
     await this.sweeping?.catch(() => {});
+    // The pass just awaited may have set a retry; quitting cancels it.
+    clearTimeout(this.sweepTimer);
+    this.sweepTimer = null;
     this.cancelArtwork();
     if (this.job) this.job.pause = true;
     this.job?.abort.abort();
