@@ -19,6 +19,8 @@
  * first failed assertion.
  */
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { createRequire } from "node:module";
 import {
   access,
@@ -29,9 +31,9 @@ import {
   rmdir,
   writeFile,
 } from "node:fs/promises";
-import { open as openHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createInterface } from "node:readline";
 
 const appDir = resolve(process.argv[2] || ".");
 const require = createRequire(join(appDir, "package.json"));
@@ -63,6 +65,46 @@ const exists = (path) =>
     () => true,
     () => false,
   );
+// On Windows, Node opens ordinary files with delete sharing. Hold a
+// read-only Windows handle that omits FILE_SHARE_DELETE instead.
+async function holdWindowsFile(path) {
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "$file = [IO.File]::Open($env:RIWAQ_TEST_LOCK_FILE, 'Open', 'Read', 'Read')",
+    "try { [Console]::WriteLine('locked'); [void][Console]::ReadLine() } finally { $file.Dispose() }",
+  ].join("\n");
+  const child = spawn(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    {
+      windowsHide: true,
+      env: { ...process.env, RIWAQ_TEST_LOCK_FILE: path },
+      stdio: ["pipe", "pipe", "inherit"],
+    },
+  );
+  const closed = once(child, "close");
+  const lines = createInterface({ input: child.stdout });
+  const release = async () => {
+    if (child.exitCode === null && child.signalCode === null)
+      child.stdin.end("\n");
+    await closed;
+  };
+  try {
+    const ready = await Promise.race([
+      once(lines, "line", { signal: AbortSignal.timeout(10_000) }).then(
+        ([line]) => line,
+      ),
+      closed.then(() => null),
+    ]);
+    assert.equal(ready, "locked", "the Windows test file is held");
+    return release;
+  } catch (error) {
+    await release().catch(() => {});
+    throw error;
+  } finally {
+    lines.close();
+  }
+}
 const results = { platform: process.platform, steps: [] };
 const step = (name, data = {}) => results.steps.push({ name, ...data });
 
@@ -225,7 +267,7 @@ try {
   // reported as skipped there; tests/profile-remove-downloads.test.mjs
   // covers the same path with a refusing deleteFile.
   if (win) {
-    const handle = await openHandle(media(ids.c), "r");
+    const release = await holdWindowsFile(media(ids.c));
     let held;
     try {
       held = await must("profileRemove", { id: c });
@@ -234,7 +276,7 @@ try {
       const durableHeld = await decrypt(await readFile(profileFile));
       assert.ok(durableHeld.offlineTrash.some((e) => e.id === ids.c));
     } finally {
-      await handle.close();
+      await release();
     }
     await close();
     await open();
