@@ -49,7 +49,7 @@ export default function Profiles({
   const removed = (result) => {
     if (result?.offlineCleanup?.pending)
       notice?.(
-        "حُذف الملف الشخصي، وبقيت بعض ملفات تنزيلاته مفتوحة في برنامج آخر؛ سيحذفها رِواق حين تُغلق",
+        "حُذف الملف الشخصي. سيعيد رِواق محاولة حذف ملفات التنزيل المتبقية.",
       );
     return result;
   };

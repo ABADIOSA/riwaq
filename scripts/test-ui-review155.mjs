@@ -918,6 +918,41 @@ for (const uiLanguage of ["ar", "en"])
     },
   );
 
+await check(
+  "offline cleanup notice does not guess why files remain",
+  async () => {
+    for (const [uiLanguage, expected] of [
+      [
+        "ar",
+        "حُذف الملف الشخصي. سيعيد رِواق محاولة حذف ملفات التنزيل المتبقية.",
+      ],
+      [
+        "en",
+        "The profile was removed. Riwaq will retry deleting the remaining downloaded files.",
+      ],
+    ]) {
+      await call("profileCreate", { name: "Pending cleanup fixture" });
+      await restart({ uiLanguage });
+      await page.evaluate(() => {
+        const original = window.riwaq.call;
+        window.riwaq.call = async (method, args) => {
+          const state = await original(method, args);
+          if (method === "profileRemove")
+            return { ...state, offlineCleanup: { pending: 1 } };
+          return state;
+        };
+      });
+      await profilesDialog();
+      const card = page.locator(".profile-card", {
+        hasText: "Pending cleanup fixture",
+      });
+      await card.locator(".button-row button").last().click();
+      assert.equal(await page.locator(".toast").textContent(), expected);
+      await page.keyboard.press("Escape");
+    }
+  },
+);
+
 // --- F9 -----------------------------------------------------------------------------
 await check("F9 a template query is edited through its form", async () => {
   for (const c of (await call("init")).collections)
