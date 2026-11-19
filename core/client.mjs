@@ -304,6 +304,9 @@ export class Client {
     this.request = request;
     this.requestText = requestText;
     this.api = api;
+    // Stremio sign-in/sign-out and import generations (seventh pass, W3).
+    this.stremioAuthEpoch = 0;
+    this.stremioSyncs = 0;
     const loaded = load();
     this.state = {
       addons: [],
@@ -648,7 +651,15 @@ export class Client {
       authKey.length > 4096
     )
       throw new Error("بيانات تسجيل الدخول غير صالحة");
+    // Seventh pass, W3: a sign-in, a sign-out or a newer import that
+    // happened while this one waited for Stremio wins; this one writes
+    // nothing (a sign-out during the request never comes back signed in).
+    const signIn = ++this.stremioAuthEpoch;
     const user = await this.api("getUser", { authKey });
+    if (signIn !== this.stremioAuthEpoch)
+      throw new Error(
+        "تغيّر تسجيل الدخول إلى ستريميو أثناء العملية؛ لم يتغير شيء",
+      );
     // A commit (sixth pass, V2): refused, the previous sign-in stays.
     await this.transact(() => {
       const seal = fields(this.state, ["auth"]);
@@ -661,14 +672,39 @@ export class Client {
     });
     return this.publicState();
   }
+  /**
+   * Imports the Stremio account's addons and library. Seventh pass, W3:
+   * what this import may write is decided by what held when it was asked,
+   * captured before its first request: the profile activation (library
+   * and positions go only to that one, never to a later activation of the
+   * same profile, A → B → A), the Stremio sign-in (a sign-out, a different
+   * account or a newer import makes this one write nothing) and this run.
+   * Addons are shared by every profile and are still imported when only
+   * the activation ended; the library is then neither asked for nor
+   * written, and the answer says so (`libraryWarning`, `profileChanged`).
+   */
   async sync() {
     const authKey = this.state.auth?.authKey;
     if (!authKey) throw new Error("سجّل الدخول إلى ستريميو أولاً");
+    const ticket = this.profiles.ticket();
+    const signIn = this.stremioAuthEpoch;
+    const run = ++this.stremioSyncs;
+    const stale = () => {
+      if (
+        signIn !== this.stremioAuthEpoch ||
+        run !== this.stremioSyncs ||
+        this.state.auth?.authKey !== authKey
+      )
+        throw new Error(
+          "تغيّر تسجيل الدخول إلى ستريميو أو بدأت مزامنة أحدث؛ لم تكتب هذه المزامنة شيئًا",
+        );
+    };
     const result = await this.api("addonCollectionGet", {
       authKey,
       type: "user",
       update: false,
     });
+    stale();
     if (!Array.isArray(result?.addons))
       throw new Error("استجابة الإضافات غير صالحة. لم تتغير إضافاتك.");
     const compatible = [],
@@ -692,23 +728,29 @@ export class Client {
     // V2): nothing of the import sits in the state across the requests
     // below, and a refused write leaves addons, library and positions as
     // they were.
-    const ticket = this.profiles.ticket();
     const favorites = [];
     const progress = new Map();
     let libraryWarning = false;
+    // An activation that ended stops the library's requests too: no new
+    // work starts for a profile that is no longer the one that asked.
+    const ended = () => !this.profiles.holds(ticket);
     try {
+      if (ended()) throw new Error("activation ended");
       const ids = await this.api("datastoreMeta", {
         authKey,
         collection: "libraryItem",
       });
+      stale();
       if (!Array.isArray(ids)) throw new Error("invalid library");
       for (let offset = 0; offset < ids.length; offset += 100) {
+        if (ended()) throw new Error("activation ended");
         const items = await this.api("datastoreGet", {
           authKey,
           collection: "libraryItem",
           ids: ids.slice(offset, offset + 100).map(([id]) => id),
           all: false,
         });
+        stale();
         if (!Array.isArray(items)) throw new Error("invalid library");
         for (const item of items) {
           if (item.removed && !item.temp) continue;
@@ -742,12 +784,15 @@ export class Client {
         }
       }
     } catch {
+      // A changed sign-in or a newer import writes nothing at all.
+      stale();
       libraryWarning = true;
     }
     // Library items belong to the profile that asked; after a switch or a
     // re-lock they are not written anywhere (the viewer can sync again).
     const library = this.profiles.holds(ticket);
-    if (!library && (favorites.length || progress.size)) libraryWarning = true;
+    if (!library) libraryWarning = true;
+    stale();
     await this.transact(() => {
       const owner = this.profiles.store.active;
       const seal = fields(this.state, ["addons", "lastSync"]);
@@ -799,9 +844,12 @@ export class Client {
       imported: compatible.length,
       skipped,
       libraryWarning,
+      ...(library ? {} : { profileChanged: true }),
     };
   }
   logout() {
+    // An import or sign-in still waiting for Stremio writes nothing now.
+    this.stremioAuthEpoch++;
     // A commit (sixth pass, V2): refused, the sign-in stays.
     this.transact(() => {
       const seal = fields(this.state, ["auth"]);

@@ -95,6 +95,10 @@ export default {
     "Finish setting up the addon on its website first, then paste the configured install link",
   "بيانات تسجيل الدخول غير صالحة": "Invalid sign-in details",
   "سجّل الدخول إلى ستريميو أولاً": "Sign in to Stremio first",
+  "تغيّر تسجيل الدخول إلى ستريميو أثناء العملية؛ لم يتغير شيء":
+    "The Stremio sign-in changed while this was running; nothing changed",
+  "تغيّر تسجيل الدخول إلى ستريميو أو بدأت مزامنة أحدث؛ لم تكتب هذه المزامنة شيئًا":
+    "The Stremio sign-in changed or a newer sync started; this sync wrote nothing",
   "استجابة الإضافات غير صالحة. لم تتغير إضافاتك.":
     "The addons response isn't valid. Your addons didn't change.",
   "إضافة غير مدعومة": "Unsupported addon",
