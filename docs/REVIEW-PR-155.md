@@ -358,3 +358,184 @@ report a refused web write as a failure but keep the change in memory and
 write it with the next snapshot (and it may sync); they are never undone,
 so no device diverges, but their reply does not match what is kept until
 that later write. Not changed in this pass.
+
+# Sixth pass — Codex's fifth review (2026-11-18)
+
+Codex re-reviewed at `f990cf5` on Windows x64 (Node 24.19.0, Electron
+44.9.3, real DPAPI) and Chromium 141/157, fixed one accessibility finding
+itself (V3, `47a32cf`: each legacy-import choice group named by its
+heading through `aria-labelledby`) and returned **NO-GO** on two confirmed
+findings: **V1 (P1)**, a refused profile removal had already deleted that
+profile's downloaded media, and **V2 (P2)**, reversible actions saved with a
+plain write kept a refused change in memory, where a backup, account sync
+and the next unrelated save carried it. It confirmed Q6–Q10 within their
+tested scope. This pass answers V1 and V2 on the same branch, on top of
+`47a32cf` (kept as it is: its `aria-labelledby` and stable React ID are
+untouched), no force push, nothing merged, tagged, versioned (still
+0.55.0), deployed or published, PR still a draft. It is the author's
+account; the decision stays with the next independent review.
+
+- Environment: Linux container, **Node 24.22.3** (`/opt/node24`), npm
+  11.19.1, Playwright's Chromium 157.0.8103.78, **Electron 44.9.3 for
+  Linux** (downloaded by the package's own `install.js`, outside the
+  repository), Xvfb, Wrangler 4.141.0 outside the repository. No Windows,
+  DPAPI, NTFS, MPV or installers here.
+- The review (`Riwaq-PR155-Fifth-Review-AR.md`) and its evidence
+  (`Riwaq-PR155-Fifth-Evidence.zip`, 192 entries listed before extraction,
+  extracted into an isolated folder) were read in full and kept outside the
+  repository. Its harnesses were read before use and run only against
+  disposable stores; their exit code 0 records the defect they observed, so
+  their JSON was read.
+
+## Reproduced before changing anything
+
+- **V1** in the real Electron main process (`scripts/test-profile-remove-native.mjs`,
+  which mirrors Codex's `native-offline-refusal.mjs`: real IPC, the real
+  `profile.bin` written through safeStorage, a directory occupying
+  `profile.bin.tmp`). Off Windows, main needs a stand-in for the Win32
+  video host (`koffi` loads `user32.dll` at import) and safeStorage uses
+  Chromium's basic store; both stand-ins live outside the repository and
+  are loaded by a wrapper folder (`RIWAQ_ELECTRON_APP`). On `47a32cf`: the
+  removal is refused, `profile.bin` is byte-for-byte unchanged, B is still
+  listed, and **B's media file is already gone** (ENOENT). A Node replay of
+  main's old order (`forgetProfile`, then `Profiles.remove`) over a real
+  file store: `refused: true, profileKept: true, mediaExistsAfterRefusal:
+  false, recordAfterLaterSaveAndRestart: 0` — Codex's result exactly.
+- **V2**: Codex's `check-plain-sync.mjs` (imports pointed at a source tree
+  given on the command line, assertions untouched) on `47a32cf`: revision
+  1→2 by a PUT while the favorite's write was out, `secondReceived: true`,
+  `firstSavedAfterLaterSnapshot: true`. In Chromium, the new case 12 of
+  `scripts/test-web-durability.mjs` on `47a32cf`'s build: the refused
+  favorite is in both backups, and the refused source removal and Trakt
+  opt-in are written by the later language save.
+
+## V1 — a profile's downloads are deleted only after its removal is written
+
+**Cause.** Main's `profileRemove` called `OfflineLibrary.forgetProfile`
+(stop the download, delete every file, drop the records, save) and only
+then `Profiles.remove` (the commit). Two stores, files first: a refused
+encrypted write found the files already deleted, and `forgetProfile` had
+dropped the records in memory, so the next unrelated save made that loss
+durable.
+
+**Order now** (`OfflineLibrary.removeProfile`, called by main):
+
+1. **Before the write** (`prepareRetire`): the PIN check, playback stopped
+   when the profile is active, new download actions for it refused
+   (`removing`), the poster queue drained, its running download stopped as
+   a **pause** (a cancel deletes the partial, which must survive a refusal),
+   and a file being played or deleted refuses the removal. Nothing that
+   lasts changes.
+2. **The write** (`retire`, passed to `Profiles.remove` as `also`): the
+   profile, its local songs and the move of its download records into
+   `state.offlineTrash` (`{id, at}` only) are one encrypted write. Refused,
+   one undo puts all of it back; every file is still on disk.
+3. **After the write is durable** (`sweep`): the trashed files are deleted
+   (poster, partial, media, in `remove()`'s order). An entry leaves
+   `offlineTrash` only when all its files are gone, and the list is saved
+   (a failed save of that only means the next sweep finds nothing left to
+   delete). A file another program holds keeps its entry: the removal
+   stands, is not reported as rolled back, and answers
+   `offlineCleanup: { pending }`, which the Profiles dialog turns into a
+   sentence; the sweep runs again a minute later (five times a session) and
+   at every start. The sweep drops an entry a live record names without
+   touching its file, accepts only `<32 hex>` names inside the downloads
+   folder and removes a link, never its target.
+
+The states are distinct: refused before the write (nothing changed),
+written with clean-up pending (`offlineTrash` names files on disk, retried),
+written and complete (`offlineTrash` empty), interrupted (a crash after the
+write or halfway through leaves entries the next start finishes). The web
+edition has no downloads; its session-only song picks are now dropped once
+the removal is durable rather than before it.
+
+**Tests.** `tests/review-pr155-round6-offline.test.mjs` (10, real Client,
+Profiles and files, a store writing `profile.bin.tmp` then renaming as
+main does): refusal by Codex's blocker with a later save and a restart;
+refusal after the temporary file was written; an inactive profile removed
+with three other profiles' files untouched and nothing in a backup; a held
+file (pending reported, durable entry, idempotent retries, deleted after a
+restart) and an already missing one; a crash after the write and halfway
+through clean-up; a live record's file, a bad name and a link's target
+never deleted; a running download paused (partial kept on refusal, deleted
+once written); the active profile with a PIN (wrong PIN changes nothing, a
+refused write brings it back locked in a new activation); A→B→A while the
+removal waits (downloads frozen, nothing deleted before the write, playback
+stopped when the profile became active); a played file refusing first.
+`tests/review083.test.mjs`'s locked-file test now expects the durable
+clean-up entry instead of a refused removal (the old expectation was the
+V1 order). Real Electron main, `scripts/test-profile-remove-native.mjs`:
+refused removal keeps record and bytes across a language save and a
+restart; the written removal deletes B's file and keeps A's and C's; a
+crash after the write is finished by the next start without touching a
+live record's file. Its held-file step needs Windows (a file held without
+delete sharing) and reports itself skipped elsewhere.
+
+## V2 — a refused reversible action never reaches committed state, a backup or the account
+
+**Cause.** `Client.atRest` (Q7) made sync and backups wait for commits, and
+commits undo themselves when refused; Live TV, integration preferences,
+Stremio's import and several other actions changed memory and called a
+plain `persist()`, which is neither undone nor waited for.
+
+**Classification** (every `persist()` call site was read):
+
+| Category | Paths | Policy |
+| --- | --- | --- |
+| A — the viewer's reversible actions | Live TV favourite, source add, toggle, removal; integration preferences (`Integrations.save`) and disconnect; AniList's pasted token; the Letterboxd CSV import; Stremio's import, sign-in and sign-out; notification targets; debrid keys; home server add, removal, toggle; the AI key; update choices (core, web, desktop updater); usage and onboarding; the Discord app ID; shader folder and file, MPV path; local music add and edits | **Commits.** `Client.transact(change)`: `change` returns the undo of exactly what it changed (`core/undo.mjs` `fields` puts back only fields still holding what the change left, so a token rotated meanwhile in the same integration is never rolled back); whole-key `Client.commit` where nothing plain shares the key (settings). Refused: undone before any later snapshot (the desktop at once, the web when IndexedDB answers), the call fails, sync and backups waited meanwhile. |
+| B — effects that already happened elsewhere | a token a provider issued (Trakt/Simkl device grant) or rotated (Trakt, Simkl, Spotify refresh); the Riwaq account's session and keys; a Simkl session the provider ended | **Plain, never undone** (the old refresh token is spent): kept in memory, written again with the next save (main also saves on quit); travels only in a secrets backup or an account with secrets on. |
+| C — background state | positions and progress, connection-test statuses, update checks, provider list syncs and resume points, tag reads, a source's refresh time, the queue entry dropped when a viewing starts | **Plain**, as before. |
+
+**Changes.** `Client.transact` and `Client.ownerPart` (`core/client.mjs`),
+`core/undo.mjs`; each path above. Stremio's import now gathers addons,
+library and positions first and writes them as one commit at the end
+(nothing of it sits in the state across its requests), for the profile that
+asked only (a switch or re-lock meanwhile writes no library and says so).
+A disconnect's remote effect waits for the write: Simkl's token revoke is
+sent only once the disconnect is durable, and a refused credentials change
+brings the old account back unrevoked. The usage pulse or its deletion
+request is sent after the choice is durable. Notification targets are built
+as a copy and assigned whole, so a refused or invalid change no longer
+leaves a half-edited target.
+
+**Tests.** `tests/review-pr155-round6-durability.test.mjs` (38): twelve
+actions refused by the web's vault (abort without an error object) —
+undone in memory, absent from both backups, never written by a later
+language save or seen after a reload, kept once retried — and the same on
+the desktop's throwing store; a QuotaExceededError; two overlapping edits
+(the one built on a refused one goes with it; an unrelated plain save is
+kept); the Letterboxd import's undo landing in its own profile after a
+switch and a lock; a refused credentials change bringing the Simkl account
+back with no revoke sent; Stremio's import refused and retried (once each);
+two devices on the real account service for a Live TV favourite (Codex's
+case), a source removal, a Trakt preference and Stremio's addon import —
+refused while a manual sync waits: no PUT, no new revision, device B
+unchanged; accepted: one PUT after it is durable, none on the next sync,
+device B receives it — one accepted and one refused change together, a
+stale base (409) and a network failure, sign-out while a write is out; the
+token policy (a refused opt-in leaves a token rotated meanwhile in place,
+written with the next save, never in a backup without secrets). On
+`47a32cf` the same file fails 35 of 38 (the three that pass do not depend
+on the change). Chromium (`scripts/test-web-durability.mjs` case 12, real
+sealed IndexedDB): Codex's three refusals (abort-after-success, abort,
+request error) are answered as failures and undone, absent from both
+backups, not written by a later language save, and kept once retried.
+
+Two observations made while testing, both earlier behaviour and unchanged:
+an account carries the removal of a Live TV source only while another
+source remains (a payload without sources keeps the device's own,
+`restoreState`), and a Stremio sign-out does not reach other devices (a
+payload without Stremio keeps the device's sign-in). Reading
+`publicState()` creates an empty `spotify` integration entry; harmless,
+but a test that replaces `state.integrations` whole sees one more upload.
+
+## Not verified in this pass
+
+Windows, DPAPI, NTFS and a file held by another program (the held-file
+step of the native script is Windows-only; the same path runs in Node with
+a refusing delete), MPV and the native HUD, packaging, the NSIS and
+portable builds, installers and upgrade: Electron ran on Linux with the
+stand-ins above. Firefox. The Worker on Cloudflare's edge, a remote D1,
+production (not read or touched in this pass). A provider sending tracking
+history while an opt-in's write is still out (the web's IndexedDB window):
+the consent was given in the interface, but it is not yet durable then.
