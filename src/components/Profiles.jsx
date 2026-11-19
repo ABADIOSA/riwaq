@@ -44,6 +44,15 @@ export default function Profiles({
   const [pinTarget, setPinTarget] = useState(null);
   const [pinForm, setPinForm] = useState({ current: "", next: "" });
   const [challenge, setChallenge] = useState(null);
+  // The removal is written; files another program holds wait on a clean-up
+  // list until they can be deleted (sixth pass, V1).
+  const removed = (result) => {
+    if (result?.offlineCleanup?.pending)
+      notice?.(
+        "حُذف الملف الشخصي، وبقيت بعض ملفات تنزيلاته مفتوحة في برنامج آخر؛ سيحذفها رِواق حين تُغلق",
+      );
+    return result;
+  };
 
   if (unlockRoom)
     return (
@@ -144,7 +153,9 @@ export default function Profiles({
                   onClick={() =>
                     profile.protected
                       ? setChallenge({ profile, intent: "remove", pin: "" })
-                      : update("profileRemove", { id: profile.id })
+                      : update("profileRemove", { id: profile.id }).then(
+                          removed,
+                        )
                   }
                   title="حذف الملف الشخصي"
                 >
@@ -260,6 +271,7 @@ export default function Profiles({
                 ...challenge.values,
               },
             );
+            if (challenge.intent === "remove") removed(result);
             if (result) setChallenge(null);
           }}
         >

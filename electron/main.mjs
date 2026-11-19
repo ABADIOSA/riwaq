@@ -2153,18 +2153,19 @@ const methods = {
   profileCreate: (a) => client.profiles.create(a),
   profileUpdate: (a) => client.profiles.update(a),
   profileRemove: async (a) => {
-    client.profiles.check({ ...a, intent: "remove" });
-    if (client.profiles.store.active === a.id) {
+    const stop = async () => {
       playbackRequest.cancel();
       stopLocalMusic();
       await player.stop();
-    }
-    // Its downloads go with it (electron/offline.mjs). They are files on
-    // disk, deleted for good with their records before the profile goes
-    // (never a record without its file, or a file without its record); the
-    // profile itself and its local songs go in one write, put back whole
-    // when that write is refused (fifth pass, Q6).
-    await offline?.forgetProfile(a.id);
+    };
+    // Its downloads go with it (electron/offline.mjs, sixth pass V1): the
+    // profile, its local songs and its download records go in one write,
+    // put back whole when that write is refused (fifth pass, Q6), and the
+    // files are deleted only after it is durable; a file another program
+    // holds stays on a durable clean-up list until it can go.
+    if (offline) return offline.removeProfile(a, { stop });
+    client.profiles.check({ ...a, intent: "remove" });
+    if (client.profiles.store.active === a.id) await stop();
     return client.profiles.remove(a);
   },
   profileSwitch: async (a) => {
@@ -2985,6 +2986,9 @@ app
           return scaled.toJPEG(80);
         },
       });
+      // Files of profiles removed before a crash or while another program
+      // held them (sixth pass, V1): their removal is durable, so they go.
+      offline.sweep().catch((error) => logError("offline", error));
     } catch (error) {
       dialog.showErrorBox("Riwaq", error.message);
       app.exit(1);

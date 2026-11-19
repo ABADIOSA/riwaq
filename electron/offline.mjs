@@ -18,6 +18,13 @@ import {
 } from "./artwork-http.mjs";
 
 const ID = /^[a-f0-9]{32}$/;
+// Files of removed profiles still to delete (sixth pass, V1): 6 profiles of
+// 50 downloads, several times over, before a start-up sweep empties it.
+const TRASH_LIMIT = 2000;
+// A clean-up that a held file stopped is tried again this much later, a few
+// times a session; every start also tries it.
+const SWEEP_RETRY_MS = 60000;
+const SWEEP_RETRIES = 5;
 const MAX_BYTES = 500 * 1024 ** 3;
 const POSTER_BYTES = 128 * 1024;
 const ARTWORK_TRIES = 3;
@@ -344,6 +351,20 @@ export class OfflineLibrary {
     this.deleting = new Set();
     this.job = null;
     this.playing = "";
+    this.sweeping = null;
+    this.sweepTimer = null;
+    this.sweepRetries = 0;
+    // Downloads of removed profiles, written in the same encrypted write as
+    // the removal and deleted from disk only after it (sixth pass, V1).
+    // An entry leaves only when all its files are gone, so a file is never
+    // left without a record that owns it.
+    const trash = Array.isArray(client.state.offlineTrash)
+      ? client.state.offlineTrash
+      : [];
+    const seen = new Set();
+    client.state.offlineTrash = trash
+      .filter((x) => ID.test(x?.id) && !seen.has(x.id) && seen.add(x.id))
+      .map((x) => ({ id: x.id, at: Number(x.at) || 0 }));
     client.state.offline ||= {};
     for (const [profile, items] of Object.entries(client.state.offline)) {
       client.state.offline[profile] = (Array.isArray(items) ? items : [])
@@ -741,25 +762,95 @@ export class OfflineLibrary {
     }
   }
   /**
-   * A removed profile's downloads go with it: its download stops and its
-   * files and records are deleted (they can be gigabytes). Called after the
-   * removal's own PIN check, so it does not ask for the active profile.
+   * Removes a profile with its downloads (sixth pass, V1). Files on disk
+   * and the encrypted state are two stores, so the order makes it safe:
+   *
+   * 1. Before the write (`prepareRetire`): new download actions for the
+   *    profile are refused, its running download stops as a pause (its
+   *    partial stays), and a file being played or deleted refuses the
+   *    removal. No record and no file changes.
+   * 2. The write (`retire`, inside Profiles.remove's commit): the profile
+   *    and its local songs go, and its download records move to
+   *    `offlineTrash`, all in one encrypted write. A refused write puts
+   *    every part back, and every file is still there.
+   * 3. After the write is durable (`sweep`): the trashed files are deleted.
+   *    An entry leaves the list only when all its files are gone; a file
+   *    another program holds keeps its entry, which is tried again a minute
+   *    later and at every start, so the removal stands and nothing is left
+   *    on disk without a record.
+   *
+   * `stop` stops playback when the profile is active (main's player).
+   * Answers the public state, with `offlineCleanup.pending` when files are
+   * still waiting to be deleted.
+   */
+  async removeProfile(args, { stop = async () => {} } = {}) {
+    const profiles = this.client.profiles;
+    profiles.check({ ...args, intent: "remove" });
+    const id = args?.id;
+    const stopIfActive = async () => {
+      if (profiles.store.active === id) await stop();
+    };
+    await stopIfActive();
+    // Held until its files are deleted: no download action for it starts
+    // in between.
+    const release = await this.prepareRetire(id);
+    try {
+      // The profile may have become active while its download stopped.
+      await stopIfActive();
+      const state = profiles.remove(args, { also: () => this.retire(id) });
+      // A store that answers later than it is asked (the web's) is waited
+      // for; the desktop's has answered already. Nothing is deleted before
+      // the removal is durable.
+      await this.client.durable();
+      const { pending } = await this.sweep();
+      return pending ? { ...state, offlineCleanup: { pending } } : state;
+    } finally {
+      release();
+    }
+  }
+  /**
+   * The same three steps for the downloads alone, the records' move
+   * written on its own (and undone when that write is refused). Answers
+   * the sweep's `{ pending }`.
    */
   async forgetProfile(profileId) {
+    const release = await this.prepareRetire(profileId);
+    try {
+      const undo = this.retire(profileId);
+      try {
+        this.persist();
+      } catch (error) {
+        undo();
+        throw error;
+      }
+      return await this.sweep();
+    } finally {
+      release();
+    }
+  }
+  /**
+   * Step 1: freezes the profile's downloads for the removal. Throws, having
+   * changed nothing that lasts, when one is in use. Returns the release.
+   */
+  async prepareRetire(profileId) {
     if (this.removing.has(profileId))
       throw Error("جارٍ حذف تنزيلات هذا الملف الشخصي؛ انتظر انتهاء العملية");
     this.removing.add(profileId);
-    this.cancelArtwork();
+    const release = () => this.removing.delete(profileId);
     try {
+      this.cancelArtwork();
       // A rename already submitted to the OS cannot be aborted. Let that
-      // commit finish before cleanup, so it cannot recreate a deleted poster.
+      // commit finish first, so it cannot recreate a deleted poster.
       await this.artworkQueue;
       if (this.job?.profile === profileId) {
+        // Paused, not cancelled: a cancel deletes the partial, which must
+        // stay should the removal be refused.
+        this.job.pause = true;
         this.job.abort.abort();
         await this.job.done;
       }
       const bag = this.client.state.offline?.[profileId];
-      for (const item of Array.isArray(bag) ? [...bag] : []) {
+      for (const item of Array.isArray(bag) ? bag : []) {
         if (!ID.test(item?.id)) throw Error("التنزيل غير صالح");
         if (
           item.id === this.playing ||
@@ -767,32 +858,125 @@ export class OfflineLibrary {
           this.deleting.has(item.id)
         )
           throw Error("أوقف مشاهدة التنزيل قبل حذفه");
-        try {
-          // Delete the partial first: a locked partial must not destroy an
-          // otherwise playable complete copy or drop its owning record.
-          await this.deleteFile(this.path(item.id, true));
-          await this.deleteFile(this.path(item.id));
-          await this.deleteFile(this.posterPath(item.id));
-          await this.deleteFile(`${this.posterPath(item.id)}.tmp`);
-        } catch {
-          throw Error(
-            "تعذر حذف بعض التنزيلات؛ أغلق البرامج التي تستخدم الملفات ثم حاول حذف الملف الشخصي مجددًا",
-          );
-        }
-        this.client.state.offline[profileId] = this.bag(profileId).filter(
-          (x) => x.id !== item.id,
-        );
-        this.artworkAttempted.delete(item.id);
       }
-      delete this.client.state.offline?.[profileId];
-    } finally {
-      this.removing.delete(profileId);
-      // Save partial progress too: failures keep the profile and every
-      // undeleted file's record, so deletion can be retried after restart.
-      this.persist();
+      if (
+        (this.client.state.offlineTrash?.length || 0) +
+          (Array.isArray(bag) ? bag.length : 0) >
+        TRASH_LIMIT
+      )
+        throw Error(
+          "ما زالت ملفات ملف شخصي حُذف سابقًا تنتظر الحذف؛ أغلق البرامج التي تستخدمها ثم أعد تشغيل رِواق",
+        );
+      return release;
+    } catch (error) {
+      release();
+      throw error;
     }
   }
+  /**
+   * Step 2, inside the removal's write: the profile's records move to the
+   * clean-up list. Returns the undo, which puts them back exactly.
+   */
+  retire(profileId) {
+    const state = this.client.state;
+    const offline = (state.offline ||= {});
+    const had = Object.hasOwn(offline, profileId);
+    const items = had ? offline[profileId] : undefined;
+    const at = Date.now();
+    const known = new Set((state.offlineTrash || []).map((x) => x.id));
+    const added = (Array.isArray(items) ? items : [])
+      .filter((x) => ID.test(x?.id) && !known.has(x.id))
+      .map((x) => ({ id: x.id, at }));
+    state.offlineTrash = [...(state.offlineTrash || []), ...added];
+    delete offline[profileId];
+    return () => {
+      const now = this.client.state;
+      now.offlineTrash = (now.offlineTrash || []).filter(
+        (x) => !added.includes(x),
+      );
+      const bags = (now.offline ||= {});
+      if (had && !Object.hasOwn(bags, profileId)) bags[profileId] = items;
+    };
+  }
+  /**
+   * Step 3, after the write and at every start: deletes the files of every
+   * clean-up entry. Idempotent; one at a time. Never deletes a file a live
+   * record names (such an entry is dropped), one being played, or anything
+   * outside the downloads folder (only `<32 hex>` names inside it, each
+   * removed without following links). Answers `{ pending }`.
+   */
+  sweep() {
+    if (this.sweeping) return this.sweeping;
+    clearTimeout(this.sweepTimer);
+    this.sweepTimer = null;
+    this.sweeping = (async () => {
+      const state = this.client.state;
+      const live = new Set();
+      for (const bag of Object.values(state.offline || {}))
+        for (const item of Array.isArray(bag) ? bag : []) live.add(item?.id);
+      let pending = 0;
+      let changed = false;
+      for (const entry of [...(state.offlineTrash || [])]) {
+        const drop = () => {
+          state.offlineTrash = (state.offlineTrash || []).filter(
+            (x) => x !== entry,
+          );
+          changed = true;
+        };
+        if (!ID.test(entry?.id) || live.has(entry.id)) {
+          drop();
+          continue;
+        }
+        const id = entry.id;
+        if (
+          id === this.playing ||
+          this.using.has(id) ||
+          this.deleting.has(id)
+        ) {
+          pending++;
+          continue;
+        }
+        this.deleting.add(id);
+        try {
+          // remove()'s order: the poster before the media, so a rename in
+          // flight cannot leave a poster behind.
+          await this.deleteFile(`${this.posterPath(id)}.tmp`);
+          await this.deleteFile(this.posterPath(id));
+          await this.deleteFile(this.path(id, true));
+          await this.deleteFile(this.path(id));
+          this.artworkAttempted.delete(id);
+          drop();
+        } catch {
+          pending++;
+        } finally {
+          this.deleting.delete(id);
+        }
+      }
+      if (changed)
+        try {
+          this.persist();
+        } catch {
+          // The list as last written still names these: the next sweep
+          // finds their files gone and drops them again.
+        }
+      if (pending && this.sweepRetries < SWEEP_RETRIES) {
+        this.sweepRetries++;
+        this.sweepTimer = setTimeout(() => {
+          this.sweepTimer = null;
+          this.sweep().catch(() => {});
+        }, SWEEP_RETRY_MS);
+        this.sweepTimer.unref?.();
+      }
+      return { pending };
+    })().finally(() => {
+      this.sweeping = null;
+    });
+    return this.sweeping;
+  }
   async stop() {
+    clearTimeout(this.sweepTimer);
+    this.sweepTimer = null;
+    await this.sweeping?.catch(() => {});
     this.cancelArtwork();
     if (this.job) this.job.pause = true;
     this.job?.abort.abort();

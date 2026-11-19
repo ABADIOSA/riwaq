@@ -1260,9 +1260,18 @@ export async function startBridge({ version, store }) {
         stopLocalMusic();
         await player.stop();
       }
-      music.forget(a.id);
       const state = client.profiles.remove(a);
       followArtSession();
+      // Songs picked in this visit go once the removal is durable (sixth
+      // pass, V1); a refused write keeps them with the profile it put back.
+      const id = a.id;
+      client
+        .durable()
+        .catch(() => {})
+        .then(() => {
+          if (!client.profiles.store.list.some((p) => p.id === id))
+            music.forget(id);
+        });
       return state;
     },
     profileSwitch: async (a) => {

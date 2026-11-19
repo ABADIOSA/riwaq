@@ -310,7 +310,15 @@ export class Profiles {
       };
     });
   }
-  remove({ id, pin }) {
+  /**
+   * Removes a profile in one write. `also` (desktop main, sixth pass V1)
+   * makes further changes that belong in that same write and returns their
+   * undo: the desktop moves the profile's download records into a durable
+   * clean-up list there, and deletes their files only once this write is
+   * durable (electron/offline.mjs). A refused write undoes both, so nothing
+   * of the profile is lost.
+   */
+  remove({ id, pin }, { also } = {}) {
     this.check({ id, pin, intent: "remove" });
     // The active profile's live references into its bucket first, so an
     // undo puts back what it held at this moment.
@@ -327,6 +335,8 @@ export class Profiles {
     const hadMusic = !!music && Object.hasOwn(music, id);
     const songs = hadMusic ? music[id] : undefined;
     return this.transact(() => {
+      // Its own part first: should it throw, nothing of the profile moved.
+      const alsoUndo = typeof also === "function" ? also() : undefined;
       store.list = store.list.filter((entry) => entry.id !== id);
       delete store.data[id];
       if (hadMusic) delete music[id];
@@ -336,6 +346,10 @@ export class Profiles {
         this.apply();
       }
       return () => {
+        if (typeof alsoUndo === "function")
+          try {
+            alsoUndo();
+          } catch {}
         const now = this.store;
         if (!now.list.some((entry) => entry.id === id))
           now.list.splice(Math.min(index, now.list.length), 0, profile);
