@@ -539,3 +539,257 @@ stand-ins above. Firefox. The Worker on Cloudflare's edge, a remote D1,
 production (not read or touched in this pass). A provider sending tracking
 history while an opt-in's write is still out (the web's IndexedDB window):
 the consent was given in the interface, but it is not yet durable then.
+
+# Seventh pass — Codex's sixth review (2026-11-19)
+
+Codex re-reviewed at `10e0985` on Windows x64 (Node 24.19.0, Electron
+44.9.3, real DPAPI, NTFS and a real FileShare.Read lock), confirmed V1 and
+V2 fixed in their measured cases, fixed four narrow items itself (W6
+cleanup message, W7 symlink test split, W8 real lock in the native
+harness, W9 `undo.mjs` in the upgrade fixture: `ac0d628`, `0722a33`,
+`dc38641`, `5238e75`, kept here as they are) and returned **NO-GO** on five
+findings: W1, W3, W4 and W5 reproduced, W2 argued from the source. Issue
+#156 (a tester's report, not part of Codex's review) is answered in the
+same pass. Same branch, on top of `5238e75`, no force push; nothing
+merged, tagged, versioned (still 0.55.0), deployed or published; the PR
+stays a draft. This is the author's account; the decision stays with the
+next independent review.
+
+- Environment: Linux container, **Node 24.22.3** (`/opt/node24`), npm
+  11.19.1, Playwright's Chromium, **Electron 44.9.3 for Linux** (the
+  release zip, SHA-256 checked against Electron's own SHASUMS256.txt, put
+  in the ignored `node_modules/electron/dist`), Xvfb. No Windows, DPAPI,
+  NTFS, MPV or installers here.
+- The review (`Riwaq-PR155-Sixth-Review-AR.md`) and its evidence
+  (`Riwaq-PR155-Sixth-Evidence.zip`, 220 entries checked for absolute
+  paths, `..`, drive letters and links before extraction, extracted outside
+  the repository) were read in full. Codex's scripts were read before use
+  and run with their own relative layout (`work/round6` pointed at a tree)
+  against disposable stores. Their exit 0 records the defect they
+  observed, so their JSON was read, not their status.
+
+## Reproduced before changing anything (on `5238e75`)
+
+- **W1** `offline/overlapping-cleanup.mjs`: `secondMediaRemained: true,
+  secondPendingAdvertised: 0, secondMediaTracked: true, retryScheduled:
+  false` — Codex's result exactly.
+- **W3** `state/stremio-activation-order.mjs`: with A → B → A during
+  `addonCollectionGet`, `syntheticTitleWasAdded: true,
+  syntheticPositionWasAdded: true, libraryWarning: false`. The control
+  (the switch during `datastoreMeta`) wrote nothing.
+- **W4** `policy/check-sync-clears.mjs`: last source and Stremio sign-out
+  `afterPullB: 1, afterPullA: 1, freshDevice: 1`; one of two sources kept
+  at 1 (control). The same harness extended to two more clears (a probe
+  outside the repository) found the same for **a removed configured addon
+  and a cleared Discord app ID**.
+- **W5** `policy/check-integration-effects.mjs`:
+  `failedDisconnectRestoredSpentToken: true, spentTokenPersistedAgain:
+  true`; its five controls held.
+- **W2**, which Codex left unproven, **reproduced** with a held IndexedDB-
+  shaped write (`DurableWriter`) and a local fake endpoint. The opt-in was
+  then refused, and while it was still being written these left: a usage
+  pulse (1, with no deletion ever sent for its token), Trakt history (1),
+  Trakt scrobble start/stop (2), a Simkl scrobble start (1) and AniList
+  requests (2). Only a store that answers later (the web edition) has the
+  window; the desktop writes synchronously and undoes before returning.
+- **#156** in Chromium on `5238e75`'s web build: with the page scrolled,
+  Home on Home, Discover on Discover and the logo on Home left the page
+  where it was (1600 px stayed 1600); Home → Discover and the logo from
+  Discover opened at the old offset; Home from See all or a title page
+  came back at the offset saved when that layer opened (1049–1698 px).
+
+## W1 — overlapping removals each get a pass that reads their entries
+
+Cause: `sweep()` handed a call made during a pass that pass's promise, and
+the pass had copied `offlineTrash` before the second removal added to it;
+pending and the retry timer came from that copy.
+
+Fix (`electron/offline.mjs`): calls are counted; one pass at a time; a
+call made during a pass is answered only after another pass that reads the
+list again (`sweepPass`), so both removals' entries are deleted or
+reported before either caller hears back. The loop repeats only for calls
+made during a pass. A held file is retried by the timer at most
+`SWEEP_RETRIES` times, and a newly committed removal resets that budget for
+what it adds. `removeProfile`/`forgetProfile` report `pending` for their
+own IDs. Entries whose removal is not yet durable (`uncommitted`) are
+skipped by any other pass until that removal answers; a refused write puts
+them back with their files. A live record is checked at each entry, not
+once per pass. `stop()` also cancels a retry set by the pass it waited for.
+
+Tests: `tests/review-pr155-round7-offline.test.mjs`, 7 cases over real
+files, **all 7 fail on `5238e75`**. They cover C removed while B's pass is
+paused inside its first delete, C's file held (reported to C, kept durably,
+timer set, deleted once let go), three removals over one paused pass with a
+restart, a file held for good (bounded retries; a new removal's own
+budget), a pass started by another removal while a removal's write is
+pending and then refused (files kept), a live record naming an entry
+mid-pass plus invalid and missing entries, and `forgetProfile` counting
+only its own. Codex's `overlapping-cleanup.mjs` on the new head now fails
+at its defect assertion with `secondMediaRemained: false,
+secondMediaTracked: false`. In the real Electron main (Linux, stand-ins
+below), a port of Codex's `native-overlap.mjs` uses `chattr +i` in place of
+the Windows lock, because both make the delete fail with EPERM, which
+`removeFile` retries. See VERIFICATION.md for its numbers.
+
+## W3 — the Stremio import holds the activation and sign-in it was asked under
+
+Cause: `sync()` took its profile ticket after `addonCollectionGet`.
+
+Fix (`core/client.mjs`): the ticket is taken before any request. An ended
+activation starts no library request (none, or no further page), and
+writes no library or position. The addons, shared by every profile, are
+still imported as before, and the answer says `libraryWarning` and
+`profileChanged`. A Stremio sign-out, another account's sign-in or a newer
+import while it runs (`stremioAuthEpoch`, `stremioSyncs`, the key itself)
+makes it write nothing at all; it rejects, saying so. The adjacent path,
+`authenticate()`, had the same shape: a sign-out while `getUser` was out
+came back signed in. Now a sign-out or a newer sign-in wins.
+
+Tests: `tests/review-pr155-round7-stremio.test.mjs`, 8 cases, **7 fail on
+`5238e75`** (the uninterrupted control passes on both). They cover A → B →
+A in the first request and in a later library page, lock/unlock and a
+restore's new activation, a sign-out at each of the three requests,
+another account signed in during the import, a sign-out during
+`getUser`, two overlapping imports, and an uninterrupted retry.
+
+## W4 — a clear carried by a secrets sync is not undone by another device
+
+Cause: `restoreState` read the empty source list, the null sign-in and a
+configured addon missing from the list as "not carried" and kept the
+receiving device's, whose next sync pushed them back.
+
+Fix, with no format change (`core/backup.mjs`, `core/sync-merge.mjs`,
+`core/account.mjs`): every release since 0.5 writes `auth` (null when
+signed out) exactly when a payload includes secrets (checked on every
+`v0.x.0` tag). Such a payload is authoritative for them: its empty list,
+null sign-in and absent configured addon are clears. A payload without
+secrets keeps the device's own, as before, so nothing local is cleared by
+a device that does not share secrets. An empty Discord app ID, always
+carried, clears it. `keepSignIn`: when a device first joins an account (no
+common ancestor), merge3 lets the account win conflicts. The device's own
+Stremio sign-in is kept over the account's absent one; afterwards a null
+the account changed to is a real sign-out. What a sign-out means is now in
+docs/ACCOUNTS.md: local, then the account and other devices with secrets
+on, never Stremio's own session.
+
+Tests: `tests/review-pr155-round7-sync-clears.test.mjs`, 9 cases over the
+real accounts service (in-memory SQLite), **6 fail on `5238e75`** (the
+local-only, join-with-own-sign-in and one-of-two controls pass on both).
+They cover the last source across A, B, a new device, reloads and five
+repeated syncs with no further PUT; a 409 between pull and push; an
+offline device returning; Stremio sign-out, a new device and a later
+sign-in; secrets off; a new device keeping its own sign-in; the
+configured addon and the Discord ID; and released payloads read by
+`restoreState`. `scripts/test-accounts-released.mjs` 3/3. Codex's harness
+with its expectation set to "no resurrection" fails on `5238e75` and
+passes here (0/0/0 for both clears, 1/1/1 for the one-of-two control).
+
+Limit: a device still on 0.55 or earlier reads a carried clear the old way
+and can push the value back until it updates; no payload marker can make
+an old client drop it.
+
+## W5 — a refresh during a disconnect keeps its token with its session
+
+Cause: a refresh that answered while the disconnect was written was
+dropped (the session no longer looked current), and the refused
+disconnect's undo put back the token Simkl had just retired. Trakt's
+single-use refresh had the same shape.
+
+Fix (`core/integrations.mjs`): a renewed token is kept on the session
+object it was asked for, unless another refresh or a sign-in replaced that
+token since. It is written only while that session is stored. A refused
+refresh ends that session wherever it is; a refused disconnect then puts
+it back without a token, asking to link again. A refused disconnect whose
+token changed meanwhile asks for a plain write on its own. The revoke after
+a written disconnect waits for a refresh still out, then sends the token
+Simkl honours. A newer session is never touched.
+
+Tests: `tests/review-pr155-round7-integrations.test.mjs`, 7 cases, **5 fail
+on `5238e75`** (the refresh-before and revoke-outage controls pass on
+both). They cover a refresh answering during a refused disconnect
+(renewed token in memory, on disk without another save, after a restart,
+and a retried disconnect revoking it), a refresh answering after the
+disconnect was written (waited for, its token revoked), a refused refresh
+during a refused disconnect (back without a token), a new sign-in after the
+disconnect, a revoke outage, and Trakt's rotated pair. Codex's sequence as
+a report: `5238e75` restored the spent token and wrote it again; here the
+renewed one is restored and on disk before any other save, with 0
+revocations.
+
+## W2 — an opt-in still being written opens no network
+
+Fix (`core/client.mjs`, `core/usage.mjs`, `core/integrations.mjs`):
+`holdOptIn(key, written)` marks a consent until the write that turned it on
+settles, and `optInPending(key)` reports the mark.
+
+- **Where it is checked:** `UsagePulse.tick` checks it. So does
+  `Integrations.allows(id, s, flag)`, which every tracking boundary now
+  uses: `queueHistory`, `flushHistory`, `observePlayback`,
+  `sendScrobble`, `observeSimkl`, `sendSimkl`, `flushSimkl`, the Simkl
+  resume read and import, `queueAnilist` and `flushAnilist` (including its
+  in-loop checks). Scrobbling needs both choices kept.
+- **Withdrawal needs no mark:** the flag is off in memory at once, a queue
+  being sent stops at its next entry, and a refused withdrawal leaves the
+  kept choice.
+- **Not consent:** token rotation stays a plain save.
+
+Tests: `tests/review-pr155-round7-consent.test.mjs`, 8 cases, **6 fail on
+`5238e75`** (the two withdrawal controls pass on both). They cover the
+usage timer under a pending and then refused opt-in, the first pulse only
+once durable and after a restart, withdrawal (immediate, refused kept,
+deletion once kept), and each of the four trackers refused and accepted
+with A → B → A in between. With a Trakt queue being sent, turning tracking
+off stops the rest. The probes, outside the repository, show 0 requests on
+the new head for all five paths.
+
+## Issue #156 — Home, Discover and the logo open their page at its start
+
+The page's scroller is the document: App saves and restores
+`window.scrollY`; the title page and See all are fixed layers whose
+`lockScroll()` puts the document's offset back when released. The narrow
+drawer releases its lock in a passive effect, after any layout effect, so a
+plain `scrollTo(0)` would be undone by the release.
+
+- `scrollPageToTop()` (`src/lib/scroll-lock.js`): while a lock is held,
+  the offset its release restores becomes the top; otherwise the document
+  goes to the top now.
+- **Callers:** the navigation's `navigate`, which serves the wheel, the
+  rail, the narrow drawer and the wordmark (already a named button calling
+  Home). It calls `scrollPageToTop()` once the destination is allowed; a
+  locked room still asks for its PIN and stays put.
+- **Motion:** smooth when the page is already the one shown and neither
+  `reduceMotion` nor `prefers-reduced-motion` is on; otherwise instant.
+- **Unchanged:** programmatic navigation and Back. Back from a title page
+  or See all still returns to the saved offset and focus. The logo and
+  markup are unchanged.
+
+Test: `scripts/test-ui-nav-top.mjs` (Chromium, local addon, Arabic and
+English at 1440, 768 and 390 px; the drawer at 390). It covers the
+same-page returns, Home ↔ Discover, the logo from Home and Discover,
+closing a title page or See all onto Home's start (nothing left inert), and
+Back from each to the same offset (±2 px). It also checks reduced motion
+(at the top on the next frame), Enter on Home and Space on the logo with
+focus kept, the logo as a named button, horizontal overflow and page
+errors. 54/54 here; on `5238e75`'s build the navigation checks fail and
+Back passes (VERIFICATION.md). Measured as `window.scrollY`, the scroller
+App uses. While writing it, an apparent See all Back gap (1579 → 703 px)
+was traced to Playwright scrolling the button into view inside `click()`
+(the restore matched the offset at the click on both builds), so the test
+clicks controls where they are on screen.
+
+## Not verified in this pass
+
+- Windows, DPAPI, NTFS and a Windows file lock. The native W1 checks ran
+  in Electron for Linux, with stand-ins outside the repository for the
+  Win32 video host and the OS keyring (Chromium's basic store) and
+  `chattr +i` for the lock.
+- MPV and the native HUD; packaging (`electron-builder --win … --publish
+  never`), NSIS, portable and upgrade.
+- Firefox and touch hardware; a screen reader.
+- A real Stremio, Simkl, Trakt or AniList account. Providers were
+  in-memory fakes.
+- The Worker on Cloudflare's edge, a remote D1 and production, none of
+  which was read or touched. `scripts/test-accounts-workerd.mjs` needs
+  Wrangler (see VERIFICATION.md).
+- A check of the #156 change by an agent that did not write it: left to
+  the independent review.
