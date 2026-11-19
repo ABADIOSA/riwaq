@@ -789,7 +789,7 @@ clicks controls where they are on screen.
 - A real Stremio, Simkl, Trakt or AniList account. Providers were
   in-memory fakes.
 - The Worker on Cloudflare's edge, a remote D1 and production, none of
-  which was read or touched. `scripts/test-accounts-workerd.mjs` needs
-  Wrangler (see VERIFICATION.md).
+  which was read or touched (the Worker and its migrations have no diff in
+  this pass; local workerd and D1 16/16, VERIFICATION.md).
 - A check of the #156 change by an agent that did not write it: left to
   the independent review.
