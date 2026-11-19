@@ -122,3 +122,26 @@ export function merge3(base, local, remote, { prefer = "local" } = {}) {
   }
   return prefer === "remote" ? remote : local;
 }
+
+/**
+ * Seventh pass, W4: a payload that carries secrets now clears the Stremio
+ * sign-in when its `auth` is null (core/backup.mjs restoreState). With no
+ * common ancestor (signing in), merge3 lets the account's side win a
+ * conflict, which would sign this device out of its own Stremio session
+ * just for joining an account that has none. There the sign-in this device
+ * has is kept (and goes up with the rest of its secrets); after the first
+ * sync, a null that the account's side changed to is a real sign-out.
+ */
+export function keepSignIn(base, local, remote, merged) {
+  if (
+    base === undefined &&
+    isObject(merged) &&
+    Object.hasOwn(merged, "auth") &&
+    merged.auth === null &&
+    isObject(local?.auth) &&
+    isObject(remote) &&
+    remote.auth == null
+  )
+    return { ...merged, auth: local.auth };
+  return merged;
+}

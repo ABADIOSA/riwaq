@@ -33,7 +33,7 @@ import {
 } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { collectBackup, restoreState } from "./backup.mjs";
-import { merge3, same } from "./sync-merge.mjs";
+import { keepSignIn, merge3, same } from "./sync-merge.mjs";
 import { ACCOUNT_SERVER } from "./account-server.mjs";
 
 export const USERNAME = /^[a-z0-9][a-z0-9_.-]{2,31}$/;
@@ -725,7 +725,12 @@ export class AccountHub {
                 ? bag.secrets
                 : !!pulled.envelope.secrets;
               const local = this.collect(secrets);
-              const merged = merge3(bag.base, local, remote, { prefer });
+              const merged = keepSignIn(
+                bag.base,
+                local,
+                remote,
+                merge3(bag.base, local, remote, { prefer }),
+              );
               if (!same(merged, local) && this.playbackActive()) {
                 this.deferred = true;
                 this.deferredPrefer = prefer;
