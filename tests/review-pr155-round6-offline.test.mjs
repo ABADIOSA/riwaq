@@ -293,26 +293,47 @@ test("V1: a crash after the removal's write (or halfway through its clean-up) is
   }
 });
 
-test("V1: the clean-up never deletes a file a live record names, a bad name, or a link's target", async () => {
+test("V1: the clean-up keeps a live download and rejects an invalid trash ID", async () => {
   const t = await setup();
   const outside = join(t.dir, "outside.bin");
   try {
     await t.seed(t.c, hex(7));
     await writeFile(outside, "not Riwaq's");
-    await symlink(outside, t.media(hex(4)));
     t.client.state.offlineTrash = [
       { id: hex(7), at: 1 }, // still C's: never deleted, the entry goes
       { id: "../outside", at: 1 },
-      { id: hex(4), at: 1 }, // a link: the link goes, never its target
     ];
     t.client.persist();
     const { offline } = t.restart();
     assert.deepEqual(
       t.client.state.offlineTrash.map((x) => x.id),
-      [hex(7), hex(4)],
+      [hex(7)],
     );
     assert.deepEqual(await offline.sweep(), { pending: 0 });
     assert.deepEqual(await readFile(t.media(hex(7))), bytes(hex(7)));
+    assert.equal(await readFile(outside, "utf8"), "not Riwaq's");
+    assert.deepEqual(t.store.disk().offlineTrash, []);
+  } finally {
+    await t.cleanup();
+  }
+});
+
+test("V1: the clean-up removes a file symlink without deleting its target", async (context) => {
+  const t = await setup();
+  const outside = join(t.dir, "outside.bin");
+  try {
+    await writeFile(outside, "not Riwaq's");
+    try {
+      await symlink(outside, t.media(hex(4)));
+    } catch (error) {
+      if (process.platform !== "win32" || error.code !== "EPERM") throw error;
+      context.skip("Windows file symlink creation is not permitted");
+      return;
+    }
+    t.client.state.offlineTrash = [{ id: hex(4), at: 1 }];
+    t.client.persist();
+    const { offline } = t.restart();
+    assert.deepEqual(await offline.sweep(), { pending: 0 });
     assert.equal(await readFile(outside, "utf8"), "not Riwaq's");
     assert.ok(await gone(t.media(hex(4))));
     assert.deepEqual(t.store.disk().offlineTrash, []);
