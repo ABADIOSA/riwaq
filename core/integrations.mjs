@@ -310,6 +310,11 @@ export class Integrations {
     // kept), and so does an account the new credentials disconnected; that
     // account's remote revoke waits until the write is durable.
     let revoke;
+    const was = {
+      trackHistory: !!s.trackHistory,
+      scrobble: !!s.scrobble,
+      resume: !!s.resume,
+    };
     const written = this.client.transact(() => {
       if (changed) {
         // New credentials end the old account: refused, the old one comes
@@ -363,7 +368,23 @@ export class Integrations {
       };
     });
     this.afterWrite(written, revoke);
+    // Seventh pass, W2: a tracking choice turned on here sends nothing
+    // until it is durable (a refused write turns it off again).
+    const now = this.client.state.integrations?.[id];
+    for (const flag of ["trackHistory", "scrobble", "resume"])
+      if (now?.[flag] && (changed || !was[flag]))
+        this.client.holdOptIn?.(`${id}:${flag}`, written);
     return this.client.publicState();
+  }
+  /**
+   * True when `s` (the `id` integration) has opted in to `flag` and that
+   * choice is durable (W2). Every tracking request asks this, not the
+   * flag alone.
+   */
+  allows(id, s, flag = "trackHistory") {
+    if (!s?.[flag] || this.client.optInPending?.(`${id}:${flag}`)) return false;
+    // Scrobbling is a mode of history tracking: both choices must be kept.
+    return flag !== "scrobble" || this.allows(id, s, "trackHistory");
   }
   /** The preference part of save(), on the integration `s`. */
   configure(
@@ -1004,7 +1025,8 @@ export class Integrations {
     } else if (id === "simkl") {
       lists = simklLists(await this.simkl("/sync/all-items"));
       await this.flushSimkl();
-      if (s.resume) resume = await this.simklPlayback(s, owner);
+      if (this.allows("simkl", s, "resume"))
+        resume = await this.simklPlayback(s, owner);
     }
     if (this.get(id) !== s) throw new Error("تغير الحساب أثناء المزامنة");
     if (this.client.profiles.store.active !== owner)
@@ -1012,7 +1034,7 @@ export class Integrations {
         "تغير الملف الشخصي أثناء المزامنة؛ أعد المحاولة من الملف المطلوب",
       );
     // Written only now: the same account, and the profile that asked.
-    if (resume && s.resume) {
+    if (resume && this.allows("simkl", s, "resume")) {
       this.client.importResume(resume.points);
       s.playbackSeen = {
         ...Object.fromEntries(Object.entries(s.playbackSeen || {}).slice(-19)),
@@ -1048,7 +1070,7 @@ export class Integrations {
     const s = this.get("trakt");
     if (
       !s.token ||
-      !s.trackHistory ||
+      !this.allows("trakt", s) ||
       duration < 30 ||
       position / duration < 0.9 ||
       !/^tt\d+$/.test(meta.id)
@@ -1079,7 +1101,7 @@ export class Integrations {
     this.observeSimkl(player);
     // Read, never create: this runs on every player frame.
     const s = this.client.state.integrations?.trakt;
-    if (!s?.token || !s.trackHistory || !s.scrobble) {
+    if (!s?.token || !this.allows("trakt", s, "scrobble")) {
       this.session = null;
       return;
     }
@@ -1133,7 +1155,7 @@ export class Integrations {
   /** Simkl receives actions, never heartbeats; its server advances playback. */
   observeSimkl(player) {
     const s = this.client.state.integrations?.simkl;
-    if (!s?.token?.access_token || !s.trackHistory) {
+    if (!s?.token?.access_token || !this.allows("simkl", s)) {
       this.simklSession = null;
       return;
     }
@@ -1184,7 +1206,7 @@ export class Integrations {
     const generation = this.simklGeneration;
     const allowed = () =>
       this.client.state.integrations?.simkl === account &&
-      account?.trackHistory &&
+      this.allows("simkl", account) &&
       this.simklGeneration === generation;
     const body = simklScrobbleBody(
       session.meta,
@@ -1246,7 +1268,7 @@ export class Integrations {
   }
   async flushSimkl() {
     const account = this.client.state.integrations?.simkl;
-    if (!account?.trackHistory || !account.token?.access_token) return;
+    if (!this.allows("simkl", account) || !account.token?.access_token) return;
     if (this.simklFlushing) return this.simklFlushing;
     this.simklFlushing = (async () => {
       for (const entry of [...(account.pending || [])]) {
@@ -1257,7 +1279,7 @@ export class Integrations {
           continue;
         if (
           this.client.state.integrations?.simkl !== account ||
-          !account.trackHistory
+          !this.allows("simkl", account)
         )
           break;
         // Remove first: a failed stop is requeued by sendSimkl.
@@ -1275,6 +1297,10 @@ export class Integrations {
   sendScrobble(event, session) {
     const body = scrobbleBody(session.meta, session.videoId, session.progress);
     if (!body) return Promise.resolve();
+    if (
+      !this.allows("trakt", this.client.state.integrations?.trakt, "scrobble")
+    )
+      return Promise.resolve();
     // History is account-scoped. A reply that arrives after the viewer
     // disconnected or switched Trakt accounts must not write into the new one.
     const account = this.client.state.integrations?.trakt;
@@ -1331,10 +1357,10 @@ export class Integrations {
   async flushHistory() {
     if (this.flushing) return this.flushing;
     const s = this.get("trakt");
-    if (!s.trackHistory || !s.token) return;
+    if (!this.allows("trakt", s) || !s.token) return;
     this.flushing = (async () => {
       for (const entry of [...(s.pending || [])]) {
-        if (this.get("trakt") !== s || !s.trackHistory) break;
+        if (this.get("trakt") !== s || !this.allows("trakt", s)) break;
         if (entry.heldAt && Date.now() - entry.heldAt < HOLD_MS) continue;
         const result = await this.trakt("/sync/history", entry.body);
         if (!(result.added?.movies || result.added?.episodes)) break;
@@ -1425,7 +1451,7 @@ export class Integrations {
     const s = this.client.state.integrations?.anilist;
     if (
       !s?.token?.access_token ||
-      !s.trackHistory ||
+      !this.allows("anilist", s) ||
       !(duration >= 30) ||
       position / duration < 0.9
     )
@@ -1471,11 +1497,14 @@ export class Integrations {
   async flushAnilist() {
     if (this.anilistFlushing) return this.anilistFlushing;
     const s = this.client.state.integrations?.anilist;
-    if (!s?.trackHistory || !s.token?.access_token) return;
+    if (!this.allows("anilist", s) || !s.token?.access_token) return;
     if (s.retryAt && Date.now() < s.retryAt) return;
     this.anilistFlushing = (async () => {
       for (const entry of [...(s.pending || [])]) {
-        if (this.client.state.integrations?.anilist !== s || !s.trackHistory)
+        if (
+          this.client.state.integrations?.anilist !== s ||
+          !this.allows("anilist", s)
+        )
           break;
         let media = null;
         try {
@@ -1483,14 +1512,17 @@ export class Integrations {
           media = validTarget(entry) ? await this.anilistMedia(entry) : null;
           if (
             this.client.state.integrations?.anilist !== s ||
-            !s.trackHistory ||
+            !this.allows("anilist", s) ||
             !s.pending?.includes(entry)
           )
             break;
           const write = media && nextListEntry(media, entry);
           if (write) await this.anilist(SAVE_ENTRY, write);
         } catch (error) {
-          if (this.client.state.integrations?.anilist !== s || !s.trackHistory)
+          if (
+            this.client.state.integrations?.anilist !== s ||
+            !this.allows("anilist", s)
+          )
             break;
           if (error.status !== 404) {
             s.retryAt = Date.now() + 60000;
@@ -1502,7 +1534,7 @@ export class Integrations {
         }
         if (
           this.client.state.integrations?.anilist !== s ||
-          !s.trackHistory ||
+          !this.allows("anilist", s) ||
           !s.pending?.includes(entry)
         )
           break;

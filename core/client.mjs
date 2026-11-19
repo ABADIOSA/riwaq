@@ -435,6 +435,31 @@ export class Client {
     return this.lastWrite || Promise.resolve();
   }
   /**
+   * Seventh pass, W2: an opt-in still being written opens no network. A
+   * store that answers later (the web's) holds a new choice in memory
+   * before it is durable, and a refused write turns it off again; a timer
+   * or a queue reading the flag meanwhile would send under a choice that
+   * was never kept. `holdOptIn(key, written)` marks the consent `key`
+   * (`usage`, `trakt:trackHistory`, …) until that write settles; every
+   * send that needs it asks `optInPending(key)`. Turning a choice off
+   * needs no hold: the flag is off in memory at once, so nothing new goes.
+   */
+  holdOptIn(key, written) {
+    if (!written || typeof written.then !== "function") return;
+    const out = (this.optInsOut ||= new Map());
+    const held = out.get(key) || new Set();
+    out.set(key, held);
+    held.add(written);
+    const done = () => {
+      held.delete(written);
+      if (!held.size && out.get(key) === held) out.delete(key);
+    };
+    written.then(done, done);
+  }
+  optInPending(key) {
+    return !!this.optInsOut?.has(key);
+  }
+  /**
    * A viewing records its position every 5 s. Writing the whole encrypted
    * state each time (megabytes for a large library) stalls main, and with
    * it the player controls, so a position alone is written at most every
