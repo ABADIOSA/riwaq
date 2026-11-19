@@ -9,6 +9,7 @@
  * skips prereleases, so the list endpoint is read and versions are compared
  * here.
  */
+import { fields } from "./undo.mjs";
 
 export const REPO = "ABADIOSA/riwaq";
 const DAY = 86400000;
@@ -228,8 +229,10 @@ export class Updates {
     };
   }
   setEnabled(enabled) {
+    // A commit (sixth pass, V2): refused, the old choice stands.
+    const seal = fields(this.store, ["enabled"]);
     this.store.enabled = enabled === true;
-    this.client.persist();
+    this.client.transact(seal);
     return this.client.publicState();
   }
   /** Checks at most once a day unless forced. Never throws: a check is a nicety. */

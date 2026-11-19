@@ -25,6 +25,7 @@ import {
   MANIFEST_NAME,
   MAX_MANIFEST,
 } from "../core/update-package.mjs";
+import { fields } from "../core/undo.mjs";
 
 const INTERVAL = 4 * 60 * 60 * 1000;
 // After a failed check (a rate limit or a dropped connection), try again
@@ -128,10 +129,18 @@ export class DesktopUpdates extends Updates {
       this.store.checkedAt = null;
       this.set({ status: "idle", verified: false, percent: 0, error: "" });
     }
+    // The choices are a commit (sixth pass, V2): refused, they stay as
+    // they were. The cleared download above is a cache, fetched again.
+    const seal = fields(this.store, [
+      "enabled",
+      "autoDownload",
+      "installOnExit",
+      "channel",
+    ]);
     for (const key of ["enabled", "autoDownload", "installOnExit"])
       if (typeof values[key] === "boolean") this.store[key] = values[key];
     if (values.channel) this.store.channel = values.channel;
-    this.client.persist();
+    await this.client.transact(seal);
     if (values.enabled === false || values.autoDownload === false)
       this.cancel();
     this.onChange(this.publicState());

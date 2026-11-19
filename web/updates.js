@@ -6,6 +6,7 @@
  * version.json beside index.html; it carries the version and nothing else.
  */
 import { compareVersions, parseVersion, REPO } from "../core/updates.mjs";
+import { fields } from "../core/undo.mjs";
 
 const CHECK_MS = 30 * 60 * 1000;
 
@@ -82,8 +83,10 @@ export class WebUpdates {
     clearInterval(this.timer);
   }
   setEnabled(enabled) {
+    // A commit (sixth pass, V2): refused, the old choice stands.
+    const seal = fields(this.store, ["enabled"]);
     this.store.enabled = enabled === true;
-    this.client.persist();
+    this.client.transact(seal);
     return this.client.publicState();
   }
   configure(input = {}) {

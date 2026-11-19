@@ -57,7 +57,15 @@ test("usage is off by default; consent and random identity stay outside accounts
 });
 
 test("opt-out aborts a delayed pulse and late completion cannot restore consent", async () => {
-  const c = { state: {}, version: "0.47.0", persist() {} };
+  const c = {
+    state: {},
+    version: "0.47.0",
+    persist() {},
+    // A store that accepts (Client.transact, sixth pass V2).
+    transact(change) {
+      change();
+    },
+  };
   let finish;
   let signal;
   const u = new UsagePulse(c, {

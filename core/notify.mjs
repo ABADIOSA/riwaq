@@ -6,6 +6,7 @@
  * against its own official host, and redirects are refused so a mistyped URL
  * cannot forward the message somewhere else.
  */
+import { fields } from "./undo.mjs";
 
 export const NOTIFY_TARGETS = [
   {
@@ -126,12 +127,15 @@ export class Notifier {
   save({ id, webhook, token, chatId, enabled, clear = false }) {
     if (!NOTIFY_TARGETS.some((target) => target.id === id))
       throw new Error("وجهة الإشعارات غير معروفة");
+    // A commit (sixth pass, V2): a refused change leaves the target as it
+    // was, never written later or carried by a backup.
+    const seal = fields(this.store, [id]);
     if (clear) {
       delete this.store[id];
-      this.client.persist();
+      this.client.transact(seal);
       return this.client.publicState();
     }
-    const entry = (this.store[id] ||= {});
+    const entry = { ...(this.store[id] || {}) };
     if (id === "discord" && webhook !== undefined) {
       entry.webhook = validDiscordWebhook(webhook);
       entry.status = "untested";
@@ -147,7 +151,8 @@ export class Notifier {
       }
     }
     if (typeof enabled === "boolean") entry.enabled = enabled;
-    this.client.persist();
+    this.store[id] = entry;
+    this.client.transact(seal);
     return this.client.publicState();
   }
   async deliver(id, event) {

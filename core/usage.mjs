@@ -54,15 +54,16 @@ export class UsagePulse {
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("")
       : "";
-    this.client.state.usageMetrics = enabled
-      ? { enabled, token }
-      : { enabled: false };
-    try {
-      this.client.persist();
-    } catch (error) {
-      this.client.state.usageMetrics = old;
-      throw error;
-    }
+    // A commit (sixth pass, V2): the pulse or the deletion request is sent
+    // only once the choice is durable; refused, the old choice stands.
+    await this.client.transact(() => {
+      const next = enabled ? { enabled, token } : { enabled: false };
+      this.client.state.usageMetrics = next;
+      return () => {
+        if (this.client.state.usageMetrics === next)
+          this.client.state.usageMetrics = old;
+      };
+    });
     this.last = 0;
     if (enabled) await this.tick();
     else if (old.token && this.server) {

@@ -34,6 +34,7 @@ import { randomBytes } from "node:crypto";
 import { Client, PROFILE_CHANGED, fetchText } from "../core/client.mjs";
 import { PlaybackRequest, startOutcome } from "../core/playback-request.mjs";
 import { OfflineLibrary } from "./offline.mjs";
+import { fields } from "../core/undo.mjs";
 import { downloadCapability } from "../core/offline-media.mjs";
 import {
   automaticSubtitle,
@@ -2242,8 +2243,12 @@ const methods = {
     if (appId !== undefined) {
       if (appId && !/^\d{17,20}$/.test(String(appId)))
         throw new Error("معرّف تطبيق Discord غير صالح");
-      client.state.discordAppId = String(appId || "");
-      client.persist();
+      // A commit (sixth pass, V2): refused, the old ID stays.
+      client.transact(() => {
+        const seal = fields(client.state, ["discordAppId"]);
+        client.state.discordAppId = String(appId || "");
+        return seal();
+      });
     }
     await applyPresence().catch((error) => emit("notice", error.message));
     return client.publicState();
@@ -2293,18 +2298,20 @@ const methods = {
   // The viewer's own folder of .glsl/.hook files; only its file names are
   // read. `clear` forgets it and the chain built from it.
   chooseShaderFolder: async (a) => {
-    if (a?.clear === true) {
-      client.state.settings.shaderDir = "";
-      client.state.settings.shaderChain = [];
-    } else {
+    let dir = "";
+    if (a?.clear !== true) {
       const result = await dialog.showOpenDialog(window, {
         title: t("اختيار مجلد الشيدرات"),
         properties: ["openDirectory"],
       });
       if (result.canceled) return null;
-      client.state.settings.shaderDir = result.filePaths[0];
+      dir = result.filePaths[0];
     }
-    client.persist();
+    // Settings commits (sixth pass, V2): refused, they stay as they were.
+    client.commit(["settings"], () => {
+      client.state.settings.shaderDir = dir;
+      if (!dir) client.state.settings.shaderChain = [];
+    });
     player?.applyTuning(client.state.settings);
     return client.publicState();
   },
@@ -2315,9 +2322,10 @@ const methods = {
       properties: ["openFile"],
     });
     if (result.canceled) return null;
-    client.state.settings.shaderPath = result.filePaths[0];
-    client.state.settings.shaderPreset = "file";
-    client.persist();
+    client.commit(["settings"], () => {
+      client.state.settings.shaderPath = result.filePaths[0];
+      client.state.settings.shaderPreset = "file";
+    });
     player?.applyTuning(client.state.settings);
     return client.publicState();
   },
@@ -2519,10 +2527,10 @@ const methods = {
       filters: [{ name: "MPV executable", extensions: ["exe"] }],
       properties: ["openFile"],
     });
-    if (!r.canceled) {
-      client.state.settings.mpvPath = r.filePaths[0];
-      client.persist();
-    }
+    if (!r.canceled)
+      client.commit(["settings"], () => {
+        client.state.settings.mpvPath = r.filePaths[0];
+      });
     return client.publicState();
   },
   diagnostics,

@@ -123,6 +123,7 @@ import {
 } from "./source-wait.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { cleanResumeSource } from "./resume.mjs";
+import { fields } from "./undo.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 import {
   collectBackup,
@@ -648,12 +649,16 @@ export class Client {
     )
       throw new Error("بيانات تسجيل الدخول غير صالحة");
     const user = await this.api("getUser", { authKey });
-    this.state.auth = {
-      authKey,
-      email: user.email || "",
-      name: user.fullname || "",
-    };
-    this.persist();
+    // A commit (sixth pass, V2): refused, the previous sign-in stays.
+    await this.transact(() => {
+      const seal = fields(this.state, ["auth"]);
+      this.state.auth = {
+        authKey,
+        email: user.email || "",
+        name: user.fullname || "",
+      };
+      return seal();
+    });
     return this.publicState();
   }
   async sync() {
@@ -683,7 +688,13 @@ export class Client {
         skipped.push(addon.manifest?.name || "إضافة غير مدعومة");
       }
     }
-    this.state.addons = mergeAddons(this.state.addons, compatible);
+    // Gathered first and written as one commit at the end (sixth pass,
+    // V2): nothing of the import sits in the state across the requests
+    // below, and a refused write leaves addons, library and positions as
+    // they were.
+    const ticket = this.profiles.ticket();
+    const favorites = [];
+    const progress = new Map();
     let libraryWarning = false;
     try {
       const ids = await this.api("datastoreMeta", {
@@ -711,34 +722,78 @@ export class Client {
           if (
             !item.temp &&
             !item.removed &&
-            !this.state.favorites.some(
-              (m) => m.id === meta.id && m.type === meta.type,
-            )
+            !favorites.some((m) => m.id === meta.id && m.type === meta.type)
           )
-            this.state.favorites.push(meta);
+            favorites.push(meta);
           const videoId = item.state?.video_id || item._id;
           const key = `${item.type}:${videoId}`;
           const updated = Date.parse(item._mtime) || 0;
           if (
             item.state?.timeOffset > 0 &&
-            (!this.state.progress[key] ||
-              this.state.progress[key].updated < updated)
+            !(progress.get(key)?.updated >= updated)
           )
-            this.state.progress[key] = {
+            progress.set(key, {
               meta,
               videoId,
               position: item.state.timeOffset / 1000,
               duration: (item.state.duration || 0) / 1000,
               updated,
-            };
+            });
         }
       }
     } catch {
       libraryWarning = true;
     }
-    this.state.lastSync = Date.now();
-    this.cache.clear();
-    this.persist();
+    // Library items belong to the profile that asked; after a switch or a
+    // re-lock they are not written anywhere (the viewer can sync again).
+    const library = this.profiles.holds(ticket);
+    if (!library && (favorites.length || progress.size)) libraryWarning = true;
+    await this.transact(() => {
+      const owner = this.profiles.store.active;
+      const seal = fields(this.state, ["addons", "lastSync"]);
+      this.state.addons = mergeAddons(this.state.addons, compatible);
+      this.state.lastSync = Date.now();
+      const added = [];
+      const replaced = [];
+      if (library) {
+        for (const meta of favorites)
+          if (
+            !this.state.favorites.some(
+              (m) => m.id === meta.id && m.type === meta.type,
+            )
+          ) {
+            this.state.favorites.push(meta);
+            added.push(meta);
+          }
+        for (const [key, record] of progress) {
+          const had = Object.hasOwn(this.state.progress, key);
+          const was = this.state.progress[key];
+          if (was && !(was.updated < record.updated)) continue;
+          this.state.progress[key] = record;
+          replaced.push([key, had, was, JSON.stringify(record)]);
+        }
+      }
+      this.cache.clear();
+      const undoShared = seal();
+      return () => {
+        undoShared();
+        const list = this.ownerPart(owner, "favorites");
+        if (Array.isArray(list))
+          for (const meta of added) {
+            const text = JSON.stringify(meta);
+            const at = list.findIndex((m) => JSON.stringify(m) === text);
+            if (at >= 0) list.splice(at, 1);
+          }
+        const records = this.ownerPart(owner, "progress");
+        if (records)
+          for (const [key, had, was, text] of replaced) {
+            if (JSON.stringify(records[key]) !== text) continue;
+            if (had) records[key] = was;
+            else delete records[key];
+          }
+        this.cache.clear();
+      };
+    });
     return {
       state: this.publicState(),
       imported: compatible.length,
@@ -747,8 +802,12 @@ export class Client {
     };
   }
   logout() {
-    this.state.auth = null;
-    this.persist();
+    // A commit (sixth pass, V2): refused, the sign-in stays.
+    this.transact(() => {
+      const seal = fields(this.state, ["auth"]);
+      this.state.auth = null;
+      return seal();
+    });
     return this.publicState();
   }
   /**
@@ -850,6 +909,39 @@ export class Client {
       throw error;
     }
     return { out, written };
+  }
+  /**
+   * A reversible change that brings its own undo (PR #155 sixth pass, V2),
+   * for changes a whole-key commit would undo too broadly: a plain save
+   * may touch the same key meanwhile (a token rotated in the same
+   * integration, a source's refresh time), and that must never be rolled
+   * back. `change` changes the state and returns the undo of exactly what
+   * it changed (core/undo.mjs). The write is a commit: refused, the undo
+   * runs before any later snapshot (at once on the desktop, when the
+   * browser answers on the web), and until it settles account sync and
+   * backups wait (atRest). Returns the write: a promise on the web, which
+   * rejects already undone, or nothing.
+   */
+  transact(change) {
+    const undo = change();
+    if (typeof undo !== "function")
+      throw new TypeError("a change returns its undo");
+    try {
+      return this.persist(undo);
+    } catch (error) {
+      undo();
+      throw error;
+    }
+  }
+  /**
+   * The part of the state `key` names for profile `owner`: the live one
+   * while it is active, its bucket otherwise (an undo that runs after a
+   * switch writes into the profile the change was made in).
+   */
+  ownerPart(owner, key) {
+    const store = this.profiles.store;
+    if (store.active === owner) return this.state[key];
+    return store.data[owner]?.[key];
   }
   /** Puts `before`'s keys back for `owner` (Client.commit's undo). */
   restoreKeys(owner, before) {

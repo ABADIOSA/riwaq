@@ -5,6 +5,7 @@ import { basename, extname } from "node:path";
 import { randomUUID, randomBytes } from "node:crypto";
 import { Readable } from "node:stream";
 import { namedTags, readAudioTags } from "../core/audio-tags.mjs";
+import { fields as undoFields } from "../core/undo.mjs";
 
 export const AUDIO_TYPES = {
   ".mp3": "audio/mpeg",
@@ -191,6 +192,8 @@ export class MusicLibrary {
     }
     // The dialog and file checks may outlive a profile switch/lock.
     const b = this.bucket(profileId);
+    // A commit (sixth pass, V2): refused, the songs are not added.
+    const seal = undoFields(b, ["tracks"]);
     let added = 0;
     for (const track of additions) {
       if (
@@ -203,11 +206,16 @@ export class MusicLibrary {
       b.tracks.push({ ...track, id: randomUUID(), favorite: false });
       added++;
     }
-    this.client.persist();
+    this.client.transact(seal);
     return { ...this.view(profileId), added, skipped };
   }
   edit({ profileId, action, id, name, ids }) {
     const b = this.bucket(profileId);
+    if (action === "playlist" && !label(name, 60))
+      throw new Error("اكتب اسم قائمة التشغيل");
+    // A commit (sixth pass, V2): a refused edit leaves the library as it
+    // was, never written by a later save.
+    const seal = undoFields(b, ["tracks", "playlists", "queue"]);
     const validIds = () =>
       [...new Set(Array.isArray(ids) ? ids : [])]
         .filter((i) => b.tracks.some((t) => t.id === i))
@@ -238,7 +246,7 @@ export class MusicLibrary {
     } else if (action === "deletePlaylist")
       b.playlists = b.playlists.filter((p) => p.id !== id);
     else throw new Error("إجراء الموسيقى غير صالح");
-    this.client.persist();
+    this.client.transact(seal);
     return this.view(profileId);
   }
   async source({ profileId, id }) {

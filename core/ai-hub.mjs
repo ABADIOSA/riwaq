@@ -6,6 +6,7 @@ import {
   parseAiTitles,
 } from "./ai-search.mjs";
 import { withoutAdult } from "./adult.mjs";
+import { fields } from "./undo.mjs";
 
 const plain = (value) =>
   String(value || "")
@@ -60,6 +61,8 @@ export class AiSearch {
     };
   }
   save({ provider, key, model, clear = false }) {
+    // A commit (sixth pass, V2): a refused key change leaves the old one.
+    const seal = fields(this.client.state, ["aiSearch"]);
     if (clear) delete this.client.state.aiSearch;
     else {
       const current = this.store;
@@ -79,7 +82,7 @@ export class AiSearch {
       if (!next) throw new Error("مزوّد غير معروف");
       this.client.state.aiSearch = next;
     }
-    this.client.persist();
+    this.client.transact(seal);
     return this.client.publicState();
   }
   async ask(query) {

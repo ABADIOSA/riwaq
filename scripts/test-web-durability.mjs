@@ -18,6 +18,7 @@ import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadPlaywright } from "./fixtures/ui-browse-addon.mjs";
+import { decryptBackup } from "../core/backup.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const site = resolve(process.env.RIWAQ_WEB_DIST || resolve(root, "dist-web"));
@@ -45,6 +46,17 @@ async function fresh({ quota } = {}) {
   await context.route(/^https?:\/\//, async (route) => {
     const url = new URL(route.request().url());
     if (url.origin !== ORIGIN) return route.abort();
+    // A Live TV playlist of the fixture's own (sixth pass, V2).
+    if (url.pathname === "/__fixture/live.m3u")
+      return route.fulfill({
+        contentType: "audio/x-mpegurl",
+        body:
+          "#EXTM3U\n#EXTINF:-1,Fixture one\n" +
+          ORIGIN +
+          "/one.ts\n#EXTINF:-1,Fixture two\n" +
+          ORIGIN +
+          "/two.ts\n",
+      });
     const file = resolve(
       site,
       "." + (url.pathname === "/" ? "/index.html" : url.pathname),
@@ -745,6 +757,116 @@ try {
           (p) => p.name === "Never kept" || p.name === "Renamed",
         ),
       JSON.stringify({ made, renamed, names: final.list.map((p) => p.name) }),
+    );
+    await context.close();
+  }
+
+  // 12. V2 (sixth pass): actions that were plain saves. Codex refused a
+  // Live TV favorite, a source removal and a Trakt history opt-in in this
+  // vault; each was answered as a failure but stayed in memory, in a backup
+  // and in the next unrelated save.
+  {
+    const { context, page } = await fresh();
+    const playlist = `${ORIGIN}/__fixture/live.m3u`;
+    await call(page, "liveAdd", {
+      kind: "m3u",
+      name: "Fixture",
+      url: playlist,
+    });
+    await call(page, "liveAdd", { kind: "m3u", name: "Second", url: playlist });
+    const live = () =>
+      page.evaluate(async () => {
+        const { state } = await window.riwaq.call("hudSnapshot");
+        return {
+          favorites: state.live.favorites,
+          sources: state.live.sources.map((x) => [x.id, x.name, x.enabled]),
+          trakt: state.integrations.find?.((x) => x.id === "trakt") || null,
+        };
+      });
+    const { channels } = await call(page, "liveChannels", {});
+    const key = channels[0].key;
+    const backup = async (includeSecrets) => {
+      const [download] = await Promise.all([
+        page.waitForEvent("download"),
+        call(page, "backupExport", {
+          passphrase: "fixture passphrase 12",
+          includeSecrets,
+        }),
+      ]);
+      const text = await readFile(await download.path(), "utf8");
+      return decryptBackup(text, "fixture passphrase 12").payload;
+    };
+    const fav = await failNextWrite(page, "abort-after-success", {
+      method: "liveFavorite",
+      args: { key },
+    });
+    const removedId = (await live()).sources[0][0];
+    const removal = await failNextWrite(page, "abort", {
+      method: "liveUpdate",
+      args: { id: removedId, action: "remove" },
+    });
+    const optIn = await failNextWrite(page, "request-error", {
+      method: "integrationSave",
+      args: { id: "trakt", trackHistory: true },
+    });
+    const now = await live();
+    check(
+      "12 V2: refused Live TV favorite, source removal and Trakt opt-in are answered as failures and undone in memory",
+      fav.refused &&
+        removal.refused &&
+        optIn.refused &&
+        now.favorites === 0 &&
+        now.sources.some(([id]) => id === removedId) &&
+        !now.trakt?.trackHistory,
+      JSON.stringify({ fav, removal, optIn, now }),
+    );
+    const plain = await backup(false);
+    const secrets = await backup(true);
+    check(
+      "12 V2: neither backup carries a refused change",
+      plain.live.favorites.length === 0 &&
+        secrets.live.favorites.length === 0 &&
+        secrets.live.sources.some((x) => x.id === removedId) &&
+        !secrets.integrations?.trakt?.trackHistory,
+      JSON.stringify({
+        plain: plain.live,
+        secrets: {
+          favorites: secrets.live.favorites,
+          sources: secrets.live.sources.map((x) => x.id),
+          trakt: secrets.integrations?.trakt,
+        },
+      }),
+    );
+    // Codex's unrelated save, refused twice first, then a reload.
+    await failNextWrite(page, "abort", {
+      method: "liveFavorite",
+      args: { key },
+    });
+    await call(page, "settings", { uiLanguage: "en" });
+    await reload(page);
+    const after = await live();
+    check(
+      "12 V2: after a later language save and a reload, none of them was written",
+      after.favorites === 0 &&
+        after.sources.some(([id]) => id === removedId) &&
+        !after.trakt?.trackHistory,
+      JSON.stringify(after),
+    );
+    // A retry the vault commits stays, across a reload and in a backup.
+    await call(page, "liveFavorite", { key });
+    await call(page, "liveUpdate", { id: removedId, action: "remove" });
+    await call(page, "integrationSave", { id: "trakt", trackHistory: true });
+    await reload(page);
+    const kept = await live();
+    const keptBackup = await backup(true);
+    check(
+      "12 V2: retried and committed, all three stay across a reload and in a backup",
+      kept.favorites === 1 &&
+        !kept.sources.some(([id]) => id === removedId) &&
+        kept.trakt?.trackHistory === true &&
+        keptBackup.live.favorites.length === 1 &&
+        keptBackup.integrations?.trakt?.trackHistory === true,
+      JSON.stringify(kept),
     );
     await context.close();
   }
