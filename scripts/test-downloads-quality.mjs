@@ -35,7 +35,10 @@ const server = await createServer({
         if (file)
           return execFileSync(
             "git",
-            ["show", `d79fec355bc56d7cd6e5474a9b0c922eba76388d:${file}`],
+            [
+              "show",
+              `${process.env.DOWNLOADS_QUALITY_REF || "d79fec355bc56d7cd6e5474a9b0c922eba76388d"}:${file}`,
+            ],
             { encoding: "utf8" },
           );
       },
@@ -239,11 +242,14 @@ try {
     await page.locator(".player-menu").waitFor();
     await page.screenshot({ path: join(output, `menu-${lang}.png`) });
     await check(
-      `${lang}: the menu is exactly #113's four items, without redundant controls`,
+      `${lang}: the menu is #113's four items, then #157's Download subtitles, without redundant controls`,
       async () => {
+        // An item's own words (its first text), without the line under it.
         const labels = await page
           .locator(".player-menu button")
-          .evaluateAll((buttons) => buttons.map((b) => b.textContent.trim()));
+          .evaluateAll((buttons) =>
+            buttons.map((b) => b.childNodes[0].textContent.trim()),
+          );
         assert.deepEqual(
           labels,
           lang === "ar"
@@ -252,12 +258,14 @@ try {
                 "نسخ رابط التورنت",
                 "نسخ رابط المغناطيس",
                 "تنزيل الفيديو",
+                "تنزيل الترجمة",
               ]
             : [
                 "Take a screenshot",
                 "Copy torrent link",
                 "Copy magnet link",
                 "Download video",
+                "Download subtitles",
               ],
         );
         assert.equal(await page.locator(".player-menu .menu-note").count(), 0);
@@ -315,6 +323,184 @@ try {
         });
       },
     );
+    const subtitleItem = () => page.locator(".player-menu .subtitle-download");
+    const actions = () =>
+      page.evaluate(() =>
+        window.__calls
+          .filter((x) => x.method === "playbackAction")
+          .map((x) => x.args),
+      );
+    const openMenu = async (menu) => {
+      await page.evaluate((m) => {
+        window.__calls = [];
+        window.__menu = { ...window.__menu, ...m };
+        window.__showMenu(false);
+      }, menu);
+      await page.evaluate(() => window.__showMenu(true));
+      await page.locator(".player-menu").waitFor();
+    };
+    await openMenu({});
+    await check(
+      `${lang}: #157 Download subtitles sits right under Download video and names the subtitle it saves`,
+      async () => {
+        const order = await page
+          .locator(".player-menu > button")
+          .evaluateAll((b) => b.map((x) => x.className));
+        assert.equal(order.at(-1), "subtitle-download");
+        const video = await page
+          .getByRole("menuitem", {
+            name: lang === "ar" ? "تنزيل الفيديو" : "Download video",
+          })
+          .boundingBox();
+        const subtitles = await subtitleItem().boundingBox();
+        assert.ok(Math.abs(subtitles.y - (video.y + video.height)) <= 1);
+        assert.equal(Math.round(subtitles.x), Math.round(video.x));
+        assert.equal(Math.round(subtitles.width), Math.round(video.width));
+        assert.equal(
+          await subtitleItem().locator(".menu-detail").innerText(),
+          lang === "ar" ? "العربية · OpenSubtitles" : "Arabic · OpenSubtitles",
+        );
+      },
+    );
+    await check(
+      `${lang}: #157 the mouse saves the selected subtitle`,
+      async () => {
+        await subtitleItem().click();
+        assert.equal(await page.locator(".player-menu").count(), 0);
+        assert.deepEqual(await actions(), [
+          {
+            action: "downloadSubtitles",
+            choice: "t3",
+            videoId: "film",
+            sessionId: 4,
+            profileId: "p",
+          },
+        ]);
+      },
+    );
+    await openMenu({});
+    await check(`${lang}: #157 the keyboard reaches and saves it`, async () => {
+      await page.keyboard.press("End");
+      assert.equal(
+        await subtitleItem().evaluate((e) => e === document.activeElement),
+        true,
+      );
+      await page.keyboard.press("Enter");
+      assert.deepEqual(
+        (await actions()).map((a) => [a.action, a.choice]),
+        [["downloadSubtitles", "t3"]],
+      );
+    });
+    const long =
+      "الإنجليزية · English (SDH) OpenSubtitles hearing impaired release name WEB-DL";
+    await openMenu({
+      subtitles: {
+        choices: [
+          { id: "t3", label: "العربية · OpenSubtitles", selected: false },
+          { id: "t4", label: long, selected: false },
+        ],
+        reason: "",
+      },
+    });
+    await check(
+      `${lang}: #157 with several and none selected, a choice list in the menu; nothing is guessed`,
+      async () => {
+        assert.equal(
+          await subtitleItem().getAttribute("aria-haspopup"),
+          "menu",
+        );
+        assert.equal(await subtitleItem().locator(".menu-detail").count(), 0);
+        await subtitleItem().click();
+        assert.deepEqual(await actions(), []);
+        await page.locator(".subtitle-choice").first().waitFor();
+        assert.match(
+          await page.locator("#subtitle-choices").innerText(),
+          lang === "ar" ? /اختر الترجمة/ : /Choose the subtitles to save/,
+        );
+        const box = await page.locator(".player-menu").boundingBox();
+        assert.ok(box.width <= 320 && box.x + box.width <= 980);
+        assert.equal(
+          await page
+            .locator(".subtitle-choice")
+            .first()
+            .evaluate((e) => e === document.activeElement),
+          true,
+        );
+        await page.keyboard.press("ArrowDown");
+        await page.keyboard.press("Enter");
+        assert.deepEqual(
+          (await actions()).map((a) => [a.action, a.choice]),
+          [["downloadSubtitles", "t4"]],
+        );
+      },
+    );
+    await openMenu({});
+    const plainWidth = (await page.locator(".player-menu").boundingBox()).width;
+    await openMenu({
+      subtitles: {
+        choices: [{ id: "t4", label: long, selected: true }],
+        reason: "",
+      },
+    });
+    await check(
+      `${lang}: #157 a long subtitle name never widens the menu; Back returns from the list`,
+      async () => {
+        const box = await page.locator(".player-menu").boundingBox();
+        assert.ok(
+          Math.abs(box.width - plainWidth) <= 1,
+          `${box.width} vs ${plainWidth}`,
+        );
+        await openMenu({
+          subtitles: {
+            choices: [
+              { id: "t3", label: "A", selected: false },
+              { id: "t4", label: "B", selected: false },
+            ],
+            reason: "",
+          },
+        });
+        await subtitleItem().click();
+        await page
+          .getByRole("menuitem", { name: lang === "ar" ? "رجوع" : "Back" })
+          .click();
+        assert.equal(await subtitleItem().count(), 1);
+        await page.keyboard.press("Escape");
+      },
+    );
+    await openMenu({
+      subtitles: {
+        choices: [],
+        reason: "الترجمة هنا مدمجة في ملف الفيديو ولا تُحفظ منفصلة",
+      },
+    });
+    await check(
+      `${lang}: #157 with nothing to save the item stays, disabled, and says why`,
+      async () => {
+        assert.equal(await subtitleItem().isDisabled(), true);
+        assert.equal(
+          await subtitleItem().getAttribute("aria-describedby"),
+          "subtitles-unavailable",
+        );
+        assert.match(
+          await page.locator("#subtitles-unavailable").innerText(),
+          lang === "ar" ? /مدمجة في ملف الفيديو/ : /inside the video file/,
+        );
+        assert.deepEqual(await actions(), []);
+        await page.keyboard.press("Escape");
+      },
+    );
+    await page.evaluate(() => {
+      window.__showMenu(false);
+      window.__menu = {
+        ...window.__menu,
+        subtitles: {
+          choices: [
+            { id: "t3", label: "العربية · OpenSubtitles", selected: true },
+          ],
+          reason: "",
+        },
+      };
+    });
     await page.evaluate(() => {
       window.__menu = { ...window.__menu, torrentLink: false };
       window.__showMenu(true);

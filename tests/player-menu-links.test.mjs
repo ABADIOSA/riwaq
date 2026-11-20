@@ -12,20 +12,24 @@ const read = (path) =>
 // #113: Take a screenshot, Copy torrent link, Copy magnet link, Download
 // video. The torrent link is the address the torrent plays from on this
 // computer (for another player); the magnet is its hash and trackers.
-test("the player menu lists the four items of #113 in order", () => {
+// #157 adds "Download subtitles" right under "Download video".
+test("the player menu lists the four items of #113 in order, then #157's", () => {
   const menu = read("src/components/PlayerMenu.jsx");
-  const runs = [...menu.matchAll(/run\("(\w+)"\)/g)].map((m) => m[1]);
+  const items = menu.slice(menu.indexOf("التقط لقطة شاشة") - 80);
+  const runs = [...items.matchAll(/run\("(\w+)"/g)].map((m) => m[1]);
   assert.deepEqual(runs, [
     "screenshot",
     "copyTorrentLink",
     "copyMagnet",
     "download",
+    "downloadSubtitles",
   ]);
   const labels = [
     "التقط لقطة شاشة",
     "نسخ رابط التورنت",
     "نسخ رابط المغناطيس",
     "تنزيل الفيديو",
+    "تنزيل الترجمة",
   ];
   const at = labels.map((label) => menu.indexOf(label));
   assert.ok(at.every((i) => i > 0));
@@ -40,6 +44,7 @@ test("the player menu lists the four items of #113 in order", () => {
       "Copy torrent link",
       "Copy magnet link",
       "Download video",
+      "Download subtitles",
     ],
   );
   // No word about a missing torrent file is left from 0.53.0.
@@ -51,7 +56,13 @@ test("the player menu lists the four items of #113 in order", () => {
   );
   assert.deepEqual(
     [...action.matchAll(/action === "(\w+)"/g)].map((m) => m[1]),
-    ["screenshot", "copyTorrentLink", "copyMagnet", "download"],
+    [
+      "screenshot",
+      "copyTorrentLink",
+      "copyMagnet",
+      "download",
+      "downloadSubtitles",
+    ],
   );
   // The clipboard receives only an engine's checked address or the magnet.
   assert.deepEqual(

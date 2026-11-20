@@ -901,3 +901,60 @@ end the session at Stremio (unchanged). Whether that is acceptable for the
 Beta is a release decision; the smallest stricter step would be a server
 capability that refuses uploads from released apps, which needs a
 production deployment and is not part of this change.
+
+## Issue #157 — "Download subtitles" under "Download video"
+
+A viewer's suggestion after the seventh review (not part of it): the
+player's right-click menu (`src/components/PlayerMenu.jsx`, drawn in the
+HUD or the theater) ends with "تنزيل الفيديو"; "تنزيل الترجمة" now sits
+directly under it, same style, focus and keys.
+
+- What can be saved (`electron/subtitle-save.mjs`): a subtitle MPV loaded
+  from an addon (its address stays in main, found through the key Riwaq
+  loaded it under) or from a subtitle file the viewer opened or dropped. A
+  track inside the video stream is not offered: MPV has no supported way to
+  write one track to a file, and a transcoder is out of proportion; the
+  item is then disabled and says why, as "Download video" does.
+- Which one: the selected subtitle when it can be saved, or the only one,
+  named on a second line under the item (language, then title or "ملف على
+  هذا الجهاز"), so another language is never saved silently. With several
+  and none selected, the item opens a short choice list inside the menu
+  (heading, one item per subtitle, Back); arrows, Home, End, Enter and
+  Escape work as in the menu. The page sees `{ id, label, selected }` only;
+  an id is MPV's track number, looked up again when picked, so a track that
+  went away is refused rather than another saved.
+- Fetching (`core/subtitle-export.mjs`): http or https, no credentials; a
+  loopback or private address only as the addon's own first address (the
+  viewer's Stremio Service serves subtitles on 127.0.0.1), and no public
+  address may redirect into the viewer's network; at most three redirects,
+  each checked; 15 s; the body read up to 5 MB as it streams; HTML, image,
+  audio and video types refused. The bytes must be SRT, WebVTT or ASS/SSA
+  with at least one cue, whatever the server called them, and are saved as
+  they came (an Arabic Windows-1256 file stays one). A file of the viewer's
+  is read only if it has a subtitle extension, is a regular file and is at
+  most 5 MB.
+- Saving: the system's Save dialog (`dialog.showSaveDialog`, over the HUD
+  in the separate HDR layout so MPV's window cannot hide it), starting in
+  Downloads with a Windows-valid name (`The Show S01E02.ar.srt`: reserved
+  characters and names, bidi controls and trailing dots removed), the
+  format as the first filter, overwrite confirmation. Cancel writes
+  nothing. The file is written beside its target and renamed into place.
+  Behind the library lock and the menu's viewing check, like the other
+  menu actions; playback is not touched. The web edition keeps the menu
+  desktop-only (`web/desktop-only.js`). The notice names the file only.
+- Tests: `tests/subtitle-download.test.mjs` 9/9 (formats, names, address
+  rules, a loopback server for a local address, a 404, a timeout, a size
+  cap, an HTML page and cancellation; redirects into the network, to
+  `file:` and in a loop; choices and labels; exact bytes, cancel, replacing
+  an existing file only through the dialog, stale, embedded and malformed
+  choices; a viewer's own file, too large, gone); the menu order test and
+  main's menu harness (`tests/downloads-quality.test.mjs`: ids and labels
+  only, an old menu cannot save, an embedded track refused before any
+  fetch or dialog). Chromium (`scripts/test-downloads-quality.mjs`, Arabic
+  and English): on `dc07e73`'s menu (`QUALITY_BASELINE=1
+  DOWNLOADS_QUALITY_REF=dc07e73`) the 14 new checks fail and the 28 others
+  pass; here 44/44: the item right under "Download video" at its width, the
+  label, mouse and keyboard saves with the viewing identity, the choice
+  list with no guess, a long name never widening the menu, Back, and the
+  disabled state with its reason. Not run: the native Windows Save dialog,
+  a packaged or portable build and a real addon's subtitles.

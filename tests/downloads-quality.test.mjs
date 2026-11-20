@@ -9,6 +9,11 @@ import { syncBuiltinESMExports } from "node:module";
 import { OfflineLibrary } from "../electron/offline.mjs";
 import { downloadCapability } from "../core/offline-media.mjs";
 import { localTorrentLink } from "../core/torrent-engine.mjs";
+import {
+  saveSubtitle,
+  subtitleMenu,
+  subtitleSources,
+} from "../electron/subtitle-save.mjs";
 
 const id = "a".repeat(32),
   otherId = "b".repeat(32);
@@ -129,10 +134,35 @@ async function mainPlayback() {
       url: `http://127.0.0.1:52011/${"d".repeat(32)}/${"c".repeat(40)}/0`,
     },
     command: (a) => calls.push(a),
+    // Issue #157: an addon subtitle MPV loaded and a track inside the file.
+    rawTracks: [
+      { id: 1, type: "sub", lang: "eng" },
+      {
+        id: 2,
+        type: "sub",
+        lang: "ar",
+        selected: true,
+        external: true,
+        "external-filename": "https://subs.invalid/ar.srt",
+      },
+    ],
+    externalSubs: new Map([["https://subs.invalid/ar.srt", { key: "s1" }]]),
   };
   const context = {
     downloadCapability,
     localTorrentLink,
+    subtitleMenu,
+    subtitleSources,
+    saveSubtitle,
+    app: { getPath: () => "/downloads" },
+    dialog: {
+      showSaveDialog: async () => {
+        calls.push("save-dialog");
+        return { canceled: true };
+      },
+    },
+    hud: null,
+    t: (text) => text,
     player,
     torrentHost: { origin: "http://127.0.0.1:52011" },
     torrServer: null,
@@ -141,6 +171,7 @@ async function mainPlayback() {
     client: {
       state: { settings: { serverUrl: "http://127.0.0.1:11470" } },
       streams: new Map([["k", { infoHash: "c".repeat(40) }]]),
+      subtitles: new Map([["s1", "https://subs.invalid/ar.srt"]]),
       profiles: { store: { active: "p" }, gate() {} },
     },
     clipboard: { writeText: (a) => calls.push(a) },
@@ -165,6 +196,42 @@ test("an old menu cannot screenshot a restarted viewing of the same video", asyn
       profileId: menu.profileId,
     }),
     /انتهت هذه المشاهدة/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+// Issue #157: the menu's snapshot names subtitles by id and label only, and
+// saving one goes through the same viewing check as every menu action.
+test("the menu offers this viewing's subtitles by id and label, and an old menu cannot save one", async () => {
+  const { context, calls, player } = await mainPlayback();
+  const menu = context.playbackMenu();
+  assert.deepEqual(menu.subtitles, {
+    choices: [{ id: "t2", label: "العربية", selected: true }],
+    reason: "",
+  });
+  assert.doesNotMatch(JSON.stringify(menu), /subs\.invalid/);
+  player.startToken++;
+  await assert.rejects(
+    context.playbackAction({
+      action: "downloadSubtitles",
+      choice: "t2",
+      videoId: menu.videoId,
+      sessionId: menu.sessionId,
+      profileId: menu.profileId,
+    }),
+    /انتهت هذه المشاهدة/,
+  );
+  // An embedded track is refused before anything is fetched or asked.
+  const fresh = context.playbackMenu();
+  await assert.rejects(
+    context.playbackAction({
+      action: "downloadSubtitles",
+      choice: "t1",
+      videoId: fresh.videoId,
+      sessionId: fresh.sessionId,
+      profileId: fresh.profileId,
+    }),
+    /مدمجة/,
   );
   assert.deepEqual(calls, []);
 });

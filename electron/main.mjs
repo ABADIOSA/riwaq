@@ -103,6 +103,11 @@ import {
   translate,
 } from "../core/i18n.mjs";
 import { Player } from "./player.mjs";
+import {
+  saveSubtitle,
+  subtitleMenu,
+  subtitleSources,
+} from "./subtitle-save.mjs";
 import { TorrentHost } from "./torrent.mjs";
 import { TorrServerHost } from "./torrserver.mjs";
 import {
@@ -290,7 +295,38 @@ function playbackMenu() {
       !!localTorrentLink(player.source?.url, torrentEngines()),
     download: capability.supported,
     downloadReason: capability.reason,
+    // Issue #157: choices as ids and labels; addresses and paths stay here.
+    subtitles: subtitleMenu(viewingSubtitles()),
   };
+}
+// This viewing's subtitle tracks and where each one's bytes come from
+// (electron/subtitle-save.mjs).
+function viewingSubtitles() {
+  return subtitleSources({
+    tracks: player?.rawTracks,
+    externalSubs: player?.externalSubs,
+    addonUrl: (key) => client.subtitles.get(key) || "",
+  });
+}
+// Issue #157: the Save dialog sits above MPV's own full-screen window in the
+// separate (HDR) layout by belonging to the HUD that covers it.
+async function saveViewingSubtitle(choice) {
+  client.profiles.gate("library");
+  const parent =
+    player.state.separate && hud && !hud.isDestroyed() && hud.isVisible()
+      ? hud
+      : window;
+  const done = await saveSubtitle({
+    choice,
+    sources: viewingSubtitles(),
+    title: player.meta?.name,
+    videoId: player.videoId,
+    downloads: app.getPath("downloads"),
+    heading: t("حفظ الترجمة"),
+    showSaveDialog: (options) => dialog.showSaveDialog(parent, options),
+  });
+  if (done.saved) emit("notice", `حُفظت الترجمة «${done.name}»`);
+  return done;
 }
 // Where torrents play from on this computer: the viewer's Stremio Service,
 // the built-in engine and TorrServer. Seek previews count them as remote;
@@ -302,7 +338,13 @@ function torrentEngines() {
     torrServer?.origin,
   ].filter(Boolean);
 }
-async function playbackAction({ action, videoId, sessionId, profileId } = {}) {
+async function playbackAction({
+  action,
+  videoId,
+  sessionId,
+  profileId,
+  choice,
+} = {}) {
   if (
     !player?.state.active ||
     typeof videoId !== "string" ||
@@ -340,6 +382,7 @@ async function playbackAction({ action, videoId, sessionId, profileId } = {}) {
     return true;
   }
   if (action === "download") return startOffline();
+  if (action === "downloadSubtitles") return saveViewingSubtitle(choice);
   throw new Error("أمر غير معروف");
 }
 // The built-in torrent engine (core/torrent-engine.mjs), in its own process,
