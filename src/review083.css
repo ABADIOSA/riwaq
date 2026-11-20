@@ -74,8 +74,10 @@
   opacity: 0.45;
   cursor: default;
 }
-/* With a note under an item, room for two short lines rather than five. */
-.player-menu:has(> p) {
+/* With a note under an item, room for two short lines rather than five.
+   The subtitles note (#157) is short and often shown, so it wraps at the
+   items' width instead (#150). */
+.player-menu:has(> p:not(.subtitle-note)) {
   min-width: 210px;
 }
 .player-menu hr {

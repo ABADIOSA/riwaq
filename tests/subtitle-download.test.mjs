@@ -331,8 +331,9 @@ test("choices: addon and local subtitles can be saved, embedded ones cannot; the
     sources(2).filter((s) => s.kind === "embedded"),
   );
   assert.deepEqual(embedded.choices, []);
-  assert.match(embedded.reason, /مدمجة/);
-  assert.match(subtitleMenu([]).reason, /لا توجد ترجمة/);
+  assert.equal(embedded.reason, "مدمجة في ملف الفيديو");
+  assert.equal(translate(embedded.reason, "en"), "Inside the video file");
+  assert.equal(subtitleMenu([]).reason, "لا ترجمة محمّلة");
 });
 
 test("saving: the selected addon subtitle, the exact bytes, cancel writes nothing, a stale or embedded choice is refused", async () => {

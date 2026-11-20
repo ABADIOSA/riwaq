@@ -237,7 +237,10 @@ export default function PlayerMenu({ at, onClose, onError, request = call }) {
             )}
           </button>
           {!subtitles.choices.length && (
-            <p className="download-unavailable" id="subtitles-unavailable">
+            <p
+              className="download-unavailable subtitle-note"
+              id="subtitles-unavailable"
+            >
               {subtitles.reason}
             </p>
           )}

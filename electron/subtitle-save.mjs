@@ -90,9 +90,10 @@ export function subtitleMenu(sources) {
   if (choices.length) return { choices, reason: "" };
   return {
     choices,
+    // Short: the note sits under the item at the items' width (#150).
     reason: sources.some((s) => s.kind === "embedded")
-      ? "الترجمة هنا مدمجة في ملف الفيديو ولا تُحفظ منفصلة"
-      : "لا توجد ترجمة محمّلة في هذه المشاهدة",
+      ? "مدمجة في ملف الفيديو"
+      : "لا ترجمة محمّلة",
   };
 }
 

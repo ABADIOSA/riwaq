@@ -914,7 +914,11 @@ directly under it, same style, focus and keys.
   loaded it under) or from a subtitle file the viewer opened or dropped. A
   track inside the video stream is not offered: MPV has no supported way to
   write one track to a file, and a transcoder is out of proportion; the
-  item is then disabled and says why, as "Download video" does.
+  item is then disabled and says why in a short note («مدمجة في ملف
+  الفيديو», «لا ترجمة محمّلة»), as "Download video" does. That note wraps
+  at the items' width: the first version gave it the 210 px minimum of
+  the other notes, and `test-ui-feedback`'s HUD check (#150) caught the
+  menu at 210 px against a widest item of 126.
 - Which one: the selected subtitle when it can be saved, or the only one,
   named on a second line under the item (language, then title or "ملف على
   هذا الجهاز"), so another language is never saved silently. With several

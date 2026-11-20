@@ -11,8 +11,8 @@ export default {
   "ملف على هذا الجهاز": "file on this computer",
   "الترجمة هنا مدمجة في ملف الفيديو ولا تُحفظ منفصلة":
     "These subtitles are inside the video file and cannot be saved on their own",
-  "لا توجد ترجمة محمّلة في هذه المشاهدة":
-    "No subtitles are loaded in this viewing",
+  "مدمجة في ملف الفيديو": "Inside the video file",
+  "لا ترجمة محمّلة": "No subtitles loaded",
   "لم تعد هذه الترجمة في المشاهدة":
     "These subtitles are no longer part of this viewing",
   "اختر ترجمة من القائمة": "Choose subtitles from the menu",

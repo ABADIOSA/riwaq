@@ -470,7 +470,7 @@ try {
     await openMenu({
       subtitles: {
         choices: [],
-        reason: "الترجمة هنا مدمجة في ملف الفيديو ولا تُحفظ منفصلة",
+        reason: "مدمجة في ملف الفيديو",
       },
     });
     await check(
@@ -483,7 +483,13 @@ try {
         );
         assert.match(
           await page.locator("#subtitles-unavailable").innerText(),
-          lang === "ar" ? /مدمجة في ملف الفيديو/ : /inside the video file/,
+          lang === "ar" ? /مدمجة في ملف الفيديو/ : /Inside the video file/,
+        );
+        // The note never widens the menu past its items (#150).
+        const box = await page.locator(".player-menu").boundingBox();
+        assert.ok(
+          Math.abs(box.width - plainWidth) <= 1,
+          `${box.width} vs ${plainWidth}`,
         );
         assert.deepEqual(await actions(), []);
         await page.keyboard.press("Escape");
