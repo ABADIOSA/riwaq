@@ -66,6 +66,11 @@ const view = async () => {
   if (drawer) {
     await page.locator(".riwaq-drawer-trigger").click();
     await page.locator(".riwaq-nav-dialog[open]").waitFor();
+    // The wheel adds its destinations after measuring the opened drawer.
+    await page
+      .locator(".riwaq-nav-dialog[open] .riwaq-destinations > button")
+      .first()
+      .waitFor({ state: "attached" });
   }
   const at = await page.evaluate(() => {
     const scope = document.querySelector(".riwaq-nav-dialog[open]") || document;
