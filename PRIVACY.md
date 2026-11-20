@@ -1,6 +1,6 @@
 # Riwaq Privacy Policy
 
-**Version 1.1 · Effective 17 November 2026** · [النسخة العربية](PRIVACY.ar.md)
+**Version 1.2 · Effective 20 November 2026** · [النسخة العربية](PRIVACY.ar.md)
 
 This policy explains what information the Riwaq app handles, where it goes and what you can do about it. It describes the Riwaq desktop app for Windows, the Riwaq web edition and the optional Riwaq account service, as they exist in the version of the code published alongside this file.
 
@@ -37,6 +37,7 @@ Unless you turn on a feature that sends it somewhere (sections 4 and 5), the fol
 | Keys and sign-ins you add: TMDB, OMDb, MDBList, Fanart.tv, TheIntroDB, debrid services, AI providers, Trakt, Simkl, AniList, Spotify, Stremio, Jellyfin/Emby, live TV sources, Discord and Telegram notification targets | Encrypted state |
 | Downloads for offline viewing, their posters and the torrent cache | Riwaq's private folder in your user profile (`AppData\Roaming\Riwaq` on Windows) |
 | Local music library paths, screenshots, MPV's last log | Riwaq's folder on your device |
+| Subtitle files you save from the player menu | Where you choose in the Save dialog; Riwaq keeps no record of them. The file is fetched from the same addon address the player uses, or copied from a subtitle file you opened |
 | Pictures you choose from your computer for a collection or folder (cover, moving GIF, backdrop, logo) | A copy in Riwaq's folder (`collection-art`), named by a random ID; in the web edition, your browser's IndexedDB. Never in backups, the account or a Nuvio export |
 | Error log for the diagnostic report | Memory only, cleared when the app closes |
 
@@ -53,7 +54,7 @@ Unless you turn on a feature that sends it somewhere (sections 4 and 5), the fol
 Creating an account is optional. If you create one:
 
 - **What the service stores:** your username; a salted, peppered hash of a proof derived from your password on your device (your password itself is never sent); your data key wrapped (encrypted) by keys only your password or recovery code can produce; a recovery proof hash and wrapped key; your encrypted data and its size and revision number; and session records (a hash of each session token with its creation and last-used times).
-- **Your data is end-to-end encrypted.** It is the same content as a backup (profiles, library, progress, collections, settings, plain addon addresses) and is encrypted on your device with AES-256-GCM before upload. Keys and linked sign-ins are included only if you turn on "Sync my keys and linked accounts". The maintainer cannot read your data, reset your password or recover your data if you lose both your password and your recovery code.
+- **Your data is end-to-end encrypted.** It is the same content as a backup (profiles, library, progress, collections, settings, plain addon addresses) and is encrypted on your device with AES-256-GCM before upload. Keys and linked sign-ins are included only if you turn on "Sync my keys and linked accounts". With that choice on, the data also carries clear records: one-way fingerprints (96 bits of a SHA-256 hash) of items you removed — a Live TV source's ID, a configured addon's address, a Stremio session key, a Discord app ID — so a device still on an older version of Riwaq cannot bring them back. A fingerprint cannot be turned back into the item. They are kept with your Live TV favourites, so your backups carry them too. The maintainer cannot read your data, reset your password or recover your data if you lose both your password and your recovery code.
 - **What the service can see:** your username, when you sign in and sync, how large your encrypted data is, and the network address of each request (see section 4.3).
 - **Retention:** your data stays until you delete the account. Sessions end after 180 days without use. Older revisions of your encrypted data are replaced on each upload.
 - **Deletion:** Settings → Accounts & linking → Riwaq account → delete account removes your user record, all your encrypted data and all your sessions from the database immediately. Data already on your devices is not touched.

@@ -4,8 +4,8 @@
  * a short summary in Settings → System → Privacy; the summary must say
  * nothing the policy does not. Browser-safe.
  */
-export const POLICY_VERSION = "1.1";
-export const POLICY_DATE = "2026-11-17";
+export const POLICY_VERSION = "1.2";
+export const POLICY_DATE = "2026-11-20";
 const BASE = "https://github.com/ABADIOSA/riwaq/blob/main";
 /** Fixed pages main and the web bridge open through `openService`. */
 export const PRIVACY_URLS = {

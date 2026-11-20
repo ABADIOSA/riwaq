@@ -7,6 +7,31 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.56.0",
+    title: "فلاتر المصادر، ومجموعات تتحرك، وترجمة تحفظها",
+    items: [
+      "«تنزيل الترجمة» في قائمة المشغل تحت «تنزيل الفيديو»: تحفظ الترجمة المختارة من الإضافات أو من ملفك حيث تريد.",
+      "فلاتر متقدمة في نافذة المصادر: الدقة ونوع الإصدار والنطاق الديناميكي والصوت والترجمة واللغة والإضافة، وتتذكرها إن شئت.",
+      "مظهر شارات المصادر: شارات رِواق أو زجاج سائل أو أنماط FR-Badges، وحذف المرشح صار بلا تأكيد مع «تراجع».",
+      "المجموعات: غلاف متحرك عند المرور فقط، وصور من جهازك، واستيراد نوفيو وتصديره بكل الحقول، وقوالب جاهزة.",
+      "شريط المشغل بمربعات زجاجية ثابتة و«ينتهي» على خطها، ودائرة صغيرة لمستوى الصوت، وقائمة بعرض أطول عنصر.",
+      "الرئيسية واكتشف والشعار تفتح صفحتها من أولها، والعجلة بلا خطوط خارجية، وخيار لإخفاء بوصلة الذوق.",
+      "حساب رِواق: ما تحذفه أو تخرج منه يبقى محذوفًا على الأجهزة المحدّثة حتى لو زامن جهاز ما زال على إصدار أقدم.",
+    ],
+    en: {
+      title: "Source filters, moving collections, and subtitles to keep",
+      items: [
+        "“Download subtitles” in the player menu, under “Download video”: save the selected subtitles from an addon or your own file wherever you like.",
+        "Advanced filters in the sources window: resolution, release type, dynamic range, audio, subtitles and language, and addon, remembered if you wish.",
+        "Stream badge appearance: Riwaq's badges, Liquid Glass or FR-Badges styles; deleting a filter no longer asks first and offers Undo.",
+        "Collections: covers that move only under the pointer, pictures from your computer, Nuvio import and export with every field, and ready templates.",
+        "The player bar's controls sit in steady glass chips with Ends on their line, a small round volume level, and a menu as wide as its longest item.",
+        "Home, Discover and the logo open their page at its start, the wheel has no outer lines, and the taste compass can be hidden.",
+        "Riwaq account: what you remove or sign out of stays removed on updated devices, even when a device still on an older version syncs.",
+      ],
+    },
+  },
+  {
     version: "0.55.0",
     title: "عجلة رِواق، وتحكم أوضح",
     items: [
