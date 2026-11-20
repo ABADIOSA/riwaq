@@ -793,3 +793,111 @@ clicks controls where they are on screen.
   this pass; local workerd and D1 16/16, VERIFICATION.md).
 - A check of the #156 change by an agent that did not write it: left to
   the independent review.
+
+# Eighth pass — Codex's seventh review: release blocker W4 (2026-11-20)
+
+Codex's seventh review (Windows x64, Node 24, Electron 44.9.3, MPV 0.41.0)
+accepted W1, W2, W3, W5 and #156 and stopped the release on W4 with released
+apps in the loop: on the Worker released with v0.55.0 and migrations
+0001–0002, a v0.55.0 client brought back a Live TV source the candidate had
+removed and uploaded, on the candidate and on a new device, and the code
+showed the same path for a Stremio sign-out. Started on `dc07e73` (the head
+Codex pinned; GitHub's PR head matched). Codex's two fixes (`c5db511`, the
+web runner pinned to Ubuntu 24.04, and `dc07e73`, the #156 wait) are kept
+unchanged.
+
+## Reproduced before changing anything (on `dc07e73`)
+
+`scripts/test-accounts-mixed.mjs` runs the tag's own `core/` (git archive
+of v0.55.0) as the released client and the Worker released with v0.55.0 on
+0001–0002 over Node's SQLite. `RIWAQ_CANDIDATE=dc07e73`: 24/50 checks.
+The cloud's source count went 0 → 1 after the v0.55.0 sync, and the
+candidate, a new device and a device back from offline all held it again;
+an updated device signed out of Stremio was signed in again; a joining
+device holding the signed-out session kept it; a removed configured addon
+and a cleared Discord app ID came back; and the candidate and v0.55.0
+uploaded in turn on every sync (12, 6 and 5 extra PUTs in three idle
+rounds).
+
+Cause, from v0.55.0's own code: its `restoreState` keeps its own value for
+an empty source list, a null sign-in, a configured addon the payload lacks
+and an empty Discord ID, whatever the payload says; then its next sync
+uploads that value as its change. The candidate's seventh-pass reading
+(a secrets payload is the whole truth) holds between updated clients only:
+v0.55.0 cannot read new metadata, and it rewrites the whole payload from
+its own state, dropping anything it does not know.
+
+A second mixed-version fault surfaced in the same runs: v0.55.0's settings
+cleaner drops the six settings keys this version added (`tasteCompass`,
+`badgeStyleArt`, `badgeLook`, `sourceFacetsRemember`, `sourceFacets`,
+`collectionsLayout`). merge3 read the missing keys as deletions, so every
+v0.55.0 sync reset them to their defaults on updated devices, and the two
+devices then uploaded in turn for as long as both ran.
+
+## W4 (mixed versions) — what a released client keeps decides the representation
+
+Probed against the real v0.55.0 code before choosing anything: a
+`live.favorites` entry that matches no channel is kept, merged entry by
+entry and uploaded again as it is; a Live TV list with one invalid entry is
+taken as a list, and v0.55.0's own cleaner drops the entry. Nothing in the
+payload makes v0.55.0 drop its own Stremio key, configured addon or Discord
+app ID. `core/sync-clears.mjs`:
+
+- Clear records: a 24-hex fingerprint (SHA-256 of a fixed label, the kind
+  and the identity, cut to 96 bits) in `live.favorites`, added when a
+  secret item leaves a device's view through a sync (removed there since the
+  agreed copy, or removed by another device) and lifted when an item is
+  added on a device on this version. Devices on this version never take a
+  recorded item from the account, whoever wrote it, and a device joining
+  the account drops its own copy of one (so a never-linked account, an
+  explicit sign-out and secrets turned off are told apart at sign-in). A
+  record cannot be turned back into the value.
+- The cleared Live TV list (`CLEARED_SOURCE`) goes up while the account's
+  copy still lists a source: v0.55.0 drops its own last source.
+- The agreed copy (`base`) leaves out recorded items, so a released
+  client's copy of one is neither taken nor answered with another upload.
+- `withKnownSettings` (core/sync-merge.mjs): a settings key the account's
+  copy lacks keeps this device's value, in the merge and in the agreed
+  copy. Riwaq never deletes a settings key.
+- `keepSignIn` also keeps a joining device's own Discord app ID when the
+  account has none (the seventh pass's empty-ID clear wiped it at sign-in).
+
+No server change, migration, format version or new endpoint. A backup
+restore is untouched: it is an explicit choice and still brings back what
+it carries.
+
+Results (`node scripts/test-accounts-mixed.mjs`, real v0.55.0 client and
+Worker on 0001–0002): 50/50. Scenario 1 (last source, A/B/C/D): cloud
+sources 1 → 0 after A's upload and stay 0 after B (0.55) syncs; B drops
+its own copy; C joins without it; restarts, an unrelated change from B and
+a 409 (B moving between A's pull and push) keep it out; D (0.55), offline
+throughout, uploads it again (cloud 1), a device joining right then does
+not take it, A answers with the cleared list and D drops it (cloud 0);
+three idle rounds on five devices add 0 PUTs. Scenario 2 (Stremio,
+synthetic keys): A signs out, B (0.55) keeps its own key and uploads it;
+A, a new device and restarts stay signed out; 0 extra PUTs; an explicit new
+sign-in reaches B and C; linking the same session again on purpose on C
+reaches A; a sign-out made on B reaches A and C; without secrets sync each
+device keeps its own sign-in. Scenario 3 (sign-in without a common
+ancestor): never linked keeps the joiner's sign-in and shares it; the
+signed-out session is dropped even when the cleared copy came from 0.55;
+a different own sign-in is kept and goes up; secrets off keeps it local; a
+joiner's own source joins while the cleared one stays gone. Scenario 4:
+two sources, a configured addon, a Discord ID, favourites both ways, a
+profile setting, watch progress from 0.55, one-of-two removal, an addon
+installed again, recovery and a secrets-free backup restore. Scenario 5:
+a failed upload and a restart, an upload whose reply was lost (twice),
+concurrent updated devices, repeated syncs with 0 extra PUTs.
+`tests/sync-clears.test.mjs` 11/11 (pure rules);
+`tests/review-pr155-round7-sync-clears.test.mjs` 9/9 and
+`tests/account.test.mjs` unchanged; `scripts/test-accounts-released.mjs`
+3/3.
+
+The limit, stated in docs/ACCOUNTS.md: a v0.55.0 device keeps its own
+Stremio key, configured addon and Discord app ID on that device until it
+updates or the viewer removes them there, and the account's copy can hold
+them; only devices on this version refuse them. A Riwaq sign-out does not
+end the session at Stremio (unchanged). Whether that is acceptable for the
+Beta is a release decision; the smallest stricter step would be a server
+capability that refuses uploads from released apps, which needs a
+production deployment and is not part of this change.

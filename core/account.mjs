@@ -33,7 +33,12 @@ import {
 } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { collectBackup, restoreState } from "./backup.mjs";
-import { keepSignIn, merge3, same } from "./sync-merge.mjs";
+import { keepSignIn, merge3, same, withKnownSettings } from "./sync-merge.mjs";
+import {
+  settleClears,
+  withClearedSource,
+  withoutCleared,
+} from "./sync-clears.mjs";
 import { ACCOUNT_SERVER } from "./account-server.mjs";
 
 export const USERNAME = /^[a-z0-9][a-z0-9_.-]{2,31}$/;
@@ -339,6 +344,40 @@ export class AccountHub {
         collectBackup(this.client.state, { includeSecrets: !!secrets }).payload,
       ),
     );
+  }
+
+  /**
+   * What this device uploads: its payload, with the clear records of what
+   * it removed since `bag.base` (a sync with nothing new to pull merges
+   * nothing) and, for a released client, the cleared Live TV list
+   * (core/sync-clears.mjs). A record that drops an item still held here
+   * (a device updated from a released version) waits while a video plays,
+   * like any change from the account: null, and nothing goes up until then.
+   */
+  ownClears(bag, seen) {
+    const local = withClearedSource(this.collect(bag.secrets), bag.base, seen);
+    if (bag.base === undefined) return local;
+    const settled = settleClears(bag.base, local, local);
+    if (same(settled, local)) return local;
+    const favorites = settled.live.favorites;
+    if (
+      same(
+        { ...settled, live: { ...settled.live, favorites: [] } },
+        {
+          ...local,
+          live: { ...local.live, favorites: [] },
+        },
+      )
+    ) {
+      // Only new or lifted records: nothing this device holds changes.
+      this.client.state.live.favorites = [...favorites];
+      this.client.persist();
+      return settled;
+    }
+    if (this.playbackActive()) return null;
+    this.apply(settled);
+    this.onChange("remote");
+    return withClearedSource(this.collect(bag.secrets), bag.base, seen);
   }
 
   /** Puts the account's data on this device, keeping its own profile choice. */
@@ -719,17 +758,28 @@ export class AccountHub {
         const step = await this.client.atRest(
           () => {
             if (this.bag !== bag) return null;
+            const seen = pulled.envelope?.payload;
             if (pulled.envelope) {
               const remote = pulled.envelope.payload;
               const secrets = bag.secretsChanged
                 ? bag.secrets
                 : !!pulled.envelope.secrets;
-              const local = this.collect(secrets);
-              const merged = keepSignIn(
+              const local = withClearedSource(this.collect(secrets), bag.base);
+              // Release blocker W4 (mixed versions): clear records decide
+              // what a released client's copy may bring back
+              // (core/sync-clears.mjs).
+              const merged = settleClears(
                 bag.base,
                 local,
-                remote,
-                merge3(bag.base, local, remote, { prefer }),
+                withKnownSettings(
+                  keepSignIn(
+                    bag.base,
+                    local,
+                    remote,
+                    merge3(bag.base, local, remote, { prefer }),
+                  ),
+                  local,
+                ),
               );
               if (!same(merged, local) && this.playbackActive()) {
                 this.deferred = true;
@@ -742,7 +792,15 @@ export class AccountHub {
                 this.apply(merged);
                 this.onChange("remote");
               }
-              bag.base = remote;
+              // The agreed copy leaves out what this device's records
+              // cleared: a released client's copy of a cleared item is
+              // neither taken nor fought over with another upload.
+              // Settings a released writer did not know count as this
+              // device's own, so they are neither reset nor uploaded again.
+              bag.base = withKnownSettings(
+                withoutCleared(remote, new Set(merged.live?.favorites || [])),
+                merged,
+              );
               bag.revision = pulled.revision;
             } else if (pulled.revision === 0) {
               bag.revision = 0;
@@ -750,7 +808,13 @@ export class AccountHub {
             }
             this.deferred = false;
             this.deferredPrefer = null;
-            const local = this.collect(bag.secrets);
+            const local = this.ownClears(bag, seen);
+            if (!local) {
+              this.deferred = true;
+              this.error = "";
+              this.client.persist();
+              return null;
+            }
             if (
               !bag.secretsChanged &&
               bag.base !== undefined &&

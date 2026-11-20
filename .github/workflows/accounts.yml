@@ -12,6 +12,8 @@ on:
     paths:
       - "server/accounts/**"
       - "core/account*.mjs"
+      - "core/sync-*.mjs"
+      - "core/backup.mjs"
       - "scripts/test-account*.mjs"
       - "tests/account*.test.mjs"
       - ".github/workflows/accounts*.yml"
@@ -19,6 +21,8 @@ on:
     paths:
       - "server/accounts/**"
       - "core/account*.mjs"
+      - "core/sync-*.mjs"
+      - "core/backup.mjs"
       - "scripts/test-account*.mjs"
       - "tests/account*.test.mjs"
       - ".github/workflows/accounts*.yml"
@@ -47,11 +51,13 @@ jobs:
           cache: npm
       - run: npm ci
       - name: The service, its database integrity and the client against it
-        run: node --test tests/accounts-server.test.mjs tests/accounts-integrity.test.mjs tests/accounts-instances.test.mjs tests/accounts-workflow.test.mjs tests/account.test.mjs
+        run: node --test tests/accounts-server.test.mjs tests/accounts-integrity.test.mjs tests/accounts-instances.test.mjs tests/accounts-workflow.test.mjs tests/account.test.mjs tests/sync-clears.test.mjs tests/review-pr155-round7-sync-clears.test.mjs
       - name: Released apps across the old Worker, migration 0003 and this Worker
         run: |
           git fetch --no-tags origin tag v0.40.0 tag v0.54.0 tag v0.55.0
           node scripts/test-accounts-released.mjs
+      - name: Updated and released clients syncing one account (release blocker W4)
+        run: node scripts/test-accounts-mixed.mjs
       - name: The Worker in workerd with a local D1 (no Cloudflare account)
         run: |
           npm install --prefix "$RUNNER_TEMP/wrangler" --no-audit --no-fund wrangler@4.141.0
