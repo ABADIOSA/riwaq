@@ -1130,3 +1130,89 @@ overflow. The issue's screenshot could not be opened from this environment.
 
 Runs, versions and what was not run: [VERIFICATION.md](../VERIFICATION.md),
 2026-11-21 (ninth pass).
+
+# Tenth pass — Codex's release acceptance: W4 with every carrier lost and a new device first (2026-11-21)
+
+Codex's release acceptance of `306be5f` (Windows x64, Node 24.19.0) passed
+the 5000-favourites fix (94/94 at 0, 1, 4999 and 5000), #157's saves and the
+native Save dialog, and stopped the release on one W4 sequence (7/9; both
+controls 9/9). Only W4 is touched here; Codex's `3a66930` (subtitle save
+re-checks its viewing before the rename) and `306be5f` (release notes) are
+kept unchanged, the version stays 0.56.0, no Worker, D1 or migration change.
+
+## Reproduced before changing anything (on `306be5f`)
+
+`scripts/test-accounts-mixed.mjs` gained scenario 7, Codex's exact steps
+with the real v0.55.0 client and the Worker released with it on 0001–0002:
+A (updated) removes the only Live TV source while D (0.55.0) is offline; B
+(0.55.0) takes the clear, then deletes all five provider keys through its
+own `DataHub.save({ clear: true })`; D returns and uploads its stale source;
+a new updated device C signs in before A syncs; then A and C sync. Same
+revisions, writers and PUT counts as Codex's log: 2, 4, 5 (no record left),
+6 (D's source, no record), 7 (C, writer 0.56.0, the source and an empty
+list), and A's sync adopts revision 7 without uploading (A.base 7, A 1,
+C 1, cloud 1). Both controls (four keys deleted; A syncs before C joins)
+pass as in Codex's logs.
+
+Cause: `mergeClears` dropped a record the account's copy lacked when that
+copy held a list (`hasClears`) and the item. That was meant to recognise a
+lift, but C never knew the record: the copy it joined from had none, so it
+wrote an empty list beside the source it took. A took the absence of
+evidence for an explicit re-add, dropped its own record, and the source
+came back on A and C and stayed in the account.
+
+## W4 — lifts are written
+
+- `liftRecord(record)`: the clear record's fingerprint under another label
+  (`riwaq-sync-lift`), 24 hex, travelling in the same `riwaqClears` list (a
+  released client relays it with the rest; it shares the 340 bound).
+- `settleClears` writes it for an item added on this device since its
+  agreed copy (a new sign-in, an addon installed, a source restored from a
+  backup), whether or not this device knew the record, and drops it when
+  the item is removed again. An item taken from the account is in the
+  agreed copy by then, so a joining device's first upload carries no lift.
+- `mergeClears(base, local, remote)`: a record (or lift) in the agreed copy
+  and this device's list but missing from the account's copy goes only when
+  that copy carries its counterpart; otherwise it is kept, oldest, and put
+  back. A record and its own lift never stay together; when no order can be
+  told (two devices at once, carriers a released device made disagree) the
+  clear wins. `hasClears` is kept for the representation's own tests; it no
+  longer decides anything.
+- Unchanged: the carriers, the 8160-character bound, `withClearedSource`,
+  the account bag, `withKnownSettings`, the sign-in rule (the account's
+  records decide), the released client's own limits.
+
+What no client can do: when every copy of a record is gone from the
+account, a device that joins before one still holding it syncs cannot know
+the item was removed, and shows it. Scenario 7 states this as a limit and
+checks what must hold instead: the copy C read carries no record or lift
+anywhere in the payload, C's first upload lifts nothing, A keeps its
+record and answers with the cleared list (revision 8), and C drops the
+source at its next sync; then both 0.55.0 devices drop it too.
+
+Tests: `tests/release-0560-w4-lifts.test.mjs` (8: Codex's sequence at the
+record level, a joining device's first sync, an explicit re-add through a
+released relay, a re-add on a device that never knew the record, removed
+again after a lift, a removal and a re-add with no order, the bound, a
+Stremio session linked again versus a joiner's copy);
+`release-0560-w4-capacity` and `sync-clears` moved to written lifts (the
+relayed-lift case now carries the lift; an unknowing empty list is not
+one). Scenario 7 in four runs: Codex's failure; the same with a 409 (D
+re-uploads in the middle of A's repair) and a lost reply on A's retry;
+the four-keys control; the repair-first control. Each then restarts every
+device, idles three rounds, checks every live favourite and the key B
+kept, and restores on C, on purpose, a secrets backup holding that very
+source: the re-add lifts the record, relayed through B, and reaches A, B
+and D.
+
+| | `306be5f` | Corrected |
+| --- | --- | --- |
+| Codex's sequence (scenario 7) | A and C hold the source, cloud keeps it at revision 7 with no record | A never holds it; revision 8 carries the record and the cleared list; C, then D and B drop it |
+| Same with a 409 and a lost reply in A's repair | A takes the source, never uploads | A refuses D's re-upload, its retry lands (revision 9), settles without another upload |
+| Controls (four keys; A first) | 9/9 core checks | unchanged revisions, pass |
+| Explicit re-add on an updated device | travels (inferred) | travels through a released relay (written lift) |
+| `test-accounts-mixed.mjs` at 0, 1, 4999, 5000 | 155/170 (the earlier 94 all pass) | 170/170 |
+| Idle rounds | 0 extra PUTs | 0 extra PUTs |
+
+Runs, versions and what was not run: [VERIFICATION.md](../VERIFICATION.md),
+2026-11-21 (tenth pass).
