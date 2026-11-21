@@ -962,3 +962,171 @@ directly under it, same style, focus and keys.
   list with no guess, a long name never widening the menu, Back, and the
   disabled state with its reason. Not run: the native Windows Save dialog,
   a packaged or portable build and a real addon's subtitles.
+
+# Ninth pass — Codex's final acceptance: W4 at the favourites limit, #157 security, issue #158 (2026-11-21)
+
+Codex's final acceptance (Windows x64, Node 24.19.0, Electron 44.9.3, MPV
+0.41.0) passed the mixed-version suite 50/50 and the native subtitle saves
+in four formats, and stopped the release on two findings: W4 failed at
+exactly 5000 Live TV favourites (46/50; 50/50 at 4999), and #157's fetch
+took its local exception from the subtitle's own address and its save did
+not re-check its viewing after the fetch and the dialog. Started on
+`c657bfa` (GitHub's PR head matched; PR #155 draft). Everything earlier on
+the branch is kept unchanged; the version stays 0.56.0.
+
+## Reproduced before changing anything (on `c657bfa`)
+
+`scripts/test-accounts-mixed.mjs` gained `RIWAQ_MIXED_FAVORITES=<n>` (the
+first device gets n synthetic channel favourites before signing up), as
+Codex ran it: **4999 → 50/50, 5000 → 46/50**, the same four failures (a
+device joining right after the returning 0.55.0 device's upload got the
+source, updated devices took it back, the 0.55.0 device kept it, and the
+next source added on 0.55.0 was refused with it). The table shows the
+account's revision 4, written by 0.55.0, with no record left.
+
+Cause: the records were appended to `live.favorites`; v0.55.0's
+`restoreState` keeps the first 5000 (`.slice(0, 5000)`), so at 5000 real
+favourites a released sync cut the record and uploaded the list without
+it. The candidate's own `restoreState` cuts there too, so an updated
+device applying a merged payload at the limit lost it as well; and records
+counted against a released device's favourites (4999 real + 3 records was
+already past the limit in the new scenario 6).
+
+## W4 — records leave the favourites list
+
+Probed against every released cleaner since accounts began (0.40.0–0.55.0):
+`cleanSecretBag` keeps a provider entry's string fields of up to 8192
+characters, whatever their names, and the released code reads an entry
+only through its `key`; its interface shows the delete button only for an
+entry that has a key; `DataHub.save` spreads the entry, so adding a key
+keeps the rest.
+
+- Representation (`core/sync-clears.mjs`): the records, joined into one
+  field `riwaqClears` (at most 340 = 8160 characters, oldest dropped
+  first), in all five provider entries of the secrets payload (tmdb, omdb,
+  mdblist, fanart, theintrodb). Deleting a key on a released device removes
+  one copy of five. Updated devices keep the records in the account bag
+  (`state.account.clears`, encrypted store), never in the profile, the
+  provider store (`restoreState` drops the field) or a backup. A bag made by
+  a released version starts from its agreed copy and from what its released
+  code kept in the provider entries.
+- Merge (`mergeClears`, `mergeWithClears`): everything else goes through
+  merge3 without the records; records merge as a set. A record the
+  account's copy lacks goes only when that copy holds a list and holds the
+  item again (a lift). Updated writers always write the list, an empty one
+  included, so a released device that passes on a lift (it relays the list
+  unchanged) is followed, and a released copy with no list at all (every
+  carrier deleted) lost it: the record is kept and the next upload puts it
+  back. Trimming past 340 keeps the oldest at the front, so two devices
+  trim alike instead of fighting.
+- A record-only change is applied without waiting for a viewing to end
+  (nothing the device holds changes) and without touching the state.
+- The favourites list is the viewer's own on every device. A favourite past
+  5000 is refused when added (`LIVE_FAVORITES_MAX`, with a sentence in both
+  languages): every Riwaq cuts the list there at the next restore or sync.
+- First design rejected: putting the record first in the list. At 5000 real
+  favourites a released device would then cut a real favourite and upload
+  its removal.
+- Second design corrected during this pass: treating a released writer's
+  copy as never lifting a record broke an explicit re-install on an updated
+  device when a released device synced in between (C2 kept refusing the
+  re-installed addon). Telling "relayed" from "lost" by the list's presence
+  fixed it.
+
+Tests: `tests/release-0560-w4-capacity.test.mjs` (13: carriers, empty list,
+one deleted carrier, the 8192 bound, malformed carriers, restore never
+importing records, above-5000 input, the hub's limit, the merge rules,
+trimming, relayed lift versus lost list, favourites untouched at 5000);
+`tests/sync-clears.test.mjs` moved to the carriers (11); the round-7 W4
+suite and the account suites unchanged. `scripts/test-accounts-mixed.mjs`
+scenario 6 runs at 4999 and 5000 every time: five devices (two updated,
+three released, one offline), two sources and a configured addon removed at
+once, full-capacity released uploads, a TMDB key deleted on a released
+device, a favourite removed on 0.55.0 and another added on an updated
+device, the offline 0.55.0 device returning and a new device joining right
+after it, restarts and three idle rounds, a 409 between two updated
+devices, a lost reply, a re-install, re-login, an encrypted backup restored,
+and a released device that lost every carrier.
+
+| Scenario | Old candidate `c657bfa` | Corrected candidate |
+| --- | --- | --- |
+| 4,999 favourites (Codex's scenario 1) | PASS 50/50 | PASS |
+| 5,000 favourites (Codex's scenario 1) | FAIL 46/50 | PASS |
+| Offline legacy device returns (scenario 6, 4999 and 5000) | removed sources and addon taken by updated and new devices | updated and new devices refuse them; 0.55.0 drops the sources |
+| Legitimate favourites | preserved (the records, appended last, were what a released sync cut) | preserved on every device at both counts; the list holds no records |
+| Repeated sync | 0 extra PUTs where it settled | 0 extra PUTs |
+
+Limits: a released device keeps its own Stremio key, configured addon and
+Discord app ID (unchanged); a released device that missed the cleared list
+uploads its source again until an updated device answers (unchanged); a
+device joining at the very moment the account's copy has lost every
+carrier cannot know the records until an updated device syncs (released
+interfaces cannot delete an entry without a key, so this takes five
+configured keys deleted on one released device); records past 340 are
+dropped oldest first.
+
+## #157 — the subtitle fetch is authorized where it connects, and bound to its viewing
+
+Network (`core/subtitle-export.mjs`, `electron/subtitle-http.mjs`,
+`core/client.mjs`):
+
+- The client records which configured addon supplied each subtitle key
+  (`subtitleOrigins`: the subtitle addon, or for a stream's own subtitles
+  the addon that sent the stream). `subtitleOrigin(key)` answers only while
+  that addon is installed and enabled; a subtitle whose addon is gone is
+  refused before any request.
+- A local address is allowed only at a trusted origin: the supplying
+  addon's own scheme, host and port, and only when that addon is itself
+  local (`trustedOrigin`). Naming a loopback or private address grants
+  nothing. Once a redirect leaves the trusted origin, trust ends for the
+  rest of the chain.
+- Main's transport keeps artwork's connection-time control: outside the
+  trusted origin the socket's own lookup keeps only public addresses
+  (loopback, private, CGNAT, link-local and metadata, multicast, reserved,
+  ULA, link-local IPv6, v4-mapped IPv6 dropped), so a public name that
+  resolves home, or resolves differently the second time, never connects.
+  IP literals are checked as they are. No proxy (`agent: false`), no
+  cookies, no header but Accept; redirects are still checked hop by hop
+  with the timeout and the 5 MB cap. Artwork's own code is unchanged (its
+  `publicAddress` and `publicLookup` are only exported).
+
+Binding (`electron/subtitle-save.mjs`, `electron/main.mjs`): the save
+captures the viewing (video ID and start token), the profile's activation
+ticket and the chosen track's source (`sameSource`: track, kind, address or
+path, supplying addon) and re-checks them, with the library lock, before
+the fetch, after it, before the dialog, after it and right before the
+write; any change ends the save with nothing written, and a 250 ms watch
+aborts a fetch still out. A changed selection (which track is shown) still
+saves the one chosen; a removed or replaced track does not.
+
+Tests: `tests/release-0560-subtitle-security.test.mjs` (25), with a fake
+resolver and request for public names and a loopback fixture as the
+configured local addon: every refused range and family, mixed answers,
+rebinding between two connections, literals and local names, another port
+as another origin, headers, a trusted addon saving, unconfigured localhost,
+public to local, public to a name resolving home, local to public and back,
+timeout, cancel and size over the real transport, the client's origin
+tracking (enabled, disabled, removed), every invalidation of the binding
+(playback ends, another video, profile switch, A → B → A, library lock,
+track removed or replaced, addon removed) before the dialog and with the
+dialog open, a cancelled fetch reported as the ended viewing, main's abort,
+a cancelled dialog, temp-file cleanup, and main's wiring. The issue-#157
+suites moved to the trusted-origin contract.
+
+Not verified here: the native Windows Save dialog, MPV's real subtitle
+tracks, a real local subtitle addon and a real public one; Codex's Windows
+acceptance did those for the feature and must repeat SRT and the dialog.
+
+## Issue #158 — glass refined, Flutter evaluated
+
+`src/glass.css` token values only: a curved top reflection in the dark
+sheen and an inner shade at every glass edge's foot (`--glass-floor`), the
+dialog's rim included; fallbacks still flatten them. Flutter is evaluated
+and not adopted (`docs/ISSUE-158-GLASS-FLUTTER.md`); the issue stays open.
+Checked in Chromium on the web build: text contrast measured from pixels is
+identical before and after; screenshots at 390, 768 and 1440 px in both
+languages and schemes, reduced motion and reduced transparency, no
+overflow. The issue's screenshot could not be opened from this environment.
+
+Runs, versions and what was not run: [VERIFICATION.md](../VERIFICATION.md),
+2026-11-21 (ninth pass).
