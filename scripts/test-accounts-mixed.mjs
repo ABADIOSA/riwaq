@@ -1399,6 +1399,91 @@ try {
       w.close();
     }
   }
+  // A receive followed by a failed upload must persist the received state and
+  // its sync position together. Restarting must not turn it into a local edit.
+  if (liftRecord) {
+    scenario = "8 remote receive, failed upload and restart";
+    const w = world();
+    try {
+      const acct = account();
+      const A = w.device(Current, "A");
+      const B = w.device(Legacy, "B");
+      const C = w.device(Current, "C");
+      const D = w.device(Legacy, "D");
+      await add(A, 1);
+      const id = A.state.live.sources[0].id;
+      const record = clearRecord("live", id);
+      const lift = liftRecord(record);
+      for (const provider of CARRIERS)
+        B.client.dataHub.save({
+          id: provider,
+          key: "synthetic-" + provider + "-key-0000",
+        });
+      await A.client.account.signup(acct);
+      await B.client.account.login(acct);
+      await D.client.account.login(acct);
+      await A.sync();
+      A.client.live.updateSource({ id, action: "remove" });
+      await A.sync();
+      await B.sync();
+      for (const provider of CARRIERS)
+        B.client.dataHub.save({ id: provider, clear: true });
+      await B.sync();
+      await C.client.account.login(acct);
+      check(
+        "C starts without the source or evidence of its earlier removal",
+        count(C) === 0 &&
+          readClears((await w.cloud(A)).envelope.payload).length === 0,
+      );
+      await D.sync();
+      const incoming = await row(w, "D returned with the old source", [
+        A,
+        C,
+        D,
+      ]);
+      C.client.favorite({ id: "tt0111161", type: "movie", name: "Fixture" });
+      w.failNext = { method: "PUT", after: false };
+      let refused;
+      try {
+        await C.sync();
+      } catch (error) {
+        if (error.message !== "synthetic network failure") throw error;
+        refused = true;
+      }
+      check(
+        "C received the source and the following upload failed before commit",
+        refused &&
+          count(C) === 1 &&
+          (await w.cloud(A)).revision === incoming.cloudRevision,
+      );
+      C.restart();
+      check(
+        "C restored the received source and its matching sync position",
+        count(C) === 1 &&
+          C.base() === incoming.cloudRevision &&
+          realSources(C.state.account.base?.live?.sources).some(
+            (item) => item.id === id,
+          ),
+      );
+      await C.sync();
+      check(
+        "C does not write a lift when retrying after restart",
+        !readClears((await w.cloud(A)).envelope.payload).includes(lift),
+      );
+      await A.sync();
+      await C.sync();
+      const repaired = await row(w, "A repaired after C restarted", [A, C, D]);
+      check(
+        "the original deletion stands on A, C and the account",
+        !count(A) &&
+          !count(C) &&
+          !repaired.cloudSources &&
+          readClears((await w.cloud(A)).envelope.payload).includes(record),
+      );
+    } finally {
+      w.close();
+    }
+  }
 } catch (error) {
   checks.push({ scenario, name: "unexpected error", ok: false });
   console.error(`FAIL [${scenario}] unexpected error:`, error);

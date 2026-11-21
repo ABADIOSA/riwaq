@@ -401,7 +401,7 @@ export class AccountHub {
   }
 
   /** Puts the account's data on this device, keeping its own profile choice. */
-  apply(payload) {
+  apply(payload, position) {
     const client = this.client;
     const profiles = client.profiles;
     const active = profiles.store.active;
@@ -429,6 +429,9 @@ export class AccountHub {
       // review, N12), as after a backup restore.
       profiles.renew();
       client.cache.clear();
+      // The received state and its sync position belong in one snapshot.
+      // A failed following upload must not make a restart treat it as an edit.
+      if (bag && position) Object.assign(bag, position);
       client.persist();
     } finally {
       this.applying = false;
@@ -828,20 +831,24 @@ export class AccountHub {
                 return null;
               }
               bag.secrets = secrets;
-              if (!same(merged, local) && !recordsOnly) {
-                this.apply(merged);
-                this.onChange("remote");
-              }
               // The agreed copy leaves out what this device's records
               // cleared: a released client's copy of a cleared item is
               // neither taken nor fought over with another upload.
               // Settings a released writer did not know count as this
               // device's own, so they are neither reset nor uploaded again.
-              bag.base = withKnownSettings(
-                withoutCleared(remote, new Set(readClears(merged))),
-                merged,
-              );
-              bag.revision = pulled.revision;
+              const position = {
+                base: withKnownSettings(
+                  withoutCleared(remote, new Set(readClears(merged))),
+                  merged,
+                ),
+                revision: pulled.revision,
+              };
+              if (!same(merged, local) && !recordsOnly) {
+                this.apply(merged, position);
+                this.onChange("remote");
+              } else {
+                Object.assign(bag, position);
+              }
             } else if (pulled.revision === 0) {
               bag.revision = 0;
               bag.base = undefined;
