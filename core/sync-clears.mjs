@@ -43,18 +43,37 @@
  *   drops the entry: that device really loses its last source. Only the
  *   last source needs it; removing one of several already reached 0.55.0.
  *
- * Records merge as a set with three rules (mergeClears): a record either
- * side added stays; one this device lifted (it added the item again) goes;
- * one the account's copy lacks goes only when that copy holds a list (an
- * updated writer always writes one, empty included, and a released device
- * passes it on) and holds the item again, as a lift does. A released copy
- * with no list at all lost it: this device keeps the record and puts it
- * back.
+ * Lifts are written, never inferred (Codex's release acceptance,
+ * 2026-11-21). An item added on a device on this version (in its payload,
+ * not in the copy it last agreed with the account) gets a lift record in
+ * the same list: the 24-hex fingerprint of its clear record under another
+ * label (liftRecord). A device that holds a clear record drops it only when
+ * the account's copy carries its lift; a list that merely lacks the record
+ * proves nothing. Until then a list without the record was read as a lift,
+ * and a device that never knew the record wrote exactly that: a released
+ * device deleted all five carriers, a 0.55.0 device returned with the
+ * removed source, and a new updated device that joined before the remover
+ * synced uploaded it with an empty list, which the remover took as a lift
+ * and the source came back everywhere.
+ *
+ * Records merge as a set (mergeClears): a record either side added stays;
+ * one this device lifted or trimmed since the agreed copy goes; one the
+ * account's copy lacks goes only when that copy carries its counterpart (a
+ * clear record's lift, or a lift's clear record when the item was removed
+ * again), and is otherwise put back: that copy lost it. A record and its
+ * own lift never stay together; when the order cannot be told the clear
+ * wins.
  *
  * What a released client cannot be made to do: drop its own Stremio key,
  * configured addon or Discord app ID. It keeps them, on that device, until
  * it updates or the viewer removes them there; devices on this version
  * never take them back.
+ *
+ * What no client can know: once every copy of a record is gone from the
+ * account (five keys deleted on a released device), a device joining
+ * before one that still holds the record syncs sees the item. Its first
+ * upload carries no lift, so that device puts the record back and the
+ * joining device drops the item at its next sync.
  *
  * Pure and browser-safe.
  */
@@ -94,6 +113,30 @@ export function clearRecord(kind, value) {
     .slice(0, 24);
 }
 
+/**
+ * The lift record of a clear record: written by a device on this version
+ * that added the item (it is in its payload and not in the copy it last
+ * agreed with the account). Only a device that knows the clear record can
+ * tell it from another record, and only a lift drops a clear record.
+ */
+export function liftRecord(record) {
+  return createHash("sha256")
+    .update(`riwaq-sync-lift\n${record}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+
+/** A record and its own lift never stay together: the clear wins. */
+const unlifted = (list) => {
+  const listed = new Set(list);
+  const drop = new Set();
+  for (const record of list) {
+    const lift = liftRecord(record);
+    if (listed.has(lift)) drop.add(lift);
+  }
+  return drop.size ? list.filter((record) => !drop.has(record)) : list;
+};
+
 /** True when a payload carries secrets (`auth`, null when signed out). */
 export const carriesSecrets = (payload) =>
   isObject(payload) && Object.hasOwn(payload, "auth");
@@ -127,6 +170,8 @@ export function readClears(payload) {
  * one. Every updated writer puts one in each carrier; a released device
  * passes them on as they are. A secrets payload with none was written by a
  * released device that lost them (every carrier's provider entry deleted).
+ * It says nothing about lifts: a list written by a device that never knew a
+ * record lacks it too (mergeClears reads lifts only from liftRecord).
  */
 export function hasClears(payload) {
   if (!carriesSecrets(payload) || !isObject(payload.providers)) return false;
@@ -181,42 +226,41 @@ export function withClears(payload, records) {
 }
 
 /**
- * Merges record lists (oldest first). `base` is undefined at sign-in, when
- * the account's records decide. `lifts`: the account's copy holds a
- * writer's list (hasClears), so a record missing from it may have been
- * lifted. `holds(record)`: that copy holds the item the record names.
+ * Merges record lists (oldest first), clear and lift records alike. `base`
+ * is undefined at sign-in, when the account's records decide.
  *
- * - In the account's copy and not lifted here (in base, gone from local):
- *   kept.
+ * - In the account's copy and not dropped here (in base, gone from local:
+ *   lifted, cleared again or trimmed here): kept.
  * - Added here since the base: kept, newest.
  * - In base and local but gone from the account's copy: dropped only when
- *   the copy's list lifted it, which an updated device does only by adding
- *   the item again (a released device passes that on unchanged). Otherwise
- *   the copy lost it (a released device without any carrier, or a list
- *   trimmed past MAX_CLEARS) and it is kept, oldest, so trimming drops it
- *   first again.
+ *   that copy carries its counterpart, which only a device on this version
+ *   writes, and a released device passes on unchanged: the lift of a clear
+ *   record (the item was added again on such a device), or the clear record
+ *   of a lift (it was removed again). A copy that merely lacks it lost it
+ *   (a released device without any carrier, a device that never knew it, a
+ *   list trimmed past MAX_CLEARS), and it is kept, oldest, so trimming
+ *   drops it first again.
+ * - A record and its own lift both left (two devices at once, or carriers a
+ *   released device made disagree): the clear wins.
  */
-export function mergeClears(
-  base,
-  local,
-  remote,
-  { lifts = false, holds = () => false } = {},
-) {
-  if (base === undefined) return bounded(remote);
+export function mergeClears(base, local, remote) {
+  if (base === undefined) return unlifted(bounded(remote));
   const inBase = new Set(base);
   const inLocal = new Set(local);
   const inRemote = new Set(remote);
+  const liftsOfRemote = new Set(remote.map(liftRecord));
   const front = [];
   const added = [];
   for (const record of local) {
     if (inRemote.has(record)) continue;
     if (!inBase.has(record)) added.push(record);
-    else if (!(lifts && holds(record))) front.push(record);
+    else if (!inRemote.has(liftRecord(record)) && !liftsOfRemote.has(record))
+      front.push(record);
   }
   const middle = remote.filter(
     (record) => inLocal.has(record) || !inBase.has(record),
   );
-  return bounded([...front, ...middle, ...added]);
+  return unlifted(bounded([...front, ...middle, ...added]));
 }
 
 /**
@@ -240,14 +284,12 @@ export function mergeWithClears(
   if (!carriesSecrets(merged)) return merged;
   if (!carriesSecrets(local) || !carriesSecrets(remote))
     return withClears(merged, kept);
-  const holding = secretRecords(remote);
   return withClears(
     merged,
     mergeClears(
       base === undefined ? undefined : readClears(base),
       readClears(local),
       readClears(remote),
-      { lifts: hasClears(remote), holds: (record) => holding.has(record) },
     ),
   );
 }
@@ -342,11 +384,14 @@ export function withoutCleared(payload, records, own) {
  * After the first sync (a base exists), a secret item that was in `base`
  * and is gone from `local` was removed here, and one that was in `local`
  * and is gone from `merged` was removed by another device: both get a
- * record. One in `local` but not in `base` was added here (a new sign-in,
- * an addon installed again), and its record is lifted. At sign-in nothing
- * is recorded or lifted: the account's records decide, so an item cleared
- * on another device is dropped here too, while this device's own sign-in
- * that the account never saw is kept.
+ * record (and lose a lift of theirs). One in `local` but not in `base` was
+ * added here (a new sign-in, an addon installed again, a backup restored):
+ * its record is lifted and its lift record written, the only thing that
+ * lifts it on other devices. An item that only came from the account is in
+ * `base` by then, so taking a copy is never a lift. At sign-in nothing is
+ * recorded or lifted: the account's records decide, so an item cleared on
+ * another device is dropped here too, while this device's own sign-in that
+ * the account never saw is kept.
  */
 export function settleClears(base, local, merged) {
   if (!carriesSecrets(merged)) return merged;
@@ -365,16 +410,27 @@ export function settleClears(base, local, merged) {
     for (const record of mine)
       if (!after.has(record) && !lifted.has(record)) added.push(record);
   }
-  for (const record of lifted) records.delete(record);
   const fresh = [...new Set(added)].filter(
     (record) => !records.has(record) && !lifted.has(record),
   );
-  for (const record of fresh) records.add(record);
+  const lifts = [...lifted]
+    .map(liftRecord)
+    .filter((record) => !records.has(record));
+  // A clear record lifted here, and the lift of one cleared again here.
+  const dropped = new Set([...lifted, ...fresh.map(liftRecord)]);
+  for (const record of dropped) records.delete(record);
+  for (const record of [...fresh, ...lifts]) records.add(record);
   const out = withoutCleared(merged, records, local);
-  if (!lifted.size && !fresh.length) return out;
+  if (
+    !fresh.length &&
+    !lifts.length &&
+    !current.some((record) => dropped.has(record))
+  )
+    return out;
   return withClears(out, [
-    ...current.filter((record) => !lifted.has(record)),
+    ...current.filter((record) => !dropped.has(record)),
     ...fresh,
+    ...lifts,
   ]);
 }
 

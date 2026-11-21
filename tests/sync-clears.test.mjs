@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import {
   CLEARED_SOURCE,
   clearRecord,
+  liftRecord,
   readClears,
   secretRecords,
   settleClears,
@@ -123,8 +124,11 @@ test("adding an item here lifts its record: an explicit re-install travels", () 
   const base = payload({ clears: [record] });
   const local = payload({ clears: [record], addons: [addon(CONFIGURED)] });
   const out = settleClears(base, local, local);
-  assert.deepEqual(readClears(out), []);
+  // The record goes and its lift is written: only that lifts it elsewhere.
+  assert.deepEqual(readClears(out), [liftRecord(record)]);
   assert.equal(out.addons.length, 1);
+  // Settling again changes nothing.
+  assert.deepEqual(settleClears(out, out, out), out);
 });
 
 test("at sign-in nothing is recorded or lifted; the account's records decide", () => {

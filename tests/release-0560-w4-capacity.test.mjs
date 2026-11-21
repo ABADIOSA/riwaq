@@ -15,6 +15,7 @@ import {
   MAX_CLEARS,
   clearRecord,
   hasClears,
+  liftRecord,
   mergeClears,
   mergeWithClears,
   readClears,
@@ -175,33 +176,36 @@ test("mergeClears: additions from both sides stay; a lift here goes", () => {
   );
   // Remote added r3, this device added r4 and lifted r2.
   assert.deepEqual(
-    mergeClears([r1, r2], [r1, r4], [r1, r2, r3], { lifts: true }),
-    [r1, r3, r4],
+    mergeClears([r1, r2], [r1, r4, liftRecord(r2)], [r1, r2, r3]),
+    [r1, r3, r4, liftRecord(r2)],
   );
   // At sign-in the account decides.
   assert.deepEqual(mergeClears(undefined, [r4], [r1]), [r1]);
 });
 
-test("mergeClears: a record missing from the account's copy is kept unless that copy lifted it", () => {
+test("mergeClears: a record missing from the account's copy is kept unless that copy carries its lift", () => {
   const r1 = clearRecord("live", S1);
-  // A released copy with no list at all: lost, kept.
-  assert.deepEqual(mergeClears([r1], [r1], [], { lifts: false }), [r1]);
-  // A list without it and without the item: lost or trimmed, kept.
-  assert.deepEqual(
-    mergeClears([r1], [r1], [], { lifts: true, holds: () => false }),
-    [r1],
-  );
-  // A list without it that holds the item again: lifted.
-  assert.deepEqual(
-    mergeClears([r1], [r1], [], { lifts: true, holds: (r) => r === r1 }),
-    [],
-  );
-  // No list, item held (a released device re-uploading the removed
-  // source with every carrier lost): the record stays.
-  assert.deepEqual(
-    mergeClears([r1], [r1], [], { lifts: false, holds: () => true }),
-    [r1],
-  );
+  const l1 = liftRecord(r1);
+  // A copy without it (no list at all, or a list written by a device that
+  // never knew it, whatever that copy holds): lost, kept.
+  assert.deepEqual(mergeClears([r1], [r1], []), [r1]);
+  assert.deepEqual(mergeClears([r1], [r1], [clearRecord("live", S2)]), [
+    r1,
+    clearRecord("live", S2),
+  ]);
+  // The copy carries its lift: lifted.
+  assert.deepEqual(mergeClears([r1], [r1], [l1]), [l1]);
+  // A lift whose item was removed again: the clear record is back.
+  assert.deepEqual(mergeClears([l1], [l1], [r1]), [r1]);
+  // A lift the copy merely lacks stays (lost, not undone).
+  assert.deepEqual(mergeClears([l1], [l1], []), [l1]);
+  // Lifted here since the base: the account's copy of the record goes.
+  assert.deepEqual(mergeClears([r1], [l1], [r1]), [l1]);
+  // Removed again here since the base: the account's old lift goes.
+  assert.deepEqual(mergeClears([l1], [r1], [l1]), [r1]);
+  // A record and its own lift with no order between them: the clear wins.
+  assert.deepEqual(mergeClears([], [l1], [r1]), [r1]);
+  assert.deepEqual(mergeClears(undefined, [], [r1, l1]), [r1]);
 });
 
 test("mergeClears: trimming on another device converges instead of fighting", () => {
@@ -210,28 +214,35 @@ test("mergeClears: trimming on another device converges instead of fighting", ()
   );
   const mine = all.slice(0, MAX_CLEARS);
   const theirs = all.slice(1); // they added one and trimmed the oldest
-  assert.deepEqual(
-    mergeClears(mine, mine, theirs, { lifts: true, holds: () => false }),
-    theirs,
-  );
+  assert.deepEqual(mergeClears(mine, mine, theirs), theirs);
 });
 
-test("a released device passing on a lift is followed; one that lost the list is not", () => {
+test("a released device passing on a lift is followed; a lost or unknowing list is not", () => {
   const record = clearRecord("live", S1);
   const base = payload({ clears: [record] });
   const local = base;
-  // An updated device re-added S1 (its record lifted), a released device
-  // relayed that copy: the list is there, without the record, with S1.
-  const relayed = payload({ sources: [source(S1)], clears: [] });
+  // An updated device re-added S1 (its record lifted, its lift written), a
+  // released device relayed that copy: the lift is there, with S1.
+  const relayed = payload({
+    sources: [source(S1)],
+    clears: [liftRecord(record)],
+  });
   let merged = settleClears(base, local, mergeWithClears(base, local, relayed));
   assert.deepEqual(
     merged.live.sources.map((s) => s.id),
     [S1],
   );
-  assert.deepEqual(readClears(merged), []);
+  assert.deepEqual(readClears(merged), [liftRecord(record)]);
   // The same source from a released device whose copy carries no list.
   const lost = payload({ sources: [source(S1)] });
   merged = settleClears(base, local, mergeWithClears(base, local, lost));
+  assert.deepEqual(merged.live.sources, []);
+  assert.deepEqual(readClears(merged), [record]);
+  // The same source with an empty list from a device on this version that
+  // never knew the record (Codex's release acceptance: it joined after
+  // every carrier was lost): not a lift.
+  const unknowing = payload({ sources: [source(S1)], clears: [] });
+  merged = settleClears(base, local, mergeWithClears(base, local, unknowing));
   assert.deepEqual(merged.live.sources, []);
   assert.deepEqual(readClears(merged), [record]);
 });

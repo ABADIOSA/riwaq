@@ -67,6 +67,15 @@ const check = (name, ok, detail = "") => {
     `${ok ? "PASS" : "FAIL"} [${scenario}] ${name}${detail ? " — " + detail : ""}`,
   );
 };
+/**
+ * A limit: something the client cannot know, stated rather than counted
+ * (docs/ACCOUNTS.md). Printed, listed at the end, never a pass.
+ */
+const limits = [];
+const limit = (name, detail = "") => {
+  limits.push({ scenario, name, detail });
+  console.log(`LIMIT [${scenario}] ${name}${detail ? " — " + detail : ""}`);
+};
 const table = [];
 
 try {
@@ -82,7 +91,10 @@ try {
   const { openData } = await load(currentDir, "core/account.mjs");
   // Where the records travel (the carriers since the 5000-favorites fix);
   // an older candidate kept them in live.favorites and has no readClears.
-  const { readClears } = await load(root, "core/sync-clears.mjs");
+  const { readClears, clearRecord, liftRecord } = await load(
+    root,
+    "core/sync-clears.mjs",
+  );
   const worker =
     (await load(legacyDir, "server/accounts/worker.mjs").catch(() => null)) ||
     (await load(legacyDir, "server/accounts/service.mjs"));
@@ -1106,6 +1118,287 @@ try {
       w.close();
     }
   }
+
+  // ── Scenario 7: every carrier lost, a new device first (Codex, release
+  // acceptance 2026-11-21) ─────────────────────────────────────────────
+  // Codex's exact sequence: A (updated) removes the only Live TV source
+  // while D (0.55) is offline; B (0.55) takes the clear, then deletes all
+  // five provider keys through its own DataHub (what its interface does),
+  // so no copy of the record is left in the account; D comes back and
+  // uploads its stale source; a brand-new updated device C signs in before
+  // A syncs again, and uploads the source with an empty list of records.
+  // Codex's two controls (9/9 before the fix): B deletes four keys, or A
+  // syncs before C joins. A fourth run puts a 409 (D re-uploading in the
+  // middle of A's repair) and a lost reply on A's repair. Every run then
+  // restarts every device, idles, and restores on purpose, on C, a backup
+  // that holds that very source: an explicit re-add lifts the record.
+  const CARRIERS = ["tmdb", "omdb", "mdblist", "fanart", "theintrodb"];
+  for (const v of [
+    { name: "7 all five carriers lost, C before A", deleted: 5 },
+    {
+      name: "7 all five lost, 409 and lost reply in A's repair",
+      deleted: 5,
+      race: true,
+    },
+    { name: "7 control: four carriers lost", deleted: 4 },
+    { name: "7 control: A repairs before C", deleted: 5, repairFirst: true },
+  ]) {
+    scenario = v.name;
+    const w = world();
+    try {
+      const acct = account();
+      const A = w.device(Current, "A");
+      const B = w.device(Legacy, "B");
+      const D = w.device(Legacy, "D"); // offline after the first sync
+      await add(A, 1);
+      await durable(A);
+      const expected = await seedFavorites(A);
+      const source = A.state.live.sources[0].id;
+      const record = clearRecord("live", source);
+      const lift = liftRecord ? liftRecord(record) : null;
+      const cloudClears = async () =>
+        readClears((await w.cloud(A)).envelope.payload);
+      const favouritesKept = (...devices) =>
+        devices.every((d) => {
+          const have = new Set(d.state.live?.favorites || []);
+          return expected.every((key) => have.has(key));
+        });
+      // Five synthetic keys, configured on the released client.
+      for (const id of CARRIERS)
+        B.client.dataHub.save({ id, key: `synthetic-${id}-key-0000` });
+      await A.client.account.signup(acct);
+      await B.client.account.login(acct);
+      await D.client.account.login(acct);
+      await A.sync();
+      let r = await row(w, "configured and synced", [A, B, D]);
+      check(
+        "all five configured on old B",
+        CARRIERS.every((id) => B.state.providers?.[id]?.key) &&
+          count(A) === 1 &&
+          count(B) === 1 &&
+          count(D) === 1,
+      );
+      // The viewer's own encrypted backup, the source and keys in it.
+      const kept = A.client.exportBackup({
+        passphrase: "synthetic backup passphrase 7",
+        includeSecrets: true,
+      });
+      const held = []; // A's count at every step after its removal
+      A.client.live.updateSource({ id: source, action: "remove" });
+      await durable(A);
+      await A.sync();
+      await B.sync();
+      r = await row(w, "A removed, B took clear", [A, B, D]);
+      held.push(count(A));
+      check(
+        "D holds source while A removes it",
+        count(D) === 1 && count(A) === 0,
+      );
+      check(
+        "A, B cleared; cloud has carrier",
+        count(A) === 0 &&
+          count(B) === 0 &&
+          (await cloudClears()).includes(record),
+      );
+      check(
+        "cloud source still removed before reconnect",
+        r.cloudSources === 0,
+      );
+      // B (0.55) deletes its keys the way its interface does.
+      for (const id of CARRIERS.slice(0, v.deleted))
+        B.client.dataHub.save({ id, clear: true });
+      await B.sync();
+      r = await row(w, "legacy B clears configured keys via normal method", [
+        A,
+        B,
+        D,
+      ]);
+      if (v.deleted === 5)
+        check(
+          "normal UI deletion removed all carriers",
+          r.cloudRecords === 0,
+          `records=${r.cloudRecords}`,
+        );
+      else
+        check(
+          "four ordinary deletions still leave the clear record",
+          (await cloudClears()).includes(record),
+        );
+      await D.sync();
+      r = await row(w, "offline legacy D reconnects before A", [A, B, D]);
+      held.push(count(A));
+      check("legacy D keeps stale benign source", count(D) === 1);
+      const stale = (await w.cloud(A)).envelope.payload;
+      if (v.deleted === 5)
+        check(
+          "stale source is in cloud without carrier",
+          r.cloudSources === 1 && r.cloudRecords === 0,
+        );
+      else
+        check(
+          "stale source is in cloud with the surviving clear",
+          r.cloudSources === 1 && readClears(stale).includes(record),
+        );
+      if (v.repairFirst) await A.sync();
+      const C = w.device(Current, "C");
+      await C.client.account.login(acct);
+      await durable(C);
+      r = await row(
+        w,
+        v.repairFirst
+          ? "new C signs in after A's repair"
+          : "new C signs in before A's repair",
+        [A, B, D, C],
+      );
+      held.push(count(A));
+      if (v.deleted === 5 && !v.repairFirst) {
+        // Codex's check here asked C not to show the source. Nothing C can
+        // read says it was ever removed: the account's copy is D's, and no
+        // record or lift is left in it, nor anywhere in the payload. C may
+        // show it until a device that still holds the record syncs; what
+        // must hold is that C's first upload does not make it legitimate.
+        limit(
+          "new C does not display removed source",
+          `C=${count(C)}: the account's copy C read carries no record (documented limit)`,
+        );
+        check(
+          "the copy C read holds no trace of the record or a lift",
+          !readClears(stale).length &&
+            !JSON.stringify(stale).includes(record) &&
+            !(lift && JSON.stringify(stale).includes(lift)),
+        );
+        const first = await cloudClears();
+        check(
+          "C's first upload lifts nothing",
+          r.cloudWriter === "0.56.0" &&
+            !first.includes(lift) &&
+            !(C.state.account.clears || []).includes(lift),
+          `writer=${r.cloudWriter} records=${first.length}`,
+        );
+      } else
+        check(
+          "new C does not display removed source",
+          count(C) === 0,
+          `C=${count(C)}`,
+        );
+      if (v.race) {
+        // D (0.55) uploads again between A's pull and push (a 409), and the
+        // server takes A's retry but its reply never arrives.
+        w.beforeNextPut = async () => {
+          await D.sync();
+          w.beforeNextPut = async () => {
+            w.failNext = { method: "PUT", after: true };
+          };
+        };
+        const conflicts = w.conflicts;
+        await A.sync().catch(() => {});
+        held.push(count(A));
+        check(
+          "A's repair met a 409 from D (0.55) and lost its retry's reply",
+          w.conflicts > conflicts && !w.beforeNextPut && !w.failNext,
+        );
+        // A device that never uploaded leaves the hooks armed: disarm them
+        // (otherwise D's own next upload would wait on itself).
+        w.beforeNextPut = null;
+        w.failNext = null;
+        A.restart();
+      }
+      await A.sync();
+      await C.sync();
+      r = await row(w, "A repairs and C syncs", [A, B, D, C]);
+      held.push(count(A));
+      check(
+        "A repairs and C drops source",
+        count(A) === 0 && count(C) === 0 && r.cloudSources === 0,
+        `A=${count(A)} C=${count(C)} cloud=${r.cloudSources}`,
+      );
+      const repaired = await cloudClears();
+      check(
+        "the account's copy carries the record again, and no lift",
+        repaired.includes(record) && !repaired.includes(lift),
+      );
+      for (const d of [D, B, A, D, B, C]) await d.sync();
+      check(
+        "D and B (0.55) drop the source once they read the clear",
+        count(D) === 0 && count(B) === 0,
+        `D=${count(D)} B=${count(B)}`,
+      );
+      for (const d of [A, B, D, C]) d.restart();
+      for (const d of [A, B, D, C]) await d.sync();
+      held.push(count(A));
+      check(
+        "after restarts no device holds the removed source",
+        [A, B, D, C].every((d) => count(d) === 0),
+      );
+      check(
+        "A never held the source again after removing it",
+        held.every((n) => n === 0),
+        held.join(","),
+      );
+      check(
+        "every device keeps every live favourite",
+        favouritesKept(A, B, D, C),
+      );
+      // Unrelated data still travels; the key B kept stays everywhere.
+      B.client.favorite({ id: "tt0111161", type: "movie", name: "Fixture" });
+      await B.sync();
+      await A.sync();
+      await C.sync();
+      await D.sync();
+      check(
+        "an unrelated favourite from B (0.55) reaches A, C and D",
+        [A, C, D].every((d) =>
+          (d.state.favorites || []).some((f) => f.id === "tt0111161"),
+        ),
+      );
+      if (v.deleted === 4)
+        check(
+          "the key B kept stays on every device",
+          [A, B, C, D].every(
+            (d) =>
+              d.state.providers?.theintrodb?.key ===
+              "synthetic-theintrodb-key-0000",
+          ),
+        );
+      for (const d of [A, B, D, C]) await d.sync();
+      let settled = w.puts;
+      for (let i = 0; i < 3; i++) for (const d of [A, B, D, C]) await d.sync();
+      r = await row(w, "restarted; three idle rounds", [A, B, D, C]);
+      check(
+        "idle rounds upload nothing more",
+        w.puts === settled,
+        `${w.puts - settled} extra PUTs`,
+      );
+      // The viewer restores, on purpose, the backup holding that very
+      // source on C: a re-add made on an updated device lifts the record,
+      // also through a released device relaying the list.
+      C.client.restoreBackup({
+        text: kept.text,
+        passphrase: "synthetic backup passphrase 7",
+      });
+      await durable(C);
+      for (const d of [C, B, A, D, C, A]) await d.sync();
+      r = await row(w, "C restored that source on purpose", [A, B, D, C]);
+      const lifted = await cloudClears();
+      check(
+        "an explicit re-add on C lifts the record and reaches A, B and D",
+        [A, B, D, C].every((d) => count(d) === 1) &&
+          !lifted.includes(record) &&
+          (!liftRecord || lifted.includes(lift)),
+        [A, B, D, C].map((d) => d.name + "=" + count(d)).join(" "),
+      );
+      for (const d of [A, B, D, C]) await d.sync();
+      settled = w.puts;
+      for (let i = 0; i < 3; i++) for (const d of [A, B, D, C]) await d.sync();
+      check(
+        "after the re-add, idle rounds upload nothing more",
+        w.puts === settled && [A, B, D, C].every((d) => count(d) === 1),
+        `${w.puts - settled} extra PUTs`,
+      );
+    } finally {
+      w.close();
+    }
+  }
 } catch (error) {
   checks.push({ scenario, name: "unexpected error", ok: false });
   console.error(`FAIL [${scenario}] unexpected error:`, error);
@@ -1115,6 +1408,10 @@ try {
 
 console.log("\nState after each recorded step:");
 console.table(table);
+for (const l of limits)
+  console.log(
+    `Limit [${l.scenario}] ${l.name}${l.detail ? " — " + l.detail : ""}`,
+  );
 const failed = checks.filter((c) => !c.ok);
 console.log(
   `Mixed versions (${CANDIDATE || "this checkout"} with ${LEGACY}): ${checks.length - failed.length}/${checks.length} checks passed`,
