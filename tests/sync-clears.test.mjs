@@ -8,8 +8,10 @@ import assert from "node:assert/strict";
 import {
   CLEARED_SOURCE,
   clearRecord,
+  readClears,
   secretRecords,
   settleClears,
+  withClears,
   withClearedSource,
   withoutCleared,
 } from "../core/sync-clears.mjs";
@@ -31,6 +33,7 @@ const addon = (transportUrl) => ({ transportUrl, manifest: {}, enabled: true });
 const payload = ({
   sources = [],
   favorites = [],
+  clears = [],
   auth = null,
   addons = [],
   discordAppId = "",
@@ -49,7 +52,7 @@ const payload = ({
     p.integrations = {};
     p.notify = {};
   }
-  return p;
+  return withClears(p, clears);
 };
 const key = (authKey) => ({ authKey, email: "", name: "" });
 
@@ -86,14 +89,16 @@ test("a removal here since the base gets a record; the item stays out", () => {
   const local = payload();
   const out = settleClears(base, local, local);
   assert.deepEqual(
-    out.live.favorites.sort(),
+    readClears(out).sort(),
     [clearRecord("live", S1), clearRecord("stremio", "k1")].sort(),
   );
+  // Records never touch the favorites list (Codex, 5000 favorites).
+  assert.deepEqual(out.live.favorites, []);
   // A released client's copy brought back later is refused.
   const legacy = payload({
     sources: [source(S1)],
     auth: key("k1"),
-    favorites: out.live.favorites,
+    clears: readClears(out),
   });
   const merged = merge3(out, out, legacy);
   const settled = settleClears(out, out, merged);
@@ -106,7 +111,7 @@ test("a removal another device made is recorded when it reaches this one", () =>
   const local = base;
   const remote = payload({ sources: [source(S2)] });
   const out = settleClears(base, local, merge3(base, local, remote));
-  assert.deepEqual(out.live.favorites, [clearRecord("live", S1)]);
+  assert.deepEqual(readClears(out), [clearRecord("live", S1)]);
   assert.deepEqual(
     out.live.sources.map((s) => s.id),
     [S2],
@@ -115,16 +120,16 @@ test("a removal another device made is recorded when it reaches this one", () =>
 
 test("adding an item here lifts its record: an explicit re-install travels", () => {
   const record = clearRecord("addon", CONFIGURED);
-  const base = payload({ favorites: [record] });
-  const local = payload({ favorites: [record], addons: [addon(CONFIGURED)] });
+  const base = payload({ clears: [record] });
+  const local = payload({ clears: [record], addons: [addon(CONFIGURED)] });
   const out = settleClears(base, local, local);
-  assert.deepEqual(out.live.favorites, []);
+  assert.deepEqual(readClears(out), []);
   assert.equal(out.addons.length, 1);
 });
 
 test("at sign-in nothing is recorded or lifted; the account's records decide", () => {
   const records = [clearRecord("stremio", "shared")];
-  const remote = payload({ favorites: records });
+  const remote = payload({ clears: records });
   // The joining device holds the very session that was signed out: dropped.
   const same = payload({ auth: key("shared") });
   let out = settleClears(
@@ -135,7 +140,7 @@ test("at sign-in nothing is recorded or lifted; the account's records decide", (
     }),
   );
   assert.equal(out.auth, null);
-  assert.deepEqual(out.live.favorites, records);
+  assert.deepEqual(readClears(out), records);
   // Its own different session is kept.
   const other = payload({ auth: key("own") });
   out = settleClears(undefined, other, {
@@ -145,7 +150,7 @@ test("at sign-in nothing is recorded or lifted; the account's records decide", (
   assert.equal(out.auth.authKey, "own");
   // A released client's copy of the cleared key, with the joiner's own:
   // the joiner's own wins.
-  const legacy = payload({ favorites: records, auth: key("shared") });
+  const legacy = payload({ clears: records, auth: key("shared") });
   out = settleClears(
     undefined,
     other,

@@ -22,6 +22,9 @@ import {
   xtreamEndpoints,
 } from "./livetv.mjs";
 
+/** Live TV favourites a viewer can keep (the restore limit, every release). */
+export const LIVE_FAVORITES_MAX = 5000;
+
 const MAX_SOURCES = 12;
 const PAGE = 120;
 
@@ -334,6 +337,15 @@ export class LiveHub {
     return { start, hours, rows, groups: listing.groups, total: listing.total };
   }
   favorite(key) {
+    // Every Riwaq keeps at most LIVE_FAVORITES_MAX (a restore and every
+    // released client cut the list there, core/backup.mjs restoreState):
+    // a favourite past it would be dropped silently at the next sync or
+    // restore, so it is refused here, where the viewer sees why.
+    const at = this.store.favorites.indexOf(key);
+    if (at < 0 && this.store.favorites.length >= LIVE_FAVORITES_MAX)
+      throw new Error(
+        `بلغت القنوات المفضلة حدها (${LIVE_FAVORITES_MAX})؛ أزل قناة لتضيف أخرى`,
+      );
     // A commit (sixth pass, V2): Codex saw a refused favorite stay in
     // memory, reach a backup and, through account sync, another device.
     this.client.transact(() => {

@@ -32,6 +32,7 @@ import reviewPr155Round4 from "./en/review-pr155-round4.mjs";
 import reviewPr155Round5 from "./en/review-pr155-round5.mjs";
 import reviewPr155Round6 from "./en/review-pr155-round6.mjs";
 import subtitleDownload from "./en/subtitle-download.mjs";
+import release0560Final from "./en/release-0560-final.mjs";
 
 export default {
   ...core,
@@ -63,6 +64,7 @@ export default {
   ...reviewPr155Round5,
   ...reviewPr155Round6,
   ...subtitleDownload,
+  ...release0560Final,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",

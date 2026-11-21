@@ -33,9 +33,14 @@ import {
 } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { collectBackup, restoreState } from "./backup.mjs";
-import { keepSignIn, merge3, same, withKnownSettings } from "./sync-merge.mjs";
+import { keepSignIn, same, withKnownSettings } from "./sync-merge.mjs";
 import {
+  carriesSecrets,
+  mergeWithClears,
+  readClears,
   settleClears,
+  stripClears,
+  withClears,
   withClearedSource,
   withoutCleared,
 } from "./sync-clears.mjs";
@@ -336,14 +341,38 @@ export class AccountHub {
     return { ...response, data };
   }
 
-  /** The data that syncs, as a detached copy (never live references). */
-  collect(secrets) {
+  /**
+   * The data that syncs, as a detached copy (never live references), with
+   * this device's clear records when it carries secrets.
+   */
+  collect(secrets, bag = this.bag) {
     this.client.profiles.capture();
-    return JSON.parse(
+    const payload = JSON.parse(
       JSON.stringify(
         collectBackup(this.client.state, { includeSecrets: !!secrets }).payload,
       ),
     );
+    return withClears(payload, bag ? this.clearsOf(bag) : []);
+  }
+
+  /**
+   * The clear records this device agreed with the account (oldest first),
+   * kept in the account's bag, not the profile: they belong to the account.
+   * A device updated from 0.55.0 has none yet: it starts from the agreed
+   * copy and the records its released code put in its provider entries.
+   */
+  clearsOf(bag) {
+    if (!Array.isArray(bag.clears))
+      bag.clears = readClears(
+        withClears({ auth: null, providers: {} }, [
+          ...readClears(bag.base),
+          ...readClears({
+            auth: null,
+            providers: this.client.state.providers,
+          }),
+        ]),
+      );
+    return bag.clears;
   }
 
   /**
@@ -359,18 +388,9 @@ export class AccountHub {
     if (bag.base === undefined) return local;
     const settled = settleClears(bag.base, local, local);
     if (same(settled, local)) return local;
-    const favorites = settled.live.favorites;
-    if (
-      same(
-        { ...settled, live: { ...settled.live, favorites: [] } },
-        {
-          ...local,
-          live: { ...local.live, favorites: [] },
-        },
-      )
-    ) {
+    if (same(stripClears(settled), stripClears(local))) {
       // Only new or lifted records: nothing this device holds changes.
-      this.client.state.live.favorites = [...favorites];
+      bag.clears = readClears(settled);
       this.client.persist();
       return settled;
     }
@@ -390,7 +410,10 @@ export class AccountHub {
     this.applying = true;
     try {
       profiles.capture();
-      client.state = restoreState(client.state, payload);
+      // The records belong to the account's bag, never to the state.
+      const bag = this.bag;
+      if (bag && carriesSecrets(payload)) bag.clears = readClears(payload);
+      client.state = restoreState(client.state, stripClears(payload));
       if (client.state.profiles.list.some((p) => p.id === active))
         client.state.profiles.active = active;
       profiles.ensure();
@@ -426,6 +449,9 @@ export class AccountHub {
       revision: 0,
       secrets: !!secrets,
       lastSync: null,
+      // Clear records come from the account at the first sync; a bag from
+      // a released version has none and starts from its agreed copy.
+      clears: [],
     };
     this.client.state.accountName = username;
     this.error = "";
@@ -767,7 +793,8 @@ export class AccountHub {
               const local = withClearedSource(this.collect(secrets), bag.base);
               // Release blocker W4 (mixed versions): clear records decide
               // what a released client's copy may bring back
-              // (core/sync-clears.mjs).
+              // (core/sync-clears.mjs). They merge as a set; a released
+              // copy can lose them but never lift one.
               const merged = settleClears(
                 bag.base,
                 local,
@@ -776,19 +803,32 @@ export class AccountHub {
                     bag.base,
                     local,
                     remote,
-                    merge3(bag.base, local, remote, { prefer }),
+                    mergeWithClears(bag.base, local, remote, {
+                      prefer,
+                      kept: this.clearsOf(bag),
+                    }),
                   ),
                   local,
                 ),
               );
-              if (!same(merged, local) && this.playbackActive()) {
+              // Records alone change nothing this device holds: they never
+              // wait for a viewing to end.
+              const recordsOnly =
+                !same(merged, local) &&
+                same(stripClears(merged), stripClears(local));
+              if (recordsOnly) bag.clears = readClears(merged);
+              if (
+                !same(merged, local) &&
+                !recordsOnly &&
+                this.playbackActive()
+              ) {
                 this.deferred = true;
                 this.deferredPrefer = prefer;
                 this.error = "";
                 return null;
               }
               bag.secrets = secrets;
-              if (!same(merged, local)) {
+              if (!same(merged, local) && !recordsOnly) {
                 this.apply(merged);
                 this.onChange("remote");
               }
@@ -798,7 +838,7 @@ export class AccountHub {
               // Settings a released writer did not know count as this
               // device's own, so they are neither reset nor uploaded again.
               bag.base = withKnownSettings(
-                withoutCleared(remote, new Set(merged.live?.favorites || [])),
+                withoutCleared(remote, new Set(readClears(merged))),
                 merged,
               );
               bag.revision = pulled.revision;

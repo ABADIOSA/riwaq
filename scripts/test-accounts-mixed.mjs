@@ -26,6 +26,10 @@ import { sqliteD1 } from "../server/accounts/local.mjs";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const LEGACY = process.env.RIWAQ_LEGACY || "v0.55.0";
 const CANDIDATE = process.env.RIWAQ_CANDIDATE || "";
+// Codex's boundary (final acceptance, 2026-11-21): the released client keeps
+// the first 5000 Live TV favorites. RIWAQ_MIXED_FAVORITES gives the first
+// device that many synthetic channel favorites before it signs up.
+const FAVORITES = Number(process.env.RIWAQ_MIXED_FAVORITES || 0);
 const cache = join(root, ".cache");
 mkdirSync(cache, { recursive: true });
 const work = mkdtempSync(join(cache, "riwaq-mixed-"));
@@ -76,6 +80,9 @@ try {
   const { Client: Legacy } = await load(legacyDir, "core/client.mjs");
   const { Client: Current } = await load(currentDir, "core/client.mjs");
   const { openData } = await load(currentDir, "core/account.mjs");
+  // Where the records travel (the carriers since the 5000-favorites fix);
+  // an older candidate kept them in live.favorites and has no readClears.
+  const { readClears } = await load(root, "core/sync-clears.mjs");
   const worker =
     (await load(legacyDir, "server/accounts/worker.mjs").catch(() => null)) ||
     (await load(legacyDir, "server/accounts/service.mjs"));
@@ -207,6 +214,16 @@ try {
   const durable = async (d) => {
     if (d.client.durable) await d.client.durable();
   };
+  /** Synthetic channel favorites (24-hex keys, as channel keys are). */
+  const seedFavorites = async (d, n = FAVORITES) => {
+    const keys = Array.from({ length: n }, () =>
+      randomBytes(12).toString("hex"),
+    );
+    d.state.live.favorites = keys;
+    d.client.persist();
+    await durable(d);
+    return keys;
+  };
   async function row(w, step, devices) {
     const { revision, envelope } = await w.cloud(devices[0]);
     const entry = {
@@ -219,6 +236,8 @@ try {
         (s) => s?.cleared,
       ),
       cloudStremio: envelope.payload.auth?.authKey ? "signed in" : "none",
+      cloudRecords: readClears(envelope.payload).length,
+      cloudFavorites: (envelope.payload.live?.favorites || []).length,
       puts: w.puts,
       conflicts: w.conflicts,
     };
@@ -226,6 +245,8 @@ try {
       entry[`${d.name}.base`] = d.base();
       entry[`${d.name}.sources`] = count(d);
       entry[`${d.name}.stremio`] = signedIn(d) ? "signed in" : "none";
+      if (FAVORITES || scenario.startsWith("6"))
+        entry[`${d.name}.favorites`] = (d.state.live?.favorites || []).length;
     }
     table.push(entry);
     return entry;
@@ -242,6 +263,7 @@ try {
       const D = w.device(Legacy, "D"); // offline after the first sync
       await add(A, 1);
       await durable(A);
+      await seedFavorites(A);
       await A.client.account.signup(acct);
       await B.client.account.login(acct);
       await D.client.account.login(acct);
@@ -801,6 +823,285 @@ try {
         `${w.puts - settled} extra PUTs`,
       );
       await row(w, "end", [A, A2, B]);
+    } finally {
+      w.close();
+    }
+  }
+
+  // ── Scenario 6: a full favorites list (Codex, final acceptance) ──────
+  // The released client keeps its first 5000 Live TV favorites. At exactly
+  // 5000 real favorites (and 4999, the control) every clear must hold and
+  // every favourite must stay, through a full-capacity released upload,
+  // several released devices, a deleted provider key on one of them,
+  // multiple removals at once, favourites changed after a removal, a 409
+  // between two updated devices, a lost reply, re-login, an encrypted
+  // backup and repeated rounds.
+  for (const full of [4999, 5000]) {
+    scenario = `6 full favorites ${full}`;
+    const w = world();
+    try {
+      const acct = account();
+      const A = w.device(Current, "A");
+      const A2 = w.device(Current, "A2");
+      const B = w.device(Legacy, "B");
+      const L = w.device(Legacy, "L"); // a second released device
+      const D = w.device(Legacy, "D"); // offline after the first sync
+      for (const i of [1, 2, 3]) await add(A, i);
+      A.state.addons.push({
+        transportUrl: CONFIGURED,
+        manifest,
+        enabled: true,
+      });
+      A.state.discordAppId = "123456789012345678";
+      // Synthetic keys only; nothing here asks a provider for anything.
+      A.state.providers = {
+        tmdb: { key: "synthetic-tmdb-" + "0".repeat(16), enabled: true },
+        fanart: { key: "synthetic-fanart-key", enabled: true },
+      };
+      A.client.settings({ tasteCompass: false });
+      A.client.persist();
+      await durable(A);
+      let expected = await seedFavorites(A, full);
+      // Every favourite the viewer has, and none they removed. Neutral to
+      // where records travel (an older candidate kept them in this list),
+      // so RIWAQ_CANDIDATE runs are compared on the viewer's data alone.
+      const same5000 = (...devices) =>
+        devices.every((d) => {
+          const have = new Set(d.state.live?.favorites || []);
+          return (
+            expected.every((key) => have.has(key)) &&
+            !removedFavorites.some((key) => have.has(key))
+          );
+        });
+      const removedFavorites = [];
+      const ids = (d) => realSources(d.state.live?.sources).map((x) => x.name);
+      await A.client.account.signup(acct);
+      for (const d of [A2, B, L, D]) await d.client.account.login(acct);
+      for (const d of [A, A2, B, L, D]) await d.sync();
+      await row(w, "five devices synced", [A, A2, B, L, D]);
+      check(
+        `every device holds the ${full} favourites, 3 sources and the addon`,
+        same5000(A, A2, B, L, D) &&
+          [A, A2, B, L, D].every((d) => count(d) === 3 && configured(d) === 1),
+      );
+      // Two removals at once, plus the configured addon, on A.
+      const [s1, s2] = A.state.live.sources;
+      A.client.live.updateSource({ id: s1.id, action: "remove" });
+      A.client.live.updateSource({ id: s2.id, action: "remove" });
+      A.state.addons = A.state.addons.filter(
+        (x) => x.transportUrl !== CONFIGURED,
+      );
+      A.client.persist();
+      await durable(A);
+      await A.sync();
+      let r = await row(w, "A removed two sources and the addon", [A, B, L]);
+      check(
+        "three records go up; the favourites list is untouched",
+        r.cloudRecords >= 3 && r.cloudFavorites === full,
+        `records=${r.cloudRecords} favourites=${r.cloudFavorites}`,
+      );
+      // A full-capacity upload from each released device.
+      await B.sync();
+      await L.sync();
+      r = await row(w, "B and L (0.55) synced at capacity", [A, B, L]);
+      check(
+        "the records survive the released uploads at capacity",
+        r.cloudRecords >= 3 && r.cloudWriter !== "0.56.0",
+        `records=${r.cloudRecords} writer=${r.cloudWriter}`,
+      );
+      check(
+        "B and L (0.55) hold one source and every favourite",
+        count(B) === 1 && count(L) === 1 && same5000(B, L),
+      );
+      // The viewer deletes the TMDB key on L (0.55): that copy of the
+      // records goes with it; the other carriers keep them.
+      L.client.dataHub.save({ id: "tmdb", clear: true });
+      await L.sync();
+      r = await row(w, "L (0.55) deleted its TMDB key", [A, L]);
+      check(
+        "a provider key deleted on a released device keeps the records",
+        r.cloudRecords >= 3,
+        `records=${r.cloudRecords}`,
+      );
+      for (const d of [A, A2, B]) await d.sync();
+      check(
+        "that deletion still reaches the updated devices (an ordinary secret change)",
+        !A.state.providers?.tmdb?.key && !A2.state.providers?.tmdb?.key,
+      );
+      // Favourites change after the removal: one goes on B (0.55), a new one
+      // comes on A2, so both lists move and stay at the boundary.
+      const gone = expected[7];
+      B.client.live.favorite(gone);
+      await B.sync();
+      await A2.sync();
+      const fresh = randomBytes(12).toString("hex");
+      A2.client.live.favorite(fresh);
+      await durable(A2);
+      await A2.sync();
+      expected = [...expected.filter((k) => k !== gone), fresh];
+      removedFavorites.push(gone);
+      for (const d of [A, B, L, A2]) await d.sync();
+      check(
+        "a favourite removed on B (0.55) and one added on A2 reach every device",
+        same5000(A, A2, B, L),
+        `A=${A.state.live.favorites.length} B=${B.state.live.favorites.length}`,
+      );
+      // D (0.55) comes back with all three sources and the addon; a new
+      // updated device joins right after its upload.
+      await D.sync();
+      r = await row(w, "D (0.55) back after being offline", [A, D]);
+      const C2 = w.device(Current, "C2");
+      await C2.client.account.login(acct);
+      await durable(C2);
+      check(
+        "a device joining right after D's upload gets neither removed source nor the addon",
+        count(C2) === 1 && configured(C2) === 0,
+        `C2 sources=${count(C2)} addon=${configured(C2)}`,
+      );
+      for (const d of [A, A2]) await d.sync();
+      check(
+        "updated devices never take D's copies back",
+        [A, A2, C2].every((d) => count(d) === 1 && configured(d) === 0),
+      );
+      await D.sync();
+      await A.sync();
+      await D.sync();
+      check("D (0.55) drops the two removed sources", count(D) === 1);
+      // Restarts and repeated rounds: stable, no upload war.
+      for (const d of [A, A2, B, L, D, C2]) d.restart();
+      for (const d of [A, A2, B, L, D, C2]) await d.sync();
+      const settled = w.puts;
+      for (let i = 0; i < 3; i++)
+        for (const d of [A, A2, B, L, D, C2]) await d.sync();
+      r = await row(w, "restarted; three more rounds", [A, A2, B, L, D, C2]);
+      check(
+        "repeated mixed syncs upload nothing more",
+        w.puts === settled,
+        `${w.puts - settled} extra PUTs`,
+      );
+      check(
+        "after restarts every device keeps every favourite",
+        same5000(A, A2, B, L, D, C2),
+      );
+      check(
+        "a 0.56 setting is not reset by the released devices",
+        A.state.settings.tasteCompass === false &&
+          A2.state.settings.tasteCompass === false,
+      );
+      // Two updated devices at once, with a 409: A removes the last source
+      // while A2 adds a new one between A's pull and push.
+      w.beforeNextPut = async () => {
+        await add(A2, 4);
+        await durable(A2);
+        await A2.sync();
+      };
+      A.client.live.updateSource({
+        id: A.state.live.sources[0].id,
+        action: "remove",
+      });
+      await durable(A);
+      const conflicts = w.conflicts;
+      await A.sync();
+      for (const d of [A2, B, L, C2, A]) await d.sync();
+      r = await row(w, "409: A removed one, A2 added one", [A, A2, B, L, C2]);
+      check("the 409 happened and was retried", w.conflicts > conflicts);
+      check(
+        "after the 409 every device holds only A2's new source",
+        [A, A2, B, L, C2].every((d) => ids(d).join() === "Disposable 4"),
+        [A, A2, B, L, C2].map((d) => d.name + "=" + ids(d).join("|")).join(" "),
+      );
+      // A lost reply on a removal at capacity.
+      w.failNext = { method: "PUT", after: true };
+      A.client.live.updateSource({
+        id: A.state.live.sources[0].id,
+        action: "remove",
+      });
+      await durable(A);
+      await A.sync().catch(() => {});
+      // A removed it: A never holds it again at any step; A2 drops it at
+      // its own sync.
+      let held = 0;
+      for (const d of [A, B, L, A2]) {
+        await d.sync();
+        held += count(A);
+      }
+      check(
+        "after a lost reply no updated device takes the source back",
+        held === 0 && count(A2) === 0,
+        `A held it ${held} times; A2=${count(A2)}`,
+      );
+      // L (0.55) read the account's empty list after B (0.55) wrote it, kept
+      // its own source and uploaded it (the released limit in ACCOUNTS.md);
+      // A2 answered with the cleared list, which L now reads.
+      await L.sync();
+      check(
+        "a removal whose reply was lost holds against B and L (0.55)",
+        [A, A2, B, L].every((d) => count(d) === 0),
+        [A, A2, B, L].map((d) => d.name + "=" + count(d)).join(" "),
+      );
+      // An explicit re-install on an updated device lifts its record.
+      A2.state.addons.push({
+        transportUrl: CONFIGURED,
+        manifest,
+        enabled: true,
+      });
+      A2.client.persist();
+      await durable(A2);
+      for (const d of [A2, A, B, C2]) await d.sync();
+      check(
+        "re-installing the addon on A2 reaches A, C2 and B (0.55)",
+        [A, A2, C2, B].every((d) => configured(d) === 1),
+        [A, A2, C2, B].map((d) => d.name + "=" + configured(d)).join(" "),
+      );
+      // Signing out and in again takes the account's records.
+      await A.client.account.logout();
+      await A.client.account.login(acct);
+      await durable(A);
+      await D.sync();
+      await A.sync();
+      check(
+        "after re-login A refuses D's (0.55) copies and keeps every favourite",
+        count(A) === 0 && same5000(A),
+        `A sources=${count(A)}`,
+      );
+      // An encrypted backup (with secrets) taken now and restored on A2.
+      const exported = A2.client.exportBackup({
+        passphrase: "synthetic backup passphrase 6",
+        includeSecrets: true,
+      });
+      A2.client.restoreBackup({
+        text: exported.text,
+        passphrase: "synthetic backup passphrase 6",
+      });
+      await durable(A2);
+      for (const d of [A2, D, A, A2]) await d.sync();
+      check(
+        "after a backup restore A2 keeps the clears and every favourite",
+        count(A2) === 0 && same5000(A2) && count(A) === 0,
+      );
+      // A released device that lost every carrier (all five provider
+      // entries gone: not reachable from its interface, forced here) and
+      // uploads: an updated device puts the records back.
+      for (const id of ["tmdb", "omdb", "mdblist", "fanart", "theintrodb"])
+        delete L.state.providers?.[id];
+      L.client.persist();
+      L.state.live.favorites = [...L.state.live.favorites];
+      B.client.favorite({ id: "tt0099685", type: "movie", name: "Nudge" });
+      await B.sync();
+      await L.sync();
+      r = await row(w, "L (0.55) lost every carrier", [A, L]);
+      await A.sync();
+      r = await row(w, "A answered", [A, L]);
+      check(
+        "an updated device restores the records the released copy lost",
+        r.cloudRecords >= 3,
+        `records=${r.cloudRecords}`,
+      );
+      for (const d of [D, A, A2, C2]) await d.sync();
+      check(
+        "at the end no updated device holds a removed source or loses a favourite",
+        [A, A2, C2].every((d) => count(d) === 0) && same5000(A, A2, C2, B),
+      );
     } finally {
       w.close();
     }

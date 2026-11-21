@@ -472,6 +472,13 @@ function cleanLiveSources(list) {
   return out;
 }
 
+/**
+ * Account sync's clear records ride in each data provider's entry as this
+ * text field (core/sync-clears.mjs): they belong to the account, not to a
+ * restored state, so a restore leaves them out.
+ */
+export const CLEAR_FIELD = "riwaqClears";
+
 function cleanSecretBag(input, ids) {
   // Tokens and keys are opaque. Keep only known services and plain values, so
   // a crafted file cannot smuggle structure the app never wrote.
@@ -482,6 +489,7 @@ function cleanSecretBag(input, ids) {
     if (!isObject(value)) continue;
     const clean = {};
     for (const [key, field] of Object.entries(value)) {
+      if (key === CLEAR_FIELD) continue;
       if (typeof field === "string" && field.length <= 8192) clean[key] = field;
       else if (typeof field === "boolean" || Number.isFinite(field))
         clean[key] = field;
