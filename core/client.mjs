@@ -325,6 +325,10 @@ export class Client {
     this.streams = new Map();
     this.subtitles = new Map();
     this.subtitleInfo = new Map();
+    // Issue #157 (Codex's final acceptance): which configured addon supplied
+    // each subtitle key, by its address; saving one asks again whether that
+    // addon is still installed and enabled (subtitleOrigin).
+    this.subtitleOrigins = new Map();
     this.subtitleLists = new Map();
     this.metas = new Map();
     this.cache = new Map();
@@ -2023,6 +2027,7 @@ export class Client {
     this.streams.clear();
     this.subtitles.clear();
     this.subtitleInfo.clear();
+    this.subtitleOrigins.clear();
     this.subtitleLists.clear();
     this.metas.clear();
     this.cache.clear();
@@ -2913,15 +2918,29 @@ export class Client {
               )
             ).subtitles || [];
           answered++;
-          return found.map((s) => ({ ...s, provider: a.manifest.name }));
+          return found.map((s) => ({
+            ...s,
+            provider: a.manifest.name,
+            origin: a.transportUrl,
+          }));
         } catch {
           return [];
         }
       }),
     );
     const seen = new Set();
+    // A stream's own subtitles belong to the addon that sent the stream.
+    const streamAddon = selected?.addonKey
+      ? (this.state.addons || []).find(
+          (a) => keyFor(a.transportUrl) === selected.addonKey,
+        )
+      : null;
     const list = [
-      ...(selected?.subtitles || []).map((s) => ({ ...s, provider: "المصدر" })),
+      ...(selected?.subtitles || []).map((s) => ({
+        ...s,
+        provider: "المصدر",
+        origin: streamAddon?.transportUrl || "",
+      })),
       ...results.flat(),
     ]
       .filter((s) => typeof s?.url === "string" && /^https?:\/\//i.test(s.url))
@@ -2930,6 +2949,7 @@ export class Client {
         const key = keyFor(s.url);
         const label = subtitleLabel(s);
         boundedSet(this.subtitles, key, s.url, 3000);
+        boundedSet(this.subtitleOrigins, key, s.origin || "", 3000);
         boundedSet(
           this.subtitleInfo,
           key,
@@ -2952,6 +2972,21 @@ export class Client {
       this.subtitleLists.set(cacheKey, { at: Date.now(), list });
     }
     return list;
+  }
+
+  /**
+   * Main-process only (issue #157): the address of the configured addon that
+   * supplied a subtitle key, while that addon is still installed and
+   * enabled; "" otherwise. Saving a subtitle trusts a local origin only
+   * through this, never because the subtitle's own address names one.
+   */
+  subtitleOrigin(key) {
+    const origin = this.subtitleOrigins.get(key);
+    if (!origin) return "";
+    const addon = (this.state.addons || []).find(
+      (a) => a.transportUrl === origin,
+    );
+    return addon && addon.enabled !== false ? origin : "";
   }
 
   /**

@@ -14,6 +14,15 @@
  *   subtitle file, and are written unchanged where the system's Save dialog
  *   says, through a temporary file renamed into place. Cancelling the dialog
  *   writes nothing.
+ * - Codex's final acceptance (2026-11-21): an addon subtitle is fetched only
+ *   while the configured addon that supplied it is still installed and
+ *   enabled, and may reach a local address only at that addon's own local
+ *   origin (`trustedOrigin`), over main's transport, which checks the
+ *   address the socket connects to (electron/subtitle-http.mjs). The save
+ *   is bound to the viewing, the profile's activation and the chosen
+ *   track's source: `stillValid(source)` is asked before the fetch, after
+ *   it, before the dialog opens, after it closes and right before the
+ *   write, and any change ends the save with nothing written.
  *
  * No `electron` import: main passes the dialog and paths, tests pass fakes.
  */
@@ -26,6 +35,7 @@ import {
   fetchSubtitle,
   subtitleFileName,
   subtitleFormat,
+  trustedOrigin,
 } from "../core/subtitle-export.mjs";
 
 const isUrl = (value) => /^[a-z][a-z0-9+.-]*:\/\//i.test(String(value || ""));
@@ -33,9 +43,16 @@ const isUrl = (value) => /^[a-z][a-z0-9+.-]*:\/\//i.test(String(value || ""));
 /**
  * This viewing's subtitle tracks, each with where its bytes come from.
  * `tracks` is MPV's raw track list; `externalSubs` maps a loaded address to
- * its addon key; `addonUrl(key)` is the address main holds for a key.
+ * its addon key; `addonUrl(key)` is the address main holds for a key, and
+ * `addonOrigin(key)` the configured addon that supplied it ("" once that
+ * addon is gone or disabled).
  */
-export function subtitleSources({ tracks, externalSubs, addonUrl }) {
+export function subtitleSources({
+  tracks,
+  externalSubs,
+  addonUrl,
+  addonOrigin = () => "",
+}) {
   const out = [];
   for (const track of Array.isArray(tracks) ? tracks : []) {
     if (track?.type !== "sub" || !Number.isSafeInteger(track.id)) continue;
@@ -56,7 +73,8 @@ export function subtitleSources({ tracks, externalSubs, addonUrl }) {
     }
     const key = externalSubs?.get?.(file)?.key;
     const url = key ? addonUrl(key) : "";
-    if (url && url === file) out.push({ ...base, kind: "addon", url });
+    if (url && url === file)
+      out.push({ ...base, kind: "addon", url, origin: addonOrigin(key) || "" });
     else if (
       !isUrl(file) &&
       isAbsolute(file) &&
@@ -121,11 +139,25 @@ export async function writeInPlace(path, bytes) {
   }
 }
 
+/** Whether two sources name the same track with the same file behind it. */
+export function sameSource(a, b) {
+  return (
+    !!a &&
+    !!b &&
+    a.id === b.id &&
+    a.kind === b.kind &&
+    (a.url || "") === (b.url || "") &&
+    (a.path || "") === (b.path || "") &&
+    (a.origin || "") === (b.origin || "")
+  );
+}
+
 /**
  * Saves one choice. `showSaveDialog(options)` is the system dialog (main
  * binds its parent window); it returns `{ canceled, filePath }`.
- * Resolves `{ saved: false }` when the viewer cancels, else
- * `{ saved: true, name }` with the file's name only.
+ * `stillValid(source)` throws once the viewing, profile or chosen track
+ * changed; it is asked at every wait. Resolves `{ saved: false }` when the
+ * viewer cancels, else `{ saved: true, name }` with the file's name only.
  */
 export async function saveSubtitle({
   choice,
@@ -136,6 +168,7 @@ export async function saveSubtitle({
   showSaveDialog,
   fetch,
   signal,
+  stillValid = () => {},
   write = writeInPlace,
   heading = "حفظ الترجمة",
 }) {
@@ -145,10 +178,25 @@ export async function saveSubtitle({
   if (!source) throw new Error("لم تعد هذه الترجمة في المشاهدة");
   if (!SAVABLE.has(source.kind))
     throw new Error("الترجمة هنا مدمجة في ملف الفيديو ولا تُحفظ منفصلة");
-  const bytes =
-    source.kind === "addon"
-      ? await fetchSubtitle(source.url, { fetch, signal })
-      : await readLocal(source.path);
+  if (source.kind === "addon" && !source.origin)
+    throw new Error("الإضافة التي جاءت منها هذه الترجمة لم تعد مثبتة");
+  stillValid(source);
+  let bytes;
+  try {
+    bytes =
+      source.kind === "addon"
+        ? await fetchSubtitle(source.url, {
+            fetch,
+            signal,
+            trusted: [trustedOrigin(source.origin)].filter(Boolean),
+          })
+        : await readLocal(source.path);
+  } catch (error) {
+    // Cancelled because the viewing ended: say that, not a network error.
+    stillValid(source);
+    throw error;
+  }
+  stillValid(source);
   const format = subtitleFormat(bytes);
   if (!format) throw new Error("الملف الذي وصل ليس ملف ترجمة");
   const lang = languageOf(source.lang).code;
@@ -158,6 +206,7 @@ export async function saveSubtitle({
     lang: lang === "und" ? "" : lang,
     format,
   });
+  stillValid(source);
   const answer = await showSaveDialog({
     title: heading,
     defaultPath: downloads ? join(downloads, name) : name,
@@ -169,6 +218,8 @@ export async function saveSubtitle({
   });
   if (!answer || answer.canceled || !answer.filePath) return { saved: false };
   if (!isAbsolute(answer.filePath)) throw new Error("مكان الحفظ غير صالح");
+  // The dialog may have stayed open while the viewing or profile changed.
+  stillValid(source);
   await write(answer.filePath, bytes);
   return { saved: true, name: basename(answer.filePath), format };
 }

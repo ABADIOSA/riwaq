@@ -122,7 +122,7 @@ test("file names are valid on Windows and name the title, episode and language",
   assert.equal(safeFileName("a\\..\\..\\b"), "a .. .. b");
 });
 
-test("subtitle addresses: http(s) only, no credentials, local only as the addon's own", () => {
+test("subtitle addresses: http(s) only, no credentials, local only at a trusted origin", () => {
   assert.equal(
     subtitleUrl("https://subs.example/x.srt#frag"),
     "https://subs.example/x.srt",
@@ -136,10 +136,26 @@ test("subtitle addresses: http(s) only, no credentials, local only as the addon'
   ])
     assert.throws(() => subtitleUrl(bad), undefined, bad);
   assert.throws(() => subtitleUrl("http://192.168.1.4/x.srt"));
+  // Codex's final acceptance: naming a local address grants nothing; only
+  // the supplying addon's own local origin (scheme, host and port) does.
+  assert.throws(() => subtitleUrl("http://127.0.0.1:11470/x.vtt"));
   assert.equal(
-    subtitleUrl("http://127.0.0.1:11470/x.vtt", { local: true }),
+    subtitleUrl("http://127.0.0.1:11470/x.vtt", {
+      trusted: ["http://127.0.0.1:11470"],
+    }),
     "http://127.0.0.1:11470/x.vtt",
   );
+  for (const other of [
+    "http://127.0.0.1:11471/x.vtt",
+    "https://127.0.0.1:11470/x.vtt",
+    "http://localhost:11470/x.vtt",
+    "http://192.168.1.4:11470/x.vtt",
+  ])
+    assert.throws(
+      () => subtitleUrl(other, { trusted: ["http://127.0.0.1:11470"] }),
+      /شبكتك/,
+      other,
+    );
   for (const host of [
     "localhost",
     "127.0.0.1",
@@ -182,29 +198,40 @@ test("fetchSubtitle: an addon's local address, a broken one, a timeout and a siz
     "/hop.srt": (req, res) => res.writeHead(302, { Location: "/ok.srt" }).end(),
   });
   try {
-    const got = await fetchSubtitle(srv.base + "/ok.srt");
+    // The fixture stands in for a configured local addon: its origin is
+    // trusted, as main's trustedOrigin names it.
+    const trusted = [srv.base];
+    // Without that trust the same address is refused before any request.
+    await assert.rejects(fetchSubtitle(srv.base + "/ok.srt"), /شبكتك/);
+    const got = await fetchSubtitle(srv.base + "/ok.srt", { trusted });
     assert.equal(Buffer.from(got).toString(), SRT);
     assert.equal(
-      Buffer.from(await fetchSubtitle(srv.base + "/hop.srt")).toString(),
+      Buffer.from(
+        await fetchSubtitle(srv.base + "/hop.srt", { trusted }),
+      ).toString(),
       SRT,
     );
-    await assert.rejects(fetchSubtitle(srv.base + "/missing.srt"), /HTTP 404/);
     await assert.rejects(
-      fetchSubtitle(srv.base + "/slow.srt", { timeout: 300 }),
+      fetchSubtitle(srv.base + "/missing.srt", { trusted }),
+      /HTTP 404/,
+    );
+    await assert.rejects(
+      fetchSubtitle(srv.base + "/slow.srt", { timeout: 300, trusted }),
       /مهلة/,
     );
     await assert.rejects(
-      fetchSubtitle(srv.base + "/huge.srt", { max: 1024 * 1024 }),
+      fetchSubtitle(srv.base + "/huge.srt", { max: 1024 * 1024, trusted }),
       /كبير/,
     );
     await assert.rejects(
-      fetchSubtitle(srv.base + "/page.srt"),
+      fetchSubtitle(srv.base + "/page.srt", { trusted }),
       /لم يرسل ملف ترجمة/,
     );
     const controller = new AbortController();
     const pending = fetchSubtitle(srv.base + "/slow.srt", {
       signal: controller.signal,
       timeout: 10000,
+      trusted,
     });
     controller.abort();
     await assert.rejects(pending);
@@ -294,11 +321,13 @@ const tracks = (selected) => [
   },
 ];
 const external = new Map([[ADDON, { key: "k1" }]]);
-const sources = (selected) =>
+const ADDON_ORIGIN = "https://subs.example/manifest.json";
+const sources = (selected, origin = ADDON_ORIGIN) =>
   subtitleSources({
     tracks: tracks(selected),
     externalSubs: external,
     addonUrl: (k) => (k === "k1" ? ADDON : ""),
+    addonOrigin: (k) => (k === "k1" ? origin : ""),
   });
 
 test("choices: addon and local subtitles can be saved, embedded ones cannot; the page sees ids and labels only", () => {

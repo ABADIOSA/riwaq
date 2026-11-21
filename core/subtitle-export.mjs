@@ -6,11 +6,17 @@
  *
  * - An addon's subtitle address is untrusted. `subtitleUrl` takes http or
  *   https without credentials. A loopback or private-network address is
- *   accepted only as the addon's own first address (the viewer's Stremio
- *   Service serves subtitles on 127.0.0.1): a public address can never
- *   redirect into the viewer's network. At most three redirects, each
- *   checked again; the body is read up to `SUBTITLE_MAX` bytes and the
- *   request ends at a timeout.
+ *   accepted only at a trusted origin: the own origin (scheme, host, port)
+ *   of the configured, enabled addon that supplied the subtitle, when that
+ *   addon is itself local (`trustedOrigin`; main names it, the address
+ *   alone never does). Once a chain leaves the trusted origins it stays
+ *   out: a public address can never redirect into the viewer's network.
+ *   At most three redirects, each checked again; the body is read up to
+ *   `SUBTITLE_MAX` bytes and the request ends at a timeout.
+ * - Main's transport (electron/subtitle-http.mjs) enforces the same rule
+ *   where the socket connects (Codex's final acceptance, 2026-11-21): a
+ *   name outside the trusted origins may resolve only to public addresses,
+ *   so DNS cannot point a public-looking name at this computer.
  * - The bytes must be a subtitle file (`subtitleFormat`: SRT, WebVTT or
  *   ASS/SSA with at least one cue), whatever the server called them, and
  *   they are kept as they came: an Arabic file in Windows-1256 stays one.
@@ -24,6 +30,8 @@ import { parseCues } from "./subtitles.mjs";
 export const SUBTITLE_MAX = 5 * 1024 * 1024;
 export const SUBTITLE_TIMEOUT = 15000;
 export const SUBTITLE_EXTENSIONS = ["srt", "vtt", "ass", "ssa", "sub"];
+/** The error code main's transport gives a destination it refused. */
+export const SUBTITLE_HOST_BLOCKED = "ERR_RIWAQ_SUBTITLE_HOST";
 const REDIRECTS = 3;
 
 /** True for a host on this computer or the viewer's own network. */
@@ -50,10 +58,26 @@ export function localHost(hostname) {
 }
 
 /**
- * A subtitle address that may be fetched: http or https, no credentials.
- * A local one only when `local` allows it (the addon's own first address).
+ * The origin a configured addon's subtitles may use locally: the addon's own
+ * scheme, host and port, only when that host is local (a Stremio Service
+ * or home-server addon). "" for a public addon or a malformed address.
  */
-export function subtitleUrl(input, { local = false } = {}) {
+export function trustedOrigin(transportUrl) {
+  try {
+    const url = new URL(String(transportUrl || ""));
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    if (url.username || url.password) return "";
+    return localHost(url.hostname) ? url.origin : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * A subtitle address that may be fetched: http or https, no credentials.
+ * A local one only at one of the `trusted` origins.
+ */
+export function subtitleUrl(input, { trusted = [] } = {}) {
   let url;
   try {
     url = new URL(String(input || ""));
@@ -63,7 +87,7 @@ export function subtitleUrl(input, { local = false } = {}) {
   if (!["http:", "https:"].includes(url.protocol))
     throw new Error("عنوان الترجمة غير مدعوم");
   if (url.username || url.password) throw new Error("عنوان الترجمة غير مدعوم");
-  if (localHost(url.hostname) && !local)
+  if (localHost(url.hostname) && !trusted.includes(url.origin))
     throw new Error("حُوّلت الترجمة إلى عنوان على شبكتك، فلم تُحفظ");
   url.hash = "";
   return url.toString();
@@ -99,9 +123,19 @@ async function readCapped(response, max) {
   return out;
 }
 
+const drop = (response) => {
+  try {
+    response?.body?.cancel?.().catch?.(() => {});
+  } catch {
+    /* already closed */
+  }
+};
+
 /**
  * The subtitle's bytes from an addon's address. Never sends cookies or
- * headers of its own beyond Accept; `signal` cancels it.
+ * headers of its own beyond Accept; `signal` cancels it. `trusted`: the
+ * origins where a local address is allowed (main's trustedOrigin of the
+ * supplying addon); the transport gets them too, as `init.trusted`.
  */
 export async function fetchSubtitle(
   input,
@@ -110,15 +144,20 @@ export async function fetchSubtitle(
     timeout = SUBTITLE_TIMEOUT,
     max = SUBTITLE_MAX,
     signal,
+    trusted = [],
   } = {},
 ) {
-  const first = new URL(String(input || ""), "http://invalid.invalid/");
-  const local = localHost(first.hostname);
-  let url = subtitleUrl(input, { local });
+  // Trust holds only while the chain stays at a trusted origin: once a hop
+  // leaves, no later hop may be local, trusted or not.
+  let allowed = (Array.isArray(trusted) ? trusted : []).filter(
+    (origin) => typeof origin === "string" && origin,
+  );
+  let url = subtitleUrl(input, { trusted: allowed });
   const stop = AbortSignal.any
     ? AbortSignal.any([AbortSignal.timeout(timeout), signal].filter(Boolean))
     : AbortSignal.timeout(timeout);
   for (let hop = 0; hop <= REDIRECTS; hop++) {
+    if (!allowed.includes(new URL(url).origin)) allowed = [];
     let response;
     try {
       response = await get(url, {
@@ -126,8 +165,11 @@ export async function fetchSubtitle(
         credentials: "omit",
         headers: { Accept: "text/plain, text/vtt, application/x-subrip, */*" },
         signal: stop,
+        trusted: allowed,
       });
-    } catch {
+    } catch (error) {
+      if (error?.code === SUBTITLE_HOST_BLOCKED)
+        throw new Error("مصدر الترجمة يشير إلى عنوان على شبكتك، فلم تُحفظ");
       throw new Error(
         stop.aborted
           ? "انتهت مهلة تحميل الترجمة"
@@ -136,19 +178,23 @@ export async function fetchSubtitle(
     }
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const next = response.headers.get("location");
+      drop(response);
       if (!next) throw new Error("تعذّر تحميل الترجمة من مصدرها");
-      // A redirect may stay local only when the addon's address was.
-      url = subtitleUrl(new URL(next, url).toString(), { local });
+      url = subtitleUrl(new URL(next, url).toString(), { trusted: allowed });
       continue;
     }
-    if (!response.ok)
+    if (!response.ok) {
+      drop(response);
       throw new Error(`تعذّر تحميل الترجمة (HTTP ${response.status})`);
+    }
     const type = String(response.headers.get("content-type") || "")
       .split(";")[0]
       .trim()
       .toLowerCase();
-    if (/^(text\/html|image\/|video\/|audio\/|font\/)/.test(type))
+    if (/^(text\/html|image\/|video\/|audio\/|font\/)/.test(type)) {
+      drop(response);
       throw new Error("المصدر لم يرسل ملف ترجمة");
+    }
     try {
       return await readCapped(response, max);
     } catch (error) {

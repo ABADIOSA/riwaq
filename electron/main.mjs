@@ -104,10 +104,12 @@ import {
 } from "../core/i18n.mjs";
 import { Player } from "./player.mjs";
 import {
+  sameSource,
   saveSubtitle,
   subtitleMenu,
   subtitleSources,
 } from "./subtitle-save.mjs";
+import { requestSubtitle } from "./subtitle-http.mjs";
 import { TorrentHost } from "./torrent.mjs";
 import { TorrServerHost } from "./torrserver.mjs";
 import {
@@ -306,27 +308,66 @@ function viewingSubtitles() {
     tracks: player?.rawTracks,
     externalSubs: player?.externalSubs,
     addonUrl: (key) => client.subtitles.get(key) || "",
+    // The configured, enabled addon that supplied it (Codex's final
+    // acceptance): saving trusts a local origin only through this.
+    addonOrigin: (key) => client.subtitleOrigin(key),
   });
 }
 // Issue #157: the Save dialog sits above MPV's own full-screen window in the
 // separate (HDR) layout by belonging to the HUD that covers it.
 async function saveViewingSubtitle(choice) {
   client.profiles.gate("library");
+  // Bound to what authorized it (Codex's final acceptance): this viewing,
+  // this activation of this profile and the chosen track's source. The
+  // fetch and the Save dialog wait; any change before the write ends the
+  // save with nothing written, and an interval cancels a fetch still out.
+  const videoId = player.videoId;
+  const sessionId = player.startToken;
+  const ticket = client.profiles.ticket();
+  const stillValid = (source) => {
+    if (
+      !player?.state.active ||
+      player.videoId !== videoId ||
+      player.startToken !== sessionId ||
+      !client.profiles.holds(ticket)
+    )
+      throw new Error("انتهت المشاهدة التي طُلبت منها الترجمة؛ لم تُحفظ");
+    client.profiles.gate("library");
+    const now = viewingSubtitles().find((s) => s.id === source.id);
+    if (!sameSource(now, source))
+      throw new Error("لم تعد هذه الترجمة في المشاهدة");
+  };
   const parent =
     player.state.separate && hud && !hud.isDestroyed() && hud.isVisible()
       ? hud
       : window;
-  const done = await saveSubtitle({
-    choice,
-    sources: viewingSubtitles(),
-    title: player.meta?.name,
-    videoId: player.videoId,
-    downloads: app.getPath("downloads"),
-    heading: t("حفظ الترجمة"),
-    showSaveDialog: (options) => dialog.showSaveDialog(parent, options),
-  });
-  if (done.saved) emit("notice", `حُفظت الترجمة «${done.name}»`);
-  return done;
+  const cancel = new AbortController();
+  const chosen = viewingSubtitles().find((s) => s.id === choice);
+  const watch = setInterval(() => {
+    try {
+      if (chosen) stillValid(chosen);
+    } catch {
+      cancel.abort();
+    }
+  }, 250);
+  try {
+    const done = await saveSubtitle({
+      choice,
+      sources: viewingSubtitles(),
+      title: player.meta?.name,
+      videoId,
+      downloads: app.getPath("downloads"),
+      heading: t("حفظ الترجمة"),
+      showSaveDialog: (options) => dialog.showSaveDialog(parent, options),
+      fetch: requestSubtitle,
+      signal: cancel.signal,
+      stillValid,
+    });
+    if (done.saved) emit("notice", `حُفظت الترجمة «${done.name}»`);
+    return done;
+  } finally {
+    clearInterval(watch);
+  }
 }
 // Where torrents play from on this computer: the viewer's Stremio Service,
 // the built-in engine and TorrServer. Seek previews count them as remote;

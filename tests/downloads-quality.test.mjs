@@ -10,6 +10,7 @@ import { OfflineLibrary } from "../electron/offline.mjs";
 import { downloadCapability } from "../core/offline-media.mjs";
 import { localTorrentLink } from "../core/torrent-engine.mjs";
 import {
+  sameSource,
   saveSubtitle,
   subtitleMenu,
   subtitleSources,
@@ -154,6 +155,14 @@ async function mainPlayback() {
     subtitleMenu,
     subtitleSources,
     saveSubtitle,
+    sameSource,
+    // Codex's final acceptance: the save's transport and its watch.
+    requestSubtitle: async () => {
+      throw new Error("no network in this fixture");
+    },
+    setInterval,
+    clearInterval,
+    AbortController,
     app: { getPath: () => "/downloads" },
     dialog: {
       showSaveDialog: async () => {
@@ -172,7 +181,14 @@ async function mainPlayback() {
       state: { settings: { serverUrl: "http://127.0.0.1:11470" } },
       streams: new Map([["k", { infoHash: "c".repeat(40) }]]),
       subtitles: new Map([["s1", "https://subs.invalid/ar.srt"]]),
-      profiles: { store: { active: "p" }, gate() {} },
+      subtitleOrigin: (key) =>
+        key === "s1" ? "https://subs.invalid/manifest.json" : "",
+      profiles: {
+        store: { active: "p" },
+        gate() {},
+        ticket: () => ({ id: "p", activation: 1 }),
+        holds: () => true,
+      },
     },
     clipboard: { writeText: (a) => calls.push(a) },
     magnetOf: () => "magnet:?xt=urn:btih:fixture",
