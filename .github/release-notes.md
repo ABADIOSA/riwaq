@@ -12,7 +12,7 @@
 
 ### تحت الغطاء
 
-- **حساب رِواق مع أجهزة على إصدار أقدم:** حذف آخر مصدر قنوات مباشرة، والخروج من Stremio، وحذف إضافة مُعدّة، ومسح معرّف Discord تبقى كما هي على الأجهزة المحدّثة حتى لو زامن جهاز ما زال على 0.55، بعد إعادة التشغيل وانضمام جهاز جديد والتعارض. الجهاز على 0.55 يحذف مصدره الأخير أيضًا. وإعدادات هذا الإصدار الجديدة لم تعد ترجع إلى الافتراضي حين يزامن جهاز أقدم. لا تغيير في الخادم.
+- **حساب رِواق مع أجهزة على إصدار أقدم:** تبقى سجلات حذف آخر مصدر قنوات مباشرة، والخروج من Stremio، وحذف إضافة مُعدّة، ومسح معرّف Discord عند مزامنة الأجهزة المحدّثة مع 0.55. يحذف الجهاز القديم مصدره الأخير بعد تلقي المسح. وتبقى إعدادات الإصدار الجديد على الأجهزة التي تعرفها. يعمل ذلك مع الخادم الحالي.
 - كل ما يُكتب يُحفظ قبل أن يُرسل أو يُزامن، والحذف المرفوض يُعاد كما كان؛ التنزيلات لا تُحذف قبل أن يُكتب حذف ملفها الشخصي؛ والموافقة على الإحصاءات أو تتبع المشاهدة لا تفتح أي اتصال قبل أن تُحفظ.
 - استيراد Stremio يكتب فقط في الملف الشخصي والجلسة اللذين طُلب فيهما، وتجديد رمز Simkl أثناء فصل الحساب لا يضيع ولا يعود بعد الفصل.
 - خدمة الحسابات في نسختها التالية تربط الجلسات والبيانات بنسخة الحساب نفسها، وتُنشر إلى الإنتاج يدويًا وبشكل منفصل عن هذا الإصدار؛ التطبيق يعمل مع الخدمة الحالية والتالية.
@@ -27,18 +27,20 @@
 - **Glass appearance** (#158): a soft upper reflection and an inner edge shadow on buttons and dialogs. Solid mode and reduced transparency retain their existing appearance.
 - **Navigation:** Home, Discover and the logo open their page at its start, and Back returns you to where you were (#156); a wheel without outer lines (#146); a switch for the taste compass and Discover's tabs under one line (#148); no band beside the scrollbar (#149).
 
-Under the hood: with a Riwaq account and a device still on 0.55, removing the last Live TV source, signing out of Stremio, removing a configured addon and clearing the Discord app ID now stay that way on updated devices through restarts, a new device joining and conflicts, and the 0.55 device drops its last source too; this version's new settings no longer fall back to their defaults when an older device syncs; no server change. Every change is written before it is sent or synced, and a refused write is undone; downloads are deleted only after their profile's removal is written; opting in to statistics or tracking opens no connection until the choice is saved. A Stremio import writes only into the profile and session it was asked under, and a Simkl refresh during a disconnect is neither lost nor brought back. The account service's next version binds sessions and data to the account instance; it is deployed to production by hand, separately from this release, and the app works with the current service and the next one.
+Under the hood: updated Riwaq clients retain records of Live TV removals, Stremio sign-outs, configured addon removals and Discord ID clears when syncing with 0.55. The old client drops its last source when it receives the clear. Devices that know this version's settings keep them. This works with the existing server. Every change is written before it is sent or synced, and a refused write is undone; downloads are deleted only after their profile's removal is written; opting in to statistics or tracking opens no connection until the choice is saved. A Stremio import writes only into the profile and session it was asked under, and a Simkl refresh during a disconnect is neither lost nor brought back. The account service's next version binds sessions and data to the account instance; it is deployed to production by hand, separately from this release, and the app works with the current service and the next one.
 
 ### حدود معروفة · Known limits
 
 - إصدار تجريبي. لم يُعتمد على HDR أو Dolby Vision أو RTX حقيقي، ولا على شاشات متعددة بدقة مختلفة أو شاشات لمس فعلية أو قارئات الشاشة، ولا بحسابات خدمات حقيقية.
-- الجهاز الذي ما زال على 0.55 يحتفظ على نفسه بمفتاح Stremio والإضافة المُعدّة ومعرّف Discord التي حُذفت من جهاز آخر حتى يُحدَّث أو تحذفها منه؛ الأجهزة المحدّثة لا تأخذها. والخروج من Stremio في رِواق لا ينهي الجلسة عند Stremio نفسه.
+- قد يحتفظ جهاز على 0.55 محليًا بجلسة Stremio أو إضافة مُعدّة أو معرّف Discord حتى تحديثه أو حذفها منه. تسجيل الخروج في رِواق يزيل الجلسة من التطبيق فقط.
+- إذا فُقدت كل نسخ سجل حذف من الحساب، قد يظهر العنصر القديم مؤقتًا لجهاز ينضم أو يزامن دون علم بالحذف. يصحح الجهاز الذي احتفظ بسجل الحذف حالة الحساب عند المزامنة التالية.
 - جهاز ينضم إلى الحساب بينما آخر نسخة رفعها جهاز على 0.55 يرى إعدادات هذا الإصدار الجديدة بقيمها الافتراضية حتى يرفع جهاز محدّث.
 - الترجمة المدمجة داخل ملف الفيديو لا تُحفظ منفصلة.
 - الملفات موقّعة لتحديثات رِواق (Ed25519) لكنها غير موقّعة بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
 - Beta. Real HDR, Dolby Vision and RTX output, mixed-DPI multi-monitor setups, physical touchscreens, screen readers and real provider accounts are not certified.
-- A device still on 0.55 keeps its own Stremio key, configured addon and Discord app ID that another device removed until it updates or you remove them there; updated devices do not take them back. Signing out of Stremio in Riwaq does not end the session at Stremio itself.
+- A device on 0.55 may keep its local Stremio session, configured addon or Discord app ID until you update it or remove the item there. Signing out in Riwaq removes the session from the app only.
+- If the account loses every copy of a deletion record, a device joining or syncing without that record may briefly show an old item. The next sync from a device that kept the record repairs the account.
 - A device joining the account while the newest copy came from a 0.55 device sees this version's new settings at their defaults until an updated device uploads.
 - Subtitles embedded inside a video file are not saved separately.
 - Updates are authenticated with Riwaq's Ed25519 signature; the files carry no Windows Authenticode publisher signature, so SmartScreen may warn.
