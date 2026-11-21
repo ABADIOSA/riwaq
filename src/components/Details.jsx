@@ -55,6 +55,14 @@ import { TitleCountdown } from "./Countdown.jsx";
 import { releaseTarget } from "../../core/countdown.mjs";
 import { chipArt } from "../../core/badges.mjs";
 import { ArtChip, RuleBadge } from "./StreamBadge.jsx";
+import SourceFacets from "./SourceFacets.jsx";
+import {
+  chipPictures,
+  coveredKinds,
+  fitBadges,
+  visibleBadges,
+} from "../../core/badge-look.mjs";
+import { applyFacets, cleanFacets } from "../../core/source-facets.mjs";
 import {
   SOURCE_CHIPS,
   addonSections,
@@ -152,8 +160,16 @@ export default function Details({
     [arrived, setArrived] = useState(0),
     [sourceQuery, setSourceQuery] = useState(""),
     [sourceChips, setSourceChips] = useState([]),
+    // The advanced filters (issue #154): the profile's saved ones when it
+    // asked the picker to remember them.
+    [facets, setFacets] = useState(() =>
+      state.settings.sourceFacetsRemember
+        ? cleanFacets(state.settings.sourceFacets)
+        : {},
+    ),
     [folded, setFolded] = useState([]),
     asked = useRef(null),
+    facetSave = useRef(0),
     // The colour read from the title's artwork, for its page theme.
     [artColor, setArtColor] = useState(null),
     // The title's theme song (core/theme-song.mjs) and whether it plays,
@@ -246,6 +262,11 @@ export default function Details({
     setArrived(0);
     setSourceQuery("");
     setSourceChips([]);
+    setFacets(
+      state.settings.sourceFacetsRemember
+        ? cleanFacets(state.settings.sourceFacets)
+        : {},
+    );
     setFolded([]);
     setSubs([]);
     setStreamsLoading(true);
@@ -595,14 +616,45 @@ export default function Details({
       ? allShown.filter((s) => s.matches !== false)
       : allShown;
   // Finding a source in a long list (core/source-view.mjs): view only.
-  const visible = filterSources(shown, {
+  // The advanced filters count within what the search and chips leave.
+  const searched = filterSources(shown, {
     query: sourceQuery,
     chips: sourceChips,
   });
+  const visible = applyFacets(searched, facets);
   const narrowed = visible.length !== shown.length;
-  // The tools stay while a search or chip is on, even if the list shrank
+  // The search and chips stay while one is on, even if the list shrank
   // under five (a quality pick), so the viewer can always see and clear it.
-  const narrowing = !!sourceQuery.trim() || sourceChips.length > 0;
+  const searching = !!sourceQuery.trim() || sourceChips.length > 0;
+  // A remembered-filters save still waiting when the page goes (another
+  // title, a profile switch, a playback) is dropped with it (F2).
+  useEffect(() => () => clearTimeout(facetSave.current), []);
+  // Remembered filters follow every change, a moment after it. The save
+  // names the profile it was made in: main refuses it once another profile
+  // is active, and drops it if Remember was turned off meanwhile; turning
+  // Remember off or leaving the page cancels a pending one (PR #155
+  // review, F2).
+  const chooseFacets = (next) => {
+    setFacets(next);
+    clearTimeout(facetSave.current);
+    if (!settings.sourceFacetsRemember) return;
+    // The activation, not only the profile: a save still waiting when the
+    // viewer went to another profile and came back is refused (second
+    // review, F2).
+    const profileSession = state.profiles?.session;
+    facetSave.current = setTimeout(
+      () => update("settings", { sourceFacets: next, profileSession }),
+      500,
+    );
+  };
+  const rememberFacets = (on) => {
+    clearTimeout(facetSave.current);
+    update("settings", {
+      sourceFacetsRemember: on,
+      sourceFacets: on ? facets : {},
+      profileSession: state.profiles?.session,
+    });
+  };
   const counts = chipCounts(shown);
   const grouped = result?.order === "addon";
   const sections = grouped
@@ -610,7 +662,10 @@ export default function Details({
     : [{ id: "all", name: "", streams: visible }];
   const hiddenKinds = new Set(settings.badgesHidden || []);
   const chip = (kind) => settings.badgesOn !== false && !hiddenKinds.has(kind);
-  const art = settings.badgeArt || {};
+  // The viewer's own chip pictures first, then an FR-Badges style's (F6).
+  const art = chipPictures(settings);
+  // Badges a row shows before "+N" (core/badge-look.mjs fitBadges).
+  const BADGE_ROOM = settings.pickerLayout === "compact" ? 4 : 6;
   const dropped = result?.dropped || [];
   const currentEpisode = videos.find((v) => v.id === videoId);
   const saved = state.progress[`${meta.type}:${videoId}`];
@@ -735,47 +790,59 @@ export default function Details({
           <Busy text="نبحث في إضافاتك عن المصادر…" />
         ) : shown.length ? (
           <>
-            {(shown.length > 4 || narrowing) && (
-              <div className="source-tools">
-                <label className="source-search">
-                  <Search size={15} />
-                  <input
-                    type="search"
-                    value={sourceQuery}
-                    onChange={(e) => setSourceQuery(e.target.value)}
-                    placeholder="ابحث في المصادر: فريق، REMUX، عربي…"
-                    aria-label="ابحث في المصادر"
-                    maxLength={80}
-                  />
-                </label>
-                <ScrollRow className="source-chips">
-                  {SOURCE_CHIPS.filter(([id]) => counts[id] > 0).map(
-                    ([id, label]) => (
-                      <button
-                        key={id}
-                        className={sourceChips.includes(id) ? "chosen" : ""}
-                        aria-pressed={sourceChips.includes(id)}
-                        onClick={() =>
-                          setSourceChips((list) =>
-                            list.includes(id)
-                              ? list.filter((c) => c !== id)
-                              : [...list, id],
-                          )
-                        }
-                      >
-                        {label} <bdi>{counts[id]}</bdi>
-                      </button>
-                    ),
-                  )}
-                </ScrollRow>
-                {narrowed && (
-                  <small className="source-count" role="status">
-                    يعرض {arabicCount(visible.length, SOURCES)} من{" "}
-                    {shown.length}
-                  </small>
-                )}
-              </div>
-            )}
+            {/* The search and quick chips help in a long list; the advanced
+                filters are offered with any list that has something to
+                tell apart, and always while one is chosen, so a remembered
+                filter can be seen and cleared (PR #155 review, F4). */}
+            <div className="source-tools">
+              {(shown.length > 4 || searching) && (
+                <>
+                  <label className="source-search">
+                    <Search size={15} />
+                    <input
+                      type="search"
+                      value={sourceQuery}
+                      onChange={(e) => setSourceQuery(e.target.value)}
+                      placeholder="ابحث في المصادر: فريق، REMUX، عربي…"
+                      aria-label="ابحث في المصادر"
+                      maxLength={80}
+                    />
+                  </label>
+                  <ScrollRow className="source-chips">
+                    {SOURCE_CHIPS.filter(([id]) => counts[id] > 0).map(
+                      ([id, label]) => (
+                        <button
+                          key={id}
+                          className={sourceChips.includes(id) ? "chosen" : ""}
+                          aria-pressed={sourceChips.includes(id)}
+                          onClick={() =>
+                            setSourceChips((list) =>
+                              list.includes(id)
+                                ? list.filter((c) => c !== id)
+                                : [...list, id],
+                            )
+                          }
+                        >
+                          {label} <bdi>{counts[id]}</bdi>
+                        </button>
+                      ),
+                    )}
+                  </ScrollRow>
+                </>
+              )}
+              {narrowed && (
+                <small className="source-count" role="status">
+                  يعرض {arabicCount(visible.length, SOURCES)} من {shown.length}
+                </small>
+              )}
+              <SourceFacets
+                streams={searched}
+                chosen={facets}
+                onChange={chooseFacets}
+                remember={!!settings.sourceFacetsRemember}
+                onRemember={rememberFacets}
+              />
+            </div>
             {visible.length ? (
               sections.map((section, index) => (
                 <div className="stream-section" key={`${section.id}-${index}`}>
@@ -800,38 +867,51 @@ export default function Details({
                   )}
                   {!(grouped && folded.includes(section.id)) && (
                     <div
-                      className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""}`}
+                      className={`stream-list ${settings.pickerLayout === "compact" ? "compact" : ""} badges-${settings.badgesOn === false ? "off" : settings.badgeLook || "riwaq"}`}
                     >
-                      {section.streams.map((s) => (
-                        <div
-                          key={s.key}
-                          className={`stream ${s.key === shown[0]?.key ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
-                        >
-                          <button
-                            className="stream-play"
-                            disabled={!s.supported || !!playing}
-                            onClick={() => playStream(s)}
+                      {section.streams.map((s) => {
+                        // A pack badge that says what a built-in chip says
+                        // takes its place; the row keeps the most important
+                        // few and folds the rest behind "+N".
+                        const badges = visibleBadges(s.badges, settings);
+                        const covered = coveredKinds(badges);
+                        const fitted = fitBadges(badges, BADGE_ROOM);
+                        const has = (kind) => chip(kind) && !covered.has(kind);
+                        return (
+                          <div
+                            key={s.key}
+                            className={`stream ${s.key === shown[0]?.key ? "recommended" : ""} ${s.matches === false ? "outside" : ""}`}
                           >
-                            <span className="stream-quality">
-                              {!chip("resolution") ? (
-                                <Play size={20} />
-                              ) : s.resolution === 2160 ? (
-                                "4K"
-                              ) : s.resolution ? (
-                                `${s.resolution}p`
-                              ) : (
-                                <Play size={20} />
-                              )}
-                            </span>
-                            <span className="stream-info">
-                              <b dir="auto">{s.name}</b>
-                              {settings.pickerReleaseName !== false && (
-                                <span dir="auto">{s.title || s.provider}</span>
-                              )}
-                              <small>
-                                {chip("resolution") &&
-                                  chipArt(art, "resolution", s.resolution).map(
-                                    (src) => (
+                            <button
+                              className="stream-play"
+                              disabled={!s.supported || !!playing}
+                              onClick={() => playStream(s)}
+                            >
+                              <span className="stream-quality">
+                                {!chip("resolution") ? (
+                                  <Play size={20} />
+                                ) : s.resolution === 2160 ? (
+                                  "4K"
+                                ) : s.resolution ? (
+                                  `${s.resolution}p`
+                                ) : (
+                                  <Play size={20} />
+                                )}
+                              </span>
+                              <span className="stream-info">
+                                <b dir="auto">{s.name}</b>
+                                {settings.pickerReleaseName !== false && (
+                                  <span dir="auto">
+                                    {s.title || s.provider}
+                                  </span>
+                                )}
+                                <small>
+                                  {has("resolution") &&
+                                    chipArt(
+                                      art,
+                                      "resolution",
+                                      s.resolution,
+                                    ).map((src) => (
                                       <img
                                         key={src}
                                         className="badge-art"
@@ -840,150 +920,165 @@ export default function Details({
                                         loading="lazy"
                                         referrerPolicy="no-referrer"
                                       />
-                                    ),
-                                  )}
-                                {s.remembered && (
-                                  <em
-                                    className="tag-remembered"
-                                    title="نفس مصدر الحلقة السابقة"
-                                  >
-                                    <History size={11} /> مصدرك السابق
-                                  </em>
-                                )}
-                                {(s.badges || []).map((b) => (
-                                  <RuleBadge key={b.label} badge={b} />
-                                ))}
-                                {chip("hdr") && s.hdr && (
-                                  <ArtChip
-                                    images={chipArt(art, "hdr", s.hdr)}
-                                    label={s.hdr}
-                                  >
-                                    <em className="tag-hdr">{s.hdr}</em>
-                                  </ArtChip>
-                                )}
-                                {chip("codec") && s.codec && (
-                                  <ArtChip
-                                    images={chipArt(art, "codec", s.codec)}
-                                    label={s.codec}
-                                  >
-                                    <em>{s.codec}</em>
-                                  </ArtChip>
-                                )}
-                                {chip("source") && s.source && (
-                                  <ArtChip
-                                    images={chipArt(art, "source", s.source)}
-                                    label={s.source}
-                                  >
-                                    <em>{s.source}</em>
-                                  </ArtChip>
-                                )}
-                                {chip("audio") && s.audio && (
-                                  <ArtChip
-                                    images={[
-                                      ...chipArt(art, "audio", s.audio),
-                                      ...(chipArt(art, "audio", s.audio).length
-                                        ? chipArt(art, "channels", s.channels)
-                                        : []),
-                                    ]}
-                                    label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
-                                  >
-                                    <em>
-                                      {s.audio}
-                                      {s.channels ? ` ${s.channels}` : ""}
-                                    </em>
-                                  </ArtChip>
-                                )}
-                                {chip("size") && s.sizeLabel && (
-                                  <em>{s.sizeLabel}</em>
-                                )}
-                                {chip("cached") && s.cached && (
-                                  <em className="tag-cached">
-                                    <Zap size={11} /> {s.debrid || "مخزّن"}
-                                  </em>
-                                )}
-                                {chip("seeders") &&
-                                  s.seeders !== null &&
-                                  s.seeders !== undefined && (
-                                    <em>
-                                      <Users size={11} /> {s.seeders}
-                                    </em>
-                                  )}
-                                {chip("group") && s.trustedGroup && (
-                                  <em className="tag-trusted">
-                                    <ShieldCheck size={11} /> {s.group}
-                                  </em>
-                                )}
-                                {chip("arabic") && s.arabicDub && (
-                                  <em className="tag-arabic">دبلجة عربية</em>
-                                )}
-                                {chip("arabic") && s.arabicSub && (
-                                  <em className="tag-arabic">ترجمة عربية</em>
-                                )}
-                                {s.torrent && <em>Stremio Service</em>}
-                                {s.external && <em>رابط خارجي</em>}
-                                {!s.supported && <em>صيغة غير مدعومة</em>}
-                              </small>
-                              {explained === s.key && (
-                                <small className="stream-why" dir="auto">
-                                  {s.reasons.map((r) => (
+                                    ))}
+                                  {s.remembered && (
                                     <em
-                                      key={r.code}
-                                      className={
-                                        r.points < 0 ? "minus" : "plus"
-                                      }
+                                      className="tag-remembered"
+                                      title="نفس مصدر الحلقة السابقة"
                                     >
-                                      {r.label} {r.points > 0 ? "+" : ""}
-                                      {r.points}
+                                      <History size={11} /> مصدرك السابق
                                     </em>
+                                  )}
+                                  {fitted.shown.map((b) => (
+                                    <RuleBadge
+                                      key={`${b.group || ""}:${b.label}`}
+                                      badge={b}
+                                    />
                                   ))}
+                                  {fitted.more.length > 0 && (
+                                    <em
+                                      className="tag-more"
+                                      title={fitted.more
+                                        .map((b) => b.label)
+                                        .join(" · ")}
+                                      aria-label={`${fitted.more.length} شارات أخرى: ${fitted.more.map((b) => b.label).join("، ")}`}
+                                    >
+                                      +{fitted.more.length}
+                                    </em>
+                                  )}
+                                  {has("hdr") && s.hdr && (
+                                    <ArtChip
+                                      images={chipArt(art, "hdr", s.hdr)}
+                                      label={s.hdr}
+                                    >
+                                      <em className="tag-hdr">{s.hdr}</em>
+                                    </ArtChip>
+                                  )}
+                                  {has("codec") && s.codec && (
+                                    <ArtChip
+                                      images={chipArt(art, "codec", s.codec)}
+                                      label={s.codec}
+                                    >
+                                      <em>{s.codec}</em>
+                                    </ArtChip>
+                                  )}
+                                  {has("source") && s.source && (
+                                    <ArtChip
+                                      images={chipArt(art, "source", s.source)}
+                                      label={s.source}
+                                    >
+                                      <em>{s.source}</em>
+                                    </ArtChip>
+                                  )}
+                                  {has("audio") && s.audio && (
+                                    <ArtChip
+                                      images={[
+                                        ...chipArt(art, "audio", s.audio),
+                                        ...(chipArt(art, "audio", s.audio)
+                                          .length
+                                          ? chipArt(art, "channels", s.channels)
+                                          : []),
+                                      ]}
+                                      label={`${s.audio}${s.channels ? ` ${s.channels}` : ""}`}
+                                    >
+                                      <em>
+                                        {s.audio}
+                                        {s.channels ? ` ${s.channels}` : ""}
+                                      </em>
+                                    </ArtChip>
+                                  )}
+                                  {chip("size") && s.sizeLabel && (
+                                    <em>{s.sizeLabel}</em>
+                                  )}
+                                  {has("cached") && s.cached && (
+                                    <em className="tag-cached">
+                                      <Zap size={11} /> {s.debrid || "مخزّن"}
+                                    </em>
+                                  )}
+                                  {chip("seeders") &&
+                                    s.seeders !== null &&
+                                    s.seeders !== undefined && (
+                                      <em>
+                                        <Users size={11} /> {s.seeders}
+                                      </em>
+                                    )}
+                                  {chip("group") && s.trustedGroup && (
+                                    <em className="tag-trusted">
+                                      <ShieldCheck size={11} /> {s.group}
+                                    </em>
+                                  )}
+                                  {chip("arabic") && s.arabicDub && (
+                                    <em className="tag-arabic">دبلجة عربية</em>
+                                  )}
+                                  {has("arabic") && s.arabicSub && (
+                                    <em className="tag-arabic">ترجمة عربية</em>
+                                  )}
+                                  {s.torrent && <em>Stremio Service</em>}
+                                  {s.external && <em>رابط خارجي</em>}
+                                  {!s.supported && <em>صيغة غير مدعومة</em>}
                                 </small>
-                              )}
-                            </span>
-                            <span className="stream-action">
-                              {s.key === shown[0]?.key && (
-                                <small>الأعلى ترتيباً</small>
-                              )}
-                              {playing === s.key ? (
-                                <LoaderCircle className="spin" size={22} />
-                              ) : (
-                                <Play size={20} fill="currentColor" />
-                              )}
-                            </span>
-                          </button>
-                          {!isWeb && s.downloadable && (
-                            <button
-                              className="stream-download"
-                              title="تنزيل المصدر دون تشغيل"
-                              disabled={!!playing}
-                              onClick={async () => {
-                                const r = await act("offlineStart", {
-                                  key: s.key,
-                                  meta,
-                                  videoId,
-                                  profileId: state.profiles?.active,
-                                });
-                                if (r)
-                                  notice(
-                                    "بدأ التنزيل؛ يمكنك إغلاق المشغل ومتابعته من التنزيلات.",
-                                  );
-                              }}
-                            >
-                              <Download size={18} />
+                                {explained === s.key && (
+                                  <small className="stream-why" dir="auto">
+                                    {s.reasons.map((r) => (
+                                      <em
+                                        key={r.code}
+                                        className={
+                                          r.points < 0 ? "minus" : "plus"
+                                        }
+                                      >
+                                        {r.label} {r.points > 0 ? "+" : ""}
+                                        {r.points}
+                                      </em>
+                                    ))}
+                                  </small>
+                                )}
+                              </span>
+                              <span className="stream-action">
+                                {s.key === shown[0]?.key && (
+                                  <small>الأعلى ترتيباً</small>
+                                )}
+                                {playing === s.key ? (
+                                  <LoaderCircle className="spin" size={22} />
+                                ) : (
+                                  <Play size={20} fill="currentColor" />
+                                )}
+                              </span>
                             </button>
-                          )}
-                          <button
-                            className="stream-why-toggle"
-                            title="لماذا هذا الترتيب؟"
-                            aria-label="لماذا هذا الترتيب؟"
-                            aria-expanded={explained === s.key}
-                            onClick={() =>
-                              setExplained(explained === s.key ? "" : s.key)
-                            }
-                          >
-                            <Info size={15} />
-                          </button>
-                        </div>
-                      ))}
+                            {!isWeb && s.downloadable && (
+                              <button
+                                className="stream-download"
+                                title="تنزيل المصدر دون تشغيل"
+                                disabled={!!playing}
+                                onClick={async () => {
+                                  const r = await act("offlineStart", {
+                                    key: s.key,
+                                    meta,
+                                    videoId,
+                                    profileId: state.profiles?.active,
+                                  });
+                                  if (r)
+                                    notice(
+                                      "بدأ التنزيل؛ يمكنك إغلاق المشغل ومتابعته من التنزيلات.",
+                                    );
+                                }}
+                              >
+                                <Download size={18} />
+                              </button>
+                            )}
+                            <button
+                              className="stream-why-toggle"
+                              title="لماذا هذا الترتيب؟"
+                              aria-label="لماذا هذا الترتيب؟"
+                              aria-expanded={explained === s.key}
+                              onClick={() =>
+                                setExplained(explained === s.key ? "" : s.key)
+                              }
+                            >
+                              <Info size={15} />
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -996,6 +1091,7 @@ export default function Details({
                   onClick={() => {
                     setSourceQuery("");
                     setSourceChips([]);
+                    chooseFacets({});
                   }}
                 >
                   امسح البحث

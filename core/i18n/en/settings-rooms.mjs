@@ -18,8 +18,8 @@ export default {
     "theme colors gradient ready themes light dark white night day system",
   "حجم الواجهة زوايا كثافة تخطيط قائمة حركة شاشة التوقف هوية":
     "interface size corners density layout menu motion screensaver identity",
-  "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام مجموعات مثبتة العرض الرئيسي جلسة اليوم":
-    "home order rows catalogs hide sections pinned collections showcase today's session",
+  "ترتيب الرئيسية صفوف كتالوجات إخفاء أقسام مجموعات مثبتة العرض الرئيسي جلسة اليوم بوصلة ذوقك اكتشف":
+    "home order rows catalogs hide sections pinned collections showcase today's session taste compass discover",
   "تورنت اتصالات سرعة تخزين مؤقت cache المحرك المدمج WebTorrent Stremio Service رفع مشاركة TorrServer":
     "torrent connections speed cache built-in engine WebTorrent Stremio Service upload sharing TorrServer",
   "تنزيل تنزيلات دون إنترنت أوفلاين مساحة تخزين لقطات الشاشة مجلد ذاكرة مؤقتة":

@@ -18,14 +18,16 @@ export class FirstRun {
     return { required: this.client.state.onboarding.status === "pending" };
   }
   complete() {
-    const previous = this.client.state.onboarding;
-    this.client.state.onboarding = { version: 1, status: "complete" };
-    try {
-      this.client.persist();
-    } catch (error) {
-      this.client.state.onboarding = previous;
-      throw error;
-    }
+    // A commit (sixth pass, V2): refused, on the web too, it is still due.
+    this.client.transact(() => {
+      const previous = this.client.state.onboarding;
+      const done = { version: 1, status: "complete" };
+      this.client.state.onboarding = done;
+      return () => {
+        if (this.client.state.onboarding === done)
+          this.client.state.onboarding = previous;
+      };
+    });
     return this.client.publicState();
   }
 }

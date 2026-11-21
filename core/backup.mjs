@@ -472,6 +472,13 @@ function cleanLiveSources(list) {
   return out;
 }
 
+/**
+ * Account sync's clear records ride in each data provider's entry as this
+ * text field (core/sync-clears.mjs): they belong to the account, not to a
+ * restored state, so a restore leaves them out.
+ */
+export const CLEAR_FIELD = "riwaqClears";
+
 function cleanSecretBag(input, ids) {
   // Tokens and keys are opaque. Keep only known services and plain values, so
   // a crafted file cannot smuggle structure the app never wrote.
@@ -482,6 +489,7 @@ function cleanSecretBag(input, ids) {
     if (!isObject(value)) continue;
     const clean = {};
     for (const [key, field] of Object.entries(value)) {
+      if (key === CLEAR_FIELD) continue;
       if (typeof field === "string" && field.length <= 8192) clean[key] = field;
       else if (typeof field === "boolean" || Number.isFinite(field))
         clean[key] = field;
@@ -571,6 +579,15 @@ export function summarizeBackup(header, payload) {
  * current viewer data. Secrets the backup does not carry are kept from this
  * installation, so restoring a data-only backup on the same PC does not sign
  * the viewer out of everything they already set up.
+ *
+ * Seventh pass, W4: carried and omitted are told apart. A payload that
+ * carries secrets (it has `auth`, null when signed out: every Riwaq since
+ * 0.5 writes it exactly when secrets are included, so old payloads read
+ * the same way) is the whole truth for them. Its empty source list, null
+ * Stremio sign-in and missing configured addon are clears, which a sync
+ * from another device must not undo. A payload without secrets says
+ * nothing about them, and this installation keeps its own. The Discord app
+ * ID, always carried, is cleared by an empty one.
  */
 export function restoreState(current, payload) {
   if (!isObject(payload)) throw new Error("النسخة الاحتياطية تالفة");
@@ -586,18 +603,22 @@ export function restoreState(current, payload) {
       if (validBinding(payload.hotkeys[action.id]))
         hotkeys[action.id] = payload.hotkeys[action.id];
   const restoredAddons = cleanAddons(payload.addons);
+  const carries = (key) => Object.hasOwn(payload, key);
+  const secretsCarried = carries("auth");
   // Configured addons are secrets. When the backup did not carry them, keep
   // the ones this installation already has alongside the restored list.
-  const keptAddons = (current.addons || []).filter(
-    (addon) =>
-      !isPlainAddon(addon.transportUrl) &&
-      !restoredAddons.some(
-        (entry) => entry.transportUrl === addon.transportUrl,
-      ),
-  );
-  const carries = (key) => Object.hasOwn(payload, key);
+  const keptAddons = secretsCarried
+    ? []
+    : (current.addons || []).filter(
+        (addon) =>
+          !isPlainAddon(addon.transportUrl) &&
+          !restoredAddons.some(
+            (entry) => entry.transportUrl === addon.transportUrl,
+          ),
+      );
   const liveSources =
-    Array.isArray(payload.live?.sources) && payload.live.sources.length
+    Array.isArray(payload.live?.sources) &&
+    (payload.live.sources.length || secretsCarried)
       ? cleanLiveSources(payload.live.sources)
       : current.live?.sources || [];
   return {
@@ -606,7 +627,9 @@ export function restoreState(current, payload) {
     hotkeys,
     discordAppId: /^\d{17,20}$/.test(payload.discordAppId || "")
       ? payload.discordAppId
-      : current.discordAppId || "",
+      : payload.discordAppId === ""
+        ? ""
+        : current.discordAppId || "",
     addons: [...restoredAddons, ...keptAddons],
     live: {
       sources: liveSources,
@@ -626,7 +649,9 @@ export function restoreState(current, payload) {
             email: String(payload.auth.email || "").slice(0, 320),
             name: String(payload.auth.name || "").slice(0, 200),
           }
-        : current.auth || null,
+        : carries("auth") && payload.auth === null
+          ? null
+          : current.auth || null,
     providers: carries("providers")
       ? cleanSecretBag(payload.providers, [
           "tmdb",

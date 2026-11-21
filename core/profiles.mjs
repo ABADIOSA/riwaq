@@ -47,7 +47,40 @@ function matchesPin(record, pin) {
 export class Profiles {
   constructor(client) {
     this.client = client;
-    this.unlocked = false;
+    // The activation of the active profile (PR #155 second review, F2):
+    // every switch, re-lock and restore starts a new one, so work begun
+    // under an older one can never write, even when the same profile is
+    // active again (A → B → A, or locked and unlocked). Memory only.
+    this.epoch = 0;
+    this.appliedId = undefined;
+    this.open = false;
+  }
+  /** Whether the active profile's PIN was entered; a re-lock ends the activation. */
+  get unlocked() {
+    return this.open;
+  }
+  set unlocked(value) {
+    const next = !!value;
+    if (this.open && !next) this.epoch++;
+    this.open = next;
+  }
+  /** Starts a new activation of the active profile. */
+  renew() {
+    this.epoch++;
+  }
+  /** The active profile and its activation, as work started now names them. */
+  ticket() {
+    return { id: this.store.active, epoch: this.epoch };
+  }
+  /** The same, as the interface carries it (`profileSession`). */
+  session() {
+    return `${this.store.active}:${this.epoch}`;
+  }
+  /** True while `ticket` names the active profile's current activation. */
+  holds(ticket) {
+    return (
+      !!ticket && ticket.id === this.store.active && ticket.epoch === this.epoch
+    );
   }
   get store() {
     const state = this.client.state;
@@ -120,6 +153,10 @@ export class Profiles {
   }
   /** Points the live client state at the active profile's bucket. */
   apply() {
+    if (this.appliedId !== this.store.active) {
+      this.appliedId = this.store.active;
+      this.epoch++;
+    }
     const bucket = this.bucket();
     const state = this.client.state;
     state.favorites = bucket.favorites;
@@ -145,6 +182,7 @@ export class Profiles {
     const active = this.active();
     return {
       active: active?.id || "",
+      session: this.session(),
       unlocked: this.unlocked,
       list: this.store.list.map((profile) => ({
         id: profile.id,
@@ -162,23 +200,66 @@ export class Profiles {
     if (!profile) throw new Error("الملف الشخصي غير موجود");
     return profile;
   }
+  /**
+   * One profile change as a commit (PR #155 fifth pass, Q6). `change`
+   * validates first, then changes the store and returns its undo. When the
+   * write is refused (the desktop throws at once, the web's vault answers
+   * later through core/durable.mjs) the undo puts the profile DATA back
+   * before any later snapshot is taken, so a later, unrelated save can never
+   * write a change the viewer was told had failed. An undo never restores
+   * authority: it starts a new activation where the active profile moves,
+   * and a profile with a PIN comes back locked, so work begun under the
+   * failed change (or before it) can never write afterwards.
+   */
+  transact(change) {
+    const undo = change();
+    try {
+      this.client.persist(undo);
+    } catch (error) {
+      undo();
+      throw error;
+    }
+    return this.client.publicState();
+  }
+  /** Makes `id` the active profile again after an undo: new, locked. */
+  reactivate(id) {
+    const store = this.store;
+    const profile = store.list.find((entry) => entry.id === id);
+    if (!profile || store.active === id) return;
+    this.capture();
+    store.active = id;
+    this.unlocked = !profile.pin;
+    this.renew();
+    this.apply();
+    this.client.cache.clear();
+  }
   create({ name, avatar }) {
     if (this.store.list.length >= MAX_PROFILES)
       throw new Error("وصلت إلى الحد الأقصى من الملفات الشخصية");
     const label = String(name || "").trim();
     if (!label || label.length > 40) throw new Error("أدخل اسماً للملف الشخصي");
     const id = randomBytes(8).toString("hex");
-    this.store.list.push({
-      id,
-      name: label,
-      avatar: AVATARS.includes(avatar)
-        ? avatar
-        : AVATARS[this.store.list.length % AVATARS.length],
-      createdAt: Date.now(),
+    const previous = this.store.active;
+    return this.transact(() => {
+      this.store.list.push({
+        id,
+        name: label,
+        avatar: AVATARS.includes(avatar)
+          ? avatar
+          : AVATARS[this.store.list.length % AVATARS.length],
+        createdAt: Date.now(),
+      });
+      this.store.data[id] = emptyBucket();
+      return () => {
+        const store = this.store;
+        // A switch to it was built on it and was undone first; should it
+        // still be active, the profile active before takes over, locked.
+        if (store.active === id) this.reactivate(previous);
+        if (store.active === id) return;
+        store.list = store.list.filter((entry) => entry.id !== id);
+        delete store.data[id];
+      };
     });
-    this.store.data[id] = emptyBucket();
-    this.client.persist();
-    return this.client.publicState();
   }
   update({ id, name, avatar, lockedRooms, hideAdult, pin }) {
     const profile = this.find(id);
@@ -196,35 +277,92 @@ export class Profiles {
       throw new Error(
         "هذا الملف محمي. أدخل رمز حماية هذا الملف لتعديل الحماية",
       );
+    let label;
     if (name !== undefined) {
-      const label = String(name).trim();
+      label = String(name).trim();
       if (!label || label.length > 40)
         throw new Error("أدخل اسماً للملف الشخصي");
-      profile.name = label;
     }
-    if (avatar !== undefined && AVATARS.includes(avatar))
-      profile.avatar = avatar;
-    if (Array.isArray(lockedRooms))
-      profile.lockedRooms = lockedRooms.filter((room) =>
-        LOCKABLE_ROOMS.includes(room),
-      );
-    if (typeof hideAdult === "boolean" && hideAdult !== !!profile.hideAdult) {
-      profile.hideAdult = hideAdult;
-    }
-    this.client.persist();
-    return this.client.publicState();
+    const FIELDS = ["name", "avatar", "lockedRooms", "hideAdult"];
+    const before = FIELDS.map((key) => [
+      key,
+      Object.hasOwn(profile, key) ? structuredClone(profile[key]) : undefined,
+      Object.hasOwn(profile, key),
+    ]);
+    return this.transact(() => {
+      if (label !== undefined) profile.name = label;
+      if (avatar !== undefined && AVATARS.includes(avatar))
+        profile.avatar = avatar;
+      if (Array.isArray(lockedRooms))
+        profile.lockedRooms = lockedRooms.filter((room) =>
+          LOCKABLE_ROOMS.includes(room),
+        );
+      if (typeof hideAdult === "boolean" && hideAdult !== !!profile.hideAdult)
+        profile.hideAdult = hideAdult;
+      return () => {
+        // The entry as the store holds it now (a restore's undo may have
+        // put back another copy of it).
+        const entry = this.store.list.find((p) => p.id === id);
+        if (!entry) return;
+        for (const [key, value, had] of before)
+          if (had) entry[key] = value;
+          else delete entry[key];
+      };
+    });
   }
-  remove({ id, pin }) {
+  /**
+   * Removes a profile in one write. `also` (desktop main, sixth pass V1)
+   * makes further changes that belong in that same write and returns their
+   * undo: the desktop moves the profile's download records into a durable
+   * clean-up list there, and deletes their files only once this write is
+   * durable (electron/offline.mjs). A refused write undoes both, so nothing
+   * of the profile is lost.
+   */
+  remove({ id, pin }, { also } = {}) {
     this.check({ id, pin, intent: "remove" });
-    this.store.list = this.store.list.filter((entry) => entry.id !== id);
-    delete this.store.data[id];
-    if (this.store.active === id) {
-      this.store.active = this.store.list[0].id;
-      this.unlocked = false;
-      this.apply();
-    }
-    this.client.persist();
-    return this.client.publicState();
+    // The active profile's live references into its bucket first, so an
+    // undo puts back what it held at this moment.
+    this.capture();
+    const store = this.store;
+    const index = store.list.findIndex((entry) => entry.id === id);
+    const profile = store.list[index];
+    const bucket = store.data[id];
+    const wasActive = store.active === id;
+    // Its local songs (desktop, encrypted state.localMusic) go with it, in
+    // the same write: deleting them before the write, as main once did,
+    // lost them for good when the write was refused.
+    const music = this.client.state.localMusic;
+    const hadMusic = !!music && Object.hasOwn(music, id);
+    const songs = hadMusic ? music[id] : undefined;
+    return this.transact(() => {
+      // Its own part first: should it throw, nothing of the profile moved.
+      const alsoUndo = typeof also === "function" ? also() : undefined;
+      store.list = store.list.filter((entry) => entry.id !== id);
+      delete store.data[id];
+      if (hadMusic) delete music[id];
+      if (wasActive) {
+        store.active = store.list[0].id;
+        this.unlocked = false;
+        this.apply();
+      }
+      return () => {
+        if (typeof alsoUndo === "function")
+          try {
+            alsoUndo();
+          } catch {}
+        const now = this.store;
+        if (!now.list.some((entry) => entry.id === id))
+          now.list.splice(Math.min(index, now.list.length), 0, profile);
+        if (bucket && !now.data[id]) now.data[id] = bucket;
+        if (hadMusic) {
+          const local = (this.client.state.localMusic ||= {});
+          if (!Object.hasOwn(local, id)) local[id] = songs;
+        }
+        // Back to the profile that was active, as a new activation: locked
+        // when it has a PIN, even if it was unlocked before the removal.
+        if (wasActive) this.reactivate(id);
+      };
+    });
   }
   /**
    * Throws unless `intent` would succeed, without changing anything. Main runs
@@ -253,30 +391,50 @@ export class Profiles {
   switch({ id, pin }) {
     this.check({ id, pin, intent: "switch" });
     const profile = this.find(id);
-    this.capture();
-    this.store.active = id;
-    // A new profile starts locked even when the previous one was unlocked.
-    this.unlocked = !profile.pin;
-    this.apply();
-    this.client.cache.clear();
-    this.client.persist();
-    return this.client.publicState();
+    const previous = this.store.active;
+    return this.transact(() => {
+      this.capture();
+      this.store.active = id;
+      // A new profile starts locked even when the previous one was unlocked.
+      this.unlocked = !profile.pin;
+      // Even back to the same profile: what was started before is not ours.
+      this.renew();
+      this.apply();
+      this.client.cache.clear();
+      // The previous profile comes back as a new activation, locked when it
+      // has a PIN: its old activation ended with this switch.
+      return () => {
+        if (this.store.active === id) this.reactivate(previous);
+      };
+    });
   }
   setPin({ id, pin, current }) {
     const profile = this.find(id);
     if (profile.pin && !matchesPin(profile.pin, current || ""))
       throw new Error("رمز الحماية الحالي غير صحيح");
-    if (pin === null || pin === "") {
-      delete profile.pin;
-      if (profile.id === this.store.active) this.unlocked = true;
-    } else {
-      if (!/^\d{4,8}$/.test(String(pin)))
-        throw new Error("الرمز من 4 إلى 8 أرقام");
-      profile.pin = hashPin(pin);
-      this.unlocked = profile.id === this.store.active;
-    }
-    this.client.persist();
-    return this.client.publicState();
+    const clear = pin === null || pin === "";
+    if (!clear && !/^\d{4,8}$/.test(String(pin)))
+      throw new Error("الرمز من 4 إلى 8 أرقام");
+    const had = Object.hasOwn(profile, "pin");
+    const previous = profile.pin;
+    return this.transact(() => {
+      if (clear) {
+        delete profile.pin;
+        if (profile.id === this.store.active) this.unlocked = true;
+      } else {
+        profile.pin = hashPin(pin);
+        this.unlocked = profile.id === this.store.active;
+      }
+      return () => {
+        const entry = this.store.list.find((p) => p.id === id);
+        if (!entry) return;
+        if (had) entry.pin = previous;
+        else delete entry.pin;
+        // The PIN that is kept decides: with one, the profile is locked
+        // again (a new activation); without one, nothing is behind it.
+        if (entry.id === this.store.active) this.unlocked = !entry.pin;
+      };
+    });
   }
   unlock(pin) {
     const profile = this.active();

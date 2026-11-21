@@ -25,15 +25,16 @@ import {
   copyFileSync,
   statSync,
 } from "node:fs";
-import { lstat, readdir, rm } from "node:fs/promises";
+import { lstat, readFile, readdir, rm, stat } from "node:fs/promises";
 import { join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { Client, fetchText } from "../core/client.mjs";
+import { Client, PROFILE_CHANGED, fetchText } from "../core/client.mjs";
 import { PlaybackRequest, startOutcome } from "../core/playback-request.mjs";
 import { OfflineLibrary } from "./offline.mjs";
+import { fields } from "../core/undo.mjs";
 import { downloadCapability } from "../core/offline-media.mjs";
 import {
   automaticSubtitle,
@@ -56,7 +57,13 @@ import {
   resolveBindings,
 } from "../core/hotkeys.mjs";
 import { DEBRID } from "../core/services.mjs";
-import { fetchPackText } from "../core/badges.mjs";
+import { fetchFrStyle } from "../core/badge-look.mjs";
+import {
+  ART_GRACE_MS,
+  ART_MAX_BYTES,
+  referencedArt,
+} from "../core/collection-art.mjs";
+import { dataUrl, fileArtStore, readArtFile } from "./collection-art.mjs";
 import { artworkHost } from "../core/artwork.mjs";
 import {
   FIVE,
@@ -96,6 +103,13 @@ import {
   translate,
 } from "../core/i18n.mjs";
 import { Player } from "./player.mjs";
+import {
+  sameSource,
+  saveSubtitle,
+  subtitleMenu,
+  subtitleSources,
+} from "./subtitle-save.mjs";
+import { requestSubtitle } from "./subtitle-http.mjs";
 import { TorrentHost } from "./torrent.mjs";
 import { TorrServerHost } from "./torrserver.mjs";
 import {
@@ -170,11 +184,25 @@ function stopLocalMusic() {
 let pendingBackup = null;
 // A Nuvio snapshot between its preview and the import, held in main only.
 let pendingNuvio = null;
-const nuvioReply = (stores, source) => {
+// The preview belongs to the activation that asked for it (third review,
+// N12): checked after the dialog or the scan, and again at the import.
+const nuvioReply = (stores, source, ticket) => {
+  client.holds(ticket, "settings");
   const profiles = nuvioPreview(stores);
   if (!profiles.length) throw new Error("لم نجد ملفات شخصية في بيانات نوفيو");
-  pendingNuvio = { token: randomBytes(16).toString("hex"), stores };
+  pendingNuvio = { token: randomBytes(16).toString("hex"), stores, ticket };
   return { token: pendingNuvio.token, source, profiles };
+};
+// The held preview for this token, while its activation is still active.
+const heldNuvio = (a) => {
+  if (!pendingNuvio || pendingNuvio.token !== a?.token)
+    throw new Error("اقرأ بيانات نوفيو من جديد");
+  client.claimSession(a);
+  if (!client.profiles.holds(pendingNuvio.ticket)) {
+    pendingNuvio = null;
+    throw new Error(PROFILE_CHANGED);
+  }
+  return pendingNuvio;
 };
 let watching = { active: false, pip: false, error: false };
 // What is playing from an addon stream: subtitle requests need its stream key.
@@ -269,7 +297,77 @@ function playbackMenu() {
       !!localTorrentLink(player.source?.url, torrentEngines()),
     download: capability.supported,
     downloadReason: capability.reason,
+    // Issue #157: choices as ids and labels; addresses and paths stay here.
+    subtitles: subtitleMenu(viewingSubtitles()),
   };
+}
+// This viewing's subtitle tracks and where each one's bytes come from
+// (electron/subtitle-save.mjs).
+function viewingSubtitles() {
+  return subtitleSources({
+    tracks: player?.rawTracks,
+    externalSubs: player?.externalSubs,
+    addonUrl: (key) => client.subtitles.get(key) || "",
+    // The configured, enabled addon that supplied it (Codex's final
+    // acceptance): saving trusts a local origin only through this.
+    addonOrigin: (key) => client.subtitleOrigin(key),
+  });
+}
+// Issue #157: the Save dialog sits above MPV's own full-screen window in the
+// separate (HDR) layout by belonging to the HUD that covers it.
+async function saveViewingSubtitle(choice) {
+  client.profiles.gate("library");
+  // Bound to what authorized it (Codex's final acceptance): this viewing,
+  // this activation of this profile and the chosen track's source. The
+  // fetch and the Save dialog wait; any change before the write ends the
+  // save with nothing written, and an interval cancels a fetch still out.
+  const videoId = player.videoId;
+  const sessionId = player.startToken;
+  const ticket = client.profiles.ticket();
+  const stillValid = (source) => {
+    if (
+      !player?.state.active ||
+      player.videoId !== videoId ||
+      player.startToken !== sessionId ||
+      !client.profiles.holds(ticket)
+    )
+      throw new Error("انتهت المشاهدة التي طُلبت منها الترجمة؛ لم تُحفظ");
+    client.profiles.gate("library");
+    const now = viewingSubtitles().find((s) => s.id === source.id);
+    if (!sameSource(now, source))
+      throw new Error("لم تعد هذه الترجمة في المشاهدة");
+  };
+  const parent =
+    player.state.separate && hud && !hud.isDestroyed() && hud.isVisible()
+      ? hud
+      : window;
+  const cancel = new AbortController();
+  const chosen = viewingSubtitles().find((s) => s.id === choice);
+  const watch = setInterval(() => {
+    try {
+      if (chosen) stillValid(chosen);
+    } catch {
+      cancel.abort();
+    }
+  }, 250);
+  try {
+    const done = await saveSubtitle({
+      choice,
+      sources: viewingSubtitles(),
+      title: player.meta?.name,
+      videoId,
+      downloads: app.getPath("downloads"),
+      heading: t("حفظ الترجمة"),
+      showSaveDialog: (options) => dialog.showSaveDialog(parent, options),
+      fetch: requestSubtitle,
+      signal: cancel.signal,
+      stillValid,
+    });
+    if (done.saved) emit("notice", `حُفظت الترجمة «${done.name}»`);
+    return done;
+  } finally {
+    clearInterval(watch);
+  }
 }
 // Where torrents play from on this computer: the viewer's Stremio Service,
 // the built-in engine and TorrServer. Seek previews count them as remote;
@@ -281,7 +379,13 @@ function torrentEngines() {
     torrServer?.origin,
   ].filter(Boolean);
 }
-async function playbackAction({ action, videoId, sessionId, profileId } = {}) {
+async function playbackAction({
+  action,
+  videoId,
+  sessionId,
+  profileId,
+  choice,
+} = {}) {
   if (
     !player?.state.active ||
     typeof videoId !== "string" ||
@@ -319,6 +423,7 @@ async function playbackAction({ action, videoId, sessionId, profileId } = {}) {
     return true;
   }
   if (action === "download") return startOffline();
+  if (action === "downloadSubtitles") return saveViewingSubtitle(choice);
   throw new Error("أمر غير معروف");
 }
 // The built-in torrent engine (core/torrent-engine.mjs), in its own process,
@@ -347,6 +452,17 @@ function torrents() {
  * torrent-cache are touched (never a link, never offline downloads, which
  * live in userData/offline and offline-torrent-cache).
  */
+// Pictures chosen from this computer for collections (electron/
+// collection-art.mjs): kept under userData by opaque ID; a file no
+// profile's collections name any more is deleted.
+let artStore = null;
+const collectionArtStore = () =>
+  (artStore ||= fileArtStore(join(app.getPath("userData"), "collection-art")));
+const sweepCollectionArt = () =>
+  collectionArtStore()
+    .sweep(() => referencedArt(client.allCollections()))
+    .catch((error) => logError("collection-art", error));
+
 async function sweepTorrentCache() {
   if ((client.state.settings.torrentCache || "viewing") !== "viewing") return;
   const dir = join(app.getPath("userData"), "torrent-cache");
@@ -1729,24 +1845,33 @@ const methods = {
   },
   catalog: (a) => client.catalog(a),
   catalogPlan: (a) => client.catalogPlan(a),
-  // A badge pack is copied only as Riwaq's own pack JSON.
-  // A badge pack from a link (harbor.site, GitHub, a gist...): HTTPS only,
-  // never a machine on the viewer's network, and only its text comes back.
-  badgePackFetch: (a) => fetchPackText(String(a?.url || "")),
-  copyBadgePack: (a) => {
-    const json = String(a?.json || "");
-    let data;
-    try {
-      data = JSON.parse(json);
-    } catch {
-      throw new Error("حزمة غير صالحة");
-    }
-    if (data?.format !== "riwaq-badges" || json.length > 400000)
-      throw new Error("حزمة غير صالحة");
-    clipboard.writeText(json);
-    return true;
+  // FR-Badges styles (core/badge-look.mjs): the page names a look and the
+  // profile it chose it in; only that look's pinned file is fetched
+  // (fetchFrStyle: one host and path, redirects re-checked, bounded), and
+  // its badges join that profile's settings only while it is still the
+  // active one (PR #155 review, F2). No address comes from the renderer.
+  badgeStyleApply: (a) => {
+    client.claimSession(a);
+    return client.applyBadgeStyle(
+      {
+        look: String(a?.look || ""),
+        profileId: a?.profileId,
+        profileSession: a?.profileSession,
+      },
+      (url) => fetchFrStyle(url),
+    );
   },
-  // Only a design code may be copied; nothing else reaches the clipboard.
+  // Deleting a saved stream filter and its Undo, on the current list of
+  // the profile that asked (issue #153, F2).
+  streamFilterEdit: (a) => {
+    client.claimSession(a);
+    return client.streamFilterEdit({
+      profileId: a?.profileId,
+      profileSession: a?.profileSession,
+      action: String(a?.action || ""),
+      id: String(a?.id || ""),
+    });
+  },
   copyThemeCode: (a) => {
     const code = String(a?.code || "");
     if (!code.startsWith("RIWAQ-THEME-1:") || code.length > 6000)
@@ -2113,15 +2238,19 @@ const methods = {
   profileCreate: (a) => client.profiles.create(a),
   profileUpdate: (a) => client.profiles.update(a),
   profileRemove: async (a) => {
-    client.profiles.check({ ...a, intent: "remove" });
-    if (client.profiles.store.active === a.id) {
+    const stop = async () => {
       playbackRequest.cancel();
       stopLocalMusic();
       await player.stop();
-    }
-    // Its downloads go with it (electron/offline.mjs).
-    await offline?.forgetProfile(a.id);
-    if (client.state.localMusic) delete client.state.localMusic[a.id];
+    };
+    // Its downloads go with it (electron/offline.mjs, sixth pass V1): the
+    // profile, its local songs and its download records go in one write,
+    // put back whole when that write is refused (fifth pass, Q6), and the
+    // files are deleted only after it is durable; a file another program
+    // holds stays on a durable clean-up list until it can go.
+    if (offline) return offline.removeProfile(a, { stop });
+    client.profiles.check({ ...a, intent: "remove" });
+    if (client.profiles.store.active === a.id) await stop();
     return client.profiles.remove(a);
   },
   profileSwitch: async (a) => {
@@ -2198,8 +2327,12 @@ const methods = {
     if (appId !== undefined) {
       if (appId && !/^\d{17,20}$/.test(String(appId)))
         throw new Error("معرّف تطبيق Discord غير صالح");
-      client.state.discordAppId = String(appId || "");
-      client.persist();
+      // A commit (sixth pass, V2): refused, the old ID stays.
+      client.transact(() => {
+        const seal = fields(client.state, ["discordAppId"]);
+        client.state.discordAppId = String(appId || "");
+        return seal();
+      });
     }
     await applyPresence().catch((error) => emit("notice", error.message));
     return client.publicState();
@@ -2249,18 +2382,20 @@ const methods = {
   // The viewer's own folder of .glsl/.hook files; only its file names are
   // read. `clear` forgets it and the chain built from it.
   chooseShaderFolder: async (a) => {
-    if (a?.clear === true) {
-      client.state.settings.shaderDir = "";
-      client.state.settings.shaderChain = [];
-    } else {
+    let dir = "";
+    if (a?.clear !== true) {
       const result = await dialog.showOpenDialog(window, {
         title: t("اختيار مجلد الشيدرات"),
         properties: ["openDirectory"],
       });
       if (result.canceled) return null;
-      client.state.settings.shaderDir = result.filePaths[0];
+      dir = result.filePaths[0];
     }
-    client.persist();
+    // Settings commits (sixth pass, V2): refused, they stay as they were.
+    client.commit(["settings"], () => {
+      client.state.settings.shaderDir = dir;
+      if (!dir) client.state.settings.shaderChain = [];
+    });
     player?.applyTuning(client.state.settings);
     return client.publicState();
   },
@@ -2271,9 +2406,10 @@ const methods = {
       properties: ["openFile"],
     });
     if (result.canceled) return null;
-    client.state.settings.shaderPath = result.filePaths[0];
-    client.state.settings.shaderPreset = "file";
-    client.persist();
+    client.commit(["settings"], () => {
+      client.state.settings.shaderPath = result.filePaths[0];
+      client.state.settings.shaderPreset = "file";
+    });
     player?.applyTuning(client.state.settings);
     return client.publicState();
   },
@@ -2475,10 +2611,10 @@ const methods = {
       filters: [{ name: "MPV executable", extensions: ["exe"] }],
       properties: ["openFile"],
     });
-    if (!r.canceled) {
-      client.state.settings.mpvPath = r.filePaths[0];
-      client.persist();
-    }
+    if (!r.canceled)
+      client.commit(["settings"], () => {
+        client.state.settings.mpvPath = r.filePaths[0];
+      });
     return client.publicState();
   },
   diagnostics,
@@ -2554,7 +2690,66 @@ const methods = {
     await shell.openExternal(client.updates.releaseUrl());
     return true;
   },
-  collectionsEdit: (a) => client.collectionsEdit(a || {}),
+  collectionsEdit: (a) => {
+    const result = client.collectionsEdit(a || {});
+    sweepCollectionArt();
+    return result;
+  },
+  // A picture for a collection or folder from this computer: the native
+  // dialog picks it, the bytes decide what it is (core/collection-art.mjs),
+  // and the page gets back only "local:<id>". Behind the library lock.
+  // A still slot (cover, backdrop, logo) refuses an animated file (F8).
+  // The profile that opened the dialog must still be the active one when
+  // it closes, or nothing is kept (F2); the file is opened once and read
+  // from that handle, a regular file of at most 8 MB (readArtFile).
+  collectionArtPick: async (a) => {
+    client.profiles.gate("library");
+    // The activation that opened the dialog, checked again after every
+    // await and at the grant itself (second review: artwork ownership).
+    const ticket = client.claimSession(a);
+    const picked = await dialog.showOpenDialog(window, {
+      title: t("اختر صورة للمجموعة"),
+      properties: ["openFile"],
+      filters: [
+        { name: t("الصور"), extensions: ["gif", "png", "jpg", "jpeg", "webp"] },
+      ],
+    });
+    const path = picked.canceled ? "" : picked.filePaths[0];
+    if (!path) return null;
+    client.holds(ticket, "library");
+    const bytes = await readArtFile(path, ART_MAX_BYTES);
+    client.holds(ticket, "library");
+    const { ref, type, width, height } = await collectionArtStore().add(bytes, {
+      still: a?.slot !== "moving",
+    });
+    try {
+      client.notePickedArt(ref, ticket);
+    } catch (error) {
+      // Kept for no one: removed now rather than at the next sweep.
+      await collectionArtStore()
+        .forget(ref)
+        .catch(() => {});
+      throw error;
+    }
+    // A picture picked and never saved goes at the next sweep after its
+    // grace period, even if nothing else happens meanwhile.
+    setTimeout(sweepCollectionArt, ART_GRACE_MS + 60_000).unref?.();
+    return { ref, type, width, height };
+  },
+  // Only a picture this profile's collections name (or it just picked).
+  collectionArt: async (a) => {
+    client.profiles.gate("library");
+    const ticket = client.profiles.ticket();
+    const ref = `local:${String(a?.id || "").replace(/^local:/, "")}`;
+    if (!client.canReadArt(ref)) return "";
+    const found = await collectionArtStore().read(ref);
+    // The read awaited the disk: the picture goes only to the activation
+    // that asked, if it may still read it (second review).
+    if (!client.profiles.holds(ticket) || client.profiles.isLocked("library"))
+      return "";
+    if (!client.canReadArt(ref)) return "";
+    return found ? dataUrl(found) : "";
+  },
   collectionCatalogs: () => client.collectionCatalogs(),
   collectionFolder: (a) =>
     client.collectionFolder({
@@ -2591,16 +2786,27 @@ const methods = {
     );
     return true;
   },
-  importNuvioCollections: (a) =>
-    client.importNuvioCollections({
+  importNuvioCollections: (a) => {
+    client.claimSession(a);
+    const result = client.importNuvioCollections({
       text: typeof a?.text === "string" ? a.text : "",
-    }),
+      mode: typeof a?.mode === "string" ? a.mode : "merge",
+      only: Array.isArray(a?.only) ? a.only : undefined,
+      legacy: a?.legacy,
+      profileId: a?.profileId === undefined ? undefined : String(a.profileId),
+      profileSession: a?.profileSession,
+    });
+    // Replacing collections can leave a chosen picture unnamed.
+    sweepCollectionArt();
+    return result;
+  },
   /**
    * Looks for Nuvio Desktop's data on this PC. Only the known stores are
    * read; the folder comes from the environment, never from the interface.
    */
-  nuvioScan: () => {
+  nuvioScan: (a) => {
     client.profiles.gate("settings");
+    const ticket = client.claimSession(a);
     if (process.platform !== "win32")
       throw new Error("البحث عن نوفيو متاح على ويندوز فقط");
     // Both Nuvio HTPC and the official Nuvio Desktop may be installed, and an
@@ -2624,13 +2830,14 @@ const methods = {
       if (Object.keys(stores).length && (!best || newest > best.newest))
         best = { stores, newest, label: folder.label };
     }
-    if (best) return nuvioReply(best.stores, best.label);
+    if (best) return nuvioReply(best.stores, best.label, ticket);
     throw new Error(
       "لم نجد نوفيو على هذا الجهاز. افتح نوفيو وسجّل دخولك مرة ليحفظ بياناتك، أو استخدم ملف النسخة الاحتياطية.",
     );
   },
-  nuvioPickBackup: async () => {
+  nuvioPickBackup: async (a) => {
     client.profiles.gate("settings");
+    const ticket = client.claimSession(a);
     const r = await dialog.showOpenDialog(window, {
       title: t("اختيار نسخة إعدادات نوفيو"),
       filters: [{ name: "Nuvio backup", extensions: ["zip"] }],
@@ -2639,14 +2846,15 @@ const methods = {
     if (r.canceled) return null;
     if (statSync(r.filePaths[0]).size > 200 * 1024 * 1024)
       throw new Error("الملف كبير جداً");
+    client.holds(ticket, "settings");
     return nuvioReply(
       readNuvioZip(readFileSync(r.filePaths[0])),
       basename(r.filePaths[0]),
+      ticket,
     );
   },
   nuvioImport: async (a) => {
-    if (!pendingNuvio || pendingNuvio.token !== a?.token)
-      throw new Error("اقرأ بيانات نوفيو من جديد");
+    const held = heldNuvio(a);
     const parts = {};
     for (const key of [
       "addons",
@@ -2656,24 +2864,26 @@ const methods = {
       "tmdbKey",
     ])
       parts[key] = a?.parts?.[key] === true;
-    const reply = await client.importNuvio(pendingNuvio.stores, {
-      profile: a?.profile,
-      parts,
-    });
     pendingNuvio = null;
-    broadcast();
-    return reply;
+    try {
+      return await client.importNuvio(held.stores, {
+        profile: a?.profile,
+        parts,
+        ticket: held.ticket,
+      });
+    } finally {
+      broadcast();
+    }
   },
   // A shape-only report of Nuvio's collections for troubleshooting; the
   // viewer chooses to copy it, and it carries no addresses or keys.
   nuvioDiagnostics: (a) => {
     client.profiles.gate("settings");
-    if (!pendingNuvio || pendingNuvio.token !== a?.token)
-      throw new Error("اقرأ بيانات نوفيو من جديد");
+    const held = heldNuvio(a);
     const index = Number(a?.profile);
     if (!Number.isInteger(index) || index < 1)
       throw new Error("اختر ملف نوفيو");
-    clipboard.writeText(nuvioDiagnostics(pendingNuvio.stores, index));
+    clipboard.writeText(nuvioDiagnostics(held.stores, index));
     return true;
   },
   removeNuvioPlugin: (a) =>
@@ -2868,6 +3078,9 @@ app
           return scaled.toJPEG(80);
         },
       });
+      // Files of profiles removed before a crash or while another program
+      // held them (sixth pass, V1): their removal is durable, so they go.
+      offline.sweep().catch((error) => logError("offline", error));
     } catch (error) {
       dialog.showErrorBox("Riwaq", error.message);
       app.exit(1);
@@ -2936,6 +3149,7 @@ app
       // Finish deleting old pieces before the renderer can request a new
       // engine. An rm already in flight cannot be stopped by torrentHost.
       await sweepTorrentCache().catch((error) => logError("torrent", error));
+      sweepCollectionArt();
       const look = drawnLook();
       // Windows switching between light and dark repaints the native bar.
       nativeTheme.on("updated", applyTitleOverlay);
@@ -3309,10 +3523,15 @@ app
           !Object.hasOwn(methods, method)
         )
           return { ok: false, error: "الطلب غير مسموح" };
+        const writes = client?.writes;
         try {
           return { ok: true, value: await methods[method](args) };
         } catch (error) {
           logError(`ipc:${method}`, error);
+          // A refused write was undone (Client.commit, Profiles.transact):
+          // the page is shown what is actually kept, as the web's onUndo
+          // does, including a profile that came back locked (fifth pass).
+          if (client && client.writes !== writes) broadcast();
           if (process.env.RIWAQ_SMOKE)
             console.error(`Smoke IPC ${method}: ${error.stack}`);
           return { ok: false, error: cleanError(error) };

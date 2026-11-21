@@ -1,15 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  Check,
-  Copy,
-  Pencil,
-  Plus,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, Check, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   FILTER_LIMIT,
   FILTER_OPTIONS,
@@ -18,11 +8,14 @@ import {
 import {
   BADGE_KINDS,
   RULE_LIMIT,
-  exportBadgePack,
-  importBadgePack,
   patternProblem,
   ruleBadges,
 } from "../../../core/badges.mjs";
+import {
+  LOOK_SUPERSEDED,
+  chooseLook,
+  isFrLook,
+} from "../../../core/badge-look.mjs";
 import { call } from "../../lib/api.js";
 import { RuleBadge } from "../StreamBadge.jsx";
 
@@ -302,7 +295,7 @@ const summary = (f) =>
     .join(" · ");
 
 /** Saved stream filters: the quality the viewer prefers, one active. */
-export function FiltersPage({ state, update, notice }) {
+export function FiltersPage({ state, update, act, setState, notice }) {
   const s = state.settings;
   const filters = s.streamFilters || [];
   const [draft, setDraft] = useState(null);
@@ -323,6 +316,36 @@ export function FiltersPage({ state, update, notice }) {
         ? draft[key].filter((v) => v !== value)
         : [...draft[key], value],
     });
+  // One press deletes one filter, no question first (issue #153); the
+  // notice offers Undo, which puts it back in its place, active again if
+  // it was. Only this filter goes: there is no delete-all here. Both are
+  // done by main on the profile's list as it is then, and both name the
+  // profile they were pressed in: an Undo pressed after switching profile,
+  // even with this page closed, is refused there and changes neither
+  // profile (PR #155 review, F2).
+  const remove = async (filter) => {
+    // The activation it was pressed in (second review, F2): an Undo after a
+    // switch away and back, or a re-lock, finds nothing to restore.
+    const profileSession = state.profiles?.session;
+    const r = await act("streamFilterEdit", {
+      profileSession,
+      action: "remove",
+      id: filter.id,
+    });
+    if (!r) return;
+    setState(r.state);
+    notice(`حُذف المرشح «${filter.name}»`, {
+      label: "تراجع",
+      run: async () => {
+        const back = await act("streamFilterEdit", {
+          profileSession,
+          action: "restore",
+          id: filter.id,
+        });
+        if (back) setState(back.state);
+      },
+    });
+  };
   return (
     <section className="settings-card">
       <div className="section-heading">
@@ -377,11 +400,8 @@ export function FiltersPage({ state, update, notice }) {
               </button>
               <button
                 title="حذف"
-                onClick={async () =>
-                  window.confirm(`حذف المرشح «${f.name}»؟`) &&
-                  (await save(filters.filter((x) => x.id !== f.id))) &&
-                  notice("حُذف المرشح")
-                }
+                aria-label={`حذف المرشح «${f.name}»`}
+                onClick={() => remove(f)}
               >
                 <Trash2 size={14} />
               </button>
@@ -494,21 +514,133 @@ const SAMPLE = {
   arabic: "ترجمة عربية",
 };
 
-/** Built-in format chips: all on or off, and single kinds hidden. */
-export function BadgesPage({ state, update }) {
+/**
+ * "Stream badge appearance" (core/badge-look.mjs), replacing the Harbor
+ * badge packs page (issue #152): Riwaq's chips, Liquid Glass, three
+ * FR-Badges styles fetched from their pinned file when chosen, or none.
+ */
+const LOOKS = [
+  ["riwaq", "رِواق الافتراضي", "الشارات النصية كما كانت."],
+  ["liquid", "زجاج سائل", "شارات زجاجية بلون السمة، مرسومة محلياً بلا تحميل."],
+  [
+    "fr-glass",
+    "FR Glass",
+    "صور FR-Badges الداكنة. تُجلب من GitHub عند اختيارها.",
+  ],
+  ["fr-frost", "FR Frost", "صور FR-Badges الزجاجية، تناسب الملصقات والخلفيات."],
+  ["fr-minimal", "Minimal", "صور FR-Badges المختصرة."],
+  ["off", "بدون شارات", "يخفي شارات الصيغة كلها؛ تبقى شاراتك المخصصة."],
+];
+
+function BadgeLookCard({ state, update, act, setState, notice }) {
+  const s = state.settings;
+  const on = s.badgesOn !== false;
+  const current = on ? s.badgeLook || "riwaq" : "off";
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [report, setReport] = useState(null);
+  const choose = async (look) => {
+    if (busy || look === current) return;
+    setError("");
+    setReport(null);
+    if (look === "off") return update("settings", { badgesOn: false });
+    if (!isFrLook(look)) return update("settings", chooseLook(s, look));
+    setBusy(look);
+    // Main fetches the style and adds it to this profile's settings only
+    // if this profile is still the active one when the file arrives; a
+    // switch meanwhile leaves both profiles as they were (F2).
+    try {
+      const r = await call("badgeStyleApply", {
+        look,
+        profileSession: state.profiles?.session,
+      });
+      setState(r.state);
+      const done = r.report;
+      setReport(done);
+      notice(
+        done.over
+          ? `«${done.style}»: حُمّلت ${done.loaded} شارة و${done.pictures} صورة، ولم تتسع ${done.over}`
+          : `«${done.style}»: حُمّلت ${done.loaded} شارة و${done.pictures} صورة`,
+      );
+    } catch (e) {
+      // A newer choice won (made elsewhere, or after this page was closed
+      // and opened again): nothing failed and nothing changes (R3).
+      if (e.message !== LOOK_SUPERSEDED)
+        setError(
+          `${e.message}. بقي المظهر كما كان؛ تحقق من الاتصال وحاول مرة ثانية.`,
+        );
+    }
+    setBusy("");
+  };
+  return (
+    <section className="settings-card badge-look-card">
+      <h2>مظهر شارات المصادر</h2>
+      <p>
+        كيف تظهر شارات الدقة وHDR والصوت والمصدر بجانب كل مصدر. لا يُفرض شيء:
+        «رِواق الافتراضي» يبقى كما هو حتى تختار غيره.
+      </p>
+      <div className="badge-looks" role="radiogroup" aria-label="مظهر الشارات">
+        {LOOKS.map(([id, title, text]) => (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={current === id}
+            aria-busy={busy === id}
+            disabled={!!busy}
+            className={`badge-look ${current === id ? "selected" : ""}`}
+            onClick={() => choose(id)}
+          >
+            <span className={`badge-look-sample look-${id}`} aria-hidden="true">
+              <i>4K</i>
+              <i>DV</i>
+              <i>Atmos</i>
+            </span>
+            <b>{busy === id ? "نجلب النمط…" : title}</b>
+            <small>{text}</small>
+          </button>
+        ))}
+      </div>
+      {error && (
+        <p className="inline-warning" role="alert">
+          {error}
+        </p>
+      )}
+      {report && (
+        <p className="subtle" role="status">
+          {`${report.style}: ${report.loaded} شارة بصورتها و${report.pictures} صورة للشارات المدمجة، من ${report.total} شارة في ملف FR-Badges المختصر.`}
+          {report.over > 0 &&
+            ` ${report.over} لم تتسع بعد قواعدك الخاصة (${report.own}): الحد ${RULE_LIMIT} قاعدة.`}
+        </p>
+      )}
+      <p className="subtle">
+        أنماط FR تأتي من FR-Badges لـ farizmohd70 (رخصة MIT)؛ صورها تُحمّل من
+        GitHub عند عرض المصادر، وإن تعذّر تحميل صورة تظهر شارتها زجاجية بنصها.
+        اختيار نمط آخر يزيل شارات النمط السابق ويُبقي شاراتك الخاصة.
+      </p>
+    </section>
+  );
+}
+
+/** Built-in format chips: their look, and single kinds hidden. */
+export function BadgesPage({ state, update, act, setState, notice }) {
   const s = state.settings;
   const hidden = new Set(s.badgesHidden || []);
   const on = s.badgesOn !== false;
   return (
     <>
+      <BadgeLookCard
+        state={state}
+        update={update}
+        act={act}
+        setState={setState}
+        notice={notice}
+      />
       <section className="settings-card">
-        <Toggle
-          on={on}
-          title="إظهار شارات الصيغة على المصادر"
-          text="الشارات الصغيرة للدقة وHDR والترميز والصوت بجانب كل مصدر في قائمة التشغيل. إطفاؤها يخفيها كلها، وتبقى شاراتك المخصصة."
-          onChange={(badgesOn) => update("settings", { badgesOn })}
-        />
-        <div className="badge-preview" aria-label="معاينة">
+        <div
+          className={`badge-preview badges-${on ? s.badgeLook || "riwaq" : "off"}`}
+          aria-label="معاينة"
+        >
           <span className="stream-quality">
             {on && !hidden.has("resolution") ? "4K" : "▶"}
           </span>
@@ -718,8 +850,8 @@ export function BadgeRulesPage({ state, update, notice }) {
             onClick={() => setShowPacks(!showPacks)}
           >
             {showPacks
-              ? "أخفِ قواعد الحزم"
-              : `أظهر ${fromPacks} قاعدة من الحزم`}
+              ? "أخفِ شارات الأنماط المثبّتة"
+              : `أظهر ${fromPacks} شارة من الأنماط المثبّتة`}
           </button>
         )}
         {visible.length ? (
@@ -759,321 +891,9 @@ export function BadgeRulesPage({ state, update, notice }) {
           <p className="subtle">
             {rules.length
               ? "لا قواعد تطابق بحثك."
-              : "لا توجد قواعد بعد. أضف واحدة أو استورد حزمة."}
+              : "لا توجد قواعد بعد. أضف واحدة بالأعلى."}
           </p>
         )}
-      </section>
-    </>
-  );
-}
-
-/** Packs: a JSON file of rules and hidden kinds, to share or import. */
-/** A pack's name from its link: "harbor-light" from …/harbor-light.json. */
-const packName = (link, host) => {
-  try {
-    const file = new URL(link).pathname.split("/").filter(Boolean).pop() || "";
-    const base = decodeURIComponent(file).replace(/\.json$/i, "");
-    return (base && base !== "badges" ? base : host).slice(0, 60);
-  } catch {
-    return String(host || "حزمة").slice(0, 60);
-  }
-};
-
-/** Packs people share as links, known to work with Riwaq's importer. */
-const KNOWN_PACKS = [
-  ["Harbor Light", "https://harbor.site/badges/harbor-light.json"],
-  ["Harbor Color", "https://harbor.site/badges/harbor-color.json"],
-  ["Harbor Minimal", "https://harbor.site/badges/minimal.json"],
-  ["Harbor Abstract", "https://harbor.site/badges/abstract.json"],
-  [
-    "NardBadges",
-    "https://raw.githubusercontent.com/vowl313/NardBadges/refs/heads/main/NardBadges.json",
-  ],
-];
-
-export function BadgePacksPage({ state, update, notice }) {
-  const s = state.settings;
-  const rules = s.badgeRules || [];
-  const art = s.badgeArt || {};
-  const [url, setUrl] = useState("");
-  const [text, setText] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState(null);
-  const file = useRef(null);
-  const read = (json, name) => {
-    try {
-      setPreview({ name, pack: importBadgePack(json, undefined, { name }) });
-      setError("");
-    } catch (e) {
-      setPreview(null);
-      setError(e.message);
-    }
-  };
-  const fetchUrl = async (link) => {
-    setBusy(true);
-    setError("");
-    setPreview(null);
-    try {
-      const { text: body, name } = await call("badgePackFetch", { url: link });
-      read(body, packName(link, name));
-    } catch (e) {
-      setError(e.message);
-    }
-    setBusy(false);
-  };
-  const install = async () => {
-    const { pack, name } = preview;
-    const ids = new Set(pack.rules.map((r) => r.id));
-    // Importing a pack again replaces its earlier rules.
-    const kept = rules.filter((r) => r.pack !== name && !ids.has(r.id));
-    const merged = [...pack.rules, ...kept].slice(0, RULE_LIMIT);
-    const ok = await update("settings", {
-      badgesOn: true,
-      badgeRules: merged,
-      badgeArt: { ...art, ...pack.art },
-      badgesHidden: [...new Set([...(s.badgesHidden || []), ...pack.hidden])],
-    });
-    if (ok) {
-      notice(
-        `ثُبّتت «${name}»: ${Object.keys(pack.art).length} صورة و${pack.rules.length} قاعدة`,
-      );
-      setPreview(null);
-      setUrl("");
-      setText("");
-    }
-  };
-  const installed = [...new Set(rules.map((r) => r.pack).filter(Boolean))].map(
-    (name) => [name, rules.filter((r) => r.pack === name).length],
-  );
-  const samples = preview
-    ? [
-        ...Object.values(preview.pack.art),
-        ...preview.pack.rules.map((r) => r.image).filter(Boolean),
-      ].slice(0, 14)
-    : [];
-  return (
-    <>
-      <section className="settings-card">
-        <h2>استيراد حزمة من رابط</h2>
-        <p>
-          الصق رابط ملف الشارات، مثل حزم هاربور أو نوفيو أو رابط gist. يقرأ
-          رِواق صيغته وصيغة هاربور ونوفيو، ويعرض ما في الحزمة قبل تثبيتها. لا
-          يُنفّذ أي شيء من الملف، وتُفحص كل قاعدة.
-        </p>
-        <form
-          className="input-action"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (url.trim()) fetchUrl(url.trim());
-          }}
-        >
-          <input
-            dir="ltr"
-            aria-label="رابط الحزمة"
-            placeholder="https://harbor.site/badges/harbor-light.json"
-            value={url}
-            onChange={(e) => {
-              setUrl(e.target.value);
-              setError("");
-            }}
-          />
-          <button className="primary" disabled={!url.trim() || busy}>
-            {busy ? "نجلب…" : "اعرض الحزمة"}
-          </button>
-        </form>
-        <div className="choice-row known-packs">
-          {KNOWN_PACKS.map(([name, link]) => (
-            <button
-              key={link}
-              disabled={busy}
-              onClick={() => {
-                setUrl(link);
-                fetchUrl(link);
-              }}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-        {error && <p className="inline-warning">{error}</p>}
-      </section>
-      {preview && (
-        <section className="settings-card pack-preview">
-          <h2>{preview.name}</h2>
-          <div className="pack-samples">
-            {samples.map((src) => (
-              <img
-                key={src}
-                src={src}
-                alt=""
-                className="badge-art"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-            ))}
-          </div>
-          <ul className="pack-counts">
-            <li>
-              <b>{Object.keys(preview.pack.art).length}</b> صورة للشارات المدمجة
-              (4K، HDR، أتموس…)
-            </li>
-            <li>
-              <b>{preview.pack.rules.length}</b> قاعدة شارات
-              {preview.pack.rules.filter((r) => r.image).length
-                ? ` (${preview.pack.rules.filter((r) => r.image).length} منها بصور)`
-                : ""}
-            </li>
-            {preview.pack.skipped > 0 && (
-              <li>
-                <b>{preview.pack.skipped}</b> تُركت: نمطها غير صالح أو قد يبطئ
-                رِواق، أو بلا اسم.
-              </li>
-            )}
-            {preview.pack.disabled > 0 && (
-              <li>
-                <b>{preview.pack.disabled}</b> معطّلة في الحزمة نفسها.
-              </li>
-            )}
-          </ul>
-          <p className="subtle">
-            صور الشارات تُحمّل من موقع الحزمة عند عرض المصادر. تثبيت الحزمة
-            نفسها مرة ثانية يستبدل قواعدها القديمة.
-          </p>
-          <div className="button-row">
-            <button className="primary" onClick={install}>
-              <Check size={15} /> ثبّت الحزمة
-            </button>
-            <button className="ghost" onClick={() => setPreview(null)}>
-              إلغاء
-            </button>
-          </div>
-        </section>
-      )}
-      <section className="settings-card">
-        <h2>من ملف أو نص</h2>
-        <input
-          ref={file}
-          type="file"
-          accept=".json,application/json"
-          hidden
-          onChange={async (e) => {
-            const f = e.target.files?.[0];
-            e.target.value = "";
-            if (!f) return;
-            if (f.size > 3000000) return setError("الملف أكبر من المسموح");
-            read(await f.text(), f.name.replace(/\.json$/i, "").slice(0, 60));
-          }}
-        />
-        <button className="secondary" onClick={() => file.current?.click()}>
-          <Upload size={15} /> استيراد من ملف
-        </button>
-        <label className="studio-field">
-          أو الصق محتوى الحزمة أو رابطها
-          <textarea
-            dir="ltr"
-            rows={5}
-            placeholder='{"filters":[{"name":"REMUX","pattern":"remux","imageURL":"https://…"}]}'
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setError("");
-            }}
-          />
-        </label>
-        <button
-          className="primary"
-          disabled={!text.trim() || busy}
-          onClick={() =>
-            /^https:\/\/\S+$/.test(text.trim())
-              ? fetchUrl(text.trim())
-              : read(text, "حزمة ملصوقة")
-          }
-        >
-          اعرض الحزمة
-        </button>
-      </section>
-      {(installed.length > 0 || Object.keys(art).length > 0) && (
-        <section className="settings-card">
-          <h2>المثبّت</h2>
-          <ul className="rule-list">
-            {installed.map(([name, count]) => (
-              <li key={name}>
-                <b>{name}</b>
-                <small className="subtle">{count} قاعدة</small>
-                <button
-                  className="icon-plain"
-                  title="إزالة الحزمة"
-                  aria-label={`إزالة ${name}`}
-                  onClick={() =>
-                    update("settings", {
-                      badgeRules: rules.filter((r) => r.pack !== name),
-                    })
-                  }
-                >
-                  <Trash2 size={14} />
-                </button>
-              </li>
-            ))}
-            {Object.keys(art).length > 0 && (
-              <li>
-                <span className="pack-samples">
-                  {Object.values(art)
-                    .slice(0, 6)
-                    .map((src) => (
-                      <img
-                        key={src}
-                        src={src}
-                        alt=""
-                        className="badge-art"
-                        referrerPolicy="no-referrer"
-                      />
-                    ))}
-                </span>
-                <small className="subtle">
-                  {Object.keys(art).length} صورة للشارات المدمجة
-                </small>
-                <button
-                  className="icon-plain"
-                  title="إرجاع الشارات المدمجة نصاً"
-                  aria-label="إزالة صور الشارات المدمجة"
-                  onClick={() => update("settings", { badgeArt: {} })}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </li>
-            )}
-          </ul>
-        </section>
-      )}
-      <section className="settings-card">
-        <h2>شارك إعدادك</h2>
-        <p>انسخ قواعدك وصورك والشارات المخفية كملف JSON لتشاركها.</p>
-        <div className="button-row">
-          <button
-            className="secondary"
-            onClick={async () =>
-              (await call("copyBadgePack", {
-                json: exportBadgePack(s),
-              }).catch(() => false)) && notice("نُسخ إعدادك كـ JSON")
-            }
-          >
-            <Copy size={15} /> نسخ JSON
-          </button>
-          {rules.length > 0 && (
-            <button
-              className="secondary danger"
-              onClick={() =>
-                window.confirm("حذف كل القواعد المخصصة؟") &&
-                update("settings", { badgeRules: [] }).then(
-                  (ok) => ok && notice("حُذفت كل القواعد"),
-                )
-              }
-            >
-              <X size={15} /> حذف كل القواعد
-            </button>
-          )}
-        </div>
       </section>
     </>
   );

@@ -28,6 +28,7 @@ import {
   updatedValues,
 } from "./streaming-server.mjs";
 import { interleave } from "./folder-view.mjs";
+import { fields } from "./undo.mjs";
 
 const INDEX_TTL = 30 * 60000;
 const newId = () =>
@@ -74,6 +75,8 @@ export class ServicesHub {
   debridSave({ id, key, clear = false }) {
     if (!DEBRID.some((d) => d.id === id)) throw new Error("خدمة غير معروفة");
     const store = (this.state.debrid ||= {});
+    // A commit (sixth pass, V2): a refused key change leaves the old one.
+    const seal = fields(store, [id]);
     if (clear) delete store[id];
     else {
       if (
@@ -85,7 +88,7 @@ export class ServicesHub {
         throw new Error("المفتاح غير صالح");
       store[id] = { key: key.trim(), status: "untested" };
     }
-    this.client.persist();
+    this.client.transact(seal);
     return this.client.publicState();
   }
   async debridCheck({ id }) {
@@ -206,25 +209,56 @@ export class ServicesHub {
       deviceId,
       enabled: true,
     };
-    this.state.homeServers = [...servers, server];
-    this.client.persist();
+    // A commit (sixth pass, V2): refused, the server is not added (its
+    // session on the server simply goes unused) and the add says so.
+    await this.client.transact(() => {
+      this.state.homeServers = [...servers, server];
+      return () => {
+        this.state.homeServers = cleanServers(this.state.homeServers).filter(
+          (s) => s.id !== server.id,
+        );
+      };
+    });
     await this.homeServerCheck({ id: server.id }).catch(() => {});
     return this.client.publicState();
   }
   homeServerRemove({ id }) {
-    this.state.homeServers = cleanServers(this.state.homeServers).filter(
-      (s) => s.id !== id,
-    );
-    delete this.state.homeServerStatus?.[id];
-    this.indexes.delete(id);
-    this.client.persist();
+    // A commit (sixth pass, V2): refused, the server is put back.
+    this.client.transact(() => {
+      const list = cleanServers(this.state.homeServers);
+      const index = list.findIndex((s) => s.id === id);
+      const server = list[index];
+      this.state.homeServers = list.filter((s) => s.id !== id);
+      delete this.state.homeServerStatus?.[id];
+      this.indexes.delete(id);
+      return () => {
+        if (!server) return;
+        const now = cleanServers(this.state.homeServers);
+        if (now.some((s) => s.id === id)) return;
+        now.splice(Math.min(index, now.length), 0, server);
+        this.state.homeServers = now;
+      };
+    });
     return this.client.publicState();
   }
   homeServerToggle({ id, enabled }) {
-    this.state.homeServers = cleanServers(this.state.homeServers).map((s) =>
-      s.id === id ? { ...s, enabled: enabled === true } : s,
-    );
-    this.client.persist();
+    // A commit (sixth pass, V2): refused, the server's switch goes back.
+    this.client.transact(() => {
+      const was = cleanServers(this.state.homeServers).find(
+        (s) => s.id === id,
+      )?.enabled;
+      const now = enabled === true;
+      this.state.homeServers = cleanServers(this.state.homeServers).map((s) =>
+        s.id === id ? { ...s, enabled: now } : s,
+      );
+      return () => {
+        if (was === undefined) return;
+        this.state.homeServers = cleanServers(this.state.homeServers).map(
+          (s) =>
+            s.id === id && s.enabled === now ? { ...s, enabled: was } : s,
+        );
+      };
+    });
     return this.client.publicState();
   }
   headersFor(server) {

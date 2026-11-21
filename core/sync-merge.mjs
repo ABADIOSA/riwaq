@@ -122,3 +122,89 @@ export function merge3(base, local, remote, { prefer = "local" } = {}) {
   }
   return prefer === "remote" ? remote : local;
 }
+
+/**
+ * Seventh pass, W4: a payload that carries secrets now clears the Stremio
+ * sign-in when its `auth` is null (core/backup.mjs restoreState). With no
+ * common ancestor (signing in), merge3 lets the account's side win a
+ * conflict, which would sign this device out of its own Stremio session
+ * just for joining an account that has none. There the sign-in this device
+ * has is kept (and goes up with the rest of its secrets); after the first
+ * sync, a null that the account's side changed to is a real sign-out.
+ * A sign-in the account's clear records name is still dropped afterwards
+ * (core/sync-clears.mjs settleClears): the device held the very session
+ * that was signed out elsewhere.
+ */
+export function keepSignIn(base, local, remote, merged) {
+  if (base !== undefined || !isObject(merged) || !isObject(remote))
+    return merged;
+  let out = merged;
+  if (
+    Object.hasOwn(merged, "auth") &&
+    merged.auth === null &&
+    isObject(local?.auth) &&
+    remote.auth == null
+  )
+    out = { ...out, auth: local.auth };
+  // Release blocker W4: the same for the Discord app ID, which an empty
+  // value clears since the seventh pass. Joining an account that has none
+  // keeps this device's own.
+  if (
+    merged.discordAppId === "" &&
+    /^\d{17,20}$/.test(local?.discordAppId || "") &&
+    !remote.discordAppId
+  )
+    out = { ...out, discordAppId: local.discordAppId };
+  return out;
+}
+
+/**
+ * Release blocker W4 (mixed versions): a released app drops the profile
+ * settings it does not know (0.55.0 has no `badgeLook`, `sourceFacets`,
+ * `collectionsLayout`, `tasteCompass`… and its cleaner leaves them out).
+ * Read by merge3, a key the account's copy lacks was deleted, so every
+ * sync from a released device reset those settings here to their defaults,
+ * and this device's next upload put them back: the two uploaded in turn
+ * for as long as both ran. Riwaq never deletes a settings key (safeSettings
+ * writes them all), so a missing one only means the writer did not know
+ * it: `target` takes `from`'s value for every settings key, at any depth
+ * of plain objects, it lacks. Profiles `target` does not have are left out.
+ */
+export function withKnownSettings(target, from) {
+  const data = target?.profiles?.data;
+  const own = from?.profiles?.data;
+  if (!isObject(data) || !isObject(own)) return target;
+  let changed = false;
+  const fill = (into, source) => {
+    if (!isObject(into) || !isObject(source)) return into;
+    let out = into;
+    for (const [key, value] of Object.entries(source)) {
+      if (!Object.hasOwn(into, key)) {
+        if (out === into) out = { ...into };
+        out[key] = value;
+      } else if (isObject(into[key]) && isObject(value)) {
+        const deeper = fill(into[key], value);
+        if (deeper !== into[key]) {
+          if (out === into) out = { ...into };
+          out[key] = deeper;
+        }
+      }
+    }
+    return out;
+  };
+  const nextData = { ...data };
+  for (const [id, bucket] of Object.entries(data)) {
+    const settings = own[id]?.settings;
+    if (!isObject(bucket) || !isObject(bucket.settings) || !isObject(settings))
+      continue;
+    const filled = fill(bucket.settings, settings);
+    if (filled === bucket.settings) continue;
+    nextData[id] = { ...bucket, settings: filled };
+    changed = true;
+  }
+  if (!changed) return target;
+  return {
+    ...target,
+    profiles: { ...target.profiles, data: nextData },
+  };
+}

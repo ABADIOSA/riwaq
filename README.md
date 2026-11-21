@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.55.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
+  <a href="https://github.com/ABADIOSA/riwaq/releases/tag/v0.56.0"><img alt="Release" src="https://img.shields.io/github/v/release/ABADIOSA/riwaq?include_prereleases&label=release&color=e7b66e"></a>
   <img alt="Windows x64" src="https://img.shields.io/badge/Windows-x64-15191e">
   <a href="https://abadiosa.github.io/riwaq/"><img alt="Web" src="https://img.shields.io/badge/web-abadiosa.github.io%2Friwaq-15191e"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-15191e"></a>
@@ -30,19 +30,19 @@
 
 | النسخة                         | الملف                                                         |
 | ------------------------------ | ------------------------------------------------------------- |
-| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.55.0-win-x64.exe`                              |
-| النسخة المحمولة                | `Riwaq-0.55.0-win-x64.exe`                                    |
+| المثبّت (يتحدّث من داخل رِواق) | `Riwaq-Setup-0.56.0-win-x64.exe`                              |
+| النسخة المحمولة                | `Riwaq-0.56.0-win-x64.exe`                                    |
 | من المتصفح بدون تحميل          | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.55.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
+الملفات في [صفحة الإصدارات](https://github.com/ABADIOSA/riwaq/releases/tag/v0.56.0)، ومعها `SHA256SUMS.txt` للتحقق من البصمة. الملف غير موقّع بشهادة ناشر ويندوز، فقد يظهر تنبيه SmartScreen.
 
-### الجديد في 0.55.0 · تجريبي
+### الجديد في 0.56.0 · تجريبي
 
-- التنقل صار «العجلة»: وجهاتك على حافة عجلة تدور إلى ما تختاره. الشريط الجانبي باقٍ في **الإعدادات ← المظهر والواجهة ← الواجهة ← شكل التنقل**.
-- أزرار ونوافذ «زجاجية» بلون ثيمك أو «مصمتة» بلا شفافية، وكل الحركات تتوقف مع «تقليل الحركة».
-- شريط مشغل جديد: الوقت المنقضي أو المتبقي، الفصول بأسمائها، ووقت الانتهاء بنظام 12 ساعة، و↑ و↓ تغيّران الصوت بمؤشر صغير.
-- النوافذ ما تحرّك الصفحة خلفها، وفي نافذة المصادر تتمرر القائمة فقط، وزر الإغلاق بعيد عن شريط التمرير.
-- صور التنزيلات تُحفظ من بداية التنزيل، ومساحة التورنت تُحرَّر بعد المشاهدة، وجلب الصور والتنظيف محصوران فلا يلمسان شبكتك المحلية أو ملفاتك.
+- «تنزيل الترجمة» في قائمة المشغل تحت «تنزيل الفيديو»: تحفظ الترجمة المختارة من الإضافات أو من ملفك حيث تريد (الترجمة المدمجة في ملف الفيديو لا تُحفظ منفصلة).
+- فلاتر متقدمة في نافذة المصادر، و«مظهر شارات المصادر» بين شارات رِواق والزجاج السائل وأنماط FR-Badges، وحذف المرشح مع «تراجع».
+- المجموعات: غلاف متحرك عند المرور فقط، وصور من جهازك، واستيراد نوفيو وتصديره بكل الحقول، وقوالب جاهزة.
+- شريط مشغل بمربعات زجاجية ثابتة ودائرة صغيرة لمستوى الصوت، والرئيسية واكتشف والشعار تفتح صفحتها من أولها.
+- حساب رِواق: ما تحذفه أو تخرج منه يبقى كذلك على الأجهزة المحدّثة حتى لو زامن جهاز ما زال على 0.55.
 
 الإصدارات السابقة في [سجل الإصدارات](docs/CHANGELOG.md).
 
@@ -110,19 +110,19 @@ Riwaq brings Stremio addons into a right-to-left Arabic interface, also availabl
 
 | Edition                               | File                                                          |
 | ------------------------------------- | ------------------------------------------------------------- |
-| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.55.0-win-x64.exe`                              |
-| Portable                              | `Riwaq-0.55.0-win-x64.exe`                                    |
+| Installer (updates itself from Riwaq) | `Riwaq-Setup-0.56.0-win-x64.exe`                              |
+| Portable                              | `Riwaq-0.56.0-win-x64.exe`                                    |
 | In the browser, nothing to install    | [abadiosa.github.io/riwaq](https://abadiosa.github.io/riwaq/) |
 
-Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.55.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
+Get them from the [releases page](https://github.com/ABADIOSA/riwaq/releases/tag/v0.56.0), with `SHA256SUMS.txt` to check them. The files carry no Windows publisher signature, so SmartScreen may warn.
 
-### What's new in 0.55.0 · Beta
+### What's new in 0.56.0 · Beta
 
-- Navigation is now the wheel: your destinations sit on the rim of a wheel that turns to what you choose. The sidebar stays in **Settings → Appearance & interface → Interface → Navigation**.
-- Glass buttons and dialogs in your theme's colours, or Solid with no transparency; every movement stops with Reduce motion.
-- A new player bar: elapsed or remaining time, named chapters and the end time in 12-hour form, and ↑ and ↓ change the volume with a small indicator.
-- Dialogs never move the page behind them, only the list scrolls in the sources window, and the close button sits clear of the scrollbar.
-- Download posters are saved when a download starts, torrent space is freed after watching, and artwork fetching and cleanup are confined so they never touch your local network or files.
+- "Download subtitles" in the player menu, under "Download video": save the selected subtitles from an addon or your own file wherever you like (subtitles embedded in the video file are not saved separately).
+- Advanced filters in the sources window, "Stream badge appearance" with Riwaq's badges, Liquid Glass or FR-Badges styles, and filter deletion with Undo.
+- Collections: covers that move only under the pointer, pictures from your computer, Nuvio import and export with every field, and ready templates.
+- A player bar in steady glass chips with a small round volume level, and Home, Discover and the logo open their page at its start.
+- Riwaq account: what you remove or sign out of stays that way on updated devices, even when a device still on 0.55 syncs.
 
 Earlier releases are in the [changelog](docs/CHANGELOG.md).
 

@@ -245,6 +245,11 @@ function hub(responses) {
       live: { sources: [], favorites: [] },
     },
     persist() {},
+    // A store that accepts: a commit's change runs, its undo is kept
+    // (Client.transact, sixth pass V2).
+    transact(change) {
+      change();
+    },
     publicState() {
       return { live: this.live.publicState() };
     },

@@ -16,7 +16,11 @@ import {
   webUrl,
 } from "./protocol.mjs";
 import { analyzeStreams, sizeLabel } from "./stream-engine.mjs";
-import { applyStreamPrefs } from "./stream-prefs.mjs";
+import {
+  applyStreamPrefs,
+  removeFilter,
+  restoreFilter,
+} from "./stream-prefs.mjs";
 import { discoverCinemetaUrl, discoverPlan, discoverRow } from "./discover.mjs";
 import {
   forgetSeries,
@@ -24,7 +28,13 @@ import {
   rememberSeries,
   sourceIdentity,
 } from "./series-memory.mjs";
-import { cleanBadgeRules, ruleBadges } from "./badges.mjs";
+import { cleanBadgeRules, importBadgePack, ruleBadges } from "./badges.mjs";
+import {
+  LOOK_SUPERSEDED,
+  chooseFrStyle,
+  frStyleUrl,
+  isFrRule,
+} from "./badge-look.mjs";
 import { ServicesHub } from "./services-hub.mjs";
 import { AiSearch } from "./ai-hub.mjs";
 import { SpotifyHub } from "./spotify.mjs";
@@ -82,9 +92,13 @@ import {
   availableCatalogs,
   editCollections,
   fromNuvio,
+  applyTemplate,
+  importCollections,
   mergeCollections,
   resolveCatalog,
 } from "./collections.mjs";
+import { presetCollection } from "./collection-presets.mjs";
+import { ART_GRACE_MS, artId, referencedArt } from "./collection-art.mjs";
 import { nuvioProfile } from "./nuvio.mjs";
 import {
   FEED_PREFIX,
@@ -109,6 +123,7 @@ import {
 } from "./source-wait.mjs";
 import { followedSeries, upNextList, calendarEntries } from "./episodes.mjs";
 import { cleanResumeSource } from "./resume.mjs";
+import { fields } from "./undo.mjs";
 import { HOTKEY_ACTIONS, publicHotkeys, validBinding } from "./hotkeys.mjs";
 import {
   collectBackup,
@@ -137,6 +152,30 @@ function subtitleFormat(url) {
  * Sets a key on a map that must not grow for the whole session: re-setting
  * moves it to the newest end, and the oldest entries beyond `limit` go.
  */
+/** The viewer's answers for older-file collections: "match" or "copy". */
+function legacyChoices(input) {
+  const out = {};
+  if (!input || typeof input !== "object" || Array.isArray(input)) return out;
+  for (const [id, choice] of Object.entries(input).slice(0, 200))
+    if (typeof id === "string" && (choice === "match" || choice === "copy"))
+      out[id] = choice;
+  return out;
+}
+/**
+ * A Nuvio import whose profile parts were not written (refused, or the
+ * write failed and was rolled back) after some addons were installed: the
+ * viewer is told exactly what stayed (third review, N2).
+ */
+function nuvioPartial(error, addons) {
+  if (!addons) return error;
+  const kept = `لم يُحفظ ما اخترته من نوفيو لهذا الملف الشخصي وبقي كما كان، أما الإضافات المثبّتة (${addons}) فمحفوظة`;
+  const out = new Error(
+    [String(error?.message || error || ""), kept].filter(Boolean).join(" · "),
+  );
+  out.cause = error;
+  out.installedAddons = addons;
+  return out;
+}
 function boundedSet(map, key, value, limit) {
   map.delete(key);
   map.set(key, value);
@@ -146,6 +185,25 @@ function boundedSet(map, key, value, limit) {
 // A position alone reaches the encrypted file at most this often (see
 // persistProgress); anything else is written at once.
 export const PROGRESS_SAVE_MS = 20000;
+// How long account sync and a backup wait for a commit still being written
+// before they give up for now (Client.atRest).
+const AT_REST_WAIT = 15000;
+export const STILL_SAVING =
+  "تغيير على هذا الجهاز ما زال يُحفظ؛ أعد المحاولة بعد لحظات";
+// The parts of the state each profile owns (core/profiles.mjs apply).
+const PROFILE_KEYS = new Set([
+  "favorites",
+  "progress",
+  "queue",
+  "connectedLists",
+  "collections",
+  "settings",
+]);
+/** Said when work for one profile finishes after another became active. */
+export const PROFILE_CHANGED =
+  "تغيّر الملف الشخصي قبل اكتمال هذا التغيير؛ لم يُحفظ شيء";
+/** Said when a newer choice of the same setting arrived first (R3). */
+export const SUPERSEDED = LOOK_SUPERSEDED;
 const streamIdentity = (stream) =>
   JSON.stringify([
     stream.url,
@@ -246,6 +304,9 @@ export class Client {
     this.request = request;
     this.requestText = requestText;
     this.api = api;
+    // Stremio sign-in/sign-out and import generations (seventh pass, W3).
+    this.stremioAuthEpoch = 0;
+    this.stremioSyncs = 0;
     const loaded = load();
     this.state = {
       addons: [],
@@ -264,6 +325,10 @@ export class Client {
     this.streams = new Map();
     this.subtitles = new Map();
     this.subtitleInfo = new Map();
+    // Issue #157 (Codex's final acceptance): which configured addon supplied
+    // each subtitle key, by its address; saving one asks again whether that
+    // addon is still installed and enabled (subtitleOrigin).
+    this.subtitleOrigins = new Map();
     this.subtitleLists = new Map();
     this.metas = new Map();
     this.cache = new Map();
@@ -286,6 +351,10 @@ export class Client {
       ...(accountRequest ? { request: accountRequest } : {}),
     });
     this.profiles = new Profiles(this);
+    // Deleted stream filters waiting for Undo, by profile (streamFilterEdit).
+    this.filterUndo = new Map();
+    // Pictures picked from this computer, not yet in a folder (canReadArt).
+    this.artPicks = new Map();
     this.notifier = new Notifier(this);
     this.announcements = new Announcements(this, {
       platform: announcementPlatform,
@@ -300,13 +369,99 @@ export class Client {
     // client state has to point at its bucket before anything reads them.
     this.profiles.ensure();
   }
-  persist() {
+  /**
+   * Writes the whole state. The desktop's store writes synchronously and
+   * throws on failure; the web's (web/store.js over core/durable.mjs)
+   * answers with a promise that settles when the browser has committed the
+   * write, and takes `undo` to roll a commit back when it did not (PR #155
+   * third review, N1). Returns that promise, or nothing.
+   */
+  persist(undo) {
     clearTimeout(this.progressTimer);
     this.progressTimer = null;
     this.progressSaved = Date.now();
     this.profiles.capture();
-    this.saveData(this.state);
+    this.writes = (this.writes || 0) + 1;
+    const written = this.saveData(this.state, undo);
+    const later = !!written && typeof written.then === "function";
+    if (later) {
+      this.lastWrite = written;
+      // A commit whose write is still out (fifth pass, Q7): until it
+      // settles, the live state holds a change that may yet be undone, so
+      // account sync and a backup wait for it (atRest).
+      if (typeof undo === "function") {
+        const out = (this.commitsOut ||= new Set());
+        out.add(written);
+        const done = () => out.delete(written);
+        written.then(done, done);
+      }
+    }
     this.account?.touch();
+    return later ? written : undefined;
+  }
+  /**
+   * Runs `step`, which must not wait, at a moment when no commit's write is
+   * still out (fifth pass, Q7), and answers what it returns. The live state
+   * then holds only what is durable, or kept on purpose (a plain save, such
+   * as a position or a token a provider already rotated, is never undone):
+   * whatever `step` reads from it can leave the device. The check and
+   * `step` run in the same turn, so no commit can start between them. A
+   * commit's write settles on its own (the desktop's at once, the
+   * browser's when IndexedDB answers), so this never waits for anything
+   * that waits for it; one that is still out after `wait` ms makes this
+   * throw instead of reading it.
+   */
+  async atRest(step, { wait = AT_REST_WAIT } = {}) {
+    let expired = false;
+    let timer;
+    const late = new Promise((resolve) => {
+      // Not unref'd: it lives only while a commit is out, and is cleared.
+      timer = setTimeout(() => {
+        expired = true;
+        resolve();
+      }, wait);
+    });
+    try {
+      for (;;) {
+        if (!this.commitsOut?.size) return step();
+        if (expired) throw new Error(STILL_SAVING);
+        await Promise.race([Promise.allSettled([...this.commitsOut]), late]);
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  /**
+   * Settles when the last write asked for is durable, and rejects when it
+   * was not (only the web's store writes later than it is asked).
+   */
+  durable() {
+    return this.lastWrite || Promise.resolve();
+  }
+  /**
+   * Seventh pass, W2: an opt-in still being written opens no network. A
+   * store that answers later (the web's) holds a new choice in memory
+   * before it is durable, and a refused write turns it off again; a timer
+   * or a queue reading the flag meanwhile would send under a choice that
+   * was never kept. `holdOptIn(key, written)` marks the consent `key`
+   * (`usage`, `trakt:trackHistory`, …) until that write settles; every
+   * send that needs it asks `optInPending(key)`. Turning a choice off
+   * needs no hold: the flag is off in memory at once, so nothing new goes.
+   */
+  holdOptIn(key, written) {
+    if (!written || typeof written.then !== "function") return;
+    const out = (this.optInsOut ||= new Map());
+    const held = out.get(key) || new Set();
+    out.set(key, held);
+    held.add(written);
+    const done = () => {
+      held.delete(written);
+      if (!held.size && out.get(key) === held) out.delete(key);
+    };
+    written.then(done, done);
+  }
+  optInPending(key) {
+    return !!this.optInsOut?.has(key);
   }
   /**
    * A viewing records its position every 5 s. Writing the whole encrypted
@@ -415,20 +570,27 @@ export class Client {
   setHotkey({ id, binding }) {
     if (!HOTKEY_ACTIONS.some((action) => action.id === id))
       throw new Error("إجراء غير معروف");
-    const store = (this.state.hotkeys ||= {});
-    if (binding === null || binding === "" || binding === undefined)
-      delete store[id];
-    else if (validBinding(binding)) store[id] = binding;
-    else
+    if (
+      binding !== null &&
+      binding !== "" &&
+      binding !== undefined &&
+      !validBinding(binding)
+    )
       throw new Error(
         "اختصار غير صالح. استخدم مفتاحاً واحداً مع Ctrl أو Shift أو Alt.",
       );
-    this.persist();
+    this.commit(["hotkeys"], () => {
+      const store = (this.state.hotkeys ||= {});
+      if (binding === null || binding === "" || binding === undefined)
+        delete store[id];
+      else store[id] = binding;
+    });
     return this.publicState();
   }
   resetHotkeys() {
-    this.state.hotkeys = {};
-    this.persist();
+    this.commit(["hotkeys"], () => {
+      this.state.hotkeys = {};
+    });
     return this.publicState();
   }
   enabled() {
@@ -442,37 +604,55 @@ export class Client {
     if (!addon) throw new Error("الإضافة غير موجودة");
     return addon;
   }
-  async install(input) {
+  /**
+   * Installs an addon from its manifest. Answered once the list is durable
+   * (on the web, once the browser committed it; third review, N2), so an
+   * addon counted as installed is one that stays. `enabled: false` keeps a
+   * new addon switched off, in the same write.
+   */
+  async install(input, { enabled } = {}) {
     const transportUrl = normalizeAddon(input);
     const manifest = validateManifest(await this.request(transportUrl));
     if (manifest.behaviorHints?.configurationRequired)
       throw new Error(
         "أكمل إعداد الإضافة في موقعها أولاً ثم الصق رابط التثبيت المهيأ",
       );
-    this.state.addons = mergeAddons(this.state.addons, [
-      { transportUrl, manifest },
-    ]);
+    await this.commitAsync(["addons"], () => {
+      const known = this.state.addons.some(
+        (a) => a.transportUrl === transportUrl,
+      );
+      this.state.addons = mergeAddons(this.state.addons, [
+        { transportUrl, manifest },
+      ]);
+      if (!known && enabled === false) {
+        const added = this.state.addons.find(
+          (a) => a.transportUrl === transportUrl,
+        );
+        if (added) added.enabled = false;
+      }
+    });
     this.cache.clear();
-    this.persist();
     return this.publicState();
   }
   updateAddon({ key, action }) {
-    const addon = this.addon(key);
-    const index = this.state.addons.indexOf(addon);
-    if (action === "toggle") addon.enabled = addon.enabled === false;
-    else if (action === "remove") this.state.addons.splice(index, 1);
-    else if (action === "up" && index > 0)
-      [this.state.addons[index - 1], this.state.addons[index]] = [
-        addon,
-        this.state.addons[index - 1],
-      ];
-    else if (action === "down" && index < this.state.addons.length - 1)
-      [this.state.addons[index + 1], this.state.addons[index]] = [
-        addon,
-        this.state.addons[index + 1],
-      ];
+    this.addon(key);
+    this.commit(["addons"], () => {
+      const addon = this.addon(key);
+      const index = this.state.addons.indexOf(addon);
+      if (action === "toggle") addon.enabled = addon.enabled === false;
+      else if (action === "remove") this.state.addons.splice(index, 1);
+      else if (action === "up" && index > 0)
+        [this.state.addons[index - 1], this.state.addons[index]] = [
+          addon,
+          this.state.addons[index - 1],
+        ];
+      else if (action === "down" && index < this.state.addons.length - 1)
+        [this.state.addons[index + 1], this.state.addons[index]] = [
+          addon,
+          this.state.addons[index + 1],
+        ];
+    });
     this.cache.clear();
-    this.persist();
     return this.publicState();
   }
   /**
@@ -485,11 +665,12 @@ export class Client {
     if (!drop.size) return this.publicState();
     // Stored addons carry no key: they are named by keyFor(transportUrl),
     // as publicState and addonsHealth give them to the interface.
-    this.state.addons = this.state.addons.filter(
-      (a) => !drop.has(keyFor(a.transportUrl)),
-    );
+    this.commit(["addons"], () => {
+      this.state.addons = this.state.addons.filter(
+        (a) => !drop.has(keyFor(a.transportUrl)),
+      );
+    });
     this.cache.clear();
-    this.persist();
     return this.publicState();
   }
   async authenticate(authKey) {
@@ -499,23 +680,60 @@ export class Client {
       authKey.length > 4096
     )
       throw new Error("بيانات تسجيل الدخول غير صالحة");
+    // Seventh pass, W3: a sign-in, a sign-out or a newer import that
+    // happened while this one waited for Stremio wins; this one writes
+    // nothing (a sign-out during the request never comes back signed in).
+    const signIn = ++this.stremioAuthEpoch;
     const user = await this.api("getUser", { authKey });
-    this.state.auth = {
-      authKey,
-      email: user.email || "",
-      name: user.fullname || "",
-    };
-    this.persist();
+    if (signIn !== this.stremioAuthEpoch)
+      throw new Error(
+        "تغيّر تسجيل الدخول إلى ستريميو أثناء العملية؛ لم يتغير شيء",
+      );
+    // A commit (sixth pass, V2): refused, the previous sign-in stays.
+    await this.transact(() => {
+      const seal = fields(this.state, ["auth"]);
+      this.state.auth = {
+        authKey,
+        email: user.email || "",
+        name: user.fullname || "",
+      };
+      return seal();
+    });
     return this.publicState();
   }
+  /**
+   * Imports the Stremio account's addons and library. Seventh pass, W3:
+   * what this import may write is decided by what held when it was asked,
+   * captured before its first request: the profile activation (library
+   * and positions go only to that one, never to a later activation of the
+   * same profile, A → B → A), the Stremio sign-in (a sign-out, a different
+   * account or a newer import makes this one write nothing) and this run.
+   * Addons are shared by every profile and are still imported when only
+   * the activation ended; the library is then neither asked for nor
+   * written, and the answer says so (`libraryWarning`, `profileChanged`).
+   */
   async sync() {
     const authKey = this.state.auth?.authKey;
     if (!authKey) throw new Error("سجّل الدخول إلى ستريميو أولاً");
+    const ticket = this.profiles.ticket();
+    const signIn = this.stremioAuthEpoch;
+    const run = ++this.stremioSyncs;
+    const stale = () => {
+      if (
+        signIn !== this.stremioAuthEpoch ||
+        run !== this.stremioSyncs ||
+        this.state.auth?.authKey !== authKey
+      )
+        throw new Error(
+          "تغيّر تسجيل الدخول إلى ستريميو أو بدأت مزامنة أحدث؛ لم تكتب هذه المزامنة شيئًا",
+        );
+    };
     const result = await this.api("addonCollectionGet", {
       authKey,
       type: "user",
       update: false,
     });
+    stale();
     if (!Array.isArray(result?.addons))
       throw new Error("استجابة الإضافات غير صالحة. لم تتغير إضافاتك.");
     const compatible = [],
@@ -535,21 +753,33 @@ export class Client {
         skipped.push(addon.manifest?.name || "إضافة غير مدعومة");
       }
     }
-    this.state.addons = mergeAddons(this.state.addons, compatible);
+    // Gathered first and written as one commit at the end (sixth pass,
+    // V2): nothing of the import sits in the state across the requests
+    // below, and a refused write leaves addons, library and positions as
+    // they were.
+    const favorites = [];
+    const progress = new Map();
     let libraryWarning = false;
+    // An activation that ended stops the library's requests too: no new
+    // work starts for a profile that is no longer the one that asked.
+    const ended = () => !this.profiles.holds(ticket);
     try {
+      if (ended()) throw new Error("activation ended");
       const ids = await this.api("datastoreMeta", {
         authKey,
         collection: "libraryItem",
       });
+      stale();
       if (!Array.isArray(ids)) throw new Error("invalid library");
       for (let offset = 0; offset < ids.length; offset += 100) {
+        if (ended()) throw new Error("activation ended");
         const items = await this.api("datastoreGet", {
           authKey,
           collection: "libraryItem",
           ids: ids.slice(offset, offset + 100).map(([id]) => id),
           all: false,
         });
+        stale();
         if (!Array.isArray(items)) throw new Error("invalid library");
         for (const item of items) {
           if (item.removed && !item.temp) continue;
@@ -563,47 +793,284 @@ export class Client {
           if (
             !item.temp &&
             !item.removed &&
-            !this.state.favorites.some(
-              (m) => m.id === meta.id && m.type === meta.type,
-            )
+            !favorites.some((m) => m.id === meta.id && m.type === meta.type)
           )
-            this.state.favorites.push(meta);
+            favorites.push(meta);
           const videoId = item.state?.video_id || item._id;
           const key = `${item.type}:${videoId}`;
           const updated = Date.parse(item._mtime) || 0;
           if (
             item.state?.timeOffset > 0 &&
-            (!this.state.progress[key] ||
-              this.state.progress[key].updated < updated)
+            !(progress.get(key)?.updated >= updated)
           )
-            this.state.progress[key] = {
+            progress.set(key, {
               meta,
               videoId,
               position: item.state.timeOffset / 1000,
               duration: (item.state.duration || 0) / 1000,
               updated,
-            };
+            });
         }
       }
     } catch {
+      // A changed sign-in or a newer import writes nothing at all.
+      stale();
       libraryWarning = true;
     }
-    this.state.lastSync = Date.now();
-    this.cache.clear();
-    this.persist();
+    // Library items belong to the profile that asked; after a switch or a
+    // re-lock they are not written anywhere (the viewer can sync again).
+    const library = this.profiles.holds(ticket);
+    if (!library) libraryWarning = true;
+    stale();
+    await this.transact(() => {
+      const owner = this.profiles.store.active;
+      const seal = fields(this.state, ["addons", "lastSync"]);
+      this.state.addons = mergeAddons(this.state.addons, compatible);
+      this.state.lastSync = Date.now();
+      const added = [];
+      const replaced = [];
+      if (library) {
+        for (const meta of favorites)
+          if (
+            !this.state.favorites.some(
+              (m) => m.id === meta.id && m.type === meta.type,
+            )
+          ) {
+            this.state.favorites.push(meta);
+            added.push(meta);
+          }
+        for (const [key, record] of progress) {
+          const had = Object.hasOwn(this.state.progress, key);
+          const was = this.state.progress[key];
+          if (was && !(was.updated < record.updated)) continue;
+          this.state.progress[key] = record;
+          replaced.push([key, had, was, JSON.stringify(record)]);
+        }
+      }
+      this.cache.clear();
+      const undoShared = seal();
+      return () => {
+        undoShared();
+        const list = this.ownerPart(owner, "favorites");
+        if (Array.isArray(list))
+          for (const meta of added) {
+            const text = JSON.stringify(meta);
+            const at = list.findIndex((m) => JSON.stringify(m) === text);
+            if (at >= 0) list.splice(at, 1);
+          }
+        const records = this.ownerPart(owner, "progress");
+        if (records)
+          for (const [key, had, was, text] of replaced) {
+            if (JSON.stringify(records[key]) !== text) continue;
+            if (had) records[key] = was;
+            else delete records[key];
+          }
+        this.cache.clear();
+      };
+    });
     return {
       state: this.publicState(),
       imported: compatible.length,
       skipped,
       libraryWarning,
+      ...(library ? {} : { profileChanged: true }),
     };
   }
   logout() {
-    this.state.auth = null;
-    this.persist();
+    // An import or sign-in still waiting for Stremio writes nothing now.
+    this.stremioAuthEpoch++;
+    // A commit (sixth pass, V2): refused, the sign-in stays.
+    this.transact(() => {
+      const seal = fields(this.state, ["auth"]);
+      this.state.auth = null;
+      return seal();
+    });
     return this.publicState();
   }
+  /**
+   * Work the interface started for one profile and finishes later (an
+   * Undo, a download, a delayed save) names that profile; main refuses it
+   * once another profile is active, so it can never land in the wrong one
+   * (PR #155 review, F2). The check sits here, where the state is
+   * written, not only in React.
+   *
+   * A profile ID alone is not enough (second review, F2): A → B → A, or a
+   * re-lock and unlock, makes A active again, and a late write from A's
+   * earlier activation must still be refused. `profileSession` (the
+   * interface's copy of `profiles.session`) names the activation; where
+   * it is given it must match exactly. Returns a ticket for work that
+   * awaits before it writes, checked again with `holds`.
+   */
+  claim(input) {
+    const named = input && typeof input === "object" ? input : {};
+    if (named.profileSession !== undefined) {
+      if (String(named.profileSession ?? "") !== this.profiles.session())
+        throw new Error(PROFILE_CHANGED);
+    } else if (
+      named.profileId !== undefined &&
+      String(named.profileId ?? "") !== this.profiles.store.active
+    )
+      throw new Error(PROFILE_CHANGED);
+    return this.profiles.ticket();
+  }
+  /**
+   * Refuses unless `ticket`'s activation is still the active one and, for
+   * a locked `room`, its PIN is still entered: called after every await,
+   * right before the write.
+   */
+  holds(ticket, room) {
+    if (!this.profiles.holds(ticket)) throw new Error(PROFILE_CHANGED);
+    if (room) this.profiles.gate(room);
+  }
+  /**
+   * The strict claim the interface's calls go through (third review, N12):
+   * the activation must be named. A profile ID alone cannot tell A from A
+   * after A → B → A, and a missing one would silently become whichever
+   * activation is current when the call lands, so both are refused.
+   */
+  claimSession(input) {
+    const session = input?.profileSession;
+    if (typeof session !== "string" || !session)
+      throw new Error(PROFILE_CHANGED);
+    return this.claim({ profileSession: session });
+  }
+  sameProfile(profileId, profileSession) {
+    if (profileId === undefined && profileSession === undefined) return;
+    this.claim({ profileId, profileSession });
+  }
+  /**
+   * Changes the active profile's state and writes it as one step (PR #155
+   * second review, R10): when the write fails, the parts named in `keys`
+   * go back to what they were before, in memory and in the profile's
+   * bucket, and the error is thrown on. A later, unrelated save can then
+   * never write a change the viewer was told had failed.
+   */
+  commit(keys, change) {
+    return this.commitWith(keys, change).out;
+  }
+  /**
+   * The same, for work that must know the write is durable before it goes
+   * on (an addon counted as installed, a Nuvio import's report): on the
+   * web, waits for the browser's commit and throws, already rolled back,
+   * when it failed (third review, N1/N2).
+   */
+  async commitAsync(keys, change) {
+    const { out, written } = this.commitWith(keys, change);
+    if (written) await written;
+    return out;
+  }
+  commitWith(keys, change) {
+    // The profile whose bucket the change lands in: an undo that arrives
+    // after a switch puts that profile's parts back in its own bucket,
+    // never in the profile now active.
+    const owner = this.profiles.store.active;
+    const before = keys.map((key) => [
+      key,
+      this.state[key] === undefined
+        ? undefined
+        : structuredClone(this.state[key]),
+    ]);
+    const undo = () => this.restoreKeys(owner, before);
+    let out;
+    try {
+      out = change();
+    } catch (error) {
+      undo();
+      throw error;
+    }
+    let written;
+    try {
+      written = this.persist(undo);
+    } catch (error) {
+      undo();
+      throw error;
+    }
+    return { out, written };
+  }
+  /**
+   * A reversible change that brings its own undo (PR #155 sixth pass, V2),
+   * for changes a whole-key commit would undo too broadly: a plain save
+   * may touch the same key meanwhile (a token rotated in the same
+   * integration, a source's refresh time), and that must never be rolled
+   * back. `change` changes the state and returns the undo of exactly what
+   * it changed (core/undo.mjs). The write is a commit: refused, the undo
+   * runs before any later snapshot (at once on the desktop, when the
+   * browser answers on the web), and until it settles account sync and
+   * backups wait (atRest). Returns the write: a promise on the web, which
+   * rejects already undone, or nothing.
+   */
+  transact(change) {
+    const undo = change();
+    if (typeof undo !== "function")
+      throw new TypeError("a change returns its undo");
+    try {
+      return this.persist(undo);
+    } catch (error) {
+      undo();
+      throw error;
+    }
+  }
+  /**
+   * The part of the state `key` names for profile `owner`: the live one
+   * while it is active, its bucket otherwise (an undo that runs after a
+   * switch writes into the profile the change was made in).
+   */
+  ownerPart(owner, key) {
+    const store = this.profiles.store;
+    if (store.active === owner) return this.state[key];
+    return store.data[owner]?.[key];
+  }
+  /** Puts `before`'s keys back for `owner` (Client.commit's undo). */
+  restoreKeys(owner, before) {
+    const store = this.profiles.store;
+    const live = store.active === owner;
+    // Live references written back first, so apply() below changes only
+    // what is put back here.
+    if (live) this.profiles.capture();
+    const bucket = store.data[owner];
+    for (const [key, value] of before) {
+      if (PROFILE_KEYS.has(key)) {
+        if (bucket) {
+          if (value === undefined) delete bucket[key];
+          else bucket[key] = value;
+        }
+        if (live) this.state[key] = value;
+        continue;
+      }
+      if (value === undefined) delete this.state[key];
+      else this.state[key] = value;
+    }
+    // The live references follow the bucket again (apply fills defaults).
+    if (live && bucket) this.profiles.apply();
+  }
   settings(input, playback) {
+    if (
+      input &&
+      typeof input === "object" &&
+      ("profileId" in input || "profileSession" in input)
+    ) {
+      const { profileId, profileSession, ...rest } = input;
+      this.claim({
+        profileId: "profileId" in input ? String(profileId ?? "") : undefined,
+        profileSession,
+      });
+      input = rest;
+    }
+    // A badge look chosen here (Riwaq's, Liquid Glass, Off) is newer than
+    // any FR style still downloading, which then may not land (R3).
+    if (input && ("badgeLook" in input || "badgesOn" in input))
+      this.badgeChoice = (this.badgeChoice || 0) + 1;
+    // Remembered source filters are saved a moment after each change; one
+    // that arrives after Remember was turned off is stale and is dropped.
+    if (
+      input &&
+      "sourceFacets" in input &&
+      !("sourceFacetsRemember" in input) &&
+      !this.state.settings.sourceFacetsRemember
+    ) {
+      const { sourceFacets, ...rest } = input;
+      input = rest;
+    }
     if (
       input?.rememberVolume === true &&
       !this.state.settings.rememberVolume &&
@@ -611,9 +1078,83 @@ export class Client {
       Number.isFinite(playback.volume)
     )
       input = { ...input, lastVolume: playback.volume };
-    this.state.settings = safeSettings(input, this.state.settings);
-    this.persist();
+    this.commit(["settings"], () => {
+      this.state.settings = safeSettings(input, this.state.settings);
+    });
     return this.publicState();
+  }
+  /**
+   * Deleting a saved stream filter and its Undo (issue #153, PR #155 review
+   * F2), both worked out on the profile's list as it is now, not on a copy
+   * the page held. The deleted filter waits here, per profile, for Undo;
+   * an Undo for another profile, or one already used, changes nothing.
+   */
+  streamFilterEdit({ profileId, profileSession, action, id } = {}) {
+    this.claim({ profileId: String(profileId ?? ""), profileSession });
+    const settings = this.state.settings;
+    // Kept per activation: an Undo from before a switch back, or before a
+    // re-lock, finds nothing (second review, F2).
+    const key = `${this.profiles.session()}|${String(id || "")}`;
+    if (action === "remove") {
+      const plan = removeFilter(
+        settings.streamFilters,
+        settings.activeFilter,
+        String(id || ""),
+      );
+      if (!plan) throw new Error("المرشح غير موجود");
+      this.settings({ streamFilters: plan.filters, activeFilter: plan.active });
+      this.filterUndo.set(key, plan.undo);
+      // Only the last few deletions can come back.
+      while (this.filterUndo.size > 8)
+        this.filterUndo.delete(this.filterUndo.keys().next().value);
+      return { state: this.publicState(), removed: true };
+    }
+    if (action === "restore") {
+      const undo = this.filterUndo.get(key);
+      this.filterUndo.delete(key);
+      const back = undo
+        ? restoreFilter(settings.streamFilters, settings.activeFilter, undo)
+        : null;
+      if (back)
+        this.settings({
+          streamFilters: back.filters,
+          activeFilter: back.active,
+        });
+      return { state: this.publicState(), restored: !!back };
+    }
+    throw new Error("إجراء غير معروف");
+  }
+  /**
+   * Choosing an FR-Badges style (core/badge-look.mjs): its pinned file is
+   * fetched by the caller's `fetchText` (main or the web bridge), and the
+   * badges are added to the settings of the profile that asked, worked out
+   * from that profile's rules as they are when the file arrives. A switch
+   * to another profile during the download leaves both untouched (F2).
+   */
+  /**
+   * The last choice wins (second review, R3): every choice of a look,
+   * here or through `settings` (Riwaq's, Liquid Glass, Off), takes the
+   * next number, and a download that finishes after a newer choice, in
+   * any order and even after the Settings page was closed and opened
+   * again, is dropped with SUPERSEDED instead of bringing its style back.
+   */
+  async applyBadgeStyle({ look, profileId, profileSession } = {}, fetchText) {
+    const ticket = this.claim({
+      profileId: profileId === undefined ? undefined : String(profileId),
+      profileSession,
+    });
+    const url = frStyleUrl(String(look || ""));
+    if (!url) throw new Error("نمط غير معروف");
+    const choice = (this.badgeChoice = (this.badgeChoice || 0) + 1);
+    const text = await fetchText(url);
+    this.holds(ticket);
+    if (this.badgeChoice !== choice) throw new Error(SUPERSEDED);
+    const pack = importBadgePack(text, undefined, { name: look });
+    const { patch, report } = chooseFrStyle(this.state.settings, pack, look);
+    this.commit(["settings"], () => {
+      this.state.settings = safeSettings(patch, this.state.settings);
+    });
+    return { state: this.publicState(), report };
   }
   /** Only actual player volume changes are saved; coalesce drag/key bursts. */
   recordVolume(volume) {
@@ -630,27 +1171,29 @@ export class Client {
     this.profiles.gate("library");
     if (input?.profileId !== this.profiles.store.active)
       throw new Error("تغير الملف الشخصي؛ أعد اختيار ذوقك في الملف الحالي");
-    this.state.settings.taste = editTaste(this.state.settings.taste, input);
-    this.persist();
+    this.commit(["settings"], () => {
+      this.state.settings.taste = editTaste(this.state.settings.taste, input);
+    });
     return this.publicState();
   }
   favorite(meta) {
     if (!meta?.id || !meta?.type || !meta?.name)
       throw new Error("بيانات العنوان غير صالحة");
-    const index = this.state.favorites.findIndex(
-      (m) => m.id === meta.id && m.type === meta.type,
-    );
-    if (index >= 0) this.state.favorites.splice(index, 1);
-    else
-      this.state.favorites.push({
-        id: meta.id,
-        type: meta.type,
-        name: meta.name,
-        poster: meta.poster,
-        background: meta.background,
-        description: meta.description,
-      });
-    this.persist();
+    this.commit(["favorites"], () => {
+      const index = this.state.favorites.findIndex(
+        (m) => m.id === meta.id && m.type === meta.type,
+      );
+      if (index >= 0) this.state.favorites.splice(index, 1);
+      else
+        this.state.favorites.push({
+          id: meta.id,
+          type: meta.type,
+          name: meta.name,
+          poster: meta.poster,
+          background: meta.background,
+          description: meta.description,
+        });
+    });
     return this.publicState();
   }
   /**
@@ -739,13 +1282,72 @@ export class Client {
     if (added) this.persist();
     return added;
   }
+  /** Every profile's collections, for the local pictures' sweep. */
+  allCollections() {
+    const buckets = Object.values(this.profiles?.store?.data || {});
+    return [
+      ...(this.state.collections || []),
+      ...buckets.flatMap((b) =>
+        Array.isArray(b?.collections) ? b.collections : [],
+      ),
+    ];
+  }
+  /**
+   * Pictures chosen from this computer (core/collection-art.mjs) are read
+   * only by a profile whose collections name them, or that picked one a
+   * moment ago and has not saved it into a folder yet: knowing an ID is
+   * not enough (PR #155 review, security). Picks are kept per profile for
+   * the store's grace period.
+   */
+  notePickedArt(ref, ticket = this.profiles.ticket()) {
+    const id = artId(ref);
+    if (!id) return;
+    // The activation that picked it (second review, artwork ownership):
+    // granted at the commit point, after every await, never to whichever
+    // profile happens to be active when the file finished writing.
+    this.holds(ticket, "library");
+    this.artPicks.set(id, {
+      profile: ticket.id,
+      epoch: ticket.epoch,
+      at: Date.now(),
+    });
+    while (this.artPicks.size > 50)
+      this.artPicks.delete(this.artPicks.keys().next().value);
+  }
+  canReadArt(ref) {
+    const id = artId(ref);
+    if (!id) return false;
+    if (referencedArt(this.state.collections || []).has(id)) return true;
+    const pick = this.artPicks.get(id);
+    return (
+      !!pick &&
+      this.profiles.holds({ id: pick.profile, epoch: pick.epoch }) &&
+      Date.now() - pick.at < ART_GRACE_MS
+    );
+  }
   collectionsEdit(input) {
     this.profiles.gate("library");
-    this.state.collections = editCollections(
-      this.state.collections || [],
-      input,
-    );
-    this.persist();
+    // An edit started before a profile switch (a picture picked while the
+    // dialog was open) names its profile and is refused after it (F2).
+    if (input && ("profileId" in input || "profileSession" in input))
+      this.claim({
+        profileId:
+          "profileId" in input ? String(input.profileId ?? "") : undefined,
+        profileSession: input.profileSession,
+      });
+    // A Riwaq template (core/collection-presets.mjs): added, or updated in
+    // place when it is already here (its IDs are stable), never copied.
+    // The viewer's edits to it are kept (applyTemplate); at the collection
+    // limit it is refused, so the interface never says it was added.
+    this.commit(["collections"], () => {
+      this.state.collections =
+        input?.action === "preset"
+          ? applyTemplate(
+              this.state.collections || [],
+              presetCollection(String(input.preset || "")),
+            ).collections
+          : editCollections(this.state.collections || [], input);
+    });
     return this.publicState();
   }
   /**
@@ -755,8 +1357,17 @@ export class Client {
    * profile's; library titles join its library; plugin repositories are
    * listed, never run.
    */
-  async importNuvio(stores, { profile, parts = {} } = {}) {
+  async importNuvio(stores, { profile, parts = {}, ticket: given } = {}) {
     this.profiles.gate("settings");
+    // Addons install with awaits; what belongs to a profile (collections,
+    // library, plugins, the key) is written only if the activation that
+    // started the import is still the active one, with Settings still
+    // open (PR #155 review, F2; second review: A → B → A and re-locks).
+    // A preview names the activation it was read under (third review,
+    // N12): an import from it after a switch, even back, is refused before
+    // anything is installed.
+    const ticket = given || this.profiles.ticket();
+    this.holds(ticket, "settings");
     const index = Number(profile);
     if (!Number.isInteger(index) || index < 1)
       throw new Error("اختر ملف نوفيو");
@@ -772,6 +1383,16 @@ export class Client {
     };
     if (parts.addons) {
       for (const addon of data.addons.slice(0, 100)) {
+        // Before each addon (fifth pass, Q10), not only before the loop and
+        // after it: once the activation that started the import is over
+        // (a switch, even back, a re-lock, a restore) no further addon is
+        // started. One already installed stays (the household's shared
+        // list) and the report says how many.
+        try {
+          this.holds(ticket, "settings");
+        } catch (error) {
+          throw nuvioPartial(error, result.addons);
+        }
         let key;
         try {
           key = keyFor(normalizeAddon(addon.url));
@@ -781,18 +1402,49 @@ export class Client {
         }
         if (this.state.addons.some((a) => keyFor(a.transportUrl) === key))
           continue;
+        // Each addon is its own durable write (the household's list, shared
+        // by every profile): one counted here stays, one whose write failed
+        // is rolled back and named (third review, N2).
         try {
-          await this.install(addon.url);
-          const added = this.state.addons.find(
-            (a) => keyFor(a.transportUrl) === key,
-          );
-          if (added && !addon.enabled) added.enabled = false;
+          await this.install(addon.url, { enabled: addon.enabled !== false });
           result.addons++;
         } catch {
           result.addonFailures.push(new URL(addon.url).host);
         }
       }
     }
+    // The profile's parts and the TMDB key go in ONE write: all of them, or
+    // none, and the report says which addons stayed either way.
+    try {
+      this.holds(ticket, "settings");
+      await this.commitAsync(
+        ["collections", "favorites", "nuvioPlugins", "providers"],
+        () => {
+          this.importNuvioParts(data, parts, result);
+          if (parts.tmdbKey && data.tmdbKey) {
+            // The viewer's key in Riwaq wins; Nuvio's only fills an empty slot.
+            if (this.state.providers?.tmdb?.key) result.tmdbKey = "kept";
+            else {
+              this.dataHub.stage({
+                id: "tmdb",
+                key: data.tmdbKey,
+                enabled: true,
+              });
+              result.tmdbKey = "imported";
+            }
+          }
+        },
+      );
+    } catch (error) {
+      throw nuvioPartial(error, result.addons);
+    } finally {
+      this.cache.clear();
+      this.dataHub.changed();
+    }
+    return { result, state: this.publicState() };
+  }
+  /** The profile's own parts of a Nuvio import, all in one write. */
+  importNuvioParts(data, parts, result) {
     if (parts.collections) {
       const merged = mergeCollections(
         this.state.collections || [],
@@ -822,42 +1474,100 @@ export class Client {
         result.plugins++;
       }
     }
-    if (parts.tmdbKey && data.tmdbKey) {
-      // The viewer's key in Riwaq wins; Nuvio's only fills an empty slot.
-      if (this.state.providers?.tmdb?.key) result.tmdbKey = "kept";
-      else {
-        this.dataHub.save({ id: "tmdb", key: data.tmdbKey, enabled: true });
-        result.tmdbKey = "imported";
-      }
-    }
-    this.cache.clear();
-    this.persist();
-    return { result, state: this.publicState() };
   }
   removeNuvioPlugin({ key }) {
-    this.state.nuvioPlugins = (this.state.nuvioPlugins || []).filter(
-      (p) => keyFor(p.url) !== key,
-    );
-    this.persist();
+    this.commit(["nuvioPlugins"], () => {
+      this.state.nuvioPlugins = (this.state.nuvioPlugins || []).filter(
+        (p) => keyFor(p.url) !== key,
+      );
+    });
     return this.publicState();
   }
-  /** Nuvio's collections JSON pasted from any Nuvio app (phone, TV, desktop). */
-  importNuvioCollections({ text } = {}) {
+  /**
+   * Nuvio's collections JSON pasted from any Nuvio app (phone, TV, desktop),
+   * into this profile: merged by ID (the default), added as copies, or in
+   * place of every collection, for all of the file's collections or the
+   * ones the viewer picked. The report says what was imported, updated,
+   * replaced, left at a limit and which sources Riwaq cannot read yet.
+   */
+  importNuvioCollections({
+    text,
+    mode,
+    only,
+    legacy,
+    profileId,
+    profileSession,
+  } = {}) {
     this.profiles.gate("library");
+    // The preview belongs to the activation that pasted it (second
+    // review, F2): Replace from another profile, or after a switch back,
+    // is refused before anything changes.
+    this.claim({ profileId, profileSession });
     if (typeof text !== "string" || !text.trim() || text.length > 4_000_000)
       throw new Error("الصق نص مجموعات نوفيو أولاً");
     const converted = fromNuvio(text);
-    const merged = mergeCollections(
-      this.state.collections || [],
-      converted.collections,
+    // The IDs the preview showed (the same reading, so the same IDs); an
+    // import that would bring nothing, or a choice the file no longer
+    // holds, throws before the state is touched (PR #155 review, F1).
+    const pick = Array.isArray(only)
+      ? only.filter((id) => typeof id === "string").slice(0, 200)
+      : undefined;
+    // Written as one step: a failed save leaves the collections as they
+    // were in memory too, so nothing writes the rejected Replace later
+    // (second review, R10).
+    const done = this.commit(["collections"], () => {
+      const result = importCollections(
+        this.state.collections || [],
+        converted.collections,
+        {
+          mode,
+          only: pick,
+          // A collection from an older Riwaq file that may be one of the
+          // viewer's: their answer, per collection (third review, N3).
+          aliases: converted.report.aliases,
+          legacy: legacyChoices(legacy),
+        },
+      );
+      this.state.collections = result.collections;
+      return result;
+    });
+    const written = new Set(done.report.written);
+    // The report covers only the collections chosen, and what was kept
+    // after the limits, not everything the file held (F7).
+    const chosen = new Set(
+      converted.collections
+        .filter((c) => !pick || pick.includes(c.id))
+        .map((c) => c.id),
     );
-    this.state.collections = merged.collections;
-    this.persist();
+    const over = { collections: 0, folders: 0, sources: 0 };
+    for (const id of chosen) {
+      const part = converted.report.byCollection[id];
+      if (!part) continue;
+      over.folders += part.over.folders;
+      over.sources += part.over.sources;
+    }
+    if (!pick) over.collections = converted.report.over.collections;
     return {
       result: {
-        collections: merged.added,
-        folders: converted.folders,
-        skippedSources: converted.skipped,
+        collections: done.report.added + done.report.updated,
+        added: done.report.added,
+        updated: done.report.updated,
+        replaced: done.report.replaced,
+        skipped: done.report.skipped,
+        folders: done.report.folders,
+        skippedSources: done.report.unsupported,
+        // Only sources of folders actually written: a folder left out at
+        // the limit is not described as kept (R6).
+        unsupported: converted.report.unsupported
+          .filter(
+            (u) =>
+              chosen.has(u.collectionId) &&
+              written.has(`${u.collectionId}/${u.folderId}`),
+          )
+          .slice(0, 50),
+        repeated: converted.report.repeated,
+        over,
+        duplicates: converted.report.duplicates,
       },
       state: this.publicState(),
     };
@@ -1192,12 +1902,18 @@ export class Client {
       input.profileId !== this.profiles.store.active
     )
       throw new Error("تغير الملف الشخصي؛ أعد إضافة الجلسة من الملف المطلوب");
-    this.state.queue = editQueue(this.state.queue || [], input);
-    this.persist();
+    this.commit(["queue"], () => {
+      this.state.queue = editQueue(this.state.queue || [], input);
+    });
     return this.publicState();
   }
-  historyEdit({ action, meta, videoId, videoIds }) {
+  historyEdit(input) {
     this.profiles.gate("library");
+    // Written as one commit (third review, N1): a write the browser
+    // refuses leaves the history as it was.
+    return this.commit(["progress"], () => this.historyChange(input));
+  }
+  historyChange({ action, meta, videoId, videoIds }) {
     const media = cleanMedia(meta);
     const validId = (value) =>
       typeof value === "string" && !!value && value.length <= 1000;
@@ -1225,7 +1941,6 @@ export class Client {
           markedAt: Date.now(),
         };
       }
-      this.persist();
       return this.publicState();
     }
     if (action === "dismiss") {
@@ -1236,7 +1951,6 @@ export class Client {
       for (const record of Object.values(this.state.progress))
         if (record?.meta?.type === media.type && record.meta.id === media.id)
           record.hiddenAt = at;
-      this.persist();
       return this.publicState();
     }
     if (!validId(videoId)) throw new Error("معرّف المشاهدة غير صالح");
@@ -1257,7 +1971,6 @@ export class Client {
       };
     else throw new Error("إجراء السجل غير صالح");
     // Manual history changes stay local; they never submit tracker history.
-    this.persist();
     return this.publicState();
   }
   /** Seals the installation into backup text. File dialogs live in main. */
@@ -1285,14 +1998,36 @@ export class Client {
     // let anyone holding an older backup strip the parental PINs.
     this.profiles.gate("settings");
     const { payload } = decryptBackup(text, passphrase);
+    this.profiles.capture();
+    // The whole state as it was, for a write the store refuses (third
+    // review, N1): the restore is then undone, never half kept.
+    const previous = structuredClone(this.state);
     this.state = restoreState(this.state, payload);
+    this.afterRestore();
+    const undo = () => {
+      this.state = previous;
+      this.afterRestore();
+    };
+    try {
+      this.persist(undo);
+    } catch (error) {
+      undo();
+      throw error;
+    }
+    return this.publicState();
+  }
+  /** What a replaced state needs (a restore, or its undo). */
+  afterRestore() {
     // A restored profile starts locked, and nothing derived from the old
     // state may survive: stream keys, metadata and live listings all reset.
     this.profiles.unlocked = false;
     this.profiles.ensure();
+    // Every profile was replaced: work started before belongs to none.
+    this.profiles.renew();
     this.streams.clear();
     this.subtitles.clear();
     this.subtitleInfo.clear();
+    this.subtitleOrigins.clear();
     this.subtitleLists.clear();
     this.metas.clear();
     this.cache.clear();
@@ -1300,8 +2035,6 @@ export class Client {
     this.dataHub.cache.clear();
     this.dataHub.generation++;
     this.integrations.devices.clear();
-    this.persist();
-    return this.publicState();
   }
   /** Addon metadata without provider enrichment: episode lists are enough here. */
   async rawMeta({ type, id }) {
@@ -1873,11 +2606,12 @@ export class Client {
   }
   /** Forgets one series' choices, or every series' when none is named. */
   forgetSeries(seriesId) {
-    this.state.settings.seriesMemory = forgetSeries(
-      this.state.settings.seriesMemory,
-      typeof seriesId === "string" ? seriesId : "",
-    );
-    this.persist();
+    this.commit(["settings"], () => {
+      this.state.settings.seriesMemory = forgetSeries(
+        this.state.settings.seriesMemory,
+        typeof seriesId === "string" ? seriesId : "",
+      );
+    });
     return this.publicState();
   }
   async getStreams({ type, id, seriesId, again = false }) {
@@ -1999,6 +2733,15 @@ export class Client {
           (!!stream.url && !/\.(m3u8|mpd)([?#]|$)/i.test(stream.url)),
         name: stream.name || stream.provider,
         title: stream.title || stream.description || "",
+        // An addon may describe a source in a field of its own beside the
+        // title (TrueHD, English subtitles): kept, so the filters, search
+        // and badges read it too (PR #155 review, F5).
+        ...(stream.title &&
+        typeof stream.description === "string" &&
+        stream.description.trim() &&
+        stream.description !== stream.title
+          ? { description: stream.description.slice(0, 600) }
+          : {}),
         provider: stream.provider,
         tier: entry.tier,
         score: entry.score,
@@ -2016,6 +2759,7 @@ export class Client {
         sizeLabel: sizeLabel(parsed.size),
         seeders: parsed.seeders,
         cached: parsed.cached,
+        uncached: parsed.uncached,
         debrid: parsed.debrid,
         arabicSub: parsed.arabic.sub,
         arabicDub: parsed.arabic.dub,
@@ -2055,7 +2799,11 @@ export class Client {
     );
     // Badge matching gets a time budget so no stream title can hold up the
     // picker.
-    const rules = cleanBadgeRules(settings.badgeRules);
+    // With badges off, an FR-Badges style's rules are not even tried; the
+    // viewer's own still are (PR #155 review, F6).
+    const rules = cleanBadgeRules(settings.badgeRules).filter(
+      (r) => settings.badgesOn !== false || !isFrRule(r),
+    );
     const badgeDeadline = Date.now() + 1500;
     // The viewer's own copies on their home servers come first.
     const home = (
@@ -2170,15 +2918,29 @@ export class Client {
               )
             ).subtitles || [];
           answered++;
-          return found.map((s) => ({ ...s, provider: a.manifest.name }));
+          return found.map((s) => ({
+            ...s,
+            provider: a.manifest.name,
+            origin: a.transportUrl,
+          }));
         } catch {
           return [];
         }
       }),
     );
     const seen = new Set();
+    // A stream's own subtitles belong to the addon that sent the stream.
+    const streamAddon = selected?.addonKey
+      ? (this.state.addons || []).find(
+          (a) => keyFor(a.transportUrl) === selected.addonKey,
+        )
+      : null;
     const list = [
-      ...(selected?.subtitles || []).map((s) => ({ ...s, provider: "المصدر" })),
+      ...(selected?.subtitles || []).map((s) => ({
+        ...s,
+        provider: "المصدر",
+        origin: streamAddon?.transportUrl || "",
+      })),
       ...results.flat(),
     ]
       .filter((s) => typeof s?.url === "string" && /^https?:\/\//i.test(s.url))
@@ -2187,6 +2949,7 @@ export class Client {
         const key = keyFor(s.url);
         const label = subtitleLabel(s);
         boundedSet(this.subtitles, key, s.url, 3000);
+        boundedSet(this.subtitleOrigins, key, s.origin || "", 3000);
         boundedSet(
           this.subtitleInfo,
           key,
@@ -2209,6 +2972,21 @@ export class Client {
       this.subtitleLists.set(cacheKey, { at: Date.now(), list });
     }
     return list;
+  }
+
+  /**
+   * Main-process only (issue #157): the address of the configured addon that
+   * supplied a subtitle key, while that addon is still installed and
+   * enabled; "" otherwise. Saving a subtitle trusts a local origin only
+   * through this, never because the subtitle's own address names one.
+   */
+  subtitleOrigin(key) {
+    const origin = this.subtitleOrigins.get(key);
+    if (!origin) return "";
+    const addon = (this.state.addons || []).find(
+      (a) => a.transportUrl === origin,
+    );
+    return addon && addon.enabled !== false ? origin : "";
   }
 
   /**

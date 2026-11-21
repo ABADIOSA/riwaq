@@ -1,2 +1,5 @@
 # Runtime data published by Admin/GitHub; validate its schema and size in tests.
 announcements/feed.json
+# FR-Badges' pinned file, byte for byte: core/badge-look.mjs checks its
+# SHA-256, so formatting it would make the beta checks refuse it.
+scripts/fixtures/fr-badges-frost.json

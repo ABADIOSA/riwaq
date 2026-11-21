@@ -17,7 +17,7 @@
  * addresses, provider keys and addon URLs stay on this side of the bridge,
  * and addresses are opened only after the same checks main makes.
  */
-import { Client, fetchText } from "../core/client.mjs";
+import { Client, PROFILE_CHANGED, fetchText } from "../core/client.mjs";
 import {
   automaticSubtitle,
   cuesAround,
@@ -35,7 +35,17 @@ import {
   pkce as spotifyPkce,
 } from "../core/spotify.mjs";
 import { DEBRID } from "../core/services.mjs";
-import { fetchPackText } from "../core/badges.mjs";
+import { fetchFrStyle } from "../core/badge-look.mjs";
+import {
+  ART_GRACE_MS,
+  ART_MAX_BYTES,
+  referencedArt,
+} from "../core/collection-art.mjs";
+import {
+  artObjectUrl,
+  browserArtStore,
+  forgetArtUrls,
+} from "./collection-art.js";
 import { artworkHost } from "../core/artwork.mjs";
 import {
   FIVE,
@@ -168,7 +178,23 @@ export async function startBridge({ version, store }) {
   window.addEventListener("pageshow", () =>
     client.usage.start(() => document.visibilityState === "visible"),
   );
-  const broadcast = () => emit("state", client.publicState());
+  // Object addresses of pictures belong to one profile activation: every
+  // change of it (a switch, a lock, a restore, an account sync, a removal)
+  // lets them all go, not only the switch and the lock (third review, N12).
+  let artSession = client.profiles.session();
+  const followArtSession = () => {
+    const now = client.profiles.session();
+    if (now === artSession) return;
+    artSession = now;
+    forgetArtUrls();
+  };
+  const broadcast = () => {
+    followArtSession();
+    emit("state", client.publicState());
+  };
+  // Commits the browser refused were rolled back (core/durable.mjs): the
+  // page is shown the state that is actually kept.
+  store.onUndo = () => broadcast();
   client.updates = new WebUpdates(client, {
     current: version,
     onChange: broadcast,
@@ -701,11 +727,24 @@ export async function startBridge({ version, store }) {
   let pendingNuvio = null;
   let lastDiagnosis = null;
   const cueCache = new Map();
-  const nuvioReply = (stores, source) => {
+  // The preview belongs to the activation that asked for it (third
+  // review, N12), as on the desktop.
+  const nuvioReply = (stores, source, ticket) => {
+    client.holds(ticket, "settings");
     const profiles = nuvioPreview(stores);
     if (!profiles.length) throw new Error("لم نجد ملفات شخصية في بيانات نوفيو");
-    pendingNuvio = { token: randomHex(16), stores };
+    pendingNuvio = { token: randomHex(16), stores, ticket };
     return { token: pendingNuvio.token, source, profiles };
+  };
+  const heldNuvio = (a) => {
+    if (!pendingNuvio || pendingNuvio.token !== a?.token)
+      throw new Error("اقرأ بيانات نوفيو من جديد");
+    client.claimSession(a);
+    if (!client.profiles.holds(pendingNuvio.ticket)) {
+      pendingNuvio = null;
+      throw new Error(PROFILE_CHANGED);
+    }
+    return pendingNuvio;
   };
   const tooBig = (file, max, message) => {
     if (file.size > max) throw new Error(message);
@@ -796,6 +835,25 @@ export async function startBridge({ version, store }) {
     return { report, text };
   }
 
+  // Pictures no profile's collections name any more are deleted (after a
+  // short grace, core/collection-art.mjs). What memory names, what the last
+  // durable write named and what the write under way names are all kept, so
+  // a change the browser has not committed (or refused) never lets a
+  // picture go that the kept state still shows (third review, N1).
+  const keptArt = () => {
+    const out = referencedArt(client.allCollections());
+    for (const set of store.durableArt?.() || [])
+      for (const id of set) out.add(id);
+    return out;
+  };
+  const sweepArt = () => browserArtStore.sweep(keptArt).catch(() => {});
+  // A change that names or drops pictures is swept only once it is
+  // durable; a refused one throws before any clean-up.
+  const sweepAfter = async (result) => {
+    await client.durable();
+    sweepArt();
+    return result;
+  };
   const methods = {
     musicLocalLibrary: async (a) => {
       await music.tagSome(a?.profileId);
@@ -844,18 +902,32 @@ export async function startBridge({ version, store }) {
     },
     catalog: (a) => client.catalog(a),
     catalogPlan: (a) => client.catalogPlan(a),
-    badgePackFetch: (a) => fetchPackText(String(a?.url || "")),
-    copyBadgePack: async (a) => {
-      const json = String(a?.json || "");
-      let data;
-      try {
-        data = JSON.parse(json);
-      } catch {
-        throw new Error("حزمة غير صالحة");
-      }
-      if (data?.format !== "riwaq-badges" || json.length > 400000)
-        throw new Error("حزمة غير صالحة");
-      return copyText(json);
+    // FR-Badges styles (core/badge-look.mjs): the page names a look and only
+    // its pinned file on GitHub is fetched (redirects re-checked, 3 MB at
+    // most); no address ever comes from the renderer. Only the text returns.
+    badgeStyleApply: async (a) => {
+      client.claimSession(a);
+      const done = await client.applyBadgeStyle(
+        {
+          look: String(a?.look || ""),
+          profileId: a?.profileId,
+          profileSession: a?.profileSession,
+        },
+        (url) => fetchFrStyle(url),
+      );
+      await client.durable();
+      return done;
+    },
+    streamFilterEdit: async (a) => {
+      client.claimSession(a);
+      const done = client.streamFilterEdit({
+        profileId: a?.profileId,
+        profileSession: a?.profileSession,
+        action: String(a?.action || ""),
+        id: String(a?.id || ""),
+      });
+      await client.durable();
+      return done;
     },
     copyThemeCode: async (a) => {
       const code = String(a?.code || "");
@@ -1024,10 +1096,14 @@ export async function startBridge({ version, store }) {
     removeAddons: (a) => client.removeAddons({ keys: a?.keys }),
     settings: async (a) => {
       const state = client.settings(a, player?.state);
-      player.applyCueStyle();
       // A successful settings response must survive an immediate reload,
-      // including on browsers where encryption/IndexedDB writes are slower.
-      await store.settled();
+      // including on browsers where encryption/IndexedDB writes are slower;
+      // a refused write throws here, already rolled back (N1).
+      try {
+        await client.durable();
+      } finally {
+        player.applyCueStyle();
+      }
       return state;
     },
     providerSave: (a) => client.dataHub.save(a),
@@ -1184,19 +1260,32 @@ export async function startBridge({ version, store }) {
         stopLocalMusic();
         await player.stop();
       }
-      music.forget(a.id);
-      return client.profiles.remove(a);
+      const state = client.profiles.remove(a);
+      followArtSession();
+      // Songs picked in this visit go once the removal is durable (sixth
+      // pass, V1); a refused write keeps them with the profile it put back.
+      const id = a.id;
+      client
+        .durable()
+        .catch(() => {})
+        .then(() => {
+          if (!client.profiles.store.list.some((p) => p.id === id))
+            music.forget(id);
+        });
+      return state;
     },
     profileSwitch: async (a) => {
       client.profiles.check({ ...a, intent: "switch" });
       stopLocalMusic();
       await player.stop();
+      forgetArtUrls();
       return client.profiles.switch(a);
     },
     profilePin: (a) => client.profiles.setPin(a),
     profileUnlock: (a) => client.profiles.unlock(a?.pin),
     profileLock: () => {
       stopLocalMusic();
+      forgetArtUrls();
       return client.profiles.lock();
     },
     setHotkey: (a) => client.setHotkey(a),
@@ -1390,7 +1479,7 @@ export async function startBridge({ version, store }) {
       return true;
     },
     openUpdate: () => openExternal(client.updates.releaseUrl()),
-    collectionsEdit: (a) => client.collectionsEdit(a || {}),
+    collectionsEdit: (a) => sweepAfter(client.collectionsEdit(a || {})),
     collectionCatalogs: () => client.collectionCatalogs(),
     collectionFolder: (a) =>
       client.collectionFolder({
@@ -1416,23 +1505,75 @@ export async function startBridge({ version, store }) {
         JSON.stringify(toNuvio(client.state.collections || []), null, 2),
         "application/json",
       ),
-    importNuvioCollections: (a) =>
-      client.importNuvioCollections({
-        text: typeof a?.text === "string" ? a.text : "",
-      }),
-    nuvioPickBackup: async () => {
+    importNuvioCollections: (a) => {
+      client.claimSession(a);
+      return sweepAfter(
+        client.importNuvioCollections({
+          text: typeof a?.text === "string" ? a.text : "",
+          mode: typeof a?.mode === "string" ? a.mode : "merge",
+          only: Array.isArray(a?.only) ? a.only : undefined,
+          legacy: a?.legacy,
+          profileId:
+            a?.profileId === undefined ? undefined : String(a.profileId),
+          profileSession: a?.profileSession,
+        }),
+      );
+    },
+    // A picture for a collection or folder from this computer, kept in
+    // this browser (web/collection-art.js); the page gets "local:<id>".
+    // As on the desktop: a still slot refuses an animated file (F8), the
+    // profile that opened the chooser must still be active (F2), and a
+    // picture is read only by a profile whose collections name it.
+    collectionArtPick: async (a) => {
+      client.profiles.gate("library");
+      const ticket = client.claimSession(a);
+      const file = await pickFile({
+        accept: "image/gif,image/png,image/jpeg,image/webp",
+      });
+      if (!file) return null;
+      client.holds(ticket, "library");
+      if (file.size > ART_MAX_BYTES)
+        throw new Error("الصورة أكبر من 8 ميغابايت");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      client.holds(ticket, "library");
+      const { ref, type, width, height } = await browserArtStore.add(bytes, {
+        still: a?.slot !== "moving",
+      });
+      try {
+        client.notePickedArt(ref, ticket);
+      } catch (error) {
+        await browserArtStore.forget(ref).catch(() => {});
+        throw error;
+      }
+      setTimeout(sweepArt, ART_GRACE_MS + 60_000);
+      return { ref, type, width, height };
+    },
+    collectionArt: async (a) => {
+      client.profiles.gate("library");
+      followArtSession();
+      const ticket = client.profiles.ticket();
+      const ref = `local:${String(a?.id || "").replace(/^local:/, "")}`;
+      if (!client.canReadArt(ref)) return "";
+      const url = await artObjectUrl(ref);
+      if (!client.profiles.holds(ticket) || client.profiles.isLocked("library"))
+        return "";
+      return client.canReadArt(ref) ? url : "";
+    },
+    nuvioPickBackup: async (a) => {
       client.profiles.gate("settings");
+      const ticket = client.claimSession(a);
       const file = await pickFile({ accept: ".zip,application/zip" });
       if (!file) return null;
+      client.holds(ticket, "settings");
       tooBig(file, 200 * 1024 * 1024, "الملف كبير جداً");
       return nuvioReply(
         readNuvioZip(new Uint8Array(await file.arrayBuffer())),
         file.name,
+        ticket,
       );
     },
     nuvioImport: async (a) => {
-      if (!pendingNuvio || pendingNuvio.token !== a?.token)
-        throw new Error("اقرأ بيانات نوفيو من جديد");
+      const held = heldNuvio(a);
       const parts = {};
       for (const key of [
         "addons",
@@ -1442,33 +1583,39 @@ export async function startBridge({ version, store }) {
         "tmdbKey",
       ])
         parts[key] = a?.parts?.[key] === true;
-      const reply = await client.importNuvio(pendingNuvio.stores, {
-        profile: a?.profile,
-        parts,
-      });
       pendingNuvio = null;
-      broadcast();
-      return reply;
+      try {
+        return await client.importNuvio(held.stores, {
+          profile: a?.profile,
+          parts,
+          ticket: held.ticket,
+        });
+      } finally {
+        broadcast();
+      }
     },
     nuvioDiagnostics: (a) => {
       client.profiles.gate("settings");
-      if (!pendingNuvio || pendingNuvio.token !== a?.token)
-        throw new Error("اقرأ بيانات نوفيو من جديد");
+      const held = heldNuvio(a);
       const index = Number(a?.profile);
       if (!Number.isInteger(index) || index < 1)
         throw new Error("اختر ملف نوفيو");
-      return copyText(nuvioDiagnostics(pendingNuvio.stores, index));
+      return copyText(nuvioDiagnostics(held.stores, index));
     },
     removeNuvioPlugin: (a) =>
       client.removeNuvioPlugin({
         key: typeof a?.key === "string" ? a.key : "",
       }),
-    backupExport: ({ passphrase, includeSecrets = false } = {}) => {
-      const { text, left } = client.exportBackup({
-        passphrase,
-        includeSecrets: includeSecrets === true,
-        app: version,
-      });
+    backupExport: async ({ passphrase, includeSecrets = false } = {}) => {
+      // Sealed once no commit's write is still out (fifth pass, Q7), so a
+      // backup never carries a change the vault may yet refuse.
+      const { text, left } = await client.atRest(() =>
+        client.exportBackup({
+          passphrase,
+          includeSecrets: includeSecrets === true,
+          app: version,
+        }),
+      );
       const stamp = new Date().toISOString().slice(0, 10);
       saveFile(`riwaq-backup-${stamp}.riwaq`, text);
       return { saved: true, left };
@@ -1507,6 +1654,7 @@ export async function startBridge({ version, store }) {
         passphrase,
       });
       pendingBackup = null;
+      followArtSession();
       return state;
     },
     backupCancel: () => {
@@ -1635,7 +1783,12 @@ export async function startBridge({ version, store }) {
     call: async (method, args) => {
       if (!Object.hasOwn(methods, method)) throw new Error("الطلب غير مسموح");
       try {
-        return copy(await methods[method](copy(args)));
+        // A call that wrote is answered once the browser committed the
+        // write, and fails (rolled back) when it did not (N1).
+        const writes = client.writes;
+        const out = await methods[method](copy(args));
+        if (client.writes !== writes) await client.durable();
+        return copy(out);
       } catch (error) {
         logError(`ipc:${method}`, error);
         throw new Error(cleanError(error));

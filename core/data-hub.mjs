@@ -60,7 +60,23 @@ export class DataHub {
       };
     });
   }
-  save({ id, key, enabled, clear = false }) {
+  save(input) {
+    // One commit (third review, N1): a write the browser refuses leaves
+    // the provider as it was.
+    this.client.commit(["providers"], () => this.stage(input));
+    this.changed();
+    return this.client.publicState();
+  }
+  /** Drops what was read with the previous keys. */
+  changed() {
+    this.cache.clear();
+    this.generation++;
+  }
+  /**
+   * Changes a provider in memory only, for a caller that writes it in its
+   * own commit (a Nuvio import's key goes with the rest of its import).
+   */
+  stage({ id, key, enabled, clear = false }) {
     if (!PROVIDERS.some((p) => p.id === id))
       throw new Error("خدمة البيانات غير معروفة");
     const state = (this.client.state.providers ||= {});
@@ -79,10 +95,6 @@ export class DataHub {
           typeof enabled === "boolean" ? enabled : current.enabled !== false,
       };
     }
-    this.cache.clear();
-    this.generation++;
-    this.client.persist();
-    return this.client.publicState();
   }
   async request(id, path, params = {}) {
     const key = this.client.state.providers?.[id]?.key;

@@ -696,6 +696,8 @@ try {
           const items = [...header.children].map((el) => {
             const r = el.getBoundingClientRect();
             return {
+              name: String(el.className).split(" ")[0],
+              text: el.innerText.replace(/\s+/g, " ").slice(0, 40),
               left: r.left,
               right: r.right,
               top: r.top,
@@ -720,7 +722,7 @@ try {
           assert.ok(
             Math.min(a.right, b.right) - Math.max(a.left, b.left) <= 1 ||
               Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) <= 1,
-            "header controls must not overlap",
+            `header controls must not overlap: ${JSON.stringify({ language, width, a, b })}`,
           );
         }
       if (width === 1440 || width === 390)
@@ -735,8 +737,10 @@ try {
         );
         // The wheel (the default navigation) starts compact; its button
         // shows the names and makes it compact again.
+        // 100 px since #146's follow-up (the lens clears the divider);
+        // open it is 212 px.
         assert.ok(
-          (await page.locator(".riwaq-sidebar").boundingBox()).width < 100,
+          (await page.locator(".riwaq-sidebar").boundingBox()).width <= 100,
           "the wheel starts compact",
         );
         assert.ok(
@@ -864,9 +868,19 @@ try {
     .filter({ has: page.locator('img[src*="last-train"]') })
     .first();
   await quickPoster.click({ button: "right" });
+  // Force the favorite's IndexedDB write to finish after the pointer action.
+  await page.evaluate(() => {
+    const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+    crypto.subtle.encrypt = async (...args) => {
+      crypto.subtle.encrypt = encrypt;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return encrypt(...args);
+    };
+  });
   await page
     .getByRole("menuitem", { name: "أضف إلى مكتبتي", exact: true })
     .click();
+  await page.locator(".poster-actions").waitFor({ state: "detached" });
   assert.ok(
     (await call("init")).favorites.some((m) => m.id === "webfix:last-train"),
   );

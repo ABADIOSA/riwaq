@@ -10,7 +10,10 @@ const date = (value) =>
   typeof value === "string" && /^\d{4}/.test(value) ? value.slice(0, 10) : "";
 
 /** The TMDB endpoint and query for one source page. */
-export function tmdbRequest(source, { page = 1, language = "ar-SA" } = {}) {
+export function tmdbRequest(
+  source,
+  { page = 1, language = "ar-SA", now = Date.now() } = {},
+) {
   const lang = { language };
   switch (source.kind) {
     case "list":
@@ -73,6 +76,14 @@ export function tmdbRequest(source, { page = 1, language = "ar-SA" } = {}) {
       const lte = tv ? "first_air_date.lte" : "primary_release_date.lte";
       set(gte, f.releaseDateGte);
       set(lte, f.releaseDateLte);
+      // "Released in the last N days", from the day it is asked for; it
+      // ends today, so titles only announced for later stay out.
+      if (f.recentDays > 0) {
+        const day = (offset) =>
+          new Date(now - offset * 86400000).toISOString().slice(0, 10);
+        set(gte, day(f.recentDays));
+        if (!f.releaseDateLte) set(lte, day(0));
+      }
       set(tv ? "first_air_date_year" : "primary_release_year", f.year);
       return { path: tv ? "discover/tv" : "discover/movie", params };
     }

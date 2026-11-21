@@ -54,15 +54,19 @@ export class UsagePulse {
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("")
       : "";
-    this.client.state.usageMetrics = enabled
-      ? { enabled, token }
-      : { enabled: false };
-    try {
-      this.client.persist();
-    } catch (error) {
-      this.client.state.usageMetrics = old;
-      throw error;
-    }
+    // A commit (sixth pass, V2): the pulse or the deletion request is sent
+    // only once the choice is durable; refused, the old choice stands.
+    const written = this.client.transact(() => {
+      const next = enabled ? { enabled, token } : { enabled: false };
+      this.client.state.usageMetrics = next;
+      return () => {
+        if (this.client.state.usageMetrics === next)
+          this.client.state.usageMetrics = old;
+      };
+    });
+    // Seventh pass, W2: the timer's tick sends nothing while it is written.
+    if (enabled) this.client.holdOptIn?.("usage", written);
+    await written;
     this.last = 0;
     if (enabled) await this.tick();
     else if (old.token && this.server) {
@@ -81,6 +85,7 @@ export class UsagePulse {
   async tick() {
     if (
       !this.publicState().enabled ||
+      this.client.optInPending?.("usage") ||
       !this.server ||
       !this.active() ||
       this.pending ||

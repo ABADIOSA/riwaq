@@ -1,4 +1,5 @@
 import { keyFor, validateManifest, mergeAddons } from "./protocol.mjs";
+import { fields } from "./undo.mjs";
 import {
   ANILIST_API,
   LISTS_QUERY,
@@ -273,6 +274,10 @@ export class Integrations {
     if (!SERVICES.includes(id)) throw new Error("منصة غير معروفة");
     return ((this.client.state.integrations ||= {})[id] ||= {});
   }
+  /** True while `s` is the stored session for `id` (no entry is created). */
+  current(id, s) {
+    return this.client.state.integrations?.[id] === s;
+  }
   save({
     id,
     clientId,
@@ -299,12 +304,94 @@ export class Integrations {
       (clientId?.trim() && s.clientId !== clientId.trim()) ||
       (clientSecret?.trim() && s.clientSecret !== clientSecret.trim()) ||
       (username && s.username !== username);
-    if (changed) {
-      const saved = { clientId: s.clientId, clientSecret: s.clientSecret };
-      this.disconnect(id);
-      s = this.get(id);
-      Object.assign(s, saved);
-    }
+    // One commit (sixth pass, V2): Codex saw a refused opt-in stay in
+    // memory and reach a secrets backup and a later save. Refused, the
+    // fields this changed go back (a token a provider rotated meanwhile is
+    // kept), and so does an account the new credentials disconnected; that
+    // account's remote revoke waits until the write is durable.
+    let revoke;
+    const was = {
+      trackHistory: !!s.trackHistory,
+      scrobble: !!s.scrobble,
+      resume: !!s.resume,
+    };
+    const written = this.client.transact(() => {
+      if (changed) {
+        // New credentials end the old account: refused, the old one comes
+        // back in place of the entry made here, unless that was changed.
+        const saved = { clientId: s.clientId, clientSecret: s.clientSecret };
+        const out = this.detach(id);
+        revoke = out.revoke;
+        s = this.get(id);
+        Object.assign(s, saved);
+        this.configure(s, id, {
+          clientId,
+          clientSecret,
+          username,
+          trackHistory,
+          scrobble,
+          resume,
+        });
+        const made = s;
+        const after = JSON.stringify(made);
+        return () => {
+          const bag = this.client.state.integrations || {};
+          if (bag[id] !== made || JSON.stringify(made) !== after) return;
+          delete bag[id];
+          out.undo();
+        };
+      }
+      const seal = fields(s, [
+        "clientId",
+        "clientSecret",
+        "username",
+        "trackHistory",
+        "scrobble",
+        "resume",
+        "pending",
+        "playbackSeen",
+        "trackingError",
+      ]);
+      this.configure(s, id, {
+        clientId,
+        clientSecret,
+        username,
+        trackHistory,
+        scrobble,
+        resume,
+      });
+      const undo = seal();
+      return () => {
+        undo();
+        // Tracking that is off again holds no queue (configure's rule).
+        if (!s.trackHistory && s.pending?.length) s.pending = [];
+      };
+    });
+    this.afterWrite(written, revoke);
+    // Seventh pass, W2: a tracking choice turned on here sends nothing
+    // until it is durable (a refused write turns it off again).
+    const now = this.client.state.integrations?.[id];
+    for (const flag of ["trackHistory", "scrobble", "resume"])
+      if (now?.[flag] && (changed || !was[flag]))
+        this.client.holdOptIn?.(`${id}:${flag}`, written);
+    return this.client.publicState();
+  }
+  /**
+   * True when `s` (the `id` integration) has opted in to `flag` and that
+   * choice is durable (W2). Every tracking request asks this, not the
+   * flag alone.
+   */
+  allows(id, s, flag = "trackHistory") {
+    if (!s?.[flag] || this.client.optInPending?.(`${id}:${flag}`)) return false;
+    // Scrobbling is a mode of history tracking: both choices must be kept.
+    return flag !== "scrobble" || this.allows(id, s, "trackHistory");
+  }
+  /** The preference part of save(), on the integration `s`. */
+  configure(
+    s,
+    id,
+    { clientId, clientSecret, username, trackHistory, scrobble, resume },
+  ) {
     if (clientId?.trim()) s.clientId = clientId.trim();
     if (clientSecret?.trim()) s.clientSecret = clientSecret.trim();
     if (username) s.username = username;
@@ -341,44 +428,114 @@ export class Integrations {
       s.scrobble = scrobble && !!s.trackHistory;
       if (!s.scrobble) this.session = null;
     }
-    this.client.persist();
-    return this.client.publicState();
   }
   disconnect(id) {
+    // A commit (sixth pass, V2): refused, the account comes back as it
+    // was, and nothing was revoked: Simkl's revoke waits for the write.
+    let revoke;
+    const written = this.client.transact(() => {
+      const out = this.detach(id);
+      revoke = out.revoke;
+      return out.undo;
+    });
+    this.afterWrite(written, revoke);
+    return this.client.publicState();
+  }
+  /** Runs `then` (an external effect) once `written` is durable. */
+  afterWrite(written, then) {
+    if (typeof then !== "function") return;
+    Promise.resolve(written)
+      .then(then, () => {})
+      .catch(() => {});
+  }
+  /**
+   * The local part of a disconnect, returning its undo and the remote
+   * revoke to send once the write is durable (sixth pass, V2).
+   */
+  detach(id) {
     const s = this.get(id);
+    const state = this.client.state;
+    const owner = this.client.profiles.store.active;
     this.devices.delete(id);
     if (id === "simkl") {
       this.simklGeneration++;
       this.simklSession = null;
     }
-    if (id === "simkl" && s.token?.v2 && s.token.access_token)
-      Promise.resolve()
-        .then(() =>
-          this.client.request(
-            this.simklUrl("/oauth2/revoke", s),
-            FORM(
-              { token: s.token.access_token, client_id: s.clientId },
-              this.simklHeaders(s),
-            ),
-          ),
-        )
-        .catch(() => {});
+    // Seventh pass, W5: the token revoked is the one the provider honours
+    // when the disconnect is written. A refresh still out for this session
+    // finishes first, since it retires the token this session had.
+    const revoke =
+      id === "simkl" && s.token?.v2 && s.token.access_token
+        ? async () => {
+            if (this.simklRefreshing?.session === s)
+              await this.simklRefreshing.promise.catch(() => {});
+            const access = s.token?.access_token;
+            if (!access) return;
+            await this.client
+              .request(
+                this.simklUrl("/oauth2/revoke", s),
+                FORM(
+                  { token: access, client_id: s.clientId },
+                  this.simklHeaders(s),
+                ),
+              )
+              .catch(() => {});
+          }
+        : undefined;
+    const tokenAtDetach = s.token;
     if (id === "trakt") {
       this.session = null;
       // Disconnecting forgets the account's suggestions too.
       this.suggestions?.clear();
     }
+    const addons = state.addons;
+    const addon = s.addonKey
+      ? addons.find((a) => keyFor(a.transportUrl) === s.addonKey)
+      : undefined;
+    const addonAt = addon ? addons.indexOf(addon) : -1;
     if (s.addonKey)
-      this.client.state.addons = this.client.state.addons.filter(
+      state.addons = addons.filter(
         (a) => keyFor(a.transportUrl) !== s.addonKey,
       );
-    delete this.client.state.integrations[id];
-    this.client.state.connectedLists = (
-      this.client.state.connectedLists || []
-    ).filter((l) => l.service !== id);
+    delete state.integrations[id];
+    const lists = (state.connectedLists || []).filter((l) => l.service === id);
+    state.connectedLists = (state.connectedLists || []).filter(
+      (l) => l.service !== id,
+    );
     this.client.cache.clear();
-    this.client.persist();
-    return this.client.publicState();
+    const undo = () => {
+      const now = this.client.state;
+      const bag = (now.integrations ||= {});
+      // Back, unless the service was connected again since (an empty
+      // entry is only what get() leaves).
+      if (bag[id] && Object.keys(bag[id]).length) return;
+      bag[id] = s;
+      // A refresh that answered while this disconnect was written left its
+      // token on `s` (the provider retired the old one), or ended the
+      // session. The session put back carries that, and is written again
+      // on its own (a plain save), never the spent token (W5).
+      if (s.token !== tokenAtDetach)
+        queueMicrotask(() => {
+          if (this.current(id, s))
+            try {
+              this.client.persist();
+            } catch {
+              // Written with the next save.
+            }
+        });
+      if (
+        addon &&
+        !now.addons.some((a) => keyFor(a.transportUrl) === s.addonKey)
+      )
+        now.addons.splice(Math.min(addonAt, now.addons.length), 0, addon);
+      const kept = this.client.ownerPart(owner, "connectedLists");
+      if (Array.isArray(kept))
+        for (const list of lists)
+          if (!kept.some((l) => l.key === list.key && l.service === id))
+            kept.push(list);
+      this.client.cache.clear();
+    };
+    return { undo, revoke };
   }
   async begin(id = "trakt") {
     if (!["trakt", "simkl"].includes(id)) throw new Error("المنصة غير مدعومة");
@@ -543,6 +700,7 @@ export class Integrations {
     ) {
       if (!this.refreshing)
         this.refreshing = (async () => {
+          const used = s.token.refresh_token;
           const token = await this.client
             .request(
               "https://auth.trakt.tv/oauth/token",
@@ -562,12 +720,18 @@ export class Integrations {
             });
           if (!token.access_token || !token.refresh_token)
             throw new Error("أعد ربط Trakt");
-          if (this.get("trakt") !== s)
+          // Seventh pass, W5: Trakt's refresh token is single use, so the
+          // new pair belongs to this session object even when a disconnect
+          // is being written (a refused one then puts back a working pair).
+          // Another refresh or a new sign-in since keeps its own.
+          if (s.token?.refresh_token !== used)
             throw new Error("تغير الحساب أثناء الطلب");
           s.token = {
             ...token,
             created_at: token.created_at || Math.floor(Date.now() / 1000),
           };
+          if (!this.current("trakt", s))
+            throw new Error("تغير الحساب أثناء الطلب");
           this.client.persist();
         })().finally(() => {
           this.refreshing = null;
@@ -697,6 +861,7 @@ export class Integrations {
     if (this.simklRefreshing?.session === s)
       return this.simklRefreshing.promise;
     const job = { session: s };
+    const used = s.token?.refresh_token;
     job.promise = (async () => {
       try {
         const token = await this.client.request(
@@ -711,7 +876,12 @@ export class Integrations {
           ),
         );
         if (!token?.access_token) throw new Error("HTTP 401");
-        if (this.get("simkl") !== s || !s.token) return;
+        // Seventh pass, W5: by now Simkl has retired the token this
+        // session had. The new one is kept on the session object whatever
+        // happened locally meanwhile: a disconnect being written puts it
+        // back with a working token if refused, and revokes this one if
+        // written. Only the current session is written now.
+        if (!s.token || s.token.refresh_token !== used) return;
         s.token = {
           ...s.token,
           ...token,
@@ -719,11 +889,17 @@ export class Integrations {
           created_at: Math.floor(Date.now() / 1000),
           v2: true,
         };
-        this.client.persist();
+        if (this.current("simkl", s)) this.client.persist();
       } catch (error) {
-        if ([400, 401].includes(error.status) && this.get("simkl") === s) {
+        if (
+          [400, 401].includes(error.status) &&
+          s.token &&
+          s.token.refresh_token === used
+        ) {
+          // Refused: this session is over wherever it is (a disconnect
+          // refused later puts it back without a token, asking to link).
           delete s.token;
-          this.client.persist();
+          if (this.current("simkl", s)) this.client.persist();
           throw new Error("انتهت جلسة Simkl. اربط الحساب من جديد.");
         }
         throw simklProblem(error);
@@ -849,7 +1025,8 @@ export class Integrations {
     } else if (id === "simkl") {
       lists = simklLists(await this.simkl("/sync/all-items"));
       await this.flushSimkl();
-      if (s.resume) resume = await this.simklPlayback(s, owner);
+      if (this.allows("simkl", s, "resume"))
+        resume = await this.simklPlayback(s, owner);
     }
     if (this.get(id) !== s) throw new Error("تغير الحساب أثناء المزامنة");
     if (this.client.profiles.store.active !== owner)
@@ -857,7 +1034,7 @@ export class Integrations {
         "تغير الملف الشخصي أثناء المزامنة؛ أعد المحاولة من الملف المطلوب",
       );
     // Written only now: the same account, and the profile that asked.
-    if (resume && s.resume) {
+    if (resume && this.allows("simkl", s, "resume")) {
       this.client.importResume(resume.points);
       s.playbackSeen = {
         ...Object.fromEntries(Object.entries(s.playbackSeen || {}).slice(-19)),
@@ -893,7 +1070,7 @@ export class Integrations {
     const s = this.get("trakt");
     if (
       !s.token ||
-      !s.trackHistory ||
+      !this.allows("trakt", s) ||
       duration < 30 ||
       position / duration < 0.9 ||
       !/^tt\d+$/.test(meta.id)
@@ -924,7 +1101,7 @@ export class Integrations {
     this.observeSimkl(player);
     // Read, never create: this runs on every player frame.
     const s = this.client.state.integrations?.trakt;
-    if (!s?.token || !s.trackHistory || !s.scrobble) {
+    if (!s?.token || !this.allows("trakt", s, "scrobble")) {
       this.session = null;
       return;
     }
@@ -978,7 +1155,7 @@ export class Integrations {
   /** Simkl receives actions, never heartbeats; its server advances playback. */
   observeSimkl(player) {
     const s = this.client.state.integrations?.simkl;
-    if (!s?.token?.access_token || !s.trackHistory) {
+    if (!s?.token?.access_token || !this.allows("simkl", s)) {
       this.simklSession = null;
       return;
     }
@@ -1029,7 +1206,7 @@ export class Integrations {
     const generation = this.simklGeneration;
     const allowed = () =>
       this.client.state.integrations?.simkl === account &&
-      account?.trackHistory &&
+      this.allows("simkl", account) &&
       this.simklGeneration === generation;
     const body = simklScrobbleBody(
       session.meta,
@@ -1091,7 +1268,7 @@ export class Integrations {
   }
   async flushSimkl() {
     const account = this.client.state.integrations?.simkl;
-    if (!account?.trackHistory || !account.token?.access_token) return;
+    if (!this.allows("simkl", account) || !account.token?.access_token) return;
     if (this.simklFlushing) return this.simklFlushing;
     this.simklFlushing = (async () => {
       for (const entry of [...(account.pending || [])]) {
@@ -1102,7 +1279,7 @@ export class Integrations {
           continue;
         if (
           this.client.state.integrations?.simkl !== account ||
-          !account.trackHistory
+          !this.allows("simkl", account)
         )
           break;
         // Remove first: a failed stop is requeued by sendSimkl.
@@ -1120,6 +1297,10 @@ export class Integrations {
   sendScrobble(event, session) {
     const body = scrobbleBody(session.meta, session.videoId, session.progress);
     if (!body) return Promise.resolve();
+    if (
+      !this.allows("trakt", this.client.state.integrations?.trakt, "scrobble")
+    )
+      return Promise.resolve();
     // History is account-scoped. A reply that arrives after the viewer
     // disconnected or switched Trakt accounts must not write into the new one.
     const account = this.client.state.integrations?.trakt;
@@ -1176,10 +1357,10 @@ export class Integrations {
   async flushHistory() {
     if (this.flushing) return this.flushing;
     const s = this.get("trakt");
-    if (!s.trackHistory || !s.token) return;
+    if (!this.allows("trakt", s) || !s.token) return;
     this.flushing = (async () => {
       for (const entry of [...(s.pending || [])]) {
-        if (this.get("trakt") !== s || !s.trackHistory) break;
+        if (this.get("trakt") !== s || !this.allows("trakt", s)) break;
         if (entry.heldAt && Date.now() - entry.heldAt < HOLD_MS) continue;
         const result = await this.trakt("/sync/history", entry.body);
         if (!(result.added?.movies || result.added?.episodes)) break;
@@ -1213,13 +1394,25 @@ export class Integrations {
     if (this.get("anilist") !== s) throw new Error("تغير الحساب أثناء الربط");
     if (!Number.isInteger(viewer?.Viewer?.id))
       throw new Error("لم يتعرف AniList على هذا الرمز");
-    s.token = token;
-    s.userId = viewer.Viewer.id;
-    s.username = String(viewer.Viewer.name || "AniList").slice(0, 60);
-    s.pending = [];
-    s.sent = [];
-    s.unmatched = 0;
-    this.client.persist();
+    // A commit (sixth pass, V2): the pasted token is the viewer's own, so a
+    // refused write puts the account back as it was.
+    await this.client.transact(() => {
+      const seal = fields(s, [
+        "token",
+        "userId",
+        "username",
+        "pending",
+        "sent",
+        "unmatched",
+      ]);
+      s.token = token;
+      s.userId = viewer.Viewer.id;
+      s.username = String(viewer.Viewer.name || "AniList").slice(0, 60);
+      s.pending = [];
+      s.sent = [];
+      s.unmatched = 0;
+      return seal();
+    });
     return this.client.publicState();
   }
   /** One GraphQL call with the viewer's token; refusals read in Arabic. */
@@ -1258,7 +1451,7 @@ export class Integrations {
     const s = this.client.state.integrations?.anilist;
     if (
       !s?.token?.access_token ||
-      !s.trackHistory ||
+      !this.allows("anilist", s) ||
       !(duration >= 30) ||
       position / duration < 0.9
     )
@@ -1304,11 +1497,14 @@ export class Integrations {
   async flushAnilist() {
     if (this.anilistFlushing) return this.anilistFlushing;
     const s = this.client.state.integrations?.anilist;
-    if (!s?.trackHistory || !s.token?.access_token) return;
+    if (!this.allows("anilist", s) || !s.token?.access_token) return;
     if (s.retryAt && Date.now() < s.retryAt) return;
     this.anilistFlushing = (async () => {
       for (const entry of [...(s.pending || [])]) {
-        if (this.client.state.integrations?.anilist !== s || !s.trackHistory)
+        if (
+          this.client.state.integrations?.anilist !== s ||
+          !this.allows("anilist", s)
+        )
           break;
         let media = null;
         try {
@@ -1316,14 +1512,17 @@ export class Integrations {
           media = validTarget(entry) ? await this.anilistMedia(entry) : null;
           if (
             this.client.state.integrations?.anilist !== s ||
-            !s.trackHistory ||
+            !this.allows("anilist", s) ||
             !s.pending?.includes(entry)
           )
             break;
           const write = media && nextListEntry(media, entry);
           if (write) await this.anilist(SAVE_ENTRY, write);
         } catch (error) {
-          if (this.client.state.integrations?.anilist !== s || !s.trackHistory)
+          if (
+            this.client.state.integrations?.anilist !== s ||
+            !this.allows("anilist", s)
+          )
             break;
           if (error.status !== 404) {
             s.retryAt = Date.now() + 60000;
@@ -1335,7 +1534,7 @@ export class Integrations {
         }
         if (
           this.client.state.integrations?.anilist !== s ||
-          !s.trackHistory ||
+          !this.allows("anilist", s) ||
           !s.pending?.includes(entry)
         )
           break;
@@ -1364,18 +1563,32 @@ export class Integrations {
       else unmatched++;
     }
     const unique = [...new Map(metas.map((m) => [m.id, m])).values()];
-    this.client.state.connectedLists = [
-      ...(this.client.state.connectedLists || []).filter(
-        (l) => l.key !== "letterboxd-csv",
-      ),
-      {
+    // A commit (sixth pass, V2): a refused import leaves the list that was
+    // there, in the profile it was made for.
+    await this.client.transact(() => {
+      const owner = this.client.profiles.store.active;
+      const lists = this.client.state.connectedLists || [];
+      const before = lists.find((l) => l.key === "letterboxd-csv");
+      const entry = {
         key: "letterboxd-csv",
         service: "letterboxd",
         name: "Letterboxd · قائمة مستوردة",
         metas: unique,
-      },
-    ];
-    this.client.persist();
+      };
+      this.client.state.connectedLists = [
+        ...lists.filter((l) => l.key !== "letterboxd-csv"),
+        entry,
+      ];
+      const after = JSON.stringify(entry);
+      return () => {
+        const now = this.client.ownerPart(owner, "connectedLists");
+        if (!Array.isArray(now)) return;
+        const at = now.findIndex((l) => l.key === "letterboxd-csv");
+        if (at < 0 || JSON.stringify(now[at]) !== after) return;
+        if (before) now[at] = before;
+        else now.splice(at, 1);
+      };
+    });
     return {
       state: this.client.publicState(),
       count: unique.length,

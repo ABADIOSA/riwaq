@@ -9,10 +9,15 @@
  * private window that refuses storage) nothing is written at all and the
  * viewer is told: there is no plaintext fallback, as on the desktop.
  *
- * core/Client expects load() and save() to be synchronous, so the state is
- * opened before the client starts and every save is a snapshot sealed in
- * the background, newest last.
+ * The state is opened before the client starts. A save is answered with a
+ * promise that settles only when the browser has COMMITTED the write (the
+ * transaction's `complete`, never a request's `success`), and rejects on an
+ * abort or an error: core/durable.mjs rolls a commit back in memory before
+ * any later snapshot is taken, so a refused write is never reported as done
+ * and never rides along with a later save (PR #155 third review, N1).
  */
+import { DurableWriter } from "../core/durable.mjs";
+import { stateArt } from "../core/collection-art.mjs";
 const DB_NAME = "riwaq-web";
 const STORE = "vault";
 const KEY_ID = "key";
@@ -24,19 +29,51 @@ const request = (req) =>
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+/** What a refused write says (an abort carries no error of its own). */
+export const WRITE_FAILED =
+  "تعذّر حفظ بيانات رِواق في هذا المتصفح، فلم يُحفظ التغيير";
+const failure = (t) => {
+  const error = new Error(WRITE_FAILED);
+  const cause = t.error;
+  if (cause) {
+    error.cause = cause;
+    if (cause.name) error.name = cause.name;
+  }
+  return error;
+};
 
 function openDb() {
   const open = globalThis.indexedDB.open(DB_NAME, 1);
   open.onupgradeneeded = () => open.result.createObjectStore(STORE);
   return request(open);
 }
+// Settles with the transaction: `complete` is the commit; a request's
+// `success` before an abort (a quota refusal arrives that way) is not.
 const tx = (db, mode, run) =>
   new Promise((resolve, reject) => {
     const t = db.transaction(STORE, mode);
-    const result = run(t.objectStore(STORE));
-    t.oncomplete = () => resolve(result?.result);
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error);
+    let done = false;
+    t.oncomplete = () => {
+      done = true;
+      resolve(result?.result);
+    };
+    t.onabort = () => {
+      if (!done) reject(failure(t));
+      done = true;
+    };
+    // An error event is followed by the abort, which rejects; nothing here
+    // resolves early.
+    t.onerror = () => {};
+    let result;
+    try {
+      result = run(t.objectStore(STORE));
+    } catch (error) {
+      done = true;
+      try {
+        t.abort();
+      } catch {}
+      reject(error);
+    }
   });
 
 async function vaultKey(db) {
@@ -98,40 +135,59 @@ export async function openStore() {
   }
   // Ask the browser not to evict the store under storage pressure.
   navigator.storage?.persist?.().catch?.(() => {});
-  let chain = Promise.resolve();
-  let failed = false;
-  const write = (id, text) => {
-    chain = chain
-      .then(() => seal(key, text))
-      .then((sealed) => tx(db, "readwrite", (s) => s.put(sealed, id)))
-      .catch(() => {
-        failed = true;
-      });
-    return chain;
+  const put = async (id, text) => {
+    const sealed = await seal(key, text);
+    await tx(db, "readwrite", (s) => s.put(sealed, id));
   };
-  return {
+  // The state handed to the last save; snapshots are taken from it when a
+  // write starts, so one write carries every change asked for before it.
+  let current = initial;
+  const store = {
     persistent: true,
+    // Called after commits were rolled back (the bridge re-sends state).
+    onUndo: null,
     get failed() {
-      return failed;
+      return writer.failures > 0;
     },
     load: () => initial,
-    // A snapshot now; sealing and writing follow in order.
-    save: (data) => {
-      write(STATE_ID, JSON.stringify(data));
+    /** Resolves once this change is committed; rejects when it was not. */
+    save: (data, undo) => {
+      current = data;
+      return writer.request(undo);
     },
-    // The web's profile.before-restore.bin: an undo kept in this browser.
-    saveBeforeRestore: (data) => write(BACKUP_ID, JSON.stringify(data)),
-    settled: () => chain,
+    // The web's profile.before-restore.bin: an undo kept in this browser,
+    // written after every save asked for so far, and refused loudly.
+    saveBeforeRestore: async (data) => {
+      const text = JSON.stringify(data);
+      await writer.settled();
+      await put(BACKUP_ID, text);
+    },
+    /** Resolves when nothing is being written; never rejects. */
+    settled: () => writer.settled(),
+    /** The pictures the durable state and the one being written name. */
+    durableArt: () => writer.metas(),
   };
+  const writer = new DurableWriter({
+    snapshot: () => ({
+      text: JSON.stringify(current),
+      meta: stateArt(current),
+    }),
+    write: (text) => put(STATE_ID, text),
+    onUndo: (error) => store.onUndo?.(error),
+    initialMeta: stateArt(initial),
+  });
+  return store;
 }
 
 function memoryStore() {
   return {
     persistent: false,
     failed: false,
+    onUndo: null,
     load: () => ({}),
     save: () => {},
     saveBeforeRestore: async () => {},
     settled: async () => {},
+    durableArt: () => [],
   };
 }

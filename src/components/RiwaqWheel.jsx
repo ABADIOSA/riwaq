@@ -26,7 +26,6 @@ import {
  * and last; Tab still walks through everything. A wheel gesture or drag
  * brings a button to the lens; click, Enter or Space opens its page.
  */
-const TICK_EVERY = 4;
 const SCROLL_STEP = 48;
 const DRAG_THRESHOLD = 8;
 const LENS_SIZE = 56;
@@ -143,29 +142,6 @@ export default function RiwaqWheel({
   // Physical x for SVG and the lens; the buttons use logical insets.
   const px = (x) => (rtl ? width - x : x);
   const hub = { x: px(layout.hub.x), y: layout.hub.y };
-  // The rim's ticks as two paths (minor, major), only around the visible arc.
-  const ticks = useMemo(() => {
-    const span = Math.abs(layout.items[0]?.angle || 0);
-    const reach = Math.ceil((span + 12) / TICK_EVERY) * TICK_EVERY;
-    const facing = rtl ? 180 : 0;
-    let minor = "";
-    let major = "";
-    for (let off = -reach; off <= reach; off += TICK_EVERY) {
-      const r = ((facing + off) * Math.PI) / 180;
-      const long = off % (TICK_EVERY * 5) === 0;
-      const inner = layout.radius + (long ? 9 : 12);
-      const outer = layout.radius + 16;
-      const seg = `M${(hub.x + Math.cos(r) * inner).toFixed(1)} ${(hub.y + Math.sin(r) * inner).toFixed(1)}L${(hub.x + Math.cos(r) * outer).toFixed(1)} ${(hub.y + Math.sin(r) * outer).toFixed(1)}`;
-      if (long) major += seg;
-      else minor += seg;
-    }
-    return (
-      <>
-        <path d={minor} />
-        <path className="major" d={major} />
-      </>
-    );
-  }, [layout.radius, layout.items, hub.x, hub.y, rtl]);
   const inset = WHEEL.apex[layout.mode] - WHEEL.item / 2;
   const onKeyDown = (e) => {
     const index = buttons.current.indexOf(document.activeElement);
@@ -263,7 +239,6 @@ export default function RiwaqWheel({
               className="wheel-rim-line"
               d={rimPath(layout, { rtl, width })}
             />
-            <g className="wheel-ticks">{ticks}</g>
             {layout.items.map((item, i) => {
               // A short spoke from each destination toward the hub.
               const dx = hub.x - px(item.x);

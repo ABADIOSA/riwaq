@@ -46,7 +46,7 @@ import {
   Music2,
 } from "lucide-react";
 import { api, call } from "./lib/api.js";
-import { lockScroll } from "./lib/scroll-lock.js";
+import { lockScroll, scrollPageToTop } from "./lib/scroll-lock.js";
 import { typeName, clock, imgUrl, episodeList } from "./lib/helpers.js";
 import {
   IconButton,
@@ -118,6 +118,7 @@ import { drawAppIcon } from "./lib/app-icon.js";
 import { useInterfaceLanguage } from "./lib/language.js";
 import { rememberScheme, useSystemDark } from "./lib/scheme.js";
 import { attachGridDrag } from "./lib/drag-scroll.js";
+import { forgetLocalArt } from "./components/CollectionArt.jsx";
 import { UpNextRail } from "./components/Episodes.jsx";
 import {
   continueWatching,
@@ -187,6 +188,7 @@ export default function App() {
     [torrentSetup, setTorrentSetup] = useState(null),
     [account, setAccount] = useState(false),
     [toast, setToast] = useState(""),
+    [toastAction, setToastAction] = useState(null),
     [player, setPlayer] = useState({ active: false }),
     [scrolled, setScrolled] = useState(false),
     [playerOpen, setPlayerOpen] = useState(false),
@@ -205,10 +207,24 @@ export default function App() {
     // The next title's sources, asked for before the episode ends.
     prefetchRef = useRef(null);
   stateRef.current = state;
-  const notice = (message) => {
+  // A notice may carry one action ({ label, run }), such as Undo after a
+  // deletion that no longer asks first (issue #153). It stays a little
+  // longer then, and the action runs once.
+  const notice = (message, action = null) => {
     setToast(message);
+    setToastAction(
+      action && typeof action.run === "function" && action.label
+        ? action
+        : null,
+    );
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 6500);
+    toastTimer.current = setTimeout(
+      () => {
+        setToast("");
+        setToastAction(null);
+      },
+      action ? 8000 : 6500,
+    );
   };
   /** Queue playback is opt-in through autoplay; explicit episode buttons stay episodic. */
   const advance = async (
@@ -437,6 +453,9 @@ export default function App() {
     setCatalog("");
     setAddonCatalogs([]);
   }, [state.profiles?.active]);
+  // Collection pictures from this computer are fetched again for each
+  // activation of a profile (a switch, a lock, a restore).
+  useEffect(() => forgetLocalArt(), [state.profiles?.session]);
   const addonSignature = state.addons
     .map((a) => `${a.key}:${a.enabled}`)
     .join("|");
@@ -722,7 +741,10 @@ export default function App() {
   };
   const dismissStable = useCallback((meta) => latest.current.dismiss(meta), []);
   const moreStable = useCallback((row) => latest.current.more(row), []);
-  const noticeStable = useCallback((m) => latest.current.notice(m), []);
+  const noticeStable = useCallback(
+    (m, action) => latest.current.notice(m, action),
+    [],
+  );
   const settingsStable = useCallback((tab) => latest.current.settings(tab), []);
   // Trakt's state for the suggestions section, stable between state events.
   const traktAccount = (state.integrations || []).find((i) => i.id === "trakt");
@@ -750,7 +772,7 @@ export default function App() {
     const room = ["collections", "folder", "music"].includes(v) ? "library" : v;
     if (isLocked(room)) {
       setUnlockRoom(room);
-      return;
+      return false;
     }
     cancelAnimationFrame(titleFrame.current);
     cancelAnimationFrame(catalogFrame.current);
@@ -762,6 +784,7 @@ export default function App() {
     setCatalog("");
     setFilter("");
     setGroup("all");
+    return true;
   };
   const favorites = state.favorites;
   const uniqueProgress = useMemo(
@@ -1101,7 +1124,19 @@ export default function App() {
           folderFrom={folderFrom}
           navigate={(id) => {
             if (id === "settings") setSettingsTab("start");
-            navigate(id);
+            // Issue #156: a destination chosen here, or the logo, opens at
+            // its start, also when it is the page already shown (then the
+            // page glides up unless motion is reduced). Back from a title
+            // or See all keeps restoring where the viewer was.
+            const same = id === view && !selected && !browseOpen;
+            if (navigate(id))
+              scrollPageToTop({
+                smooth:
+                  same &&
+                  !state.settings.reduceMotion &&
+                  !window.matchMedia?.("(prefers-reduced-motion: reduce)")
+                    .matches,
+              });
           }}
           appearance={appearance}
           profile={activeProfile}
@@ -1452,20 +1487,22 @@ export default function App() {
                               />
                             )}
                             {id === "continue" && continueFirst && sessionBand}
-                            {id === "taste" && ready && (
-                              // Folded as on Discover: its editor opens on
-                              // request, so browsing is never behind a form.
-                              <TasteDiscovery
-                                key={state.profiles?.active}
-                                rows={shownRows}
-                                state={state}
-                                update={update}
-                                onOpen={openStable}
-                                watched={finished}
-                                loading={loading}
-                                collapsed
-                              />
-                            )}
+                            {id === "taste" &&
+                              ready &&
+                              state.settings.tasteCompass !== false && (
+                                // Folded as on Discover: its editor opens on
+                                // request, so browsing is never behind a form.
+                                <TasteDiscovery
+                                  key={state.profiles?.active}
+                                  rows={shownRows}
+                                  state={state}
+                                  update={update}
+                                  onOpen={openStable}
+                                  watched={finished}
+                                  loading={loading}
+                                  collapsed
+                                />
+                              )}
                             {id === "suggestions" && (
                               <TraktSuggestions
                                 trakt={traktState}
@@ -1547,7 +1584,7 @@ export default function App() {
                         ))
                     ) : view === "discover" ? (
                       <>
-                        {ready && (
+                        {ready && state.settings.tasteCompass !== false && (
                           <TasteDiscovery
                             key={state.profiles?.active}
                             rows={shownRows}
@@ -1709,6 +1746,7 @@ export default function App() {
                 state={state}
                 update={update}
                 act={act}
+                setState={setState}
                 notice={notice}
               />
             )}
@@ -1739,6 +1777,20 @@ export default function App() {
           <div role="status" className="toast">
             <AlertCircle size={18} />
             <span>{toast}</span>
+            {toastAction && (
+              <button
+                className="toast-action"
+                onClick={() => {
+                  const run = toastAction.run;
+                  setToast("");
+                  setToastAction(null);
+                  clearTimeout(toastTimer.current);
+                  run();
+                }}
+              >
+                {toastAction.label}
+              </button>
+            )}
             <button aria-label="إغلاق التنبيه" onClick={() => setToast("")}>
               <X size={16} />
             </button>
@@ -1838,6 +1890,8 @@ export default function App() {
             act={act}
             setState={setState}
             notice={notice}
+            session={state.profiles?.session}
+            collections={state.collections}
             onClose={() => setNuvioOpen(false)}
           />
         )}

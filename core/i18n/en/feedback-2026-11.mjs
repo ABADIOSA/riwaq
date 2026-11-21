@@ -14,16 +14,12 @@ export default {
   مصمتة: "Solid",
   "«زجاجية» أزرار ونوافذ شفافة قليلًا بحافة مضيئة، مستوحاة من زجاج أبل. «مصمتة» تقلل الشفافية والمؤثرات. «تقليل الحركة» في «السلوك» أسفل هذه الصفحة يوقف دوران العجلة والانتقالات.":
     "“Glass” draws slightly translucent buttons and dialogs with a luminous edge, inspired by Apple's glass. “Solid” reduces transparency and effects. “Reduce motion” under Behaviour below stops the wheel's turn and the transitions.",
-  "تصغير العجلة": "Make the wheel compact",
+  "تصغير العجلة": "Compact wheel",
   "إظهار الأسماء": "Show names",
   قص: "Cut",
   نسخ: "Copy",
   لصق: "Paste",
   "تحديد الكل": "Select all",
-  "مؤشر مستوى الصوت": "Volume indicator",
-  "مؤشر صغير لمستوى الصوت": "A small volume indicator",
-  "يظهر لحظة تغيّر الصوت من لوحة المفاتيح أو العجلة وأدوات التحكم مخفية، صغيرًا عند مكان الصوت في الشريط السفلي دون أن يغطي الصورة.":
-    "Shows for a moment when the keyboard or the wheel changes the volume while the controls are hidden: small, where the volume sits in the bottom bar, never over the picture.",
   "اعرض الوقت المنقضي": "Show elapsed time",
   "اعرض الوقت المتبقي": "Show remaining time",
   "الوقت المتبقي {time}، اضغط لعرض الوقت المنقضي":

@@ -310,6 +310,11 @@ function notifier(requests) {
   const fake = {
     state: { notify: {}, settings: { notifyOnFinish: true } },
     persist() {},
+    // A store that accepts: a commit's change runs, its undo is kept
+    // (Client.transact, sixth pass V2).
+    transact(change) {
+      change();
+    },
     publicState() {
       return {};
     },

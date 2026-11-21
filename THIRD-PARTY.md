@@ -42,6 +42,7 @@ Not part of the Riwaq package or its installer. Riwaq downloads these unmodified
   - File: TorrServer-windows-amd64.exe from https://github.com/YouROK/TorrServer/releases/tag/MatriX.145.1, 63,547,904 bytes
   - SHA-256: d8bf93aba0521f2450436d4ede02c3b6e44a37b52c386aa9e6206daa8e5551ed
 - GLSL shader packs (Anime4K, FSRCNNX): listed under "Design and behavior references" above.
+- FR-Badges by farizmohd70 (MIT License, Copyright (c) 2026 farizmohd70): https://github.com/farizmohd70/FR-Badges — stream badge pictures. Riwaq ships none of its files. When the viewer chooses one of three of its styles (Settings → Sources → Stream badges → Stream badge appearance: FR Glass, FR Frost, Minimal), Riwaq fetches that style's "Lite" JSON from raw.githubusercontent.com at one pinned commit, checking its size and SHA-256 (`badges.json`, `badges-frost.json` or `badges-minimal.json`, `core/badge-look.mjs` `FR_COMMIT`), reads the badge names, groups, patterns and picture addresses, and stores them in the viewer's profile; the pictures themselves load from GitHub when sources are shown. Riwaq does not modify or redistribute the pictures. The Liquid Glass badges are Riwaq's own CSS. The repository keeps an unmodified copy of `badges-frost.json` at that commit as a test fixture (`scripts/fixtures/fr-badges-frost.json`, used by the Chromium checks so nothing is fetched); it is not in the app or its packages (`build.files` takes only `dist`, `electron`, `core` and `assets`).
 
 ## Web edition only
 

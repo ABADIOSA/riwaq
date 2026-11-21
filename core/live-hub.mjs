@@ -22,6 +22,9 @@ import {
   xtreamEndpoints,
 } from "./livetv.mjs";
 
+/** Live TV favourites a viewer can keep (the restore limit, every release). */
+export const LIVE_FAVORITES_MAX = 5000;
+
 const MAX_SOURCES = 12;
 const PAGE = 120;
 
@@ -112,21 +115,53 @@ export class LiveHub {
       source.username = username;
       source.password = password;
     }
-    this.store.sources.push(source);
-    this.client.persist();
+    // A commit (sixth pass, V2): a refused write takes the source out
+    // again, before anything reads it, and the add is reported as failed.
+    await this.client.transact(() => {
+      this.store.sources.push(source);
+      return () => {
+        this.store.sources = this.store.sources.filter(
+          (entry) => entry.id !== source.id,
+        );
+        this.loaded.delete(source.id);
+      };
+    });
     await this.refresh(source.id);
     return this.client.publicState();
   }
   updateSource({ id, action }) {
     const source = this.source(id);
-    if (action === "toggle") source.enabled = source.enabled === false;
-    else if (action === "remove") {
+    if (!["toggle", "remove"].includes(action))
+      throw new Error("إجراء غير معروف");
+    // Each a commit with its own undo (sixth pass, V2): a refused toggle
+    // or removal is put back, never written by a later save, a backup or
+    // account sync.
+    this.client.transact(() => {
+      if (action === "toggle") {
+        const had = Object.hasOwn(source, "enabled");
+        const was = source.enabled;
+        const now = source.enabled === false;
+        source.enabled = now;
+        return () => {
+          const entry = this.store.sources.find((e) => e.id === id);
+          if (!entry || entry.enabled !== now) return;
+          if (had) entry.enabled = was;
+          else delete entry.enabled;
+        };
+      }
+      const index = this.store.sources.findIndex((entry) => entry.id === id);
+      const loaded = this.loaded.get(id);
       this.store.sources = this.store.sources.filter(
         (entry) => entry.id !== id,
       );
       this.loaded.delete(id);
-    } else throw new Error("إجراء غير معروف");
-    this.client.persist();
+      return () => {
+        const sources = this.store.sources;
+        if (sources.some((entry) => entry.id === id)) return;
+        sources.splice(Math.min(index, sources.length), 0, source);
+        if (loaded && !this.loaded.has(id)) this.loaded.set(id, loaded);
+      };
+    });
     return this.client.publicState();
   }
   async refresh(id) {
@@ -302,11 +337,31 @@ export class LiveHub {
     return { start, hours, rows, groups: listing.groups, total: listing.total };
   }
   favorite(key) {
-    const favorites = this.store.favorites;
-    const index = favorites.indexOf(key);
-    if (index >= 0) favorites.splice(index, 1);
-    else favorites.push(key);
-    this.client.persist();
+    // Every Riwaq keeps at most LIVE_FAVORITES_MAX (a restore and every
+    // released client cut the list there, core/backup.mjs restoreState):
+    // a favourite past it would be dropped silently at the next sync or
+    // restore, so it is refused here, where the viewer sees why.
+    const at = this.store.favorites.indexOf(key);
+    if (at < 0 && this.store.favorites.length >= LIVE_FAVORITES_MAX)
+      throw new Error(
+        `بلغت القنوات المفضلة حدها (${LIVE_FAVORITES_MAX})؛ أزل قناة لتضيف أخرى`,
+      );
+    // A commit (sixth pass, V2): Codex saw a refused favorite stay in
+    // memory, reach a backup and, through account sync, another device.
+    this.client.transact(() => {
+      const favorites = this.store.favorites;
+      const index = favorites.indexOf(key);
+      const adding = index < 0;
+      if (adding) favorites.push(key);
+      else favorites.splice(index, 1);
+      return () => {
+        const now = this.store.favorites;
+        const at = now.indexOf(key);
+        if (adding) {
+          if (at >= 0) now.splice(at, 1);
+        } else if (at < 0) now.splice(Math.min(index, now.length), 0, key);
+      };
+    });
     return this.client.publicState();
   }
   /** Main-process only: turns an opaque key into a playable URL and headers. */

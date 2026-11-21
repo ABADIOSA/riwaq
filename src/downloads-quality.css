@@ -60,7 +60,10 @@
 }
 .player-menu .download-unavailable,
 .player-menu .menu-note {
-  max-width: 270px;
+  /* Wraps to the items' width and never sets it (issue #150). */
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
   margin: 0;
   padding: 0 12px 9px;
   color: #c6c9d0;
@@ -75,4 +78,30 @@
   .download-art {
     width: 60px;
   }
+}
+/* Issue #157: "Download subtitles" names the subtitle it saves on a second
+   line, and the choice list's labels; neither widens the menu. */
+.player-menu .subtitle-download {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+.player-menu .menu-detail,
+.player-menu .subtitle-choice span {
+  box-sizing: border-box;
+  width: 0;
+  min-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: var(--align-start);
+}
+.player-menu .menu-detail {
+  color: #c6c9d0;
+  font-size: 12px;
+}
+.player-menu .menu-heading {
+  padding-block: 6px 6px;
+  font-weight: 600;
+  color: #f4f4f5;
 }

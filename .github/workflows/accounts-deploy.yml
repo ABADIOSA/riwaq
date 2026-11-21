@@ -1,0 +1,209 @@
+name: Account service (deploy to production)
+
+# The ONLY workflow that changes the production account service (PR #155
+# third review, deployment gate; docs/ACCOUNTS.md, "Deploying"). It never
+# runs on a push, a merge, a pull request, a schedule or another workflow:
+# only when the owner starts it by hand from the Actions tab, on main,
+# typing a confirmation that names the exact commit. It is fail-closed:
+#
+# - It refuses unless started on main by the repository's owner, with the
+#   confirmation "deploy <first 7 characters of the commit>".
+# - It names a GitHub environment, `accounts-production`. The environment
+#   is only a gate once it is configured in Settings → Environments with
+#   the owner as a required reviewer and CLOUDFLARE_API_TOKEN moved into it
+#   as an environment secret (then no run can read the token before the
+#   owner approves it). Until then the checks above still hold, but the
+#   environment itself approves nothing.
+# - `dry_run` (the default) runs every read-only check and bundles the
+#   Worker, and changes nothing.
+# - Read-only preflight before any change: the token's account, the D1
+#   database `riwaq-accounts` with exactly the ID typed (it is never
+#   created here), the pending migrations exactly as typed, AUTH_PEPPER
+#   already a Worker secret (never created for an existing database), the
+#   Worker's current version and the database's Time Travel bookmark
+#   (recorded in the run's summary for a rollback).
+# - Every step fails on any failure (bash -e -o pipefail): a failing
+#   Wrangler, a missing or unexpected address, or a health check that never
+#   answers fails the run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy " followed by the first 7 characters of the commit being deployed'
+        required: true
+        type: string
+      database_id:
+        description: "The production D1 database ID (riwaq-accounts) this deploy must target"
+        required: true
+        type: string
+      migrations:
+        description: 'The migrations expected to be pending, comma-separated (e.g. "0003_account_instances.sql"), or "none"'
+        required: true
+        type: string
+      dry_run:
+        description: "Only check and bundle; change nothing"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: riwaq-accounts-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    environment: accounts-production
+    defaults:
+      run:
+        shell: bash
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: d83ae19aa10beea65a17f06bc10ebe3b
+      EXPECTED_URL: https://riwaq-accounts.abadiosa2007.workers.dev
+    steps:
+      - name: Refuse anything but the exact confirmation for this commit
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          expected="deploy ${GITHUB_SHA::7}"
+          if [ "$CONFIRM" != "$expected" ]; then
+            echo "::error::Not confirmed. To deploy commit ${GITHUB_SHA::7}, type exactly: $expected"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Tests (the same as the tests workflow)
+        run: |
+          node --test tests/accounts-server.test.mjs tests/accounts-integrity.test.mjs tests/accounts-instances.test.mjs tests/accounts-workflow.test.mjs tests/account.test.mjs
+          git fetch --no-tags origin tag v0.40.0 tag v0.54.0 tag v0.55.0
+          node scripts/test-accounts-released.mjs
+      - name: Check the Cloudflare token
+        id: ready
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not available to this run (docs/ACCOUNTS.md)."
+            exit 1
+          fi
+          # Removes what pasting adds and refuses an ID, key or link
+          # (exits 1 with the reason).
+          node server/accounts/check-token.mjs
+      - name: Install Wrangler 4.141.0
+        run: |
+          npm install --prefix "$RUNNER_TEMP/wrangler" --no-audit --no-fund wrangler@4.141.0
+          echo "$RUNNER_TEMP/wrangler/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Preflight (read-only) — the account and the token
+        working-directory: server/accounts
+        env:
+          HINT: ${{ steps.ready.outputs.hint }}
+        run: |
+          wrangler whoami | tee whoami.log
+          if ! grep -q "$CLOUDFLARE_ACCOUNT_ID" whoami.log; then
+            echo "::error::The token does not reach account $CLOUDFLARE_ACCOUNT_ID. $HINT"
+            exit 1
+          fi
+      - name: Preflight (read-only) — the database, never created here
+        working-directory: server/accounts
+        env:
+          DATABASE_ID: ${{ inputs.database_id }}
+        run: |
+          wrangler d1 list --json > d1.json
+          id=$(node -e '
+            const list = JSON.parse(require("node:fs").readFileSync("d1.json", "utf8"));
+            const found = list.filter((d) => d.name === "riwaq-accounts");
+            process.stdout.write(found.length === 1 ? found[0].uuid : "");')
+          if [ -z "$id" ]; then
+            echo "::error::Exactly one D1 database named riwaq-accounts must exist; this workflow never creates one."
+            exit 1
+          fi
+          if [ "$id" != "$DATABASE_ID" ]; then
+            echo "::error::riwaq-accounts is $id, not the $DATABASE_ID typed."
+            exit 1
+          fi
+          sed -i "s/00000000-0000-0000-0000-000000000000/$id/" wrangler.toml
+          grep -q "database_id = \"$id\"" wrangler.toml
+      - name: Preflight (read-only) — the pending migrations are exactly those typed
+        working-directory: server/accounts
+        env:
+          MIGRATIONS: ${{ inputs.migrations }}
+        run: |
+          wrangler d1 migrations list riwaq-accounts --remote 2>&1 | tee migrations.log
+          pending=$(grep -oE '[0-9]{4}_[A-Za-z0-9_]+\.sql' migrations.log | sort -u | paste -sd, - || true)
+          expected=$(printf '%s' "$MIGRATIONS" | tr -d ' ' | tr ',' '\n' | grep -v '^none$' | grep -v '^$' | sort -u | paste -sd, - || true)
+          if [ "$pending" != "$expected" ]; then
+            echo "::error::Pending migrations are [$pending], not the [$expected] typed."
+            exit 1
+          fi
+          echo "pending=$pending" >> "$GITHUB_ENV"
+      - name: Preflight (read-only) — the pepper exists; the current version and bookmark
+        working-directory: server/accounts
+        run: |
+          wrangler secret list --format json > secrets.json
+          if ! grep -q '"AUTH_PEPPER"' secrets.json; then
+            echo "::error::AUTH_PEPPER is not a Worker secret. A new pepper would lock every account out, so this workflow never creates one."
+            exit 1
+          fi
+          wrangler deployments list > deployments.log
+          wrangler d1 time-travel info riwaq-accounts > bookmark.log
+          {
+            echo "### Riwaq account service — before"
+            echo "Commit: ${GITHUB_SHA::7}; pending migrations: ${pending:-none}; dry run: ${{ inputs.dry_run }}"
+            echo '```'
+            tail -n 12 deployments.log
+            cat bookmark.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Bundle the Worker (changes nothing)
+        working-directory: server/accounts
+        run: wrangler deploy --dry-run --outdir "$RUNNER_TEMP/bundle"
+      - name: Apply the migrations
+        if: ${{ !inputs.dry_run }}
+        working-directory: server/accounts
+        run: wrangler d1 migrations apply riwaq-accounts --remote
+      - name: Deploy the Worker
+        if: ${{ !inputs.dry_run }}
+        id: deploy
+        working-directory: server/accounts
+        run: |
+          wrangler deploy 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1 || true)
+          if [ "$url" != "$EXPECTED_URL" ]; then
+            echo "::error::Wrangler reported '$url', not $EXPECTED_URL."
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Check the service answers
+        if: ${{ !inputs.dry_run }}
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          healthy=""
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if body=$(curl -fsS "$URL/v1/health") && printf '%s' "$body" | grep -q '"ok":true'; then
+              healthy=yes
+              break
+            fi
+            sleep 6
+          done
+          if [ "$healthy" != "yes" ]; then
+            echo "::error::$URL/v1/health never answered; see docs/ACCOUNTS.md for the rollback."
+            exit 1
+          fi
+      - name: Try an account end to end
+        if: ${{ !inputs.dry_run }}
+        env:
+          RIWAQ_ACCOUNT_SERVER: ${{ steps.deploy.outputs.url }}
+        # A throwaway account: made, signed in on a second device, synced
+        # both ways and deleted (scripts/test-account-live.mjs).
+        run: node scripts/test-account-live.mjs

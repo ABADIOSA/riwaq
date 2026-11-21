@@ -33,7 +33,17 @@ import {
 } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { collectBackup, restoreState } from "./backup.mjs";
-import { merge3, same } from "./sync-merge.mjs";
+import { keepSignIn, same, withKnownSettings } from "./sync-merge.mjs";
+import {
+  carriesSecrets,
+  mergeWithClears,
+  readClears,
+  settleClears,
+  stripClears,
+  withClears,
+  withClearedSource,
+  withoutCleared,
+} from "./sync-clears.mjs";
 import { ACCOUNT_SERVER } from "./account-server.mjs";
 
 export const USERNAME = /^[a-z0-9][a-z0-9_.-]{2,31}$/;
@@ -272,9 +282,12 @@ export class AccountHub {
       server = ACCOUNT_SERVER,
       request = accountFetch,
       now = () => Date.now(),
+      restWait,
     } = {},
   ) {
     this.client = client;
+    // How long a sync waits for a commit still being written (Client.atRest).
+    this.restWait = restWait;
     this.server = serverUrl(server);
     this.request = request;
     this.now = now;
@@ -328,18 +341,67 @@ export class AccountHub {
     return { ...response, data };
   }
 
-  /** The data that syncs, as a detached copy (never live references). */
-  collect(secrets) {
+  /**
+   * The data that syncs, as a detached copy (never live references), with
+   * this device's clear records when it carries secrets.
+   */
+  collect(secrets, bag = this.bag) {
     this.client.profiles.capture();
-    return JSON.parse(
+    const payload = JSON.parse(
       JSON.stringify(
         collectBackup(this.client.state, { includeSecrets: !!secrets }).payload,
       ),
     );
+    return withClears(payload, bag ? this.clearsOf(bag) : []);
+  }
+
+  /**
+   * The clear records this device agreed with the account (oldest first),
+   * kept in the account's bag, not the profile: they belong to the account.
+   * A device updated from 0.55.0 has none yet: it starts from the agreed
+   * copy and the records its released code put in its provider entries.
+   */
+  clearsOf(bag) {
+    if (!Array.isArray(bag.clears))
+      bag.clears = readClears(
+        withClears({ auth: null, providers: {} }, [
+          ...readClears(bag.base),
+          ...readClears({
+            auth: null,
+            providers: this.client.state.providers,
+          }),
+        ]),
+      );
+    return bag.clears;
+  }
+
+  /**
+   * What this device uploads: its payload, with the clear records of what
+   * it removed since `bag.base` (a sync with nothing new to pull merges
+   * nothing) and, for a released client, the cleared Live TV list
+   * (core/sync-clears.mjs). A record that drops an item still held here
+   * (a device updated from a released version) waits while a video plays,
+   * like any change from the account: null, and nothing goes up until then.
+   */
+  ownClears(bag, seen) {
+    const local = withClearedSource(this.collect(bag.secrets), bag.base, seen);
+    if (bag.base === undefined) return local;
+    const settled = settleClears(bag.base, local, local);
+    if (same(settled, local)) return local;
+    if (same(stripClears(settled), stripClears(local))) {
+      // Only new or lifted records: nothing this device holds changes.
+      bag.clears = readClears(settled);
+      this.client.persist();
+      return settled;
+    }
+    if (this.playbackActive()) return null;
+    this.apply(settled);
+    this.onChange("remote");
+    return withClearedSource(this.collect(bag.secrets), bag.base, seen);
   }
 
   /** Puts the account's data on this device, keeping its own profile choice. */
-  apply(payload) {
+  apply(payload, position) {
     const client = this.client;
     const profiles = client.profiles;
     const active = profiles.store.active;
@@ -348,7 +410,10 @@ export class AccountHub {
     this.applying = true;
     try {
       profiles.capture();
-      client.state = restoreState(client.state, payload);
+      // The records belong to the account's bag, never to the state.
+      const bag = this.bag;
+      if (bag && carriesSecrets(payload)) bag.clears = readClears(payload);
+      client.state = restoreState(client.state, stripClears(payload));
       if (client.state.profiles.list.some((p) => p.id === active))
         client.state.profiles.active = active;
       profiles.ensure();
@@ -359,7 +424,14 @@ export class AccountHub {
         JSON.stringify(profiles.active()?.pin || null) === pin
           ? unlocked
           : !profiles.active()?.pin;
+      // The profile's data was replaced: work started before belongs to
+      // the old data, even when the same profile and PIN stay (third
+      // review, N12), as after a backup restore.
+      profiles.renew();
       client.cache.clear();
+      // The received state and its sync position belong in one snapshot.
+      // A failed following upload must not make a restart treat it as an edit.
+      if (bag && position) Object.assign(bag, position);
       client.persist();
     } finally {
       this.applying = false;
@@ -380,20 +452,31 @@ export class AccountHub {
       revision: 0,
       secrets: !!secrets,
       lastSync: null,
+      // Clear records come from the account at the first sync; a bag from
+      // a released version has none and starts from its agreed copy.
+      clears: [],
     };
     this.client.state.accountName = username;
     this.error = "";
     this.client.persist();
   }
 
-  /** Bind asynchronous sign-in to this attempt and the originating profile. */
+  /**
+   * Binds asynchronous sign-in to this attempt and to the ACTIVATION of the
+   * profile it started under (fifth pass, Q10), not only its ID: A → B → A,
+   * a re-lock (even unlocked again) and a restore each start a new
+   * activation, and an attempt begun under the old one can then neither
+   * sign this device in nor write. Checked after every wait and before
+   * anything is kept.
+   */
   attempt() {
     const epoch = ++this.epoch;
-    const owner = this.client.profiles.store.active;
+    const profiles = this.client.profiles;
+    const ticket = profiles.ticket();
     return () => {
-      if (this.epoch !== epoch || this.client.profiles.store.active !== owner)
+      if (this.epoch !== epoch || !profiles.holds(ticket))
         throw new Error("تغيّرت جلسة الحساب؛ أعد المحاولة");
-      this.client.profiles.gate("settings");
+      profiles.gate("settings");
     };
   }
 
@@ -696,52 +779,118 @@ export class AccountHub {
         if (this.bag !== bag) return this.client.publicState();
         const pulled = await this.pull(bag);
         if (this.bag !== bag) return this.client.publicState();
-        if (pulled.envelope) {
-          const remote = pulled.envelope.payload;
-          const secrets = bag.secretsChanged
-            ? bag.secrets
-            : !!pulled.envelope.secrets;
-          const local = this.collect(secrets);
-          const merged = merge3(bag.base, local, remote, { prefer });
-          if (!same(merged, local) && this.playbackActive()) {
-            this.deferred = true;
-            this.deferredPrefer = prefer;
-            this.error = "";
-            return this.client.publicState();
-          }
-          bag.secrets = secrets;
-          if (!same(merged, local)) {
-            this.apply(merged);
-            this.onChange("remote");
-          }
-          bag.base = remote;
-          bag.revision = pulled.revision;
-        } else if (pulled.revision === 0) {
-          bag.revision = 0;
-          bag.base = undefined;
-        }
-        this.deferred = false;
-        this.deferredPrefer = null;
-        const local = this.collect(bag.secrets);
-        if (
-          !bag.secretsChanged &&
-          bag.base !== undefined &&
-          same(local, bag.base)
-        ) {
-          bag.lastSync = this.now();
-          this.error = "";
-          this.client.persist();
-          return this.client.publicState();
-        }
-        const secrets = !!bag.secrets;
-        const text = sealData(Buffer.from(bag.key, "base64"), bag.username, {
-          format: "riwaq-sync",
-          version: 1,
-          secrets,
-          app: this.client.version || "",
-          at: this.now(),
-          payload: local,
-        });
+        // Merging, applying the account's data and taking what goes up all
+        // read the live state, so they run together at a moment when no
+        // commit's write is still out (fifth pass, Q7): a change this device
+        // may yet undo is never sent, and the account's data is never put
+        // over a change still being written. Nothing here waits.
+        const step = await this.client.atRest(
+          () => {
+            if (this.bag !== bag) return null;
+            const seen = pulled.envelope?.payload;
+            if (pulled.envelope) {
+              const remote = pulled.envelope.payload;
+              const secrets = bag.secretsChanged
+                ? bag.secrets
+                : !!pulled.envelope.secrets;
+              const local = withClearedSource(this.collect(secrets), bag.base);
+              // Release blocker W4 (mixed versions): clear records decide
+              // what a released client's copy may bring back
+              // (core/sync-clears.mjs). They merge as a set; a released
+              // copy can lose them but never lift one.
+              const merged = settleClears(
+                bag.base,
+                local,
+                withKnownSettings(
+                  keepSignIn(
+                    bag.base,
+                    local,
+                    remote,
+                    mergeWithClears(bag.base, local, remote, {
+                      prefer,
+                      kept: this.clearsOf(bag),
+                    }),
+                  ),
+                  local,
+                ),
+              );
+              // Records alone change nothing this device holds: they never
+              // wait for a viewing to end.
+              const recordsOnly =
+                !same(merged, local) &&
+                same(stripClears(merged), stripClears(local));
+              if (recordsOnly) bag.clears = readClears(merged);
+              if (
+                !same(merged, local) &&
+                !recordsOnly &&
+                this.playbackActive()
+              ) {
+                this.deferred = true;
+                this.deferredPrefer = prefer;
+                this.error = "";
+                return null;
+              }
+              bag.secrets = secrets;
+              // The agreed copy leaves out what this device's records
+              // cleared: a released client's copy of a cleared item is
+              // neither taken nor fought over with another upload.
+              // Settings a released writer did not know count as this
+              // device's own, so they are neither reset nor uploaded again.
+              const position = {
+                base: withKnownSettings(
+                  withoutCleared(remote, new Set(readClears(merged))),
+                  merged,
+                ),
+                revision: pulled.revision,
+              };
+              if (!same(merged, local) && !recordsOnly) {
+                this.apply(merged, position);
+                this.onChange("remote");
+              } else {
+                Object.assign(bag, position);
+              }
+            } else if (pulled.revision === 0) {
+              bag.revision = 0;
+              bag.base = undefined;
+            }
+            this.deferred = false;
+            this.deferredPrefer = null;
+            const local = this.ownClears(bag, seen);
+            if (!local) {
+              this.deferred = true;
+              this.error = "";
+              this.client.persist();
+              return null;
+            }
+            if (
+              !bag.secretsChanged &&
+              bag.base !== undefined &&
+              same(local, bag.base)
+            ) {
+              bag.lastSync = this.now();
+              this.error = "";
+              this.client.persist();
+              return null;
+            }
+            const secrets = !!bag.secrets;
+            const text = sealData(
+              Buffer.from(bag.key, "base64"),
+              bag.username,
+              {
+                format: "riwaq-sync",
+                version: 1,
+                secrets,
+                app: this.client.version || "",
+                at: this.now(),
+                payload: local,
+              },
+            );
+            return { local, secrets, text };
+          },
+          { wait: this.restWait },
+        );
+        if (!step) return this.client.publicState();
+        const { local, secrets, text } = step;
         const pushed = await this.api("PUT", "/v1/data", {
           token: bag.token,
           conflict: true,

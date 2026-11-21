@@ -1,0 +1,770 @@
+/*
+ * Riwaq's Liquid Glass components (November 2026 beta): one chip, one
+ * panel and one badge built on the glass tokens of src/glass.css, shared by
+ * the source picker's filters, the stream badges, the collection cards and
+ * the collection editor, so no screen invents a glass of its own.
+ *
+ * - The fill, edge, sheen and shadow come from --glass-*: they already turn
+ *   opaque under Solid, reduced transparency, forced colours and browsers
+ *   without backdrop-filter, and follow the light scheme.
+ * - No backdrop blur on a chip, a badge or a card (src/glass.css: blur only
+ *   on floating surfaces). Over pictures the dark picture fill keeps text
+ *   at 4.5:1 or more.
+ * - Only transform, opacity and colours change on hover; reduced motion
+ *   stops the movement (tokens.css).
+ */
+.app {
+  --lg-radius: 999px;
+  --lg-chip-height: 32px;
+  --lg-accent-fill: color-mix(in srgb, var(--accent) 18%, var(--raised));
+  --lg-accent-edge: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+/* ---- The chip ----------------------------------------------------------- */
+
+.lg-chip,
+.facet-toggle,
+.facet-pill,
+.facet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--lg-chip-height);
+  padding: 0 12px;
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--lg-radius);
+  background: var(--glass-sheen), var(--glass-fill);
+  box-shadow: var(--glass-shadow);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    transform var(--motion-press, 150ms) var(--ease-out, ease),
+    border-color var(--motion-press, 150ms) ease,
+    background-color var(--motion-press, 150ms) ease;
+}
+.lg-chip:hover:not(:disabled),
+.facet-toggle:hover,
+.facet-pill:hover,
+.facet:hover:not(:disabled) {
+  border-color: var(--glass-edge-strong);
+  transform: translateY(-1px);
+}
+.lg-chip:active:not(:disabled),
+.facet:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.lg-chip[aria-pressed="true"],
+.facet.chosen,
+.facet-toggle.open,
+.facet-pill {
+  background: var(--glass-sheen), var(--lg-accent-fill);
+  border-color: var(--lg-accent-edge);
+}
+.lg-chip:focus-visible,
+.facet-toggle:focus-visible,
+.facet-pill:focus-visible,
+.facet:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.lg-chip:disabled,
+.facet:disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* ---- The panel ---------------------------------------------------------- */
+
+.lg-panel,
+.facet-panel {
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--glass-sheen), var(--glass-fill);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ---- The source picker's advanced filters (issue #154) ----------------- */
+
+.source-facets {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.source-facets-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.facet-badge {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink, #141210);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.facet-pill svg {
+  opacity: 0.75;
+}
+.facet-clear {
+  font-size: 12.5px;
+}
+.facet-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px 20px;
+  padding: 14px 16px;
+}
+.facet-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.facet-group legend {
+  margin-bottom: 7px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.facet-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.facet {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.facet span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+.facet-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.facet.chosen .facet-count {
+  color: var(--text);
+}
+/* "Not reported": a value of its own, drawn quieter. */
+.facet.unknown {
+  border-style: dashed;
+  color: var(--muted);
+}
+.facet-remember {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.facet-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg-chip,
+  .facet-toggle,
+  .facet-pill,
+  .facet {
+    transition: none;
+  }
+}
+.reduced-motion .lg-chip,
+.reduced-motion .facet {
+  transition: none;
+}
+
+/* ---- Stream badges: their appearance (core/badge-look.mjs) ------------- */
+
+/* Liquid Glass chips: the theme's accent as a faint tint under the glass,
+   the text at full strength. Custom badges keep their own colour as the
+   tint and edge, never as the text, so every chip stays readable. */
+.stream-list.badges-liquid .stream-info small em,
+.stream-info small em.tag-fallback,
+.stream-info small em.tag-more {
+  padding: 3px 8px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 999px;
+  background:
+    var(--glass-sheen), color-mix(in srgb, var(--accent) 9%, var(--glass-fill));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12);
+  color: var(--text);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  line-height: 1.3;
+}
+.stream-list.badges-liquid .stream-info small em.tag-hdr,
+.stream-list.badges-liquid .stream-info small em.tag-cached {
+  border-color: var(--lg-accent-edge);
+  background: var(--glass-sheen), var(--lg-accent-fill);
+}
+.stream-list.badges-liquid .stream-info small em.tag-custom {
+  background:
+    var(--glass-sheen),
+    color-mix(in srgb, var(--badge, var(--accent)) 18%, var(--glass-fill)) !important;
+  border-color: color-mix(
+    in srgb,
+    var(--badge, var(--accent)) 55%,
+    transparent
+  ) !important;
+  color: var(--text) !important;
+}
+/* "+N": the badges a short row folded away (their names in the tooltip). */
+.stream-info small em.tag-more {
+  color: var(--muted);
+  cursor: help;
+}
+/* FR-Badges pictures: one height for the row, gently rounded. */
+.stream-list.badges-fr-glass .badge-art,
+.stream-list.badges-fr-frost .badge-art,
+.stream-list.badges-fr-minimal .badge-art {
+  height: 22px;
+  max-width: 110px;
+  border-radius: 5px;
+}
+
+/* ---- The appearance picker ---------------------------------------------- */
+
+.badge-looks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+.badge-look {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--panel);
+  color: var(--text);
+  text-align: var(--align-start, start);
+  font: inherit;
+  cursor: pointer;
+}
+.badge-look:hover:not(:disabled) {
+  border-color: var(--glass-edge-strong);
+}
+.badge-look.selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.badge-look:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.badge-look:disabled {
+  cursor: progress;
+}
+.badge-look b {
+  font-size: 13.5px;
+}
+.badge-look small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+/* Each card's sample shows the look in CSS (FR styles approximated: their
+   real pictures load only when chosen). */
+.badge-look-sample {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #1d2430, #3a2a3a);
+  direction: ltr;
+}
+.badge-look-sample i {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #ffffff26;
+  color: #c9ced6;
+}
+.badge-look-sample.look-liquid i {
+  border-radius: 999px;
+  border-color: rgb(255 255 255 / 0.28);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0) 60%),
+    color-mix(in srgb, var(--accent) 22%, rgb(20 22 28 / 0.6));
+  color: #fff;
+}
+.badge-look-sample.look-fr-glass i {
+  background: rgb(0 0 0 / 0.6);
+  border-color: rgb(255 255 255 / 0.22);
+  color: #fff;
+}
+.badge-look-sample.look-fr-frost i {
+  background: rgb(255 255 255 / 0.2);
+  border-color: rgb(255 255 255 / 0.45);
+  color: #fff;
+}
+.badge-look-sample.look-fr-minimal i {
+  border-color: transparent;
+  background: none;
+  color: #fff;
+  letter-spacing: 0.4px;
+}
+.badge-look-sample.look-off i {
+  opacity: 0.3;
+  text-decoration: line-through;
+}
+
+/* ---- Collections: artwork, cards, templates, editor (Nov 2026 beta) ---- */
+
+/* The still, the GIF over it while active, or the theme's placeholder. */
+.collection-art {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 30% 20%,
+      color-mix(in srgb, var(--accent) 30%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--accent) 16%, var(--panel)),
+      var(--panel)
+    );
+}
+.collection-art img,
+.collection-art canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.collection-art .art-gif {
+  animation: riwaq-art-in var(--motion-press, 150ms) ease;
+}
+@keyframes riwaq-art-in {
+  from {
+    opacity: 0;
+  }
+}
+.art-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+.art-placeholder b {
+  font-size: 38px;
+  line-height: 1;
+}
+
+/* Folder tiles: shape, hover/focus lift, the optional glow. */
+.folder-tile .collection-art {
+  border-radius: var(--poster-radius, 12px);
+  border: 1px solid var(--line, #ffffff14);
+  transition:
+    transform var(--motion-press, 150ms) var(--ease-out, ease),
+    border-color var(--motion-press, 150ms) ease,
+    box-shadow var(--motion-press, 150ms) ease;
+}
+.folder-tile.shape-poster .collection-art {
+  width: 150px;
+  aspect-ratio: 2 / 3;
+}
+.folder-tile.shape-landscape .collection-art {
+  width: 260px;
+  aspect-ratio: 16 / 9;
+}
+.folder-tile.shape-square .collection-art {
+  width: 170px;
+  aspect-ratio: 1;
+}
+.folder-tile.is-active .collection-art,
+.folder-tile.selected .collection-art {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+.folder-tile.glow.is-active .collection-art,
+.folder-tile.glow.selected .collection-art {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 10px 30px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.folder-tile:focus-visible {
+  outline: none;
+}
+.folder-tile:focus-visible .collection-art {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.folder-tile .folder-logo {
+  max-height: 34px;
+  max-width: 100%;
+  object-fit: contain;
+  align-self: flex-start;
+}
+.folder-gallery {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 6px 2px 14px;
+}
+.folder-gallery .folder-tile {
+  cursor: pointer;
+}
+
+/* The gallery's cinematic cards. */
+.collections-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.collection-grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.collection-row {
+  display: flex;
+  gap: 18px;
+  padding: 4px 2px 12px;
+}
+.collection-row .collection-card {
+  flex: none;
+  width: min(360px, 80vw);
+}
+.collection-card.cinematic .collection-open {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+}
+.collection-card.cinematic .collection-backdrop {
+  position: absolute;
+  inset: 0;
+}
+.collection-card.cinematic .collection-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    0deg,
+    rgb(8 9 12 / 0.82),
+    rgb(8 9 12 / 0.18) 50%,
+    transparent 75%
+  );
+  pointer-events: none;
+}
+.collection-card.cinematic.is-active {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+.collection-card.cinematic .collection-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* Over the picture the glass stays dark, in both schemes (glass.css). */
+.collection-card-info {
+  position: absolute;
+  inset-inline: 12px;
+  bottom: 12px;
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0) 60%),
+    var(--glass-picture-fill, rgb(10 12 16 / 0.64));
+  color: #fff;
+  text-align: var(--align-start, start);
+}
+.collection-card-info strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  color: #fff;
+}
+.collection-card-info small {
+  color: rgb(255 255 255 / 0.8);
+  font-size: 11.5px;
+}
+.collection-logo {
+  max-height: 42px;
+  max-width: 70%;
+  object-fit: contain;
+  object-position: var(--align-start, left);
+}
+.collection-card .collection-tools {
+  z-index: 2;
+}
+.app .collection-card .collection-tools .lg-chip {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-color: rgb(255 255 255 / 0.26);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0) 55%),
+    var(--glass-picture-fill, rgb(10 12 16 / 0.64));
+  color: #fff;
+}
+.app .collection-card .collection-tools .lg-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.collection-hero-logo img,
+.collection-hero-logo canvas,
+.folder-hero-logo img,
+.folder-hero-logo canvas {
+  max-height: 90px;
+  max-width: min(420px, 80%);
+  object-fit: contain;
+}
+
+/* Riwaq's templates. */
+.preset-gallery {
+  margin-top: 40px;
+}
+.preset-gallery h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+.preset-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 14px;
+  border-radius: var(--radius-lg, 14px);
+  border: 1px solid var(--glass-edge);
+  background: var(--glass-sheen), var(--glass-fill);
+  box-shadow: var(--glass-shadow);
+}
+.preset-emoji {
+  font-size: 28px;
+  line-height: 1;
+}
+.preset-card small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.preset-card button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+/* The folder editor's look, with its preview. */
+.folder-look {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 22px;
+  margin: 0 0 18px;
+  padding: 16px;
+}
+@media (max-width: 900px) {
+  .folder-look {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.folder-look-fields {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.folder-look-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+.folder-look-preview figure {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin: 0;
+}
+.folder-look-preview figcaption {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.look-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.look-toggle span {
+  display: grid;
+  gap: 2px;
+}
+.look-toggle small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.art-field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.art-field-row input {
+  flex: 1;
+  min-width: 0;
+}
+.art-field .lg-chip {
+  width: 34px;
+  padding: 0;
+  justify-content: center;
+}
+.art-local {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius, 8px);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* A pasted Nuvio file: what is in it, which collections, how. */
+.nuvio-preview {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+}
+.nuvio-pick,
+.nuvio-mode {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.nuvio-pick legend,
+.nuvio-mode legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.nuvio-pick label,
+.nuvio-mode label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.nuvio-pick label span,
+.nuvio-mode label span {
+  display: grid;
+  gap: 2px;
+}
+.nuvio-pick small,
+.nuvio-mode small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.nuvio-mode label.selected b {
+  color: var(--accent);
+}
+.nuvio-report {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+}
+.nuvio-report li {
+  padding: 4px 12px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 999px;
+  background: var(--glass-sheen), var(--glass-fill);
+  font-size: 12.5px;
+}
+.nuvio-unsupported summary {
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .collection-art .art-gif,
+  .folder-tile .collection-art {
+    animation: none;
+    transition: none;
+  }
+}
+.reduced-motion .collection-art .art-gif,
+.reduced-motion .folder-tile .collection-art {
+  animation: none;
+  transition: none;
+}
+
+.art-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--bad, #f87171);
+  font-size: 12px;
+}
+/* A card with no picture: its emoji above the information band. */
+.collection-card.cinematic .art-placeholder {
+  align-items: start;
+  padding-top: 12%;
+}
+.collection-card.cinematic .art-placeholder b {
+  font-size: 46px;
+}
+/* The room's heading on a narrow window: its buttons wrap under the title
+   instead of running over it (it did before this change too). */
+@media (max-width: 760px) {
+  .collections-page > .page-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .collections-page > .page-heading .button-row {
+    flex-wrap: wrap;
+  }
+}
+
+/*
+ * A still slot drawn from a picture that might move (StillImage): the
+ * first frame in a canvas, laid out like the image it stands for
+ * (PR #155 review, F8).
+ */
+canvas.still-frame {
+  display: block;
+}
+.folder-hero-logo {
+  margin: 0;
+}

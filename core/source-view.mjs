@@ -24,6 +24,7 @@ export function sourceText(s) {
   return [
     s.name,
     s.title,
+    s.description,
     s.provider,
     s.group,
     s.source,

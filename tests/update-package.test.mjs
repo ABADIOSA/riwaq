@@ -60,6 +60,11 @@ async function rig({
     state: { updates: { autoDownload: false, ...preferences } },
     profiles: { gate() {} },
     persist() {},
+    // A store that accepts: a commit's change runs, its undo is kept
+    // (Client.transact, sixth pass V2).
+    transact(change) {
+      change();
+    },
     publicState: () => ({ update: updater.publicState() }),
     request: async (url) => {
       requests.push(url);

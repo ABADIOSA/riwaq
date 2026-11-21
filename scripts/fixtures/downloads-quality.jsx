@@ -64,6 +64,11 @@ window.__menu = {
   torrent: true,
   torrentLink: true,
   download: true,
+  // Issue #157: the selected subtitle can be saved.
+  subtitles: {
+    choices: [{ id: "t3", label: "العربية · OpenSubtitles", selected: true }],
+    reason: "",
+  },
 };
 window.__request = async (method, args) => {
   window.__calls.push({ method, args });

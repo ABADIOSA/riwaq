@@ -7,6 +7,15 @@ import React from "react";
  */
 export function RuleBadge({ badge }) {
   const [broken, setBroken] = React.useState(false);
+  // A pack picture that failed (offline, blocked, moved): its label as a
+  // Liquid Glass chip. Its own colours are for the picture's frame, and
+  // FR-Badges sets them fully transparent, so they would hide the text.
+  if (badge.image && broken)
+    return (
+      <em className="tag-fallback" dir="auto" title={badge.label}>
+        {badge.label}
+      </em>
+    );
   if (badge.image && !broken)
     return (
       <img

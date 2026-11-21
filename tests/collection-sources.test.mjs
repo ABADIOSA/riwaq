@@ -201,11 +201,17 @@ test("pasted TMDB and Trakt addresses become sources", () => {
     ...ids,
     source: { kind: "company", id: 420 },
   });
-  list = editCollections(list, {
-    action: "tmdbAdd",
-    ...ids,
-    source: { kind: "company", id: 420 },
-  });
+  // The same query again is refused by name, never passed off as added
+  // (PR #155 fourth pass, N11); the folder keeps it once.
+  assert.throws(
+    () =>
+      editCollections(list, {
+        action: "tmdbAdd",
+        ...ids,
+        source: { kind: "company", id: 420 },
+      }),
+    /في المجلد مصدر بنفس الاستعلام/,
+  );
   list = editCollections(list, {
     action: "traktAdd",
     ...ids,
@@ -488,8 +494,13 @@ test("an unknown Nuvio source is kept by name, not dropped silently", async () =
     },
   ]);
   assert.equal(skipped, 1);
+  // Kept with the source as it came, so a Nuvio export gives it back.
   assert.deepEqual(collections[0].folders[0].unsupported, [
-    { provider: "mdblist", title: "Top 250" },
+    {
+      provider: "mdblist",
+      title: "Top 250",
+      raw: { provider: "mdblist", title: "Top 250" },
+    },
   ]);
 });
 
@@ -531,7 +542,11 @@ test("Nuvio discover filters reach TMDB as Nuvio sends them", async () => {
     "Korean dramas, no animation",
     "a nameless folder is kept",
   );
-  assert.equal(folder.cover, "https://image.tmdb.org/t/p/original/x.jpg");
+  // The hero backdrop stays a backdrop (Nov 2026 beta): it is no longer
+  // stored as the cover, and the card still shows it when there is no
+  // cover (src/components/CollectionArt.jsx).
+  assert.equal(folder.backdrop, "https://image.tmdb.org/t/p/original/x.jpg");
+  assert.equal(folder.cover, "");
   const [source] = folder.tmdb;
   assert.equal(source.media, "tv");
   const { path, params } = tmdbRequest(source);

@@ -13,6 +13,7 @@ import { call } from "../lib/api.js";
 import { typeName } from "../lib/helpers.js";
 import { Busy, Empty, Poster, Rail, ScrollRow } from "./UI.jsx";
 import { Face, FOLDERS, SOURCES, TITLES, n, noteText } from "./Collections.jsx";
+import { StillImage, useArt } from "./CollectionArt.jsx";
 import { folderItems, mergePage, randomPick } from "../../core/folder-view.mjs";
 import { watchedTitles, withoutWatched } from "../../core/library.mjs";
 import { arabicCount } from "../../core/arabic.mjs";
@@ -55,6 +56,18 @@ export default function FolderPage({
   const [sort, setSort] = useState("source");
   const [layout, setLayout] = useState("grid");
   const [loadingMore, setLoadingMore] = useState("");
+  // The logo address that failed, not a flag: moving to a sibling folder
+  // with a good logo shows it at once, and a late error from the previous
+  // folder's logo cannot hide the new one (PR #155 second review, R8).
+  const [brokenLogo, setBrokenLogo] = useState("");
+  // Tied to the address that failed, like the logo (N10).
+  const [brokenHero, setBrokenHero] = useState("");
+  // Every hook runs before the "folder is gone" page below, in the same
+  // order on every render: a sync or another window deleting the open
+  // folder once threw React #300 here and blanked the app (R1).
+  const heroArt = useArt(folder ? folder.backdrop || folder.cover || "" : "");
+  const heroLogo = useArt(folder?.logo || "");
+  const logoBroken = !!heroLogo && brokenLogo === heroLogo;
   const signature = folder
     ? JSON.stringify([
         folder.catalogs,
@@ -162,10 +175,18 @@ export default function FolderPage({
   return (
     <div className="page-body folder-page" ref={top}>
       <header className={`folder-hero shape-${folder.shape}`}>
-        {folder.cover && (
-          <div
+        {/* The folder's own backdrop when it has one, else its still
+            cover; a picture from this computer through its ID; never
+            moving (PR #155 review, F8). */}
+        {/* A backdrop that fails leaves the hero's own background, never
+            the previous folder's picture (third review, N10). */}
+        {heroArt && brokenHero !== heroArt && (
+          <StillImage
+            key={heroArt}
             className="folder-hero-backdrop"
-            style={{ backgroundImage: `url("${folder.cover}")` }}
+            src={heroArt}
+            lazy={false}
+            onError={() => setBrokenHero(heroArt)}
           />
         )}
         <div className="folder-hero-inner">
@@ -179,12 +200,23 @@ export default function FolderPage({
                 {collection.emoji} {collection.title} ·{" "}
                 {arabicCount(siblings.length, FOLDERS)}
               </span>
-              <h1 dir="auto">
-                {folder.emoji && !folder.cover && (
-                  <span className="pinned-emoji">{folder.emoji}</span>
-                )}
-                {folder.title}
-              </h1>
+              {heroLogo && !logoBroken ? (
+                <h1 className="folder-hero-logo">
+                  <StillImage
+                    src={heroLogo}
+                    alt={folder.title}
+                    lazy={false}
+                    onError={() => setBrokenLogo(heroLogo)}
+                  />
+                </h1>
+              ) : (
+                <h1 dir="auto">
+                  {folder.emoji && !folder.cover && (
+                    <span className="pinned-emoji">{folder.emoji}</span>
+                  )}
+                  {folder.title}
+                </h1>
+              )}
               <p className="muted">
                 {n(rows.length, SOURCES)}
                 {data ? ` · ${n(loaded, TITLES)} حتى الآن` : ""}

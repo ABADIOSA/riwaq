@@ -13,7 +13,7 @@ import {
 } from "../core/account.mjs";
 import { merge3 } from "../core/sync-merge.mjs";
 import { collectBackup } from "../core/backup.mjs";
-import { handle } from "../server/accounts/worker.mjs";
+import { handle } from "../server/accounts/service.mjs";
 import { sqliteD1 } from "../server/accounts/local.mjs";
 
 // Riwaq accounts (docs/ACCOUNTS.md): end-to-end encrypted sync between

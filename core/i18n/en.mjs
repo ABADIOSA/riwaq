@@ -26,6 +26,13 @@ import quality110 from "./en/quality110.mjs";
 import uiRebuild from "./en/ui-rebuild.mjs";
 import settingsRooms from "./en/settings-rooms.mjs";
 import feedback202611 from "./en/feedback-2026-11.mjs";
+import beta202611 from "./en/beta-2026-11.mjs";
+import reviewPr155 from "./en/review-pr155.mjs";
+import reviewPr155Round4 from "./en/review-pr155-round4.mjs";
+import reviewPr155Round5 from "./en/review-pr155-round5.mjs";
+import reviewPr155Round6 from "./en/review-pr155-round6.mjs";
+import subtitleDownload from "./en/subtitle-download.mjs";
+import release0560Final from "./en/release-0560-final.mjs";
 
 export default {
   ...core,
@@ -51,6 +58,13 @@ export default {
   ...uiRebuild,
   ...settingsRooms,
   ...feedback202611,
+  ...beta202611,
+  ...reviewPr155,
+  ...reviewPr155Round4,
+  ...reviewPr155Round5,
+  ...reviewPr155Round6,
+  ...subtitleDownload,
+  ...release0560Final,
   الإعدادات: "Settings",
   "فلاتر الكتالوج": "Catalog filters",
   "كتالوج الإضافة": "Addon catalog",

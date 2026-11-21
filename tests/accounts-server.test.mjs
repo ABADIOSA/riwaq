@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { handle, MAX_DATA } from "../server/accounts/worker.mjs";
+import { handle, MAX_DATA } from "../server/accounts/service.mjs";
 import { sqliteD1 } from "../server/accounts/local.mjs";
 import {
   cleanToken,
@@ -197,9 +197,13 @@ test("the deployment config binds D1 and allows only the site's origin", () => {
   assert.match(toml, /binding = "DB"/);
   assert.match(toml, /ALLOWED_ORIGINS = "https:\/\/abadiosa\.github\.io"/);
   assert.match(toml, /main = "worker\.mjs"/);
-  const worker = readFileSync(root + "worker.mjs", "utf8");
   // Request bodies carry proofs; nothing logs them.
-  assert.doesNotMatch(worker, /console\.\w+\([^)]*(body|request|secret)/i);
+  for (const file of ["worker.mjs", "service.mjs", "usage.mjs"])
+    assert.doesNotMatch(
+      readFileSync(root + file, "utf8"),
+      /console\.\w+\([^)]*(body|request|secret)/i,
+      file,
+    );
 });
 
 test("the deploy's token check cleans pasted values and names what is not a token", () => {

@@ -30,6 +30,7 @@ for (const dir of [
 ])
   await mkdir(dir, { recursive: true });
 for (const file of [
+  "core/undo.mjs",
   "core/updates.mjs",
   "core/update-package.mjs",
   "electron/updater.mjs",

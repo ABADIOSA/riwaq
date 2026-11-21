@@ -51,3 +51,44 @@
     --motion-wheel: 0ms;
   }
 }
+
+/* ---- The scroll lock (issue #149) ----------------------------------------
+
+   While Details, See all or a dialog holds the page still, the lock hides
+   the page's scrollbar and these values carry its width (src/lib/
+   scroll-lock.js). The page and the bars fixed to that side pad by the
+   same amount, so nothing moves, and the layers on top reach the window's
+   edge: the title page's own scrollbar sits where the page's was, with no
+   empty band after it. Both values are 0 whenever nothing holds the lock. */
+:root {
+  --lock-gutter-left: 0px;
+  --lock-gutter-right: 0px;
+}
+body {
+  padding-left: var(--lock-gutter-left);
+  padding-right: var(--lock-gutter-right);
+}
+/* The sidebar on that side stays where it was; a strip of its colour
+   fills the window's edge beside it. */
+html[dir="rtl"] .app > .riwaq-sidebar {
+  right: var(--lock-gutter-right);
+  box-shadow: var(--lock-gutter-right) 0 0 0 var(--bg);
+}
+html[dir="ltr"] .app > .riwaq-sidebar {
+  left: var(--lock-gutter-left);
+  box-shadow: calc(-1 * var(--lock-gutter-left)) 0 0 0 var(--bg);
+}
+/* The layers step aside by the gutter only to line up with a sidebar on
+   that side. With none (below 761 px the wheel is in the drawer and
+   --nav-width is 0) they reach the window's edge: in Arabic at 390 px the
+   title page and See all stopped 15 px short of it (PR #155 review, F10;
+   older than #155). min() keeps the gutter while the sidebar is there and
+   0 when --nav-width is 0. */
+html[dir="rtl"] .title-page,
+html[dir="rtl"] .browse-page {
+  margin-right: min(var(--lock-gutter-right), var(--nav-width, 0px) * 1000);
+}
+html[dir="ltr"] .title-page,
+html[dir="ltr"] .browse-page {
+  margin-left: min(var(--lock-gutter-left), var(--nav-width, 0px) * 1000);
+}

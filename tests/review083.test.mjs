@@ -112,7 +112,11 @@ test("episode names and numbers survive download and restart without retaining t
   }
 });
 
-test("failed profile cleanup retains undeleted records durably and retries without touching another profile", async () => {
+// Sixth pass (V1): a file Windows refuses to delete no longer stops the
+// removal. The records move to a durable clean-up list in the removal's own
+// write; a refused file keeps its entry there and is deleted by a later
+// sweep, never left on disk without a record.
+test("a held file keeps a durable clean-up entry and a later sweep deletes it, without touching another profile", async () => {
   const root = await mkdtemp(join(tmpdir(), "riwaq-cleanup-"));
   let active = "one",
     blocked = "",
@@ -162,22 +166,26 @@ test("failed profile cleanup retains undeleted records durably and retries witho
     const other = await add();
     active = "one";
     blocked = lib.path(locked);
-    await assert.rejects(lib.forgetProfile("one"), /تعذر حذف بعض التنزيلات/);
+    assert.deepEqual(await lib.forgetProfile("one"), { pending: 1 });
     await assert.rejects(stat(lib.path(good)), { code: "ENOENT" });
     assert.equal((await stat(blocked)).size, 32);
-    assert.deepEqual(
-      client.state.offline.one.map((x) => x.id),
-      [locked],
-    );
-    assert.deepEqual(
-      saved.offline.one.map((x) => x.id),
-      [locked],
-    );
-    client.state = saved;
-    assert.equal((await lib.file("one", locked)).item.status, "ready");
-    blocked = "";
-    await lib.forgetProfile("one");
+    assert.equal(client.state.offline.one, undefined);
     assert.equal(saved.offline.one, undefined);
+    assert.deepEqual(
+      saved.offlineTrash.map((x) => x.id),
+      [locked],
+    );
+    // A restart reads the list back and its sweep deletes the file.
+    blocked = "";
+    clearTimeout(lib.sweepTimer);
+    client.state = structuredClone(saved);
+    const restarted = new OfflineLibrary(client, {
+      root,
+      resolveSource: async () => {},
+    });
+    assert.deepEqual(await restarted.sweep(), { pending: 0 });
+    await assert.rejects(stat(blocked), { code: "ENOENT" });
+    assert.deepEqual(saved.offlineTrash, []);
     assert.equal((await stat(lib.path(other))).size, 32);
     assert.deepEqual(
       saved.offline.two.map((x) => x.id),

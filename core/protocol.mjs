@@ -1,6 +1,8 @@
 import { DEFAULT_SUBTITLE_STYLE, safeSubtitleStyle } from "./subtitles.mjs";
 import { adoptWheel, cleanSavedThemes, safeAppearance } from "./appearance.mjs";
 import { cleanAddonPriority, cleanStreamFilters } from "./stream-prefs.mjs";
+import { cleanFacets } from "./source-facets.mjs";
+import { BADGE_LOOKS, cleanStyleArt } from "./badge-look.mjs";
 import {
   cleanBadgeArt,
   cleanBadgeRules,
@@ -136,6 +138,9 @@ export const DEFAULT_SETTINGS = {
   settingsMode: "simple",
   quietInterface: false,
   showSession: true,
+  // The taste compass on Discover and Home (issue #148: it could not be
+  // hidden from Discover).
+  tasteCompass: true,
   // Today's session opens as a compact band unless the viewer widened it.
   sessionExpanded: false,
   audioDevice: "auto",
@@ -224,8 +229,21 @@ export const DEFAULT_SETTINGS = {
   badgesOn: true,
   badgesHidden: [],
   badgeRules: [],
-  // Pictures for the built-in chips, from a badge pack.
+  // Pictures for the built-in chips, the viewer's own (a badge pack or by
+  // hand).
   badgeArt: {},
+  // Pictures an FR-Badges style gives the built-in chips, kept apart from
+  // the viewer's so leaving the style never takes theirs (PR #155, F6).
+  badgeStyleArt: {},
+  // How the badges look (core/badge-look.mjs): Riwaq's chips, Liquid
+  // Glass, an FR-Badges style, or none.
+  badgeLook: "riwaq",
+  // The picker's advanced filters (issue #154), kept per profile only when
+  // the viewer asks the picker to remember them.
+  sourceFacetsRemember: false,
+  sourceFacets: {},
+  // The collections room as a grid of cards or one horizontal row.
+  collectionsLayout: "grid",
   // Streaming services the viewer pays for, shown as home rows.
   streamingServices: [],
   // Series: hide episode titles not reached yet.
@@ -488,6 +506,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     "stremioBannerHidden",
     "quietInterface",
     "showSession",
+    "tasteCompass",
+    "sourceFacetsRemember",
     "sessionExpanded",
     "showShowcase",
     "sidebarCollapsed",
@@ -593,6 +613,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     sourceMode: ["all", "direct", "p2p"],
     streamOrder: ["riwaq", "addon"],
     streamOrderInside: ["addon", "riwaq"],
+    badgeLook: BADGE_LOOKS,
+    collectionsLayout: ["grid", "row"],
     titleTheme: ["artwork", "genre", "off"],
     themeSong: ["auto", "button", "off"],
     themeSongSource: ["auto", "previews"],
@@ -623,6 +645,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.streamFilters = cleanStreamFilters(input.streamFilters);
   if (Array.isArray(input.addonPriority))
     next.addonPriority = cleanAddonPriority(input.addonPriority);
+  if (input.sourceFacets && typeof input.sourceFacets === "object")
+    next.sourceFacets = cleanFacets(input.sourceFacets);
   if (Array.isArray(input.streamingServices))
     next.streamingServices = cleanServices(input.streamingServices);
   if (input.prayerCustom && typeof input.prayerCustom === "object") {
@@ -676,6 +700,8 @@ export function safeSettings(input, current = DEFAULT_SETTINGS) {
     next.badgeRules = cleanBadgeRules(input.badgeRules);
   if (input.badgeArt && typeof input.badgeArt === "object")
     next.badgeArt = cleanBadgeArt(input.badgeArt);
+  if (input.badgeStyleArt && typeof input.badgeStyleArt === "object")
+    next.badgeStyleArt = cleanStyleArt(input.badgeStyleArt);
   if (Array.isArray(input.badgesHidden))
     next.badgesHidden = cleanHiddenBadges(input.badgesHidden);
   if (typeof input.activeFilter === "string")

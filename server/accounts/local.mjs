@@ -10,15 +10,48 @@ import { DatabaseSync } from "node:sqlite";
 import { createServer } from "node:http";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { handle } from "./worker.mjs";
+import { handle } from "./service.mjs";
 
 const migrations = fileURLToPath(new URL("./migrations/", import.meta.url));
 
+/**
+ * Applies the migrations not yet applied, each once and in order, recorded
+ * in the table Wrangler keeps for D1 (d1_migrations), so a file database
+ * from an earlier run takes only the new ones (0003 alters tables).
+ * `upTo` stops after the named file (tests of an older schema).
+ */
+export function migrate(db, { upTo } = {}) {
+  db.exec(`CREATE TABLE IF NOT EXISTS d1_migrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)`);
+  const done = new Set(
+    db
+      .prepare("SELECT name FROM d1_migrations")
+      .all()
+      .map((r) => r.name),
+  );
+  for (const file of readdirSync(migrations).sort()) {
+    if (!file.endsWith(".sql")) continue;
+    if (!done.has(file)) {
+      db.exec("BEGIN");
+      try {
+        db.exec(readFileSync(migrations + file, "utf8"));
+        db.prepare("INSERT INTO d1_migrations (name) VALUES (?)").run(file);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    }
+    if (file === upTo) break;
+  }
+}
+
 /** A D1-shaped binding (prepare/bind/first/all/run, batch) over SQLite. */
-export function sqliteD1(path = ":memory:") {
+export function sqliteD1(path = ":memory:", { upTo } = {}) {
   const db = new DatabaseSync(path);
-  for (const file of readdirSync(migrations).sort())
-    if (file.endsWith(".sql")) db.exec(readFileSync(migrations + file, "utf8"));
+  migrate(db, { upTo });
   const statement = (sql, args = []) => ({
     bind: (...values) => statement(sql, values),
     first: async () => db.prepare(sql).get(...args) ?? null,
@@ -45,6 +78,8 @@ export function sqliteD1(path = ":memory:") {
       }
     },
     close: () => db.close(),
+    // Applies the remaining migrations (an older schema's test moves on).
+    migrate: () => migrate(db),
   };
 }
 

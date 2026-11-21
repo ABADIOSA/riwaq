@@ -35,7 +35,8 @@ for (const [address, prefix] of [
 ])
   nonPublic.addSubnet(address, prefix, "ipv6");
 
-function publicAddress(address) {
+/** A unicast address on the public internet (never this computer or a LAN). */
+export function publicAddress(address) {
   switch (isIP(address)) {
     case 4:
       return !nonPublic.check(address, "ipv4");
@@ -56,10 +57,8 @@ export function publicArtworkUrl(url) {
   return host.includes(".") && !/\.(?:localhost|local|home\.arpa)$/.test(host);
 }
 
-function blockedAddress() {
-  return Object.assign(new Error("blocked address"), {
-    code: ARTWORK_HOST_BLOCKED,
-  });
+function blockedAddress(code = ARTWORK_HOST_BLOCKED) {
+  return Object.assign(new Error("blocked address"), { code });
 }
 
 /**
@@ -67,12 +66,12 @@ function blockedAddress() {
  * still used for TLS verification and SNI. A separate lookup followed by
  * fetch would let DNS change the answer between the check and connection.
  */
-function publicLookup(resolve) {
+export function publicLookup(resolve, code = ARTWORK_HOST_BLOCKED) {
   return (host, options, callback) => {
     resolve(host, { ...options, all: true }, (error, addresses) => {
       if (error) return callback(error);
       const allowed = addresses.filter(({ address }) => publicAddress(address));
-      if (!allowed.length) return callback(blockedAddress());
+      if (!allowed.length) return callback(blockedAddress(code));
       if (options.all) return callback(null, allowed);
       callback(null, allowed[0].address, allowed[0].family);
     });

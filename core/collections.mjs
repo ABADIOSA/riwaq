@@ -31,6 +31,22 @@ const newId = () =>
   (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`)
     .replace(/[^\w-]/g, "")
     .slice(0, 36);
+/**
+ * A short, deterministic digest (two FNV-1a rounds, 64 bits as hex), for
+ * IDs that must come out the same wherever the same text is read: the
+ * renderer's preview and main's import (PR #155 review, F1), and a
+ * template folder's queries (F3). Not a security hash.
+ */
+export function stableHash(text) {
+  let a = 0x811c9dc5;
+  let b = 0x01000193 ^ 0x5bd1e995;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193) >>> 0;
+    b = Math.imul(b ^ c, 0x5bd1e995) >>> 0;
+  }
+  return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+}
 const line = (value, max) =>
   typeof value === "string"
     ? value
@@ -48,6 +64,24 @@ export function coverUrl(value) {
   } catch {
     return "";
   }
+}
+/**
+ * Artwork for a collection or folder (cover, moving cover, backdrop, logo):
+ * an HTTPS image address, or a picture the viewer chose from their own
+ * computer, kept by Riwaq under an opaque ID ("local:" and 32 hex digits;
+ * never a path). A ".gifv" (or other video) address is not an image an
+ * <img> can show, whatever its name says: it is refused rather than turned
+ * into something it is not.
+ */
+export const LOCAL_ART = /^local:[a-f\d]{32}$/;
+const VIDEO_EXT = /\.(gifv|mp4|m4v|webm|mov|mkv|avi)(?:[?#]|$)/i;
+export function artUrl(value) {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (LOCAL_ART.test(text)) return text;
+  const url = coverUrl(text);
+  if (!url || VIDEO_EXT.test(new URL(url).pathname)) return "";
+  return url;
 }
 const emojiOf = (value) => {
   const text = line(value, 16);
@@ -103,6 +137,19 @@ export const TRAKT_SORTS = [
   "votes",
 ];
 const MEDIA = ["movie", "tv"];
+/** A real calendar day as YYYY-MM-DD (2025-02-30 is not one). */
+const DATE = {
+  test(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!m) return false;
+    const day = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    return (
+      day.getUTCFullYear() === +m[1] &&
+      day.getUTCMonth() === +m[2] - 1 &&
+      day.getUTCDate() === +m[3]
+    );
+  },
+};
 const positive = (value, max = 2_000_000_000) => {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 && n <= max ? n : null;
@@ -112,7 +159,9 @@ const positive = (value, max = 2_000_000_000) => {
  * These are the filters Nuvio's collections carry; a filter dropped here
  * would quietly turn a folder into TMDB's generic popular titles.
  */
-const IDS = /^[\d,|]{1,400}$/;
+// Numbers joined by "," (all of) or "|" (any of); a list of separators
+// alone, or an empty item between two, is no list (second review, R9).
+const IDS = /^(?=[\d,|]{1,400}$)\d{1,12}(?:[,|]\d{1,12})*$/;
 const FILTERS = {
   withGenres: IDS,
   withoutGenres: IDS,
@@ -127,8 +176,8 @@ const FILTERS = {
   withOriginalLanguage: /^[a-z]{2,3}([|,][a-z]{2,3}){0,30}$/,
   withOriginCountry: /^[A-Z]{2}([|,][A-Z]{2}){0,60}$/,
   watchRegion: /^[A-Z]{2}$/,
-  releaseDateGte: /^\d{4}-\d{2}-\d{2}$/,
-  releaseDateLte: /^\d{4}-\d{2}-\d{2}$/,
+  releaseDateGte: DATE,
+  releaseDateLte: DATE,
 };
 const NUMBER_FILTERS = {
   voteAverageGte: [0, 10],
@@ -137,25 +186,45 @@ const NUMBER_FILTERS = {
   year: [1870, 2200],
   withRuntimeGte: [0, 1000],
   withRuntimeLte: [0, 1000],
+  // Riwaq's own: released within the last N days, counted from the day
+  // the row is asked for, so a "New" row stays new in later years
+  // (core/collection-sources.mjs tmdbRequest).
+  recentDays: [1, 3650],
 };
+// A year, a count of votes or days is whole; 2020.5 is no year (R9).
+const WHOLE_NUMBERS = new Set(["year", "voteCountGte", "recentDays"]);
+// "From" and "to" pairs: an edit with the start after the end is refused,
+// since TMDB would answer nothing (R9).
+const RANGES = [
+  ["releaseDateGte", "releaseDateLte"],
+  ["voteAverageGte", "voteAverageLte"],
+  ["withRuntimeGte", "withRuntimeLte"],
+];
 function cleanFilters(input) {
   if (!input || typeof input !== "object") return undefined;
   const out = {};
   for (const [key, rule] of Object.entries(FILTERS)) {
     if (typeof input[key] !== "string") continue;
-    // Written by hand in Nuvio, so spaces and letter case vary.
+    // Written by hand in Nuvio, so spaces and letter case vary, and a
+    // list may end with its separator.
     let value = input[key].replace(/\s+/g, "");
+    if (rule === IDS) value = value.replace(/^[,|]+|[,|]+$/g, "");
     if (key === "withOriginalLanguage") value = value.toLowerCase();
     if (key === "withOriginCountry" || key === "watchRegion")
       value = value.toUpperCase();
     if (rule.test(value)) out[key] = value;
   }
   for (const [key, [min, max]] of Object.entries(NUMBER_FILTERS)) {
-    const n = Number(input[key]);
+    const value = input[key];
     if (
-      input[key] !== null &&
-      input[key] !== undefined &&
+      typeof value !== "number" &&
+      (typeof value !== "string" || !value.trim())
+    )
+      continue;
+    const n = Number(value);
+    if (
       Number.isFinite(n) &&
+      (!WHOLE_NUMBERS.has(key) || Number.isInteger(n)) &&
       n >= min &&
       n <= max
     )
@@ -163,6 +232,75 @@ function cleanFilters(input) {
   }
   return Object.keys(out).length ? out : undefined;
 }
+/**
+ * The discover filters a viewer typed that the rules above would drop:
+ * their names, so an edit is refused with a reason instead of quietly
+ * losing a field (F9). Empty values are not problems (they clear).
+ */
+export function tmdbFilterProblems(input) {
+  if (!input || typeof input !== "object") return [];
+  const kept = cleanFilters(input) || {};
+  const problems = Object.entries(input)
+    .filter(
+      ([key, value]) =>
+        (Object.hasOwn(FILTERS, key) || Object.hasOwn(NUMBER_FILTERS, key)) &&
+        value !== null &&
+        value !== undefined &&
+        (typeof value !== "string" || value.trim() !== "") &&
+        !Object.hasOwn(kept, key),
+    )
+    .map(([key]) => key);
+  for (const [from, to] of RANGES) {
+    if (!(from in kept) || !(to in kept)) continue;
+    if (kept[from] > kept[to]) problems.push(from, to);
+  }
+  return [...new Set(problems)];
+}
+/**
+ * The one check of a TMDB source the viewer typed, for both adding and
+ * changing one (second review, R9): any filter that would be dropped or
+ * contradicts another is refused by name, before the list changes.
+ */
+function checkedTmdb(source) {
+  if (!source || typeof source !== "object" || Array.isArray(source))
+    fail("مصدر TMDB غير صالح");
+  // Fourth pass (N11): what the viewer typed is checked as typed, never
+  // swapped for a default: an unknown kind, media type or order, or a
+  // filter name Riwaq does not know, is refused by name.
+  const given = (value) =>
+    value !== undefined && value !== null && String(value).trim() !== "";
+  const problems = [];
+  if (!TMDB_KINDS.includes(String(source.kind || "").toLowerCase()))
+    problems.push("kind");
+  if (given(source.media) && !MEDIA.includes(source.media))
+    problems.push("media");
+  if (given(source.sort) && !TMDB_SORTS.includes(source.sort))
+    problems.push("sort");
+  const filters = source.filters;
+  if (
+    filters !== undefined &&
+    filters !== null &&
+    (typeof filters !== "object" || Array.isArray(filters))
+  )
+    problems.push("filters");
+  else if (filters)
+    for (const key of Object.keys(filters))
+      if (!Object.hasOwn(FILTERS, key) && !Object.hasOwn(NUMBER_FILTERS, key))
+        problems.push(key);
+  problems.push(...tmdbFilterProblems(filters));
+  if (problems.length) {
+    const error = new Error(`قيمة غير صالحة في: ${problems.join(", ")}`);
+    error.fields = problems;
+    throw error;
+  }
+  const clean = cleanTmdb(source);
+  if (!clean) fail("مصدر TMDB غير صالح");
+  return clean;
+}
+export const TMDB_FILTER_KEYS = [
+  ...Object.keys(FILTERS),
+  ...Object.keys(NUMBER_FILTERS),
+];
 function cleanTmdb(source) {
   if (!source || typeof source !== "object") return null;
   const kind = String(source.kind || "").toLowerCase();
@@ -213,6 +351,51 @@ function cleanTrakt(source) {
   };
 }
 const traktKey = (t) => `${t.list}|${t.media}`;
+/**
+ * A source Riwaq cannot read, kept as plain data so an export gives it back
+ * as it came: strings, numbers, booleans and null, in objects and lists at
+ * most four deep, 40 keys, 60 items and 500 characters a string. Nothing in
+ * it is ever run or fetched.
+ */
+export function plainCopy(value, depth = 0) {
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string")
+    return CARRIES_CREDENTIAL(value) ? undefined : value.slice(0, 500);
+  if (depth >= 4 || typeof value !== "object") return undefined;
+  if (Array.isArray(value))
+    return value
+      .slice(0, 60)
+      .map((v) => plainCopy(v, depth + 1))
+      .filter((v) => v !== undefined);
+  const out = {};
+  for (const [key, v] of Object.entries(value).slice(0, 40)) {
+    if (!/^[\w.-]{1,60}$/.test(key) || key === "__proto__") continue;
+    if (CREDENTIAL_KEY.test(key)) continue;
+    const copy = plainCopy(v, depth + 1);
+    if (copy !== undefined) out[key] = copy;
+  }
+  return out;
+}
+/*
+ * Such a copy travels in backups and accounts even without secrets, so
+ * nothing that looks like one is kept (PR #155 review, security): a field
+ * named like a key, token, password or session, and an address that
+ * carries a user name, a password or a key in its query.
+ */
+const CREDENTIAL_KEY =
+  /^key$|(?:api[_.-]?key|apikey|access[_.-]?key|secret|token|password|passwd|pwd|auth|authorization|cookie|session|credential|bearer|private[_.-]?key)s?$/i;
+const CARRIES_CREDENTIAL = (text) => {
+  if (!/^[a-z][\w+.-]*:\/\//i.test(text.trim())) return false;
+  try {
+    const url = new URL(text.trim());
+    if (url.username || url.password) return true;
+    return [...url.searchParams.keys()].some((k) => CREDENTIAL_KEY.test(k));
+  } catch {
+    return false;
+  }
+};
+
 /** Adds cleaned, unique entries up to the per-folder limit. */
 function collect(input, clean, key) {
   const out = [];
@@ -277,10 +460,14 @@ function cleanFolder(folder) {
   const unsupported = (
     Array.isArray(folder.unsupported) ? folder.unsupported : []
   )
-    .map((u) => ({
-      provider: line(u?.provider, 30),
-      title: line(u?.title, 80),
-    }))
+    .map((u) => {
+      const raw = plainCopy(u?.raw);
+      return {
+        provider: line(u?.provider, 30),
+        title: line(u?.title, 80),
+        ...(raw && typeof raw === "object" ? { raw } : {}),
+      };
+    })
     .filter((u) => u.provider)
     .slice(0, LIMITS.catalogs);
   const titles = [];
@@ -298,14 +485,42 @@ function cleanFolder(folder) {
     id: ID.test(folder.id || "") ? folder.id : newId(),
     title,
     emoji: emojiOf(folder.emoji),
-    cover: coverUrl(folder.cover),
+    cover: artUrl(folder.cover),
     shape: SHAPES.includes(folder.shape) ? folder.shape : "poster",
+    ...folderLook(folder),
     catalogs,
     tmdb,
     trakt,
     ...(unsupported.length ? { unsupported } : {}),
     titles,
+    // A template folder remembers the digest of the queries it was given,
+    // so updating the template can tell the viewer's edits from its own.
+    ...(TPL.test(folder.tpl || "") ? { tpl: folder.tpl } : {}),
   };
+}
+const TPL = /^[a-f\d]{16}$/;
+
+/**
+ * How a folder's card looks beyond its cover (Nuvio's folder fields): the
+ * moving cover shown on hover or focus, and whether it may play; a large
+ * backdrop for its page; a title logo; the glow around a focused card; and
+ * hiding the typed name (a cover or logo that already says it). Only what
+ * is set is kept, so older folders keep their shape.
+ */
+function folderLook(folder) {
+  const out = {};
+  const gif = artUrl(folder.gif);
+  if (gif) {
+    out.gif = gif;
+    out.gifOn = folder.gifOn !== false;
+  }
+  const backdrop = artUrl(folder.backdrop);
+  if (backdrop) out.backdrop = backdrop;
+  const logo = artUrl(folder.logo);
+  if (logo) out.logo = logo;
+  if (folder.glow === true) out.glow = true;
+  if (folder.hideTitle === true) out.hideTitle = true;
+  return out;
 }
 
 function cleanCollection(collection) {
@@ -320,13 +535,26 @@ function cleanCollection(collection) {
     if (clean && !folders.some((f) => f.id === clean.id)) folders.push(clean);
     if (folders.length >= LIMITS.folders) break;
   }
+  const logo = artUrl(collection.logo);
+  const tplFolders = Array.isArray(collection.tplFolders)
+    ? collection.tplFolders
+        .filter((id) => typeof id === "string" && ID.test(id))
+        .slice(0, LIMITS.folders)
+    : null;
   return {
     id: ID.test(collection.id || "") ? collection.id : newId(),
     title,
     emoji: emojiOf(collection.emoji),
-    cover: coverUrl(collection.cover),
+    cover: artUrl(collection.cover),
+    ...(logo ? { logo } : {}),
     pinned: collection.pinned === true,
     view: VIEWS.includes(collection.view) ? collection.view : "tabs",
+    // Nuvio's "All" tab switch, kept only when off so a round trip gives
+    // it back (Riwaq's own view has no such tab).
+    ...(collection.showAll === false ? { showAll: false } : {}),
+    // The folders a template had when it was last added or updated: one
+    // the viewer removed is not brought back by the next update.
+    ...(tplFolders ? { tplFolders } : {}),
     folders,
   };
 }
@@ -405,7 +633,7 @@ export function editCollections(list, input = {}) {
       const index = at(input.collectionId);
       const current = collections[index];
       const patch = {};
-      for (const key of ["title", "emoji", "cover", "view"])
+      for (const key of ["title", "emoji", "cover", "logo", "view"])
         if (input[key] !== undefined) patch[key] = input[key];
       // An empty rename keeps the current name rather than failing.
       if (patch.title !== undefined && !line(patch.title, 80))
@@ -438,7 +666,18 @@ export function editCollections(list, input = {}) {
     case "folderUpdate":
       return withFolder((folder) => {
         const current = { ...folder };
-        for (const key of ["title", "emoji", "cover", "shape"])
+        for (const key of [
+          "title",
+          "emoji",
+          "cover",
+          "shape",
+          "gif",
+          "gifOn",
+          "backdrop",
+          "logo",
+          "glow",
+          "hideTitle",
+        ])
           if (input[key] !== undefined) folder[key] = input[key];
         if (!line(folder.title, 80)) folder.title = current.title;
         return folder;
@@ -477,10 +716,10 @@ export function editCollections(list, input = {}) {
       });
     case "tmdbAdd":
       return withFolder((folder) => {
-        const clean = cleanTmdb(input.source);
-        if (!clean) fail("مصدر TMDB غير صالح");
+        const clean = checkedTmdb(input.source);
+        // Said, not passed off as added (fourth pass, N11), as Update says.
         if (folder.tmdb.some((t) => tmdbKey(t) === tmdbKey(clean)))
-          return folder;
+          fail("في المجلد مصدر بنفس الاستعلام");
         if (folder.tmdb.length >= LIMITS.catalogs)
           fail("وصلت إلى الحد الأقصى من مصادر TMDB في المجلد");
         folder.tmdb = [...folder.tmdb, clean];
@@ -495,6 +734,24 @@ export function editCollections(list, input = {}) {
         if (folder.trakt.length >= LIMITS.catalogs)
           fail("وصلت إلى الحد الأقصى من قوائم Trakt في المجلد");
         folder.trakt = [...folder.trakt, clean];
+        return folder;
+      });
+    // One TMDB source changed in place (PR #155 review, F9): a template's
+    // discover queries are the viewer's to edit, not only to remove. The
+    // rest of the folder stays as it is.
+    case "tmdbUpdate":
+      return withFolder((folder) => {
+        const index = Number(input.index);
+        if (!Number.isInteger(index) || !folder.tmdb[index])
+          fail("المصدر غير موجود");
+        const clean = checkedTmdb(input.source);
+        if (
+          folder.tmdb.some(
+            (t, i) => i !== index && tmdbKey(t) === tmdbKey(clean),
+          )
+        )
+          fail("في المجلد مصدر بنفس الاستعلام");
+        folder.tmdb = folder.tmdb.map((t, i) => (i === index ? clean : t));
         return folder;
       });
     case "tmdbRemove":
@@ -562,19 +819,102 @@ export function titlePlaces(collections, meta) {
  */
 // A stable ID for anything imported from Nuvio, so importing again replaces
 // it instead of adding a copy, even when Nuvio's own ID is long or unusual.
+// - A Riwaq export writes Riwaq's own IDs as "riwaq-<id>" (toNuvio): they
+//   come back as they were, so a round trip updates rather than copies
+//   (PR #155 review, F7).
+// - Other IDs become "nuvio-<id>"; one already in that form is kept (files
+//   written by Riwaq before the "riwaq-" form).
+// - Nothing usable: the caller derives one from the entry's place and title
+//   (stableHash), the same in the preview and the import (F1).
 const nuvioId = (id) => {
-  const safe =
-    typeof id === "string" || typeof id === "number"
-      ? String(id)
-          .replace(/[^\w-]/g, "")
-          .slice(-58)
-      : "";
+  if (typeof id !== "string" && typeof id !== "number") return undefined;
+  const text = String(id);
+  const own = text.match(/^riwaq-([\w-]{1,64})$/);
+  if (own) return own[1];
+  const safe = text.replace(/[^\w-]/g, "").slice(-58);
+  if (/^nuvio-[\w-]+$/.test(safe)) return safe;
   return safe ? `nuvio-${safe}` : undefined;
 };
+/**
+ * Riwaq's ID as Nuvio JSON carries it, chosen so that reading it back
+ * (nuvioId) gives exactly the stored ID, whatever its prefixes (PR #155
+ * second review, R2):
+ * - An ID Riwaq made from a plain Nuvio ID ("nuvio-catalog") goes back as
+ *   Nuvio's own ("catalog"), so Nuvio keeps recognising it.
+ * - Any other ID goes in Riwaq's form, "riwaq-<stored ID>", which reads
+ *   back unchanged. That covers Riwaq's own IDs and stored IDs whose
+ *   Nuvio part would be read differently on the way back: a saved
+ *   "nuvio-riwaq-curated" (from a file whose ID was "riwaq-curated")
+ *   once came back as "curated" and was merged in as a second copy.
+ * Stored IDs are at most 64 characters of [\w-], which nuvioId's Riwaq
+ * form accepts whole.
+ */
+/**
+ * The other reading of a Riwaq-form ID in a file written before the
+ * second review's export (third review, N3): "riwaq-curated" from such a
+ * file may name Riwaq's "curated", or a stored "nuvio-riwaq-curated" that
+ * the old export wrote without its prefix. Both cannot be told apart from
+ * the file, so the import asks (legacyMatches). Undefined when the ID has
+ * only one reading.
+ */
+export const legacyId = (id) => {
+  if (typeof id !== "string" || !/^riwaq-[\w-]{1,64}$/.test(id))
+    return undefined;
+  const other = `nuvio-${id.replace(/[^\w-]/g, "").slice(-58)}`;
+  return other === nuvioId(id) ? undefined : other;
+};
+export const exportId = (id) => {
+  const nuvio = /^nuvio-([\w-]+)$/.exec(id);
+  return nuvio && nuvioId(nuvio[1]) === id ? nuvio[1] : `riwaq-${id}`;
+};
+export { nuvioId };
+/**
+ * One ID per entry in a list: the entry's own (above), or one derived from
+ * its place and title; a repeated ID gets a numbered suffix, so two entries
+ * that share an ID are both kept, under IDs that are the same every time
+ * the same file is read.
+ */
+function uniqueIds(entries, scope, report) {
+  const seen = new Set();
+  return entries.map((entry, index) => {
+    let id =
+      nuvioId(entry?.id) ||
+      `nuvio-x${stableHash(`${scope}|${index}|${String(entry?.title ?? "")}`)}`;
+    if (seen.has(id)) {
+      report.duplicates++;
+      for (let n = 2; seen.has(id); n++) {
+        const suffix = `-${n}`;
+        id = `${id.replace(/-\d+$/, "").slice(0, 64 - suffix.length)}${suffix}`;
+      }
+    }
+    seen.add(id);
+    return id;
+  });
+}
 
+const NUVIO_SHAPES = {
+  poster: "POSTER",
+  landscape: "LANDSCAPE",
+  square: "SQUARE",
+};
+const shapeFrom = (value) => {
+  const shape = String(value || "poster").toLowerCase();
+  return shape === "wide" ? "landscape" : shape;
+};
+const bool = (value) => (typeof value === "boolean" ? value : undefined);
+
+/**
+ * Nuvio's collections JSON into Riwaq collections. Every display field
+ * comes across on its own (cover, moving cover and whether it plays, hero
+ * backdrop, title logo, focus glow, hidden title, tile shape), so a moving
+ * cover never stands in for the still one. Sources Riwaq cannot read are
+ * kept as they came and named in the report, never dropped quietly; what
+ * did not fit a limit is counted too.
+ */
 export function fromNuvio(input) {
   let data = input;
   if (typeof data === "string") {
+    if (data.length > 4_000_000) throw new Error("ملف مجموعات نوفيو كبير جداً");
     try {
       data = JSON.parse(data);
     } catch {
@@ -590,122 +930,264 @@ export function fromNuvio(input) {
         ? [data]
         : data;
   if (!Array.isArray(data)) throw new Error("ملف مجموعات نوفيو غير صالح");
+  const report = {
+    sources: 0,
+    unsupported: [],
+    over: { collections: 0, folders: 0, sources: 0 },
+    unnamed: 0,
+    duplicates: 0,
+    repeated: 0,
+    // The same counts for each collection, by the ID it will have, so an
+    // import of some of the file reports only what was chosen (F7).
+    byCollection: {},
+    // A collection's or folder's other reading (legacyId), by the ID it
+    // will have: "<collection>" and "<collection>/<folder>" (N3).
+    aliases: {},
+  };
+  report.over.collections = Math.max(0, data.length - LIMITS.collections);
   let skipped = 0;
-  const collections = data.map((c) => ({
-    id: nuvioId(c?.id),
-    title: c?.title,
-    cover: c?.backdropImageUrl,
-    pinned: c?.pinToTop === true,
-    view: String(c?.viewMode || "").toUpperCase() === "ROWS" ? "rows" : "tabs",
-    folders: (Array.isArray(c?.folders) ? c.folders : []).map((f, fi) => {
-      const sources =
-        Array.isArray(f?.sources) && f.sources.length
-          ? f.sources
-          : (Array.isArray(f?.catalogSources) ? f.catalogSources : []).map(
-              (s) => ({ ...s, provider: "addon" }),
-            );
-      const catalogs = [];
-      const tmdb = [];
-      const trakt = [];
-      const unsupported = [];
-      const skip = (s) => {
-        skipped++;
-        unsupported.push({
-          provider: String(s?.provider || "addon").toLowerCase(),
-          title: s?.title || s?.catalogId || "",
-        });
-      };
-      for (const s of sources) {
-        const provider = String(s?.provider || "addon").toLowerCase();
-        const media = /^(tv|series)$/i.test(String(s?.mediaType || ""))
-          ? "tv"
-          : "movie";
-        if (provider === "tmdb") {
-          const t = cleanTmdb({
-            kind: String(s?.tmdbSourceType || "discover").toLowerCase(),
-            id: s?.tmdbId,
-            media,
-            sort: s?.sortBy,
-            title: s?.title,
-            filters: s?.filters,
-          });
-          if (t) tmdb.push(t);
-          else skip(s);
-        } else if (provider === "trakt") {
-          const t = cleanTrakt({
-            list: s?.traktListId,
-            media,
-            sort: s?.sortBy,
-            how: s?.sortHow,
-            title: s?.title,
-          });
-          if (t) trakt.push(t);
-          else skip(s);
-        } else {
-          const c = cleanCatalog({
-            addon: typeof s?.addonId === "string" ? s.addonId : "",
-            type: typeof s?.type === "string" ? s.type : "",
-            catalog: typeof s?.catalogId === "string" ? s.catalogId : "",
-            genre: s?.genre && s.genre !== "none" ? s.genre : "",
-          });
-          if (c && provider === "addon") catalogs.push(c);
-          else skip(s);
+  const kept = data.slice(0, LIMITS.collections);
+  const collectionIds = uniqueIds(kept, "c", report);
+  const collections = kept.map((c, ci) => {
+    const folderList = Array.isArray(c?.folders) ? c.folders : [];
+    const cid = collectionIds[ci];
+    const mine = (report.byCollection[cid] = {
+      sources: 0,
+      unsupported: 0,
+      over: {
+        folders: Math.max(0, folderList.length - LIMITS.folders),
+        sources: 0,
+      },
+    });
+    report.over.folders += mine.over.folders;
+    const folderIds = uniqueIds(
+      folderList.slice(0, LIMITS.folders),
+      `f|${cid}`,
+      report,
+    );
+    const alias = (entry, id, key) => {
+      const other = legacyId(entry?.id);
+      if (other && id === nuvioId(entry.id)) report.aliases[key] = other;
+    };
+    alias(c, cid, cid);
+    folderList
+      .slice(0, LIMITS.folders)
+      .forEach((f, fi) => alias(f, folderIds[fi], `${cid}/${folderIds[fi]}`));
+    return {
+      id: cid,
+      title: c?.title,
+      cover: c?.backdropImageUrl,
+      pinned: c?.pinToTop === true,
+      view:
+        String(c?.viewMode || "").toUpperCase() === "ROWS" ? "rows" : "tabs",
+      ...(c?.showAllTab === false ? { showAll: false } : {}),
+      folders: folderList.slice(0, LIMITS.folders).map((f, fi) => {
+        const sources =
+          Array.isArray(f?.sources) && f.sources.length
+            ? f.sources
+            : (Array.isArray(f?.catalogSources) ? f.catalogSources : []).map(
+                (s) => ({ ...s, provider: "addon" }),
+              );
+        const catalogs = [];
+        const tmdb = [];
+        const trakt = [];
+        const unsupported = [];
+        const folderName =
+          (typeof f?.title === "string" && f.title.trim()) ||
+          sources.find((s) => typeof s?.title === "string" && s.title.trim())
+            ?.title ||
+          `مجلد ${fi + 1}`;
+        // A source Riwaq cannot read is kept as it came, up to the same
+        // per-folder limit as the others; one over it is counted as over,
+        // never as kept (F7).
+        // The same unread source twice is kept once too (fourth pass, N6).
+        const unread = new Set();
+        const skip = (s) => {
+          const raw = JSON.stringify(plainCopy(s));
+          if (unread.has(raw)) {
+            report.repeated++;
+            return;
+          }
+          unread.add(raw);
+          if (unsupported.length >= LIMITS.catalogs) {
+            report.over.sources++;
+            mine.over.sources++;
+            return;
+          }
+          skipped++;
+          mine.unsupported++;
+          const entry = {
+            provider: String(s?.provider || "addon").toLowerCase(),
+            title: s?.title || s?.catalogId || "",
+          };
+          if (report.unsupported.length < 200)
+            report.unsupported.push({
+              ...entry,
+              collection: String(c?.title || ""),
+              collectionId: cid,
+              folderId: folderIds[fi],
+              folder: folderName,
+            });
+          unsupported.push({ ...entry, raw: plainCopy(s) });
+        };
+        // The same source twice in one folder is kept once, before the
+        // limit is counted, so repeats never push a different source out
+        // (second review, R6). "The same" is what the folder's own clean-up
+        // (cleanFolder) counts as the same: a TMDB query by its kind, ID
+        // or filters and media, whatever its label; a Trakt list by list
+        // and media; a catalog by addon, type, ID and genre (fourth pass,
+        // N6: copies under other labels once used up the limit first).
+        const seen = new Set();
+        const keep = (list, item, identity) => {
+          const key = `${list === tmdb ? "t" : list === trakt ? "k" : "c"}|${identity(item)}`;
+          if (seen.has(key)) {
+            report.repeated++;
+            return;
+          }
+          seen.add(key);
+          if (list.length >= LIMITS.catalogs) {
+            report.over.sources++;
+            mine.over.sources++;
+          } else {
+            list.push(item);
+            report.sources++;
+            mine.sources++;
+          }
+        };
+        for (const s of sources) {
+          const provider = String(s?.provider || "addon").toLowerCase();
+          const media = /^(tv|series)$/i.test(String(s?.mediaType || ""))
+            ? "tv"
+            : "movie";
+          if (provider === "tmdb") {
+            const t = cleanTmdb({
+              kind: String(s?.tmdbSourceType || "discover").toLowerCase(),
+              id: s?.tmdbId,
+              media,
+              sort: s?.sortBy,
+              title: s?.title,
+              filters: s?.filters,
+            });
+            if (t) keep(tmdb, t, tmdbKey);
+            else skip(s);
+          } else if (provider === "trakt") {
+            const t = cleanTrakt({
+              list: s?.traktListId,
+              media,
+              sort: s?.sortBy,
+              how: s?.sortHow,
+              title: s?.title,
+            });
+            if (t) keep(trakt, t, traktKey);
+            else skip(s);
+          } else {
+            const cat = cleanCatalog({
+              addon: typeof s?.addonId === "string" ? s.addonId : "",
+              type: typeof s?.type === "string" ? s.type : "",
+              catalog: typeof s?.catalogId === "string" ? s.catalogId : "",
+              genre: s?.genre && s.genre !== "none" ? s.genre : "",
+            });
+            if (cat && provider === "addon") keep(catalogs, cat, catalogKey);
+            else skip(s);
+          }
         }
-      }
-      // Nuvio lets a folder hide its name behind a cover or logo, and such a
-      // folder may have none at all; it still needs a name here to be kept.
-      const named =
-        (typeof f?.title === "string" && f.title.trim()) ||
-        sources.find((s) => typeof s?.title === "string" && s.title.trim())
-          ?.title ||
-        `مجلد ${fi + 1}`;
-      return {
-        id: nuvioId(f?.id),
-        title: named,
-        emoji: f?.coverEmoji,
-        cover: [f?.coverImageUrl, f?.heroBackdropUrl, f?.focusGifUrl]
-          .map(coverUrl)
-          .find(Boolean),
-        shape:
-          String(f?.tileShape || "poster").toLowerCase() === "wide"
-            ? "landscape"
-            : String(f?.tileShape || "poster").toLowerCase(),
-        catalogs,
-        tmdb,
-        trakt,
-        unsupported,
-      };
-    }),
-  }));
+        // Nuvio lets a folder hide its name behind a cover or logo, and such
+        // a folder may have none at all; it still needs a name here.
+        if (!(typeof f?.title === "string" && f.title.trim())) report.unnamed++;
+        return {
+          id: folderIds[fi],
+          title: folderName,
+          emoji: f?.coverEmoji,
+          cover: f?.coverImageUrl,
+          gif: f?.focusGifUrl,
+          gifOn: bool(f?.focusGifEnabled),
+          backdrop: f?.heroBackdropUrl,
+          logo: f?.titleLogoUrl,
+          glow: f?.focusGlowEnabled === true,
+          hideTitle: f?.hideTitle === true,
+          shape: shapeFrom(f?.tileShape),
+          catalogs,
+          tmdb,
+          trakt,
+          unsupported,
+        };
+      }),
+    };
+  });
   const clean = cleanCollections(collections);
   return {
     collections: clean,
     folders: clean.reduce((n, c) => n + c.folders.length, 0),
     skipped,
+    report: {
+      ...report,
+      collections: clean.length,
+      folders: clean.reduce((n, c) => n + c.folders.length, 0),
+      invalid: Math.min(data.length, LIMITS.collections) - clean.length,
+    },
   };
 }
 
 /**
+ * Filters for Nuvio: a period counted back from today ("recentDays") also
+ * goes as the date it means today, which Nuvio understands; reading the
+ * file back, the period wins again.
+ */
+function nuvioFilters(filters) {
+  if (!filters) return null;
+  if (!filters.recentDays || filters.releaseDateGte) return filters;
+  return { ...filters, releaseDateGte: daysAgo(filters.recentDays) };
+}
+export const daysAgo = (days, now = Date.now()) =>
+  new Date(now - days * 86400000).toISOString().slice(0, 10);
+
+/** A picture as Nuvio can read it: an address, never a local file. */
+const exportArt = (value) => (value && !LOCAL_ART.test(value) ? value : null);
+
+/**
  * Riwaq collections as Nuvio JSON, so the arrangement can go back the other
- * way. Hand-picked titles have no Nuvio equivalent and are left out.
+ * way with every display field. Hand-picked titles have no Nuvio
+ * equivalent and are left out; pictures chosen from this computer stay on
+ * it (their fields are null); sources Riwaq could not read go back as they
+ * came.
  */
 export function toNuvio(collections) {
   return cleanCollections(collections).map((c) => ({
-    id: c.id,
+    id: exportId(c.id),
     title: c.title,
-    backdropImageUrl: c.cover || null,
+    backdropImageUrl: exportArt(c.cover),
     pinToTop: c.pinned,
     viewMode: c.view === "rows" ? "ROWS" : "TABBED_GRID",
-    showAllTab: true,
+    showAllTab: c.showAll !== false,
+    // A folder of hand-picked titles only has no Nuvio form and is left
+    // out; one with nothing but its look (a cover, a moving cover, a
+    // backdrop, a logo or an emoji Nuvio can show) goes, so it is not lost
+    // on the way back (F7).
     folders: c.folders
-      .filter((f) => f.catalogs.length || f.tmdb.length || f.trakt.length)
+      .filter(
+        (f) =>
+          f.catalogs.length ||
+          f.tmdb.length ||
+          f.trakt.length ||
+          f.unsupported?.length ||
+          exportArt(f.cover) ||
+          exportArt(f.gif) ||
+          exportArt(f.backdrop) ||
+          exportArt(f.logo) ||
+          (f.emoji && !f.titles.length),
+      )
       .map((f) => ({
-        id: f.id,
+        id: exportId(f.id),
         title: f.title,
-        coverImageUrl: f.cover || null,
+        coverImageUrl: exportArt(f.cover),
+        focusGifUrl: exportArt(f.gif),
+        focusGifEnabled: f.gif ? f.gifOn !== false : false,
+        heroBackdropUrl: exportArt(f.backdrop),
+        titleLogoUrl: exportArt(f.logo),
+        focusGlowEnabled: f.glow === true,
         coverEmoji: f.emoji || null,
-        tileShape: f.shape,
-        hideTitle: false,
+        tileShape: NUVIO_SHAPES[f.shape] || "POSTER",
+        hideTitle: f.hideTitle === true,
         sources: [
           ...f.catalogs.map((s) => ({
             provider: "addon",
@@ -721,7 +1203,7 @@ export function toNuvio(collections) {
             mediaType: t.media === "tv" ? "TV" : "MOVIE",
             sortBy: t.sort,
             title: t.title || null,
-            filters: t.filters || null,
+            filters: nuvioFilters(t.filters),
           })),
           ...f.trakt.map((t) => ({
             provider: "trakt",
@@ -731,6 +1213,9 @@ export function toNuvio(collections) {
             sortHow: t.how,
             title: t.title || null,
           })),
+          ...(f.unsupported || [])
+            .filter((u) => u.raw && typeof u.raw === "object")
+            .map((u) => u.raw),
         ],
       })),
   }));
@@ -738,16 +1223,331 @@ export function toNuvio(collections) {
 
 /** Imported collections join the viewer's; a re-import updates the one with its ID. */
 export function mergeCollections(current, incoming) {
-  const out = cleanCollections(current);
-  let added = 0;
-  for (const c of cleanCollections(incoming)) {
-    if (out.length >= LIMITS.collections) break;
-    const existing = out.findIndex((x) => x.id === c.id);
-    if (existing >= 0) out[existing] = c;
-    else out.push(c);
-    added++;
+  // A Nuvio profile without collections brings nothing and changes nothing.
+  if (!cleanCollections(incoming).length)
+    return { collections: cleanCollections(current), added: 0 };
+  const { collections, report } = importCollections(current, incoming, {
+    mode: "merge",
+  });
+  return { collections, added: report.added + report.updated };
+}
+
+export const IMPORT_MODES = ["merge", "add", "replace"];
+
+// What a Nuvio file can say about a folder. Anything else on a folder
+// (hand-picked titles, a template's marker) exists only in Riwaq and a
+// merge never takes it away.
+const NUVIO_FOLDER_ART = ["cover", "gif", "backdrop", "logo"];
+/**
+ * One of the viewer's folders updated from a file's folder with the same
+ * ID (PR #155 review, F3): the file's sources, name, shape and switches
+ * win; a picture or emoji the file does not carry keeps the viewer's (a
+ * picture from this computer is never in a file: toNuvio writes null);
+ * hand-picked titles stay. To clear a picture, edit the folder or Replace.
+ */
+function mergeFolder(mine, theirs) {
+  const out = {
+    ...mine,
+    title: theirs.title,
+    shape: theirs.shape,
+    catalogs: theirs.catalogs,
+    tmdb: theirs.tmdb,
+    trakt: theirs.trakt,
+    glow: theirs.glow === true,
+    hideTitle: theirs.hideTitle === true,
+  };
+  if (theirs.unsupported?.length) out.unsupported = theirs.unsupported;
+  else delete out.unsupported;
+  if (theirs.emoji) out.emoji = theirs.emoji;
+  for (const key of NUVIO_FOLDER_ART) if (theirs[key]) out[key] = theirs[key];
+  if (theirs.gif) out.gifOn = theirs.gifOn !== false;
+  if (!out.glow) delete out.glow;
+  if (!out.hideTitle) delete out.hideTitle;
+  return out;
+}
+/** The same for a collection: the file's name, pin and view; the viewer's pictures where the file has none. */
+function mergeCollection(mine, theirs) {
+  const out = {
+    ...mine,
+    title: theirs.title,
+    pinned: theirs.pinned,
+    view: theirs.view,
+  };
+  if (theirs.emoji) out.emoji = theirs.emoji;
+  if (theirs.cover) out.cover = theirs.cover;
+  if (theirs.logo) out.logo = theirs.logo;
+  if (theirs.showAll === false) out.showAll = false;
+  else delete out.showAll;
+  return out;
+}
+
+/**
+ * Bringing collections in, as the viewer chose:
+ * - merge (the default): a collection already here (same ID) is updated
+ *   folder by folder (mergeFolder, mergeCollection), keeping what only
+ *   Riwaq holds; the viewer's own folders stay; others are added.
+ *   Importing the same file twice changes nothing more.
+ * - add: copies with new IDs, beside whatever is here.
+ * - replace: the chosen collections take the place of all of them.
+ * `only` limits it to some of the file's collections: every ID it names
+ * must be in the file (a preview of another reading is refused, F1), and
+ * an import that would bring nothing is refused before anything changes,
+ * so Replace can never leave the list empty. The report counts what was
+ * added, updated, replaced and left out at a limit, and the folders and
+ * unread sources actually written.
+ */
+/**
+ * The file's chosen collections that may be one of the viewer's under the
+ * older reading of their ID (third review, N3): not here under the ID the
+ * file gives, but here under the other one. A merge asks the viewer which
+ * it is (`legacy` in importCollections) instead of guessing: updating the
+ * wrong collection would overwrite it, adding a copy would duplicate it.
+ */
+export function legacyMatches(current, converted, only) {
+  const list = cleanCollections(current);
+  const pick = Array.isArray(only) ? new Set(only.map(String)) : null;
+  const aliases = converted?.report?.aliases || {};
+  const out = [];
+  for (const c of converted?.collections || []) {
+    if (pick && !pick.has(c.id)) continue;
+    const same = list.find((x) => x.id === c.id);
+    if (same) {
+      // The collection is the viewer's by its own ID, but a folder of it may
+      // be one of theirs under the older reading of its ID (fifth pass,
+      // Q8): asked folder by folder, as "<collection>/<folder>".
+      for (const folder of legacyFolders(same, c, aliases)) out.push(folder);
+      continue;
+    }
+    const mine = list.find((x) => x.id === aliases[c.id]);
+    if (mine)
+      out.push({ id: c.id, title: c.title, match: mine.id, mine: mine.title });
   }
-  return { collections: out, added };
+  return out;
+}
+/**
+ * The folders of the file's collection `theirs` that are not in the
+ * viewer's `mine` under the ID the file gives, but are under the older
+ * reading of it (fromNuvio's "<collection>/<folder>" aliases). Never by
+ * name: only an ID the file itself can mean.
+ */
+function legacyFolders(mine, theirs, aliases) {
+  const out = [];
+  for (const f of Array.isArray(theirs?.folders) ? theirs.folders : []) {
+    if (mine.folders.some((x) => x.id === f.id)) continue;
+    const key = `${theirs.id}/${f.id}`;
+    const other = mine.folders.find((x) => x.id === aliases[key]);
+    if (other)
+      out.push({
+        id: key,
+        title: f.title,
+        match: other.id,
+        mine: other.title,
+        folder: true,
+        collection: mine.title,
+      });
+  }
+  return out;
+}
+
+export function importCollections(
+  current,
+  incoming,
+  { mode, only, aliases = {}, legacy = {} } = {},
+) {
+  const how = IMPORT_MODES.includes(mode) ? mode : "merge";
+  const all = cleanCollections(incoming);
+  const pick = Array.isArray(only) ? new Set(only.map(String)) : null;
+  if (pick) {
+    const missing = [...pick].filter((id) => !all.some((c) => c.id === id));
+    if (missing.length && missing.length < pick.size)
+      fail("تغيّر الملف منذ المعاينة؛ اعرضه مرة أخرى");
+  }
+  const chosen = all.filter((c) => !pick || pick.has(c.id));
+  if (!chosen.length)
+    fail(
+      pick?.size
+        ? "لم يبق في الملف شيء مما اخترته؛ اعرضه مرة أخرى"
+        : "اختر مجموعة واحدة على الأقل",
+    );
+  const report = {
+    added: 0,
+    updated: 0,
+    replaced: 0,
+    skipped: 0,
+    folders: 0,
+    unsupported: 0,
+    ids: [],
+    // The file's folders actually written, as "<file collection ID>/<folder
+    // ID>", so a report names only what was kept (second review, R6).
+    written: [],
+  };
+  let out = cleanCollections(current);
+  if (how === "replace") {
+    report.replaced = out.length;
+    out = [];
+  }
+  const wrote = (folder, from) => {
+    report.folders++;
+    report.unsupported += folder.unsupported?.length || 0;
+    report.written.push(`${from}/${folder.id}`);
+  };
+  // A collection the file may name by an older reading (N3): the viewer's
+  // answer decides, and without one nothing changes.
+  const asked = [];
+  const askedFolders = [];
+  const answered = (key) => legacy[key] === "match" || legacy[key] === "copy";
+  for (const c of chosen) {
+    if (how !== "merge") continue;
+    const same = out.find((x) => x.id === c.id);
+    if (same) {
+      // Its folders by an older reading (Q8): the viewer's answer, per
+      // folder, decides; without one nothing changes.
+      for (const f of legacyFolders(same, c, aliases))
+        if (!answered(f.id)) askedFolders.push(f.title);
+      continue;
+    }
+    const other = aliases[c.id];
+    if (!other || !out.some((x) => x.id === other)) continue;
+    if (!answered(c.id)) asked.push(c.title);
+  }
+  if (asked.length)
+    fail(
+      `اختر لكل مجموعة من نسخة أقدم: تحديث مجموعتك أم إضافتها نسخة جديدة (${asked.join("، ")})`,
+    );
+  if (askedFolders.length)
+    fail(
+      `اختر لكل مجلد من نسخة أقدم: تحديث مجلدك أم إضافته مجلداً جديداً (${askedFolders.join("، ")})`,
+    );
+  for (const c of chosen) {
+    let existing = how === "merge" ? out.findIndex((x) => x.id === c.id) : -1;
+    const older = how === "merge" && existing < 0 && legacy[c.id] === "match";
+    if (older) existing = out.findIndex((x) => x.id === aliases[c.id]);
+    if (existing >= 0) {
+      const mine = out[existing];
+      const folders = [...mine.folders];
+      for (const f of c.folders) {
+        let at = folders.findIndex((x) => x.id === f.id);
+        // Its folders by their older reading too: all of them once the
+        // viewer said it is the same collection; in a collection that is
+        // theirs by its own ID, each folder they said to update (Q8). A
+        // folder they said to copy is added as its own, under the file's
+        // ID, so merging the same file again updates that copy instead of
+        // adding another.
+        const key = `${c.id}/${f.id}`;
+        if (at < 0 && (older || legacy[key] === "match")) {
+          const other = aliases[key];
+          at = other ? folders.findIndex((x) => x.id === other) : -1;
+        }
+        if (at >= 0) {
+          // mergeFolder keeps the viewer's folder ID.
+          folders[at] = mergeFolder(folders[at], f);
+          wrote(f, c.id);
+        } else if (folders.length < LIMITS.folders) {
+          folders.push(f);
+          wrote(f, c.id);
+        } else report.skipped++;
+      }
+      out[existing] = { ...mergeCollection(mine, c), id: mine.id, folders };
+      report.updated++;
+      report.ids.push(mine.id);
+      continue;
+    }
+    if (out.length >= LIMITS.collections) {
+      report.skipped++;
+      continue;
+    }
+    const added = how === "add" ? { ...c, id: newId() } : c;
+    out.push(added);
+    for (const f of c.folders) wrote(f, c.id);
+    report.added++;
+    report.ids.push(added.id);
+  }
+  return { collections: cleanCollections(out), report };
+}
+
+/** The digest of a folder's queries, as a template folder remembers it. */
+const queriesOf = (tmdb) => stableHash(JSON.stringify(tmdb || []));
+
+/**
+ * Adding a Riwaq template, or bringing one already here up to date
+ * (PR #155 review, F3, F9). A template is Riwaq's own: an update follows
+ * the template where the viewer left it as it came and keeps every edit.
+ * - New: added with each folder's query digest and the list of its folder
+ *   IDs. At the collection limit it is refused, never reported as added.
+ * - Already here: the viewer's name, emoji, pictures, pin and view stay.
+ *   A template folder whose queries the viewer never changed takes the
+ *   template's current ones; one they edited keeps theirs; its name, look
+ *   and hand-picked titles are always theirs. A folder new in the
+ *   template is added; one the viewer removed stays removed; the viewer's
+ *   own folders are untouched. One added before `tplFolders` existed
+ *   keeps every folder it lacks out, except folders the template gained
+ *   later (marked `since` in core/collection-presets.mjs).
+ * Returns the list and whether it was added or updated.
+ */
+export function applyTemplate(current, template) {
+  const list = cleanCollections(current);
+  const [tpl] = cleanCollections([template]);
+  if (!tpl) fail("قالب غير معروف");
+  const stamp = (f) => ({ ...f, tpl: queriesOf(f.tmdb) });
+  const ids = tpl.folders.map((f) => f.id);
+  const index = list.findIndex((c) => c.id === tpl.id);
+  if (index < 0) {
+    if (list.length >= LIMITS.collections)
+      fail("وصلت إلى الحد الأقصى من المجموعات");
+    return {
+      collections: cleanCollections([
+        ...list,
+        { ...tpl, tplFolders: ids, folders: tpl.folders.map(stamp) },
+      ]),
+      added: true,
+    };
+  }
+  const mine = list[index];
+  // A template added before Riwaq kept `tplFolders` (second review, R4)
+  // cannot say which of its folders the viewer removed, so every folder
+  // the template had when that marker was introduced counts as known: a
+  // removed one stays removed. Only a folder a template gains later (one
+  // with `since`) comes in, so nothing of the viewer's is brought back.
+  const legacy = !Array.isArray(mine.tplFolders);
+  const known = new Set(
+    legacy
+      ? [
+          ...mine.folders.map((f) => f.id),
+          ...(template?.folders || [])
+            .filter((f) => !f?.since)
+            .map((f) => f?.id),
+        ]
+      : mine.tplFolders,
+  );
+  const folders = mine.folders.map((f) => {
+    const t = tpl.folders.find((x) => x.id === f.id);
+    if (!t) return f;
+    // Unstamped (the legacy template): queries still exactly the
+    // template's are the viewer's untouched copy and follow it from now
+    // on; edited ones stay the viewer's, unstamped.
+    if (!f.tpl)
+      return legacy && queriesOf(f.tmdb) === queriesOf(t.tmdb)
+        ? { ...f, tpl: queriesOf(t.tmdb) }
+        : f;
+    if (f.tpl !== queriesOf(f.tmdb)) return f;
+    return { ...f, tmdb: t.tmdb, tpl: queriesOf(t.tmdb) };
+  });
+  let deferred = 0;
+  for (const t of tpl.folders)
+    if (!known.has(t.id) && !folders.some((f) => f.id === t.id)) {
+      if (folders.length < LIMITS.folders) folders.push(stamp(t));
+      else deferred++;
+    }
+  // Known from now on: what the viewer already knew (kept or removed) and
+  // what is here now. A folder new in the template that did not fit at the
+  // folder limit is NOT marked known, so the next update brings it in once
+  // there is room (fourth pass, N4: it was marked known and never came).
+  const tplFolders = ids.filter(
+    (id) => known.has(id) || folders.some((f) => f.id === id),
+  );
+  const next = [...list];
+  next[index] = { ...mine, tplFolders, folders };
+  return { collections: cleanCollections(next), added: false, deferred };
 }
 
 /**

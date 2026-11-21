@@ -339,7 +339,9 @@ test("Nuvio collections come across, and go back", () => {
   ]);
   assert.equal(back[0].viewMode, "ROWS");
   assert.equal(back[0].pinToTop, true);
-  assert.equal(back[0].folders[0].tileShape, "landscape");
+  // Nuvio writes its shapes in capitals (Kaptain's native file has
+  // "tileShape": "LANDSCAPE"); Riwaq reads either.
+  assert.equal(back[0].folders[0].tileShape, "LANDSCAPE");
   assert.deepEqual(back[0].folders[0].sources[0], {
     provider: "addon",
     addonId: "com.linvo.cinemeta",

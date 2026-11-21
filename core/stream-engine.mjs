@@ -276,6 +276,65 @@ const ARABIC_DUB_RX =
   /مدبلج|مدبلجة|دبلجة|دوبلاج|مدبلجه|arabic\s*dub|dub\s*arabic|aradub|\bدبلجه\b/i;
 const ARABIC_HARDSUB_RX = /هارد\s*سب|hard\s*sub|hardsub|hc[-. ]?sub|hardcoded/i;
 const ARABIC_ANY_RX = /عرب|arabic|\bara\b/i;
+// English subtitles, as addons write them ("English subs", "Eng sub",
+// "English subtitles", "Subs: English", "subbed in English").
+// Fourth pass (N5): "subbed in English" and "subtitles in English" too.
+export const EN_SUB_RX =
+  /\b(?:eng(?:lish)?[-. :]*(?:subs?|subtitles?|subbed)|(?:subs?|subtitles?|subbed)[-. :]*(?:in[-. ]+)?eng(?:lish)?)\b/i;
+
+/**
+ * Whether `text` states what `rx` finds, rather than its absence (PR #155
+ * second review, R5): a match right after "no", "without", "w/o", "non",
+ * "sans", "بدون", "بلا", "من غير" or "غير" is a negation ("No English
+ * subs", "بدون ترجمة عربية", "غير مترجم"), and the fact counts only if
+ * some other match is not negated. Spaces, line breaks and marks between
+ * the words do not matter.
+ */
+export function affirms(text, rx) {
+  return readings(text, rx).some((denied) => !denied);
+}
+/**
+ * Stricter, for a fact about one track (third review, N5): `text` states
+ * it only when some match affirms it and NONE denies it. A source that
+ * says both ("English subtitles · No English subs") is believed in its
+ * denial, as a source that says both "cached" and "not cached" is.
+ */
+export function states(text, rx) {
+  const found = readings(text, rx);
+  return found.length > 0 && found.every((denied) => !denied);
+}
+/**
+ * For each match of `rx`, whether it is denied: by a negation right
+ * before it ("No English subs", "بدون ترجمة عربية") or right after it,
+ * past an optional track word ("English subtitles unavailable", "English:
+ * none", "ترجمة عربية غير متوفرة"). Spaces, line breaks and marks between
+ * the words do not matter.
+ */
+function readings(text, rx) {
+  const flags = rx.flags.includes("g") ? rx.flags : `${rx.flags}g`;
+  const all = String(text || "");
+  const out = [];
+  for (const match of all.matchAll(new RegExp(rx.source, flags))) {
+    const tidy = (part) => part.replace(/[\s\-‐-―_.:·|,()[\]]+/g, " ");
+    const before = tidy(
+      all.slice(Math.max(0, match.index - 24), match.index),
+    ).trimEnd();
+    const end = match.index + match[0].length;
+    // A separate label (for example, "Audio unavailable") cannot deny this track.
+    const suffix = all.slice(end, end + 32).split(/[·|;]/, 1)[0];
+    const after = tidy(suffix).trimStart();
+    out.push(NEGATION_RX.test(before) || DENIED_AFTER_RX.test(after));
+  }
+  return out;
+}
+// The negation, possibly followed by the kind of track it denies ("بدون
+// ترجمة عربية", "no subs English").
+const NEGATION_RX =
+  /(?:^|[\s])(?:no|without|w\/o|non|sans|بدون|بلا|من غير|غير)(?: (?:subs?|subtitles?|dub|ترجمة|ترجمه|دبلجة))?$/i;
+// What follows a fact to deny it, possibly after the kind of track it
+// names ("English subtitles unavailable", "Subs: English — not included").
+const DENIED_AFTER_RX =
+  /^(?:(?:subs?|subtitles?|audio|dub|track|ترجمة|ترجمه|دبلجة|عربية) )?(?:(?:is|are) )?(?:unavailable|not (?:available|included|provided)|missing|none|n\/a|غير (?:متوفرة|متوفر|متاحة|متاح|موجودة|موجود)|لا (?:يوجد|توجد))(?:$|[\s])/i;
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lower = (value) => String(value || "").toLowerCase();
@@ -345,7 +404,9 @@ function parseResolution(text, source) {
 function parseHdr(text) {
   const dolby =
     /\b(dolby\s*vision|dovi|dv)\b/i.test(text) && !/\bdvd\b/i.test(text);
-  const hdr10plus = /\bhdr10\s*(?:\+|plus)\b/i.test(text);
+  // "HDR10+" ends in a sign: no word boundary after it unless a letter
+  // follows, so only "plus" needs one.
+  const hdr10plus = /\bhdr10\s*(?:\+|plus\b)/i.test(text);
   const hdr10 = hdr10plus || /\bhdr10\b/i.test(text);
   const hlg = /\bhlg\b/i.test(text);
   const generic = /\bhdr\b/i.test(text);
@@ -394,12 +455,16 @@ function parseSource(text) {
 
 function parseAudio(text) {
   if (/\batmos\b/i.test(text)) return "Atmos";
-  if (/\bdts[-. ]?x\b/i.test(text)) return "DTS-X";
+  // "DTS:X" is how the format writes itself; without the colon it read as
+  // plain DTS (PR #155 review, F5).
+  if (/\bdts[-. :]?x\b/i.test(text)) return "DTS-X";
   if (/\btrue-?hd\b/i.test(text)) return "TrueHD";
   if (/\bdts[-. ]?hd(?:[-. ]?ma)?\b/i.test(text)) return "DTS-HD MA";
   if (/\bflac\b/i.test(text)) return "FLAC";
   if (/\bdts\b/i.test(text)) return "DTS";
-  if (/\b(ddp|dd\+|e-?ac-?3|eac3)\b/i.test(text)) return "DD+";
+  // "DDP5.1" glues the channels on and "DD+" ends in a sign: neither has
+  // a word boundary where the old pattern wanted one (issue #154 tests).
+  if (/\b(ddp(?=\d|\b)|dd\+|e-?ac-?3|eac3)/i.test(text)) return "DD+";
   if (/\b(ac-?3|dd(?:5|2|7)[.\- ]?\d)\b/i.test(text)) return "AC3";
   if (/\bopus\b/i.test(text)) return "Opus";
   if (/\baac\b/i.test(text)) return "AAC";
@@ -409,7 +474,7 @@ function parseAudio(text) {
 
 function parseChannels(text) {
   const attached = text.match(
-    /(?:atmos|true-?hd|dts(?:[-. ]?hd)?(?:[-. ]?ma)?|dts[-. ]?x|ddp?|e?-?ac-?3|eac3|aac|flac|opus)[\s.\-]*([752])[.\- ]([01])\b/i,
+    /(?:atmos|true-?hd|dts(?:[-. ]?hd)?(?:[-. ]?ma)?|dts[-. :]?x|ddp?|e?-?ac-?3|eac3|aac|flac|opus)[\s.\-]*([752])[.\- ]([01])\b/i,
   );
   if (attached) return `${attached[1]}.${attached[2]}`;
   // A bare "2.1" is far more often a file size than a channel layout.
@@ -499,15 +564,32 @@ function parseDebrid(text) {
     : named
       ? DEBRID_SLUGS[lower(named[1])] || ""
       : "";
+  // An addon that says a source is not cached is believed over any
+  // positive word or mark beside it: "[RD] Not cached" once counted as
+  // cached because it holds the word (PR #155 review, F5). Three states:
+  // cached, not cached (said so), and unknown (neither said). Saying
+  // "cached" or "not cached" makes a source Debrid only beside a sign of
+  // a Debrid service (its mark or name, or ⚡, the cache sign of Debrid
+  // addons): a plain link that says "Not cached" is a plain link (second
+  // review, R5).
+  const provider = !!slug || /⚡/.test(text);
   if (bracket && /^(download|dl)$/i.test(bracket[2] || ""))
-    return { debrid: slug, cached: false };
+    return { debrid: slug, cached: false, uncached: true };
+  if (UNCACHED_RX.test(text))
+    return provider
+      ? { debrid: slug, cached: false, uncached: true }
+      : { debrid: "", cached: false, uncached: false };
   const cached =
     (!!bracket && bracket[2] === "+") ||
     /⚡/.test(text) ||
-    /\b(cached|instant)\b/i.test(text) ||
-    /مخزّن|مخزن/.test(text);
-  return { debrid: slug, cached };
+    (provider &&
+      (/\b(cached|instant)\b/i.test(text) || /مخزّن|مخزن/.test(text)));
+  return { debrid: slug, cached, uncached: false };
 }
+// Any run of spaces, line breaks or a dash between the words (R5:
+// "Not  cached", "Not\n cached").
+const UNCACHED_RX =
+  /\b(?:not|non|un)[-\s]*(?:cached|instant)\b|غير\s*(?:مخزّن|مخزن)/i;
 
 function parseLanguages(text) {
   const languages = new Set();
@@ -518,8 +600,9 @@ function parseLanguages(text) {
     if (ARAB_COUNTRIES.has(code)) languages.add("ar");
     else if (COUNTRY_LANGUAGE[code]) languages.add(COUNTRY_LANGUAGE[code]);
   }
+  // "No English subs" names no language the source has (R5).
   for (const [rx, code] of LANGUAGE_WORDS)
-    if (rx.test(text)) languages.add(code);
+    if (affirms(text, rx)) languages.add(code);
   return [...languages];
 }
 
@@ -527,14 +610,15 @@ export function parseStream(stream = {}) {
   const text = sourceText(stream);
   const source = parseSource(text);
   const episode = parseEpisode(text);
-  const { debrid, cached } = parseDebrid(text);
+  const { debrid, cached, uncached } = parseDebrid(text);
   const languages = parseLanguages(text);
-  const arabicSub = ARABIC_SUB_RX.test(text);
-  const arabicDub = ARABIC_DUB_RX.test(text);
+  // A track fact said and denied in one source counts as denied (N5).
+  const arabicSub = states(text, ARABIC_SUB_RX);
+  const arabicDub = states(text, ARABIC_DUB_RX);
   const arabicHint =
     arabicSub ||
     arabicDub ||
-    ARABIC_ANY_RX.test(text) ||
+    affirms(text, ARABIC_ANY_RX) ||
     languages.includes("ar");
   if (arabicHint && !languages.includes("ar")) languages.push("ar");
   const group = parseGroup(text);
@@ -579,6 +663,7 @@ export function parseStream(stream = {}) {
     pack: parsePack(text, episode),
     debrid,
     cached,
+    uncached,
     kind,
     sample: /\bsample\b/i.test(text),
     trailer: /\b(trailer|teaser|مقطع\s*دعائي)\b/i.test(text),

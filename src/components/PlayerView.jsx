@@ -29,7 +29,9 @@ import {
   EndsAt,
   TimeCounter,
   VolumeControl,
+  VolumeOsd,
   useChapters,
+  useVolumeOsd,
 } from "./PlayerBar.jsx";
 import PlayerMenu from "./PlayerMenu.jsx";
 import { call } from "../lib/api.js";
@@ -57,6 +59,7 @@ export default function PlayerView({
     [menu, setMenu] = useState(null),
     [still, setStill] = useState(false),
     stillTimer = useRef();
+  const osd = useVolumeOsd(player);
   const mini = player.pip,
     // Full screen gives the whole window to the picture; MPV's own controller
     // draws over it, because HTML cannot paint above the native surface.
@@ -378,8 +381,24 @@ export default function PlayerView({
                 volume={player.volume || 0}
                 max={player.volumeMax || 150}
                 muted={!!player.muted}
-                onMute={() => command("mute")}
-                onChange={(value) => command("volume", value)}
+                onMute={() => {
+                  osd.bar(player.volume || 0, !player.muted);
+                  command("mute");
+                }}
+                onChange={(value) => {
+                  osd.bar(value, !!player.muted);
+                  command("volume", value);
+                }}
+              />
+            )}
+            {/* The theater's round level (issue #147): beside the controls,
+                since HTML cannot paint over Windows' native picture here. */}
+            {!mini && osd.stamp > 0 && (
+              <VolumeOsd
+                volume={player.volume}
+                muted={!!player.muted}
+                stamp={osd.stamp}
+                inline
               />
             )}
             <TimeCounter player={player} />
