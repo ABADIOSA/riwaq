@@ -16,6 +16,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -631,6 +632,32 @@ test("a write that fails leaves no temporary file behind", async () => {
     mkdirSync(target);
     await assert.rejects(writeInPlace(target, new TextEncoder().encode(SRT)));
     assert.deepEqual(readdirSync(dir), ["taken.srt"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("retiring the viewing during staging preserves the existing subtitle", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "riwaq-subtitle-"));
+  const input = join(dir, "input.srt");
+  const target = join(dir, "saved.srt");
+  try {
+    writeFileSync(input, SRT);
+    writeFileSync(target, "Existing subtitle");
+    await assert.rejects(
+      saveSubtitle({
+        choice: "t1",
+        sources: [{ id: "t1", kind: "file", path: input, lang: "en" }],
+        showSaveDialog: async () => ({ canceled: false, filePath: target }),
+        stillValid: () => {
+          if (readdirSync(dir).some((name) => name.endsWith(".part")))
+            throw new Error("Viewing retired during staging");
+        },
+      }),
+      /Viewing retired during staging/,
+    );
+    assert.equal(readFileSync(target, "utf8"), "Existing subtitle");
+    assert.deepEqual(readdirSync(dir).sort(), ["input.srt", "saved.srt"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

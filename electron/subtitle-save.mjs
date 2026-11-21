@@ -124,14 +124,15 @@ async function readLocal(path) {
   return bytes;
 }
 
-/** Writes through a temporary file beside the target, renamed into place. */
-export async function writeInPlace(path, bytes) {
+/** Stages beside the target, then checks authorization before replacing it. */
+export async function writeInPlace(path, bytes, beforeCommit) {
   const temp = join(
     dirname(path),
     `.${basename(path)}.${process.pid}.${Date.now()}.part`,
   );
   try {
     await writeFile(temp, bytes, { flag: "wx" });
+    beforeCommit?.();
     await rename(temp, path);
   } catch (error) {
     await unlink(temp).catch(() => {});
@@ -220,6 +221,6 @@ export async function saveSubtitle({
   if (!isAbsolute(answer.filePath)) throw new Error("مكان الحفظ غير صالح");
   // The dialog may have stayed open while the viewing or profile changed.
   stillValid(source);
-  await write(answer.filePath, bytes);
+  await write(answer.filePath, bytes, () => stillValid(source));
   return { saved: true, name: basename(answer.filePath), format };
 }
