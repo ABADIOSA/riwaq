@@ -204,8 +204,12 @@ button.time-counter {
     rgb(255 255 255 / 0.09),
     rgb(255 255 255 / 0) 55%
   );
+  /* Lit like the app's glass controls (src/glass.css, #158): a lip on top,
+     light gathered at the foot, a contact shadow and a soft one. */
   --bar-chip-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.12), 0 2px 8px rgb(0 0 0 / 0.25);
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 -8px 12px -10px rgb(255 255 255 / 0.1), 0 1px 2px rgb(0 0 0 / 0.3),
+    0 3px 10px rgb(0 0 0 / 0.24);
 }
 .hud-actions .hud-group,
 .app .theater-actions .button-row {

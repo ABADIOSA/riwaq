@@ -3159,10 +3159,12 @@ em.tag-custom.has-text:not(.badge-outlined) {
   margin-top: -21px;
   border-radius: 50%;
   border: 1px solid #ffffff26;
-  background: color-mix(in srgb, var(--bg, #101215) 82%, transparent);
+  /* No backdrop blur (0.57, #158): it ran on two buttons a row, repainting
+     with every scroll. A denser fill keeps the arrow readable over posters
+     (src/glass.css lights it like the other glass controls). */
+  background: color-mix(in srgb, var(--bg, #101215) 92%, transparent);
   color: var(--text, #f1f2f4);
   box-shadow: 0 6px 18px #0009;
-  backdrop-filter: blur(8px);
   opacity: 0.88;
   transition:
     opacity 0.15s,

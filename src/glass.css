@@ -24,7 +24,25 @@
  *   of glass rather than a flat tint. Values only: no new layer, blur or
  *   animation, and every fallback below still flattens them.
  */
+/*
+ * 0.57 (issue #158, docs/GLASS-MATERIAL-0.57.md): three materials instead
+ * of one tint, each a step further from the page.
+ *
+ *   1  Controls (buttons, chips, round tools, the wheel's discs): a light
+ *      glass with no blur. Light falls from above: a bright lip on the top
+ *      edge, a reflection in the upper half, a faint caustic where the light
+ *      gathers at the foot, and a shadow in two parts, one where it touches
+ *      the page and a soft one around it.
+ *   2  Floating surfaces (menus, popovers, notices): a denser glass that
+ *      blurs what is behind it, with an inner rim and a deeper shadow.
+ *   3  Dialogs: the densest glass, a broad reflection across the top and
+ *      the deepest shadow, over the dialog backdrop's own blur.
+ *
+ * Every value is a token on the app root; the consumers below read them.
+ * Blur stays on levels 2 and 3 only, never on a card or a button.
+ */
 .app {
+  /* Level 1: controls. */
   --glass-fill: color-mix(in srgb, var(--raised) 74%, transparent);
   --glass-fill-strong: color-mix(in srgb, var(--panel) 90%, transparent);
   /* Over a picture the layer alone must keep white text at 4.5:1 or more,
@@ -33,22 +51,41 @@
      3.6:1 on a light showcase). */
   --glass-picture-fill: rgb(10 12 16 / 0.64);
   --glass-picture-hover: rgb(10 12 16 / 0.74);
-  --glass-edge: color-mix(in srgb, var(--text) 15%, transparent);
-  --glass-edge-strong: color-mix(in srgb, var(--text) 26%, transparent);
+  /* The rim: a quieter hairline than 0.56.0's, so the lit top edge (the
+     lip below) reads brighter than the sides, as light on a glass edge. */
+  --glass-edge: color-mix(in srgb, var(--text) 12%, transparent);
+  --glass-edge-strong: color-mix(in srgb, var(--text) 24%, transparent);
+  /* The reflection (#158): a dome of light from above with a soft but
+     visible lower edge, ending in the top third (above the text line),
+     over a faint wash that fades by the middle. Centred, so it reads the
+     same in Arabic and English. */
   --glass-sheen:
     radial-gradient(
-      120% 70% at 50% 0%,
-      rgb(255 255 255 / 0.07),
-      rgb(255 255 255 / 0) 60%
+      130% 100% at 50% -38%,
+      rgb(255 255 255 / 0.13) 0%,
+      rgb(255 255 255 / 0.075) 50%,
+      rgb(255 255 255 / 0) 66%
     ),
-    linear-gradient(180deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0) 55%);
+    linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0) 50%);
+  /* The top edge catching the light, and the light gathering at the foot. */
+  --glass-lip: rgb(255 255 255 / 0.2);
+  --glass-lip-strong: rgb(255 255 255 / 0.28);
+  --glass-caustic: rgb(255 255 255 / 0.09);
   --glass-floor: rgb(0 0 0 / 0.18);
+  /* Where the glass meets the page, and the light around it. */
+  --glass-contact: rgb(0 0 0 / 0.3);
+  --glass-ambient: rgb(0 0 0 / 0.22);
   --glass-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.1), inset 0 -1px 0 var(--glass-floor),
-    0 3px 12px rgb(0 0 0 / 0.22);
+    inset 0 1px 0 var(--glass-lip), inset 0 -1px 0 var(--glass-floor),
+    inset 0 -8px 12px -10px var(--glass-caustic),
+    0 1px 2px var(--glass-contact), 0 4px 14px var(--glass-ambient);
   --glass-shadow-lift:
-    inset 0 1px 0 rgb(255 255 255 / 0.14), inset 0 -1px 0 var(--glass-floor),
-    0 8px 22px rgb(0 0 0 / 0.3);
+    inset 0 1px 0 var(--glass-lip-strong), inset 0 -1px 0 var(--glass-floor),
+    inset 0 -8px 12px -9px var(--glass-caustic), 0 2px 3px var(--glass-contact),
+    0 10px 24px var(--glass-ambient);
+  /* Pressed: the glass sinks, the lip goes out and the shadow closes in. */
+  --glass-shadow-press:
+    inset 0 2px 5px rgb(0 0 0 / 0.28), 0 1px 1px var(--glass-contact);
   --glass-blur: blur(18px) saturate(160%);
   /* The primary's own sheen, in the top quarter only (see .primary). */
   --primary-sheen: linear-gradient(
@@ -56,8 +93,48 @@
     rgb(255 255 255 / 0.2),
     rgb(255 255 255 / 0) 24%
   );
+
+  /* Level 2: floating surfaces. The reflection is measured in pixels, so a
+     tall menu is lit at its top only. */
+  --glass-float-fill: color-mix(in srgb, var(--panel) 90%, transparent);
+  --glass-float-sheen:
+    radial-gradient(
+      120% 120px at 50% -60px,
+      rgb(255 255 255 / 0.09) 0%,
+      rgb(255 255 255 / 0.04) 55%,
+      rgb(255 255 255 / 0) 72%
+    ),
+    linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0) 96px);
+  --glass-float-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 0 0 1px rgb(255 255 255 / 0.03), 0 2px 6px rgb(0 0 0 / 0.28),
+    0 18px 44px rgb(0 0 0 / 0.42);
+  --glass-float-blur: blur(20px) saturate(170%);
+
+  /* Level 3: dialogs. */
+  /* A broad dome of light over the dialog's head, its lower edge soft but
+     visible above the heading's baseline, over a wash that fades by
+     320 px, whatever the dialog's height. */
+  --glass-dialog-sheen:
+    radial-gradient(
+      130% 260px at 50% -120px,
+      rgb(255 255 255 / 0.13) 0%,
+      rgb(255 255 255 / 0.06) 55%,
+      rgb(255 255 255 / 0) 78%
+    ),
+    linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0) 320px);
+  /* Frosted glass has a grain: a static, tiled noise at a few percent, on
+     dialogs and floating surfaces only (Windows' Acrylic material uses the
+     same idea). Rasterised once per tile; no blur, nothing moves. */
+  --glass-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --glass-dialog-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.15),
+    inset 0 0 0 1px rgb(255 255 255 / 0.035), inset 0 -1px 0 var(--glass-floor),
+    0 2px 8px rgb(0 0 0 / 0.3), 0 30px 90px rgb(0 0 0 / 0.5);
+  --glass-dialog-blur: blur(24px) saturate(165%);
 }
 .app:where(.scheme-light) {
+  --glass-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.11 0 0 0 0 0.14 0 0 0 0.035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   --glass-fill: color-mix(in srgb, #ffffff 78%, transparent);
   --glass-fill-strong: color-mix(in srgb, #ffffff 92%, transparent);
   --glass-edge: color-mix(in srgb, var(--text) 16%, transparent);
@@ -67,13 +144,31 @@
     rgb(255 255 255 / 0.75),
     rgb(255 255 255 / 0) 60%
   );
+  --glass-lip: rgb(255 255 255 / 0.9);
+  --glass-lip-strong: #fff;
+  --glass-caustic: rgb(255 255 255 / 0.7);
   --glass-floor: rgb(26 29 36 / 0.06);
-  --glass-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.9), inset 0 -1px 0 var(--glass-floor),
-    0 2px 10px rgb(26 29 36 / 0.1);
-  --glass-shadow-lift:
+  --glass-contact: rgb(26 29 36 / 0.1);
+  --glass-ambient: rgb(26 29 36 / 0.09);
+  --glass-shadow-press:
+    inset 0 2px 4px rgb(26 29 36 / 0.12), 0 1px 1px var(--glass-contact);
+  --glass-float-fill: color-mix(in srgb, #ffffff 90%, transparent);
+  --glass-float-sheen: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.6),
+    rgb(255 255 255 / 0) 96px
+  );
+  --glass-float-shadow:
+    inset 0 1px 0 #fff, inset 0 0 0 1px rgb(255 255 255 / 0.5),
+    0 2px 6px rgb(26 29 36 / 0.1), 0 18px 44px rgb(26 29 36 / 0.18);
+  --glass-dialog-sheen: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.55),
+    rgb(255 255 255 / 0) 220px
+  );
+  --glass-dialog-shadow:
     inset 0 1px 0 #fff, inset 0 -1px 0 var(--glass-floor),
-    0 8px 20px rgb(26 29 36 / 0.16);
+    0 2px 8px rgb(26 29 36 / 0.12), 0 30px 90px rgb(26 29 36 / 0.24);
 }
 
 /* ---- Buttons ------------------------------------------------------------ */
@@ -95,15 +190,21 @@
 .app.glass-on .primary {
   background: var(--primary-sheen), var(--accent-fill);
   border: 1px solid color-mix(in srgb, var(--accent) 60%, #fff 40%);
+  /* Lit from above, a little light gathered at its foot (below the
+     glyphs), and its shadow in two parts: the contact and its own glow. */
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.35),
+    inset 0 -7px 10px -9px rgb(255 255 255 / 0.3),
+    0 1px 2px var(--glass-contact),
     0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .app.glass-on .primary:hover:not(:disabled) {
   filter: brightness(1.06);
   transform: translateY(-1px);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    inset 0 1px 0 rgb(255 255 255 / 0.42),
+    inset 0 -7px 10px -8px rgb(255 255 255 / 0.34),
+    0 2px 3px var(--glass-contact),
     0 10px 24px color-mix(in srgb, var(--accent) 34%, transparent);
 }
 /* Secondary: tinted glass with a luminous edge. */
@@ -141,6 +242,18 @@
 .app.glass-on .choice-row button:hover:not(:disabled) {
   border-color: var(--glass-edge-strong);
 }
+/* An unchosen chip lifts toward the light under the pointer, as the
+   secondary buttons do; a chosen one keeps its own light. */
+.app.glass-on
+  .choice-row
+  button:hover:not(
+    :disabled,
+    .selected,
+    [aria-checked="true"],
+    [aria-pressed="true"]
+  ) {
+  box-shadow: var(--glass-shadow-lift);
+}
 .app.glass-on .choice-row button.selected,
 .app.glass-on .choice-row button[aria-checked="true"],
 .app.glass-on .choice-row button[aria-pressed="true"] {
@@ -148,19 +261,43 @@
     var(--glass-sheen), color-mix(in srgb, var(--accent) 18%, var(--raised));
   border-color: color-mix(in srgb, var(--accent) 75%, transparent);
 }
+/* Chosen glass is lit by its own colour: an accent lip, the accent gathered
+   at its foot and a faint glow, so chosen never reads as merely hovered.
+   Written on the element, so a title page's own accent tints it too. */
+.app.glass-on .choice-row button.selected,
+.app.glass-on .choice-row button[aria-checked="true"],
+.app.glass-on .choice-row button[aria-pressed="true"],
+.app.glass-on .lg-chip[aria-pressed="true"],
+.app.glass-on .facet.chosen,
+.app.glass-on .facet-toggle.open,
+.app.glass-on .facet-pill,
+.app.glass-on .wheel-item.selected .wheel-disc {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--accent) 55%, transparent),
+    inset 0 -1px 0 var(--glass-floor),
+    inset 0 -8px 12px -10px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 1px 2px var(--glass-contact),
+    0 4px 14px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+/* A row's arrows over the posters: the control's light, never its blur. */
+.app.glass-on .scroll-arrow {
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-shadow);
+}
 /* Round tool buttons float a little when the pointer reaches them. */
 .app.glass-on .icon-button:hover:not(:disabled) {
   background: var(--glass-sheen), var(--glass-fill);
   border-color: var(--glass-edge);
   box-shadow: var(--glass-shadow);
 }
-/* Pressed: a short sink, never a jump. */
+/* Pressed: a short sink, never a jump. The lip goes out and the shadow
+   closes in, as glass pressed against the page. */
 .app.glass-on button.primary:active:not(:disabled),
 .app.glass-on button.secondary:active:not(:disabled),
 .app.glass-on .choice-row button:active:not(:disabled),
 .app.glass-on .icon-button:active:not(:disabled) {
   transform: scale(0.97);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-press);
 }
 /* Disabled: flat, no lift, no glow. */
 .app.glass-on button.primary:disabled,
@@ -183,26 +320,50 @@
   cursor: progress;
 }
 
-/* ---- Floating surfaces --------------------------------------------------- */
+/* ---- Level 3: dialogs ---------------------------------------------------- */
 
 .app.glass-on .modal {
-  background: var(--glass-sheen), var(--glass-fill-strong);
-  backdrop-filter: var(--glass-blur);
+  background:
+    var(--glass-grain), var(--glass-dialog-sheen), var(--glass-fill-strong);
+  backdrop-filter: var(--glass-dialog-blur);
   border-color: var(--glass-edge);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.08),
-    inset 0 -1px 0 var(--glass-floor),
-    0 30px 90px rgb(0 0 0 / 0.45);
+  box-shadow: var(--glass-dialog-shadow);
 }
 .app.glass-on .modal-close {
   background: var(--glass-sheen), var(--glass-fill) !important;
   border-color: var(--glass-edge) !important;
   box-shadow: var(--glass-shadow);
 }
-.app.glass-on .player-menu,
-.app.glass-on .poster-actions-menu,
+
+/* Settings cards are the large surfaces a viewer reads most: opaque (there
+   are many on a page, so no blur and no reflection), with the material's
+   lit top edge and a contact shadow, so they sit on the page like the
+   controls on them. */
+.app.glass-on .settings-card {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.045),
+    0 1px 2px rgb(0 0 0 / 0.16);
+}
+.app.glass-on.scheme-light .settings-card {
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 1px 2px rgb(26 29 36 / 0.06);
+}
+
+/* ---- Level 2: floating surfaces ----------------------------------------- */
+
+/* A title's actions menu (0.56.0 named `.poster-actions-menu` here, a class
+   nothing has, so it never got its glass), the prayer times and the
+   notices. Each opens on demand and is small: the only places besides
+   dialogs that blur what is behind them. */
+.app.glass-on .poster-actions,
+.app.glass-on .prayer-pop,
 .app.glass-on .toast {
-  backdrop-filter: var(--glass-blur);
+  background:
+    var(--glass-grain), var(--glass-float-sheen), var(--glass-float-fill);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-float-shadow);
+  backdrop-filter: var(--glass-float-blur);
 }
 /* The wheel's glass lens sits on the rail; the rail itself stays solid so
    the destinations read on any wallpaper. */
@@ -210,6 +371,7 @@
 /* ---- Solid, reduced transparency, forced colours ------------------------ */
 
 .app.glass-solid {
+  --glass-grain: linear-gradient(transparent, transparent);
   --glass-fill: var(--raised);
   --glass-fill-strong: var(--panel);
   --glass-sheen: linear-gradient(transparent, transparent);
@@ -217,10 +379,21 @@
   --glass-floor: transparent;
   --glass-shadow: none;
   --glass-shadow-lift: 0 2px 8px rgb(0 0 0 / 0.18);
+  --glass-shadow-press: none;
   --glass-blur: none;
+  --glass-float-fill: var(--panel);
+  --glass-float-sheen: linear-gradient(transparent, transparent);
+  --glass-float-shadow: 0 18px 44px rgb(0 0 0 / 0.42);
+  --glass-float-blur: none;
+  --glass-dialog-sheen: linear-gradient(transparent, transparent);
+  --glass-dialog-shadow: 0 30px 90px rgb(0 0 0 / 0.45);
+  --glass-dialog-blur: none;
 }
+/* Reduced transparency: every level opaque and without reflections; the
+   edges and shadows that give depth stay. */
 @media (prefers-reduced-transparency: reduce) {
   .app {
+    --glass-grain: linear-gradient(transparent, transparent);
     --glass-fill: var(--raised);
     --glass-fill-strong: var(--panel);
     --glass-picture-fill: #0a0c10;
@@ -228,6 +401,11 @@
     --glass-sheen: linear-gradient(transparent, transparent);
     --primary-sheen: linear-gradient(transparent, transparent);
     --glass-blur: none;
+    --glass-float-fill: var(--panel);
+    --glass-float-sheen: linear-gradient(transparent, transparent);
+    --glass-float-blur: none;
+    --glass-dialog-sheen: linear-gradient(transparent, transparent);
+    --glass-dialog-blur: none;
   }
 }
 @supports not (
@@ -239,10 +417,14 @@
     --glass-picture-fill: #0a0c10;
     --glass-picture-hover: #151820;
     --glass-blur: none;
+    --glass-float-fill: var(--panel);
+    --glass-float-blur: none;
+    --glass-dialog-blur: none;
   }
 }
 @media (forced-colors: active) {
   .app {
+    --glass-grain: linear-gradient(transparent, transparent);
     --glass-fill: Canvas;
     --glass-fill-strong: Canvas;
     --glass-picture-fill: Canvas;
@@ -254,7 +436,15 @@
     --glass-floor: transparent;
     --glass-shadow: none;
     --glass-shadow-lift: none;
+    --glass-shadow-press: none;
     --glass-blur: none;
+    --glass-float-fill: Canvas;
+    --glass-float-sheen: linear-gradient(transparent, transparent);
+    --glass-float-shadow: none;
+    --glass-float-blur: none;
+    --glass-dialog-sheen: linear-gradient(transparent, transparent);
+    --glass-dialog-shadow: none;
+    --glass-dialog-blur: none;
   }
   .wheel-lens {
     border-color: Highlight;
@@ -270,6 +460,25 @@
 
 /* The bar's glass chips (issue #151) live in src/player-bar.css, one
    rule set for the HUD and the theater. */
+/* The player's menu is a floating surface over the video (level 2), kept
+   nearly opaque: the HUD's window has no picture under it to blur, so a
+   translucent menu would only let the video show through its words. It
+   takes the level's lit top and inner rim and its two-part shadow. */
+.player-menu {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0) 72px),
+    #0f1318f2;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    inset 0 0 0 1px rgb(255 255 255 / 0.03),
+    0 2px 6px rgb(0 0 0 / 0.35),
+    0 18px 50px rgb(0 0 0 / 0.55);
+}
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  .player-menu {
+    background: #0f1318;
+  }
+}
 .hud-stage .chapter-strip .chapter:focus-visible {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);
 }
@@ -290,9 +499,13 @@
     rgb(255 255 255 / 0) 55%
   );
   --glass-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.16), 0 4px 14px rgb(0 0 0 / 0.3);
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 -8px 12px -10px rgb(255 255 255 / 0.12),
+    0 1px 2px rgb(0 0 0 / 0.35), 0 4px 14px rgb(0 0 0 / 0.3);
   --glass-shadow-lift:
-    inset 0 1px 0 rgb(255 255 255 / 0.2), 0 8px 22px rgb(0 0 0 / 0.4);
+    inset 0 1px 0 rgb(255 255 255 / 0.24),
+    inset 0 -8px 12px -9px rgb(255 255 255 / 0.14), 0 2px 3px rgb(0 0 0 / 0.35),
+    0 8px 22px rgb(0 0 0 / 0.4);
   color: #fff;
 }
 .app.glass-on .hero .secondary:hover:not(:disabled),
