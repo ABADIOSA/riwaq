@@ -10,9 +10,12 @@
 @media (min-width: 761px) {
   .app.experience-riwaq.nav-wheel {
     --nav-width: 100px;
+    /* The brand's mark stands over the lens (src/session.css, #159). */
+    --brand-axis: 56px;
   }
   .app.experience-riwaq.nav-wheel.wheel-open {
     --nav-width: 212px;
+    --brand-axis: 62px;
   }
 }
 .riwaq-sidebar.riwaq-wheel {
@@ -283,8 +286,10 @@
 }
 /* The narrow drawer: the open wheel, the same rim and lens. */
 .riwaq-nav-dialog:has(.riwaq-wheel) {
-  height: min(700px, calc(100dvh - 24px));
+  height: min(756px, calc(100dvh - 24px));
 }
 .riwaq-nav-dialog .riwaq-wheel {
-  height: 100%;
+  flex: 1;
+  height: auto;
+  min-height: 0;
 }

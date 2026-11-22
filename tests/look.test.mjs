@@ -43,13 +43,11 @@ test("ambience, logo and icon are validated and reach the root", () => {
   assert.equal(vars["--wallpaper"], 'url("https://i.example/w.jpg")');
   assert.equal(vars["--wallpaper-dim"], "0.95");
   const classes = themeClasses(a).split(" ");
-  for (const c of [
-    "wall-on",
-    "ambience-glow",
-    "logostyle-mark",
-    "logotint-gold",
-  ])
+  for (const c of ["wall-on", "ambience-glow", "logotint-gold"])
     assert.ok(classes.includes(c), c);
+  // The brand's layout follows the navigation since 0.57 (#159), never a
+  // saved style.
+  assert.ok(!classes.some((c) => c.startsWith("logostyle-")));
   assert.equal(
     safeAppearance({ logoStyle: "image", logoImage: "" }).logoStyle,
     "full",

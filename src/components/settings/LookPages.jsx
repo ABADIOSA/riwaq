@@ -3,7 +3,6 @@ import {
   Check,
   Copy,
   Download,
-  ImageOff,
   Minus,
   RotateCcw,
   Save,
@@ -19,6 +18,7 @@ import {
   resolveAppearance,
 } from "../../../core/appearance.mjs";
 import { call } from "../../lib/api.js";
+import RiwaqMark from "../RiwaqMark.jsx";
 
 const newId = () =>
   (crypto.randomUUID?.() || String(Date.now()))
@@ -196,66 +196,31 @@ export function ThemesLibrary({ state, update, notice }) {
 /** Logo & icon: the sidebar logo and the taskbar icon. */
 export function LogoPage({ state, update }) {
   const a = appearanceOf(state);
-  const [url, setUrl] = useState(a.logoImage);
   const set = (patch) => patchAppearance(state, update, patch);
+  // Issue #159: no layout to choose and no picture from a link. Riwaq's own
+  // mark always shows, with its name where the navigation shows names
+  // (core/brand.mjs); only its colour is the viewer's.
   return (
     <>
       <section className="settings-card">
         <h2>الشعار</h2>
-        <p>كيف يظهر شعار رِواق في القائمة.</p>
-        <div className="logo-choices">
-          {[
-            ["full", "الشعار والاسم"],
-            ["mark", "الشعار فقط"],
-            ["name", "الاسم فقط"],
-            ["image", "صورتي"],
-          ].map(([id, label]) => (
-            <button
-              key={id}
-              className={a.logoStyle === id ? "selected" : ""}
-              disabled={id === "image" && !a.logoImage}
-              onClick={() => set({ logoStyle: id })}
-            >
-              <span className={`logo-sample logo-${id}`}>
-                {id !== "name" && id !== "image" && (
-                  <span className="brand-mark">
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                )}
-                {id !== "mark" && id !== "image" && <b>رِواق</b>}
-                {id === "image" &&
-                  (a.logoImage ? (
-                    <img src={a.logoImage} alt="" />
-                  ) : (
-                    <ImageOff size={22} />
-                  ))}
-              </span>
-              <small>{label}</small>
-            </button>
-          ))}
+        <p>يظهر شعار رِواق وحده حين تُطوى القائمة، ومعه اسم رِواق حين تتّسع.</p>
+        <div className="brand-states" aria-hidden="true">
+          <figure className="brand-state">
+            <span className="brand-sample">
+              <RiwaqMark />
+            </span>
+            <figcaption>القائمة مطوية</figcaption>
+          </figure>
+          <figure className="brand-state">
+            <span className="brand-sample">
+              <RiwaqMark />
+              <b className="riwaq-brand-name">رِواق</b>
+            </span>
+            <figcaption>القائمة موسّعة</figcaption>
+          </figure>
         </div>
-        <label className="studio-field">
-          صورة شعارك (رابط https لصورة PNG أو SVG)
-          <input
-            dir="ltr"
-            placeholder="https://…/logo.png"
-            maxLength={2000}
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onBlur={() => {
-              const clean = imageUrl(url);
-              setUrl(clean);
-              set({
-                logoImage: clean,
-                ...(clean ? { logoStyle: "image" } : {}),
-              });
-            }}
-          />
-          <small>تُعرض الصورة كما هي؛ رِواق لا يرفعها إلى أي مكان.</small>
-        </label>
-        <label className="studio-field">
+        <div className="studio-field">
           لون الشعار
           <Choices
             options={[
@@ -265,7 +230,7 @@ export function LogoPage({ state, update }) {
             value={a.logoTint}
             onPick={(logoTint) => set({ logoTint })}
           />
-        </label>
+        </div>
       </section>
       <section className="settings-card">
         <h2>أيقونة التطبيق</h2>

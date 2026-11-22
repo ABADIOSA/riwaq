@@ -98,7 +98,6 @@ export default {
   سماتك: "Your themes",
   "سمات محفوظة رمز مشاركة تصميم": "saved themes share code design",
   "الشعار والأيقونة": "Logo & icon",
-  "شعار أيقونة شريط المهام صورة": "logo icon taskbar image",
   الخطوط: "Fonts",
   "خط الخطوط": "font fonts",
   الواجهة: "Interface",

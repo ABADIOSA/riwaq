@@ -260,10 +260,13 @@ export const DEFAULT_APPEARANCE = {
   ambientStrength: 24,
   ambientBlur: "medium",
   ambientFade: 700,
-  // Logo: the full mark and name, the mark alone, the name alone, or the
-  // viewer's own image; the mark follows the accent colour or stays gold.
-  logoStyle: "full",
+  // Logo colour: the mark follows the accent colour or stays Riwaq's gold.
   logoTint: "accent",
+  // Retired in 0.57 (issue #159, core/brand.mjs): the brand is always
+  // Riwaq's own mark, with its name where the navigation shows names.
+  // Kept, validated and never read, so a 0.56.0 device on the same account,
+  // a backup or a shared theme keeps what it had.
+  logoStyle: "full",
   logoImage: "",
   // The taskbar icon: Riwaq's own, or its mark drawn in the accent colour.
   appIcon: "classic",
@@ -422,12 +425,14 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
     );
   if ("ambientFade" in input)
     next.ambientFade = number(input.ambientFade, 0, 2000, next.ambientFade);
+  next.logoTint = choose(input.logoTint, ["accent", "gold"], next.logoTint);
+  // Retired (#159): validated as 0.56.0 did, so the values travel back to
+  // a device that still draws them, and never read for drawing here.
   next.logoStyle = choose(
     input.logoStyle,
     ["full", "mark", "name", "image"],
     next.logoStyle,
   );
-  next.logoTint = choose(input.logoTint, ["accent", "gold"], next.logoTint);
   if (typeof input.logoImage === "string")
     next.logoImage = imageUrl(input.logoImage);
   if (next.logoStyle === "image" && !next.logoImage) next.logoStyle = "full";
@@ -698,7 +703,6 @@ export function themeClasses(input) {
     `detailbg-${a.detailBackground}`,
     a.wallpaper ? "wall-on" : "",
     a.ambient === "artwork" ? "ambience-glow" : "",
-    `logostyle-${a.logoStyle}`,
     `logotint-${a.logoTint}`,
   ]
     .filter(Boolean)

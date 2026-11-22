@@ -81,59 +81,59 @@
 .chrome-bar .riwaq-masthead {
   top: 36px;
 }
+/* Riwaq's brand (issue #159, core/brand.mjs): the official mark of
+   assets/icon.svg in the logo colour, and the name only where the
+   navigation shows names. The mark is never mirrored. */
+.app {
+  --brand-tint: var(--accent);
+  --brand-mark-height: 32px;
+  --brand-mark-width: calc(var(--brand-mark-height) * 1.125);
+}
+/* "Riwaq gold" keeps the icon's gold whatever the accent; on a light page
+   a deeper gold keeps the mark at 4.6:1 against white. */
+.app.logotint-gold {
+  --brand-tint: #e7b66e;
+}
+.app.logotint-gold.scheme-light {
+  --brand-tint: #9c6a22;
+}
+.riwaq-mark {
+  display: block;
+  flex: none;
+  width: var(--brand-mark-width);
+  height: var(--brand-mark-height);
+  color: var(--brand-tint);
+  overflow: visible;
+}
 .riwaq-wordmark {
   display: flex;
   align-items: center;
-  gap: 13px;
+  gap: 12px;
+  min-height: 44px;
   border: 0;
+  border-radius: 12px;
   background: none;
   color: var(--text);
   padding: 0;
   text-align: start;
-  min-width: 100px;
 }
-.riwaq-wordmark b {
-  font-size: 32px;
+.riwaq-brand-name {
+  font-size: 25px;
   line-height: 1;
   font-weight: 800;
+  white-space: nowrap;
 }
-.riwaq-custom-logo {
-  max-height: 48px;
-  max-width: 155px;
-  object-fit: contain;
+.riwaq-wordmark .riwaq-brand-name {
+  animation: riwaq-brand-in var(--motion-page, 220ms) var(--ease-out, ease);
 }
-.riwaq-wordmark b > span {
-  display: block;
-  font-size: 9px;
-  color: var(--muted);
-  font-weight: 400;
-  margin-top: 9px;
+@keyframes riwaq-brand-in {
+  from {
+    opacity: 0;
+  }
 }
-.riwaq-monogram {
-  display: flex;
-  gap: 3px;
-  height: 35px;
-  align-items: end;
-  transform: skewY(-12deg);
-}
-.riwaq-monogram i {
-  display: block;
-  width: 9px;
-  height: 100%;
-  background: var(--accent);
-  border-radius: 7px 7px 0 0;
-}
-.riwaq-monogram i:nth-child(2) {
-  height: 76%;
-  opacity: 0.7;
-}
-.riwaq-monogram i:nth-child(3) {
-  height: 50%;
-  opacity: 0.4;
-}
-/* Logo tint "gold" keeps Riwaq's gold whatever the accent. */
-.app.logotint-gold .riwaq-monogram i {
-  background: #e7b66e;
+.riwaq-wordmark:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 .riwaq-destinations {
   display: flex;
@@ -939,11 +939,21 @@
 .riwaq-masthead .prayer-chip small {
   display: none;
 }
-.riwaq-masthead .riwaq-wordmark b {
-  font-size: 25px;
+/* The mark stands on the axis of the navigation's icons, so collapsing or
+   opening the navigation never moves it far: the middle of the collapsed
+   rail, the wheel's lens, or the first icon of the open rail and wheel
+   (core/wheel.mjs: apex 56 compact, 62 open). The masthead's padding
+   is 20 px from that same edge. Wide windows only (below). */
+.app.experience-riwaq {
+  --brand-axis: 32px;
 }
-.riwaq-masthead .riwaq-wordmark b > span {
-  display: none;
+.app.experience-riwaq.sidebar-collapsed {
+  --brand-axis: 34px;
+}
+.app.experience-riwaq .riwaq-masthead .riwaq-wordmark {
+  margin-inline-start: calc(
+    var(--brand-axis) - 20px - var(--brand-mark-width) / 2
+  );
 }
 .riwaq-sidebar {
   position: fixed;
@@ -1058,18 +1068,37 @@
   max-width: calc(100vw - 24px);
   max-height: calc(100dvh - 24px);
   width: 280px;
-  height: 600px;
+  /* 600 px of navigation and the brand's 56 px head (#159). */
+  height: 656px;
   margin-block: 12px;
   margin-inline-start: 12px;
 }
 .riwaq-nav-dialog::backdrop {
   background: #0009;
 }
+.riwaq-nav-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
 .riwaq-nav-dialog .riwaq-sidebar {
   position: static;
+  flex: 1;
   width: 100%;
-  height: 100%;
+  height: auto;
+  min-height: 0;
   border: 0;
+}
+/* The open drawer is the navigation expanded: the mark and the name
+   (issue #159, core/brand.mjs). Not a control; the masthead's mark is. */
+.riwaq-drawer-brand {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
 }
 @media (max-width: 760px) {
   .app.experience-riwaq {
@@ -1089,11 +1118,11 @@
   .riwaq-drawer-trigger {
     display: flex;
   }
-  .riwaq-masthead .riwaq-wordmark {
-    min-width: 70px;
-  }
-  .riwaq-masthead .riwaq-monogram {
-    display: none;
+  /* The navigation is folded into its drawer: the mark alone, beside the
+     button that opens it (core/brand.mjs). */
+  .app.experience-riwaq .riwaq-masthead .riwaq-wordmark {
+    margin-inline-start: 0;
+    padding-inline: 4px;
   }
   .app.experience-riwaq .riwaq-masthead > .search-box {
     grid-row: 2;

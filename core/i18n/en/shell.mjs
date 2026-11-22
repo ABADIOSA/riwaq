@@ -236,7 +236,6 @@ export default {
     "New PIN (4 to 8 digits; leave empty to remove the lock)",
   حفظ: "Save",
   "رِواق — جلسة اليوم": "Riwaq — Today's session",
-  "مساحة للحكاية": "A space for stories",
   "التنقل الرئيسي": "Main navigation",
   "جلسة اليوم": "Today's session",
   "مساحات وأدوات أخرى": "Other spaces and tools",

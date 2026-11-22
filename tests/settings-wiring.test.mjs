@@ -87,11 +87,11 @@ test("look options from before Riwaq's interface work in it too", () => {
     css,
     /\.session-build \{[^}]*border-radius: var\(--radius[^}]*background: var\(--accent-fill/,
   );
-  assert.match(css, /\.app\.logotint-gold \.riwaq-monogram i/);
-  // Logo style: mark only, name only, or both.
+  assert.match(css, /\.app\.logotint-gold \{[^}]*--brand-tint: #e7b66e/);
+  // The brand follows the navigation (#159, tests/brand.test.mjs).
   const nav = read("src/components/RiwaqNav.jsx");
-  assert.match(nav, /appearance\.logoStyle !== "name"/);
-  assert.match(nav, /appearance\.logoStyle !== "mark"/);
+  assert.match(nav, /brandLayout\(/);
+  assert.doesNotMatch(nav, /logoStyle|logoImage/);
   const studio = read("src/components/SettingsStudio.jsx");
   assert.match(studio, /const offered = \(id\) => id !== "hero"/);
   const app = read("src/App.jsx");
