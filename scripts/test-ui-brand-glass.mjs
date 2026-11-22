@@ -418,6 +418,19 @@ for (const mode of ["dark", "light"])
       await page
         .locator(".poster-actions")
         .screenshot({ path: join(output, `glass-${mode}-menu.png`) });
+      // A bright poster can fill the backdrop directly under the menu title.
+      const whiteArtwork = await page.addStyleTag({
+        content:
+          '.app:has(.poster-actions)::after { content: ""; position: fixed; inset: 0; z-index: 499; background: white; pointer-events: none; }',
+      });
+      try {
+        measured.menuTitle = await drawnContrast(
+          page,
+          page.locator(".poster-actions > strong"),
+        );
+      } finally {
+        await whiteArtwork.evaluate((el) => el.remove());
+      }
       await page.keyboard.press("Escape");
       // Level 3: a dialog.
       await openDialog();
@@ -533,6 +546,11 @@ await check(
         "backgroundImage",
       ]);
       assert.equal(dialog.backdropFilter, "none", `${label}: dialog blur`);
+      const backdropBlur = await page
+        .locator(".modal[open]")
+        .first()
+        .evaluate((el) => getComputedStyle(el, "::backdrop").backdropFilter);
+      assert.equal(backdropBlur, "none", `${label}: blur behind the dialog`);
       assert.doesNotMatch(
         dialog.backgroundImage,
         /data:image|radial-gradient/,

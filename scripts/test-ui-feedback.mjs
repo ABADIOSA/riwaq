@@ -1367,6 +1367,21 @@ await check(
         JSON.stringify(widths),
       );
       await hud.screenshot({ path: join(output, "hud-menu-en.png") });
+      const menu = hud.locator(".player-menu");
+      const menuImage = () =>
+        menu.evaluate((el) => getComputedStyle(el).backgroundImage);
+      assert.match(await menuImage(), /linear-gradient/, "glass HUD menu");
+      await hud.evaluate((nextState) => window.__emit("state", nextState), {
+        ...state,
+        settings: { ...state.settings, appearance: { glass: "solid" } },
+      });
+      await hud.locator(".hud-stage.glass-solid").waitFor();
+      assert.equal(await menuImage(), "none", "solid HUD menu reflection");
+      assert.equal(
+        await menu.evaluate((el) => getComputedStyle(el).backgroundColor),
+        "rgb(15, 19, 24)",
+        "solid HUD menu fill",
+      );
       await hud.keyboard.press("Escape");
       assert.deepEqual(outside, [], "the HUD asked nothing of the internet");
     } finally {
