@@ -242,7 +242,7 @@ try {
     await page.locator(".player-menu").waitFor();
     await page.screenshot({ path: join(output, `menu-${lang}.png`) });
     await check(
-      `${lang}: the menu is #113's four items, then #157's Download subtitles, without redundant controls`,
+      `${lang}: the menu is #113's four items, then #157's Download subtitle, without redundant controls`,
       async () => {
         // An item's own words (its first text), without the line under it.
         const labels = await page
@@ -265,7 +265,7 @@ try {
                 "Copy torrent link",
                 "Copy magnet link",
                 "Download video",
-                "Download subtitles",
+                "Download subtitle",
               ],
         );
         assert.equal(await page.locator(".player-menu .menu-note").count(), 0);
@@ -341,7 +341,7 @@ try {
     };
     await openMenu({});
     await check(
-      `${lang}: #157 Download subtitles sits right under Download video and names the subtitle it saves`,
+      `${lang}: #157 Download subtitle sits right under Download video and names the subtitle it saves`,
       async () => {
         const order = await page
           .locator(".player-menu > button")
@@ -415,7 +415,7 @@ try {
         await page.locator(".subtitle-choice").first().waitFor();
         assert.match(
           await page.locator("#subtitle-choices").innerText(),
-          lang === "ar" ? /اختر الترجمة/ : /Choose the subtitles to save/,
+          lang === "ar" ? /اختر الترجمة/ : /Choose the subtitle to save/,
         );
         const box = await page.locator(".player-menu").boundingBox();
         assert.ok(box.width <= 320 && box.x + box.width <= 980);

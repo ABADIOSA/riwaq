@@ -98,13 +98,24 @@ const SAVABLE = new Set(["addon", "file"]);
 
 /**
  * What the menu shows: the savable choices (the selected one first) and,
- * when there are none, the reason.
+ * when there are none, the reason. Two choices that would read the same
+ * (two Arabic subtitles from addons without a title, 0.57) are numbered in
+ * the order shown, so the viewer can tell which one they pick.
  */
 export function subtitleMenu(sources) {
   const choices = sources
     .filter((s) => SAVABLE.has(s.kind))
     .sort((a, b) => Number(b.selected) - Number(a.selected))
     .map((s) => ({ id: s.id, label: sourceLabel(s), selected: s.selected }));
+  const total = new Map();
+  for (const c of choices) total.set(c.label, (total.get(c.label) || 0) + 1);
+  const seen = new Map();
+  for (const c of choices) {
+    if (total.get(c.label) < 2) continue;
+    const n = (seen.get(c.label) || 0) + 1;
+    seen.set(c.label, n);
+    c.label = `${c.label} · ${n}`;
+  }
   if (choices.length) return { choices, reason: "" };
   return {
     choices,

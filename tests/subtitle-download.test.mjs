@@ -1,4 +1,4 @@
-// Issue #157: "Download subtitles" in the player menu. The bounded fetch
+// Issue #157: "Download subtitle" in the player menu. The bounded fetch
 // and file checks (core/subtitle-export.mjs) and main's choices and save
 // (electron/subtitle-save.mjs), over a loopback HTTP fixture, a temporary
 // folder and a stand-in Save dialog. No outside request is made.
@@ -363,6 +363,67 @@ test("choices: addon and local subtitles can be saved, embedded ones cannot; the
   assert.equal(embedded.reason, "مدمجة في ملف الفيديو");
   assert.equal(translate(embedded.reason, "en"), "Inside the video file");
   assert.equal(subtitleMenu([]).reason, "لا ترجمة محمّلة");
+});
+
+test("0.57: two subtitles that would read the same are numbered, the rest keep their names", () => {
+  const addon = (id, lang, extra = {}) => ({
+    id,
+    track: Number(id.slice(1)),
+    lang,
+    title: "",
+    selected: false,
+    kind: "addon",
+    url: `https://subs.example/${id}.srt`,
+    origin: "https://subs.example",
+    ...extra,
+  });
+  const menu = subtitleMenu([
+    addon("t3", "ara"),
+    addon("t4", "eng"),
+    addon("t5", "ara", { selected: true }),
+    addon("t6", "ara"),
+  ]);
+  // The selected one stays first; each Arabic one gets its place among them.
+  assert.deepEqual(
+    menu.choices.map((c) => [c.id, c.label]),
+    [
+      ["t5", "العربية · 1"],
+      ["t3", "العربية · 2"],
+      ["t4", "الإنجليزية"],
+      ["t6", "العربية · 3"],
+    ],
+  );
+  assert.equal(translate(menu.choices[1].label, "en"), "Arabic · 2");
+  assert.equal(new Set(menu.choices.map((c) => c.label)).size, 4);
+  // Nothing about where they came from reaches the page.
+  assert.ok(!JSON.stringify(menu).includes("subs.example"));
+});
+
+test("0.57 (#157 follow-up): the English names one subtitle, never all of them", () => {
+  assert.equal(translate("تنزيل الترجمة", "en"), "Download subtitle");
+  assert.equal(translate("حفظ الترجمة", "en"), "Save subtitle");
+  assert.equal(
+    translate("اختر الترجمة التي تريد حفظها", "en"),
+    "Choose the subtitle to save",
+  );
+  assert.equal(
+    translate("حُفظت الترجمة «ar.srt»", "en"),
+    "Saved the subtitle as “ar.srt”",
+  );
+  for (const key of [
+    "تنزيل الترجمة",
+    "حفظ الترجمة",
+    "اختر الترجمة التي تريد حفظها",
+    "لم تعد هذه الترجمة في المشاهدة",
+    "اختر ترجمة من القائمة",
+    "انتهت مهلة تحميل الترجمة",
+    "تعذّر تحميل الترجمة من مصدرها",
+    "الإضافة التي جاءت منها هذه الترجمة لم تعد مثبتة",
+    "انتهت المشاهدة التي طُلبت منها الترجمة؛ لم تُحفظ",
+  ])
+    assert.doesNotMatch(translate(key, "en"), /\bsubtitles\b/, key);
+  // None at all stays plural.
+  assert.equal(translate("لا ترجمة محمّلة", "en"), "No subtitles loaded");
 });
 
 test("saving: the selected addon subtitle, the exact bytes, cancel writes nothing, a stale or embedded choice is refused", async () => {
