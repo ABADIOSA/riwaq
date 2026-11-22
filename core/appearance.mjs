@@ -639,6 +639,12 @@ export function themeVariables(input) {
     contrast(c.accent, "#111111") >= contrast(c.accent, "#FFFFFF")
       ? "#141210"
       : "#FFFFFF";
+  const brandTint =
+    a.logoTint === "gold" ? (isLight(c) ? "#9C6A22" : "#E7B66E") : c.accent;
+  // In compact navigation the mark is the Home button's only visible cue.
+  const visibleBrandTint = [brandTint, c.text, "#FFFFFF", "#000000"].find(
+    (color) => contrast(color, c.bg) >= 3,
+  );
   const radius = { sharp: 4, rounded: 10, soft: 18 }[a.radius];
   const gap = { compact: 10, comfortable: 16, spacious: 24 }[a.density];
   const font =
@@ -655,6 +661,7 @@ export function themeVariables(input) {
     "--muted": c.muted,
     "--line": `${c.line}`,
     "--accent": c.accent,
+    "--brand-tint": visibleBrandTint,
     "--accent-end": c.accentEnd,
     "--accent-soft": `${c.accent}26`,
     "--accent-ink": ink,

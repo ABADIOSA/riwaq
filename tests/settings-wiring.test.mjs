@@ -87,8 +87,8 @@ test("look options from before Riwaq's interface work in it too", () => {
     css,
     /\.session-build \{[^}]*border-radius: var\(--radius[^}]*background: var\(--accent-fill/,
   );
-  assert.match(css, /\.app\.logotint-gold \{[^}]*--brand-tint: #e7b66e/);
   // The brand follows the navigation (#159, tests/brand.test.mjs).
+  assert.match(css, /\.riwaq-mark \{[^}]*color: var\(--brand-tint\)/);
   const nav = read("src/components/RiwaqNav.jsx");
   assert.match(nav, /brandLayout\(/);
   assert.doesNotMatch(nav, /logoStyle|logoImage/);

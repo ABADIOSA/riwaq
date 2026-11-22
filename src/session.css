@@ -85,17 +85,8 @@
    assets/icon.svg in the logo colour, and the name only where the
    navigation shows names. The mark is never mirrored. */
 .app {
-  --brand-tint: var(--accent);
   --brand-mark-height: 32px;
   --brand-mark-width: calc(var(--brand-mark-height) * 1.125);
-}
-/* "Riwaq gold" keeps the icon's gold whatever the accent; on a light page
-   a deeper gold keeps the mark at 4.6:1 against white. */
-.app.logotint-gold {
-  --brand-tint: #e7b66e;
-}
-.app.logotint-gold.scheme-light {
-  --brand-tint: #9c6a22;
 }
 .riwaq-mark {
   display: block;
@@ -131,8 +122,8 @@
     opacity: 0;
   }
 }
-.riwaq-wordmark:focus-visible {
-  outline: 2px solid var(--accent);
+.riwaq-masthead .riwaq-wordmark:focus-visible {
+  outline: 2px solid var(--brand-tint);
   outline-offset: 4px;
 }
 .riwaq-destinations {

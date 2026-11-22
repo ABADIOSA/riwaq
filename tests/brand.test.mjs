@@ -7,10 +7,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { BRAND_MARK, brandLayout } from "../core/brand.mjs";
 import {
+  contrast,
   decodeTheme,
+  displayedAppearance,
   encodeTheme,
   safeAppearance,
   themeClasses,
+  themeVariables,
 } from "../core/appearance.mjs";
 import { DEFAULT_SETTINGS, safeSettings } from "../core/protocol.mjs";
 import { translate } from "../core/i18n.mjs";
@@ -152,10 +155,28 @@ test("the brand keeps an accessible name in both languages and its English", () 
     "القائمة موسّعة",
   ])
     assert.doesNotMatch(translate(key, "en"), /[؀-ۿ]/, key);
-  // The light scheme's gold stays at 3:1 or more against white (#159).
-  const css = read("src/session.css");
-  assert.match(
-    css,
-    /\.app\.logotint-gold\.scheme-light \{\s*--brand-tint: #9c6a22/,
+});
+
+test("the compact Home mark stays visible on custom backgrounds", () => {
+  for (const colors of [
+    { bg: "#101010", accent: "#101010", text: "#F0F0F0" },
+    { bg: "#FFFFFF", accent: "#FFFFFF", text: "#FFFFFF" },
+  ]) {
+    const variables = themeVariables({ preset: "custom", colors });
+    const mark = variables["--brand-tint"] ?? variables["--accent"];
+    assert.ok(contrast(mark, colors.bg) >= 3, `${mark} on ${colors.bg}`);
+    assert.equal(variables["--accent"], colors.accent);
+  }
+});
+
+test("readable brand colours keep the chosen accent or Riwaq gold", () => {
+  const accent = themeVariables({ colors: { accent: "#FC7E4D" } });
+  assert.equal(accent["--brand-tint"], accent["--accent"]);
+  assert.equal(themeVariables({ logoTint: "gold" })["--brand-tint"], "#E7B66E");
+
+  const light = themeVariables(
+    displayedAppearance({ logoTint: "gold", mode: "light" }),
   );
+  assert.equal(light["--brand-tint"], "#9C6A22");
+  assert.ok(contrast(light["--brand-tint"], light["--bg"]) >= 3);
 });
