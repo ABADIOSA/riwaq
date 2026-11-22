@@ -392,10 +392,11 @@
   --glass-dialog-shadow: 0 30px 90px rgb(0 0 0 / 0.45);
   --glass-dialog-blur: none;
 }
-.app.glass-solid .modal::backdrop {
+.app.glass-solid .modal::backdrop,
+.forced-colors .app .modal::backdrop {
   backdrop-filter: none;
 }
-@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+@media (prefers-reduced-transparency: reduce) {
   .app .modal::backdrop {
     backdrop-filter: none;
   }
@@ -433,38 +434,50 @@
     --glass-dialog-blur: none;
   }
 }
-@media (forced-colors: active) {
-  .app {
-    --glass-grain: linear-gradient(transparent, transparent);
-    --glass-fill: Canvas;
-    --glass-fill-strong: Canvas;
-    --glass-picture-fill: Canvas;
-    --glass-picture-hover: Canvas;
-    --glass-edge: CanvasText;
-    --glass-edge-strong: CanvasText;
-    --glass-sheen: linear-gradient(transparent, transparent);
-    --primary-sheen: linear-gradient(transparent, transparent);
-    --glass-floor: transparent;
-    --glass-shadow: none;
-    --glass-shadow-lift: none;
-    --glass-shadow-press: none;
-    --glass-blur: none;
-    --glass-float-fill: Canvas;
-    --glass-float-sheen: linear-gradient(transparent, transparent);
-    --glass-float-shadow: none;
-    --glass-float-blur: none;
-    --glass-dialog-sheen: linear-gradient(transparent, transparent);
-    --glass-dialog-shadow: none;
-    --glass-dialog-blur: none;
-  }
-  .wheel-lens {
-    border-color: Highlight;
-    background: transparent;
-    box-shadow: none;
-  }
-  .wheel-item.selected .wheel-disc {
-    border: 2px solid Highlight;
-  }
+/* The document's forced-colors class follows both CSS media and Windows
+   nativeTheme, since some Electron renderers miss the media change. */
+.forced-colors .app {
+  --glass-grain: linear-gradient(transparent, transparent);
+  --glass-fill: Canvas;
+  --glass-fill-strong: Canvas;
+  --glass-picture-fill: Canvas;
+  --glass-picture-hover: Canvas;
+  --glass-edge: CanvasText;
+  --glass-edge-strong: CanvasText;
+  --glass-sheen: linear-gradient(transparent, transparent);
+  --primary-sheen: linear-gradient(transparent, transparent);
+  --glass-floor: transparent;
+  --glass-shadow: none;
+  --glass-shadow-lift: none;
+  --glass-shadow-press: none;
+  --glass-blur: none;
+  --glass-float-fill: Canvas;
+  --glass-float-sheen: linear-gradient(transparent, transparent);
+  --glass-float-shadow: none;
+  --glass-float-blur: none;
+  --glass-dialog-sheen: linear-gradient(transparent, transparent);
+  --glass-dialog-shadow: none;
+  --glass-dialog-blur: none;
+}
+.forced-colors .app :is(.modal, .poster-actions, .prayer-popup) {
+  --text: CanvasText;
+  --muted: CanvasText;
+  color: CanvasText;
+}
+.forced-colors .wheel-lens {
+  border-color: Highlight;
+  background: transparent;
+  box-shadow: none;
+}
+.forced-colors .wheel-item.selected .wheel-disc {
+  border: 2px solid Highlight;
+}
+.forced-colors
+  .app
+  .riwaq-sidebar
+  .riwaq-destination.selected:not(.wheel-item) {
+  outline: 2px solid Highlight;
+  outline-offset: -2px;
 }
 
 /* ---- The player's controls (HUD and theater) ----------------------------- */
@@ -485,10 +498,25 @@
     0 2px 6px rgb(0 0 0 / 0.35),
     0 18px 50px rgb(0 0 0 / 0.55);
 }
-@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+@media (prefers-reduced-transparency: reduce) {
   .glass-on .player-menu {
     background: #0f1318;
   }
+}
+.forced-colors .player-menu {
+  background: Canvas;
+  border-color: CanvasText;
+  color: CanvasText;
+  box-shadow: none;
+}
+.forced-colors
+  .player-menu
+  :is(.menu-detail, .menu-note, .download-unavailable) {
+  color: CanvasText;
+}
+.forced-colors .player-menu button:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: -2px;
 }
 .hud-stage .chapter-strip .chapter:focus-visible {
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14);

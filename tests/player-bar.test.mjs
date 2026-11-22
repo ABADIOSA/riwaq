@@ -300,7 +300,7 @@ test("every control in the bar sits in the same glass chip (#151)", () => {
   assert.doesNotMatch(read("src/hud.css"), /\.hud-main \{[^}]*!important/);
   // Opaque where transparency is reduced, plain in forced colours.
   assert.match(css, /prefers-reduced-transparency: reduce/);
-  assert.match(css, /forced-colors: active/);
+  assert.match(css, /\.forced-colors\s+:is\(/);
 });
 
 test("the player menu is as wide as its longest item (#150)", () => {

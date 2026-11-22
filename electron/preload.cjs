@@ -31,6 +31,7 @@ const allowed = new Set([
   "musicLocalSource",
   "musicLocalCover",
   "init",
+  "systemContrast",
   "windowInfo",
   "windowControl",
   "windowDrag",
@@ -211,6 +212,7 @@ contextBridge.exposeInMainWorld("riwaq", {
         "ended",
         "playerRequest",
         "hudCommand",
+        "systemContrast",
         "sources",
         "window",
       ].includes(name)

@@ -1371,6 +1371,24 @@ await check(
       const menuImage = () =>
         menu.evaluate((el) => getComputedStyle(el).backgroundImage);
       assert.match(await menuImage(), /linear-gradient/, "glass HUD menu");
+      assert.equal(
+        await hud.evaluate(() => matchMedia("(forced-colors: active)").matches),
+        false,
+        "the renderer does not supply a contrast signal",
+      );
+      await hud.evaluate(() => window.__emit("systemContrast", true));
+      assert.equal(
+        await menuImage(),
+        "none",
+        "Windows contrast HUD reflection",
+      );
+      assert.equal(
+        await menu.evaluate((el) => getComputedStyle(el).boxShadow),
+        "none",
+        "Windows contrast HUD shadow",
+      );
+      await hud.evaluate(() => window.__emit("systemContrast", false));
+      assert.match(await menuImage(), /linear-gradient/, "normal HUD returns");
       await hud.evaluate((nextState) => window.__emit("state", nextState), {
         ...state,
         settings: { ...state.settings, appearance: { glass: "solid" } },
