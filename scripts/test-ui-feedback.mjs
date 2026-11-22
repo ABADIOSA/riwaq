@@ -1150,6 +1150,9 @@ await check(
               if (method === "hudSnapshot") return { state, player };
               if (method === "subtitles") return [];
               if (method === "playerSources") return { streams: [] };
+              // No Windows contrast theme until the check emits one; the
+              // catch-all `true` below would turn it on at load.
+              if (method === "systemContrast") return false;
               if (method === "playbackMenu")
                 return {
                   videoId: "tt0000001",
