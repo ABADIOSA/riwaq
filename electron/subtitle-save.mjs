@@ -6,9 +6,9 @@
  *   found by the addon key Riwaq loaded it under) or from a subtitle file the
  *   viewer opened or dropped. A track inside the video stream is not a file
  *   of its own and is not offered; the menu says why.
- * - The page sees choices as `{ id, label, selected }` only: an id is "t"
- *   and MPV's track number, looked up again when the viewer picks it, so a
- *   track that went away is refused rather than another one saved.
+ * - The page sees choices as `{ id, label, selected, ordinal? }` only: an
+ *   id is "t" and MPV's track number, looked up again when the viewer picks
+ *   it. The ordinal only distinguishes identical labels in the menu.
  * - Saving: the bytes are fetched (core/subtitle-export.mjs) or read (a
  *   subtitle extension, a regular file, at most SUBTITLE_MAX), must be a
  *   subtitle file, and are written unchanged where the system's Save dialog
@@ -28,6 +28,7 @@
  */
 import { lstat, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join } from "node:path";
+import { language, translate } from "../core/i18n.mjs";
 import { languageOf } from "../core/subtitles.mjs";
 import {
   SUBTITLE_EXTENSIONS,
@@ -102,19 +103,28 @@ const SAVABLE = new Set(["addon", "file"]);
  * (two Arabic subtitles from addons without a title, 0.57) are numbered in
  * the order shown, so the viewer can tell which one they pick.
  */
-export function subtitleMenu(sources) {
+export function subtitleMenu(sources, lang = language()) {
   const choices = sources
     .filter((s) => SAVABLE.has(s.kind))
     .sort((a, b) => Number(b.selected) - Number(a.selected))
     .map((s) => ({ id: s.id, label: sourceLabel(s), selected: s.selected }));
+  // Two source labels can become identical after translation. Keep every
+  // existing label reserved: an actual title of "2" can look like a number.
+  const labels = choices.map(({ label }) =>
+    translate(label, lang).trim().replace(/\s+/g, " "),
+  );
   const total = new Map();
-  for (const c of choices) total.set(c.label, (total.get(c.label) || 0) + 1);
+  for (const label of labels) total.set(label, (total.get(label) || 0) + 1);
+  const used = new Set(labels);
   const seen = new Map();
-  for (const c of choices) {
-    if (total.get(c.label) < 2) continue;
-    const n = (seen.get(c.label) || 0) + 1;
-    seen.set(c.label, n);
-    c.label = `${c.label} · ${n}`;
+  for (const [index, choice] of choices.entries()) {
+    const label = labels[index];
+    if (total.get(label) < 2) continue;
+    let ordinal = (seen.get(label) || 0) + 1;
+    while (used.has(`${label} · ${ordinal}`)) ordinal++;
+    used.add(`${label} · ${ordinal}`);
+    seen.set(label, ordinal);
+    choice.ordinal = ordinal;
   }
   if (choices.length) return { choices, reason: "" };
   return {

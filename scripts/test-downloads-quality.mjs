@@ -5,6 +5,7 @@ import { execSync, execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
+import { subtitleMenu } from "../electron/subtitle-save.mjs";
 const require = createRequire(import.meta.url);
 const { chromium } = require(
   process.env.RIWAQ_PLAYWRIGHT ||
@@ -432,6 +433,32 @@ try {
           (await actions()).map((a) => [a.action, a.choice]),
           [["downloadSubtitles", "t4"]],
         );
+      },
+    );
+    const longDuplicates = ["t3", "t4"].map((id) => ({
+      id,
+      kind: "addon",
+      lang: "ara",
+      title: long,
+      selected: false,
+    }));
+    await openMenu({ subtitles: subtitleMenu(longDuplicates, lang) });
+    await check(
+      `${lang}: #157 both ordinals are visible and accessible when the duplicate title is long`,
+      async () => {
+        await subtitleItem().click();
+        for (const number of [1, 2]) {
+          const item = page.getByRole("menuitem", {
+            name: new RegExp(` · ${number}$`),
+          });
+          assert.equal(await item.count(), 1);
+          const ordinal = item.getByText(`· ${number}`, { exact: true });
+          assert.equal(await ordinal.count(), 1);
+          const box = await item.boundingBox();
+          const digit = await ordinal.boundingBox();
+          assert.ok(digit.width > 0 && digit.x >= box.x);
+          assert.ok(digit.x + digit.width <= box.x + box.width);
+        }
       },
     );
     await openMenu({});

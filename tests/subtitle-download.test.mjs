@@ -365,38 +365,74 @@ test("choices: addon and local subtitles can be saved, embedded ones cannot; the
   assert.equal(subtitleMenu([]).reason, "لا ترجمة محمّلة");
 });
 
-test("0.57: two subtitles that would read the same are numbered, the rest keep their names", () => {
-  const addon = (id, lang, extra = {}) => ({
+const addonChoice = (id, lang, extra = {}) => ({
+  id,
+  track: Number(id.slice(1)),
+  lang,
+  title: "",
+  selected: false,
+  kind: "addon",
+  url: `https://subs.example/${id}.srt`,
+  origin: "https://subs.example",
+  ...extra,
+});
+
+const displayedChoices = (menu, lang) =>
+  menu.choices.map(({ id, label, ordinal }) => [
     id,
-    track: Number(id.slice(1)),
-    lang,
-    title: "",
-    selected: false,
-    kind: "addon",
-    url: `https://subs.example/${id}.srt`,
-    origin: "https://subs.example",
-    ...extra,
-  });
+    `${translate(label, lang)}${ordinal ? ` · ${ordinal}` : ""}`,
+  ]);
+
+test("0.57: two subtitles that would read the same are numbered, the rest keep their names", () => {
   const menu = subtitleMenu([
-    addon("t3", "ara"),
-    addon("t4", "eng"),
-    addon("t5", "ara", { selected: true }),
-    addon("t6", "ara"),
+    addonChoice("t3", "ara"),
+    addonChoice("t4", "eng"),
+    addonChoice("t5", "ara", { selected: true }),
+    addonChoice("t6", "ara"),
   ]);
   // The selected one stays first; each Arabic one gets its place among them.
-  assert.deepEqual(
-    menu.choices.map((c) => [c.id, c.label]),
-    [
-      ["t5", "العربية · 1"],
-      ["t3", "العربية · 2"],
-      ["t4", "الإنجليزية"],
-      ["t6", "العربية · 3"],
-    ],
-  );
-  assert.equal(translate(menu.choices[1].label, "en"), "Arabic · 2");
-  assert.equal(new Set(menu.choices.map((c) => c.label)).size, 4);
+  assert.deepEqual(displayedChoices(menu, "ar"), [
+    ["t5", "العربية · 1"],
+    ["t3", "العربية · 2"],
+    ["t4", "الإنجليزية"],
+    ["t6", "العربية · 3"],
+  ]);
+  assert.equal(displayedChoices(menu, "en")[1][1], "Arabic · 2");
   // Nothing about where they came from reaches the page.
   assert.ok(!JSON.stringify(menu).includes("subs.example"));
+});
+
+test("subtitle choice numbering keeps a track with an existing numeric title distinct", () => {
+  const sources = [
+    addonChoice("t1", "ara"),
+    addonChoice("t2", "ara"),
+    addonChoice("t3", "ara", { title: "2" }),
+  ];
+  for (const [lang, arabic] of [
+    ["ar", "العربية"],
+    ["en", "Arabic"],
+  ]) {
+    assert.deepEqual(displayedChoices(subtitleMenu(sources, lang), lang), [
+      ["t1", `${arabic} · 1`],
+      ["t2", `${arabic} · 3`],
+      ["t3", `${arabic} · 2`],
+    ]);
+  }
+});
+
+test("subtitle choices that collide only in English are numbered only in English", () => {
+  const sources = [
+    addonChoice("t1", "ara", { title: "العربية" }),
+    addonChoice("t2", "ara", { title: "Arabic" }),
+  ];
+  assert.deepEqual(displayedChoices(subtitleMenu(sources, "ar"), "ar"), [
+    ["t1", "العربية · العربية"],
+    ["t2", "العربية · Arabic"],
+  ]);
+  assert.deepEqual(displayedChoices(subtitleMenu(sources, "en"), "en"), [
+    ["t1", "Arabic · Arabic · 1"],
+    ["t2", "Arabic · Arabic · 2"],
+  ]);
 });
 
 test("0.57 (#157 follow-up): the English names one subtitle, never all of them", () => {
