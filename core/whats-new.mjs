@@ -7,6 +7,29 @@
 
 export const WHATS_NEW = [
   {
+    version: "0.57.0",
+    title: "زجاج أوضح، وشعار رِواق، وترجمة واحدة",
+    items: [
+      "زجاج بثلاث طبقات: أزرار يضيئها الضوء من الأعلى بحافة لامعة، وقوائم عائمة بزجاج أكثف، ونوافذ بانعكاس عريض وحبيبات الزجاج المصنفر؛ والنص بنفس وضوحه.",
+      "الزجاج «المصمت» وتقليل الشفافية والألوان الإجبارية تبقيه معتمًا مسطحًا كما كان.",
+      "شعار رِواق الرسمي أعلى الشاشة: وحده حين تُطوى القائمة أو العجلة، ومعه اسم رِواق حين تتّسع.",
+      "صفحة الشعار صارت للونه فقط مع معاينة الحالتين؛ أُزيلت أنماط الشعار ورابط الصورة.",
+      "في الواجهة الإنجليزية صار الخيار «Download subtitle» بالمفرد لأنه يحفظ ترجمة واحدة، وتُرقَّم الترجمتان إذا تشابه اسماهما.",
+      "قائمة إجراءات العمل (الزر الأيمن على البطاقة) صارت زجاجية، وأسهم الصفوف لم تعد تُضبّب ما خلفها أثناء التمرير.",
+    ],
+    en: {
+      title: "Clearer glass, Riwaq's own mark, and one subtitle at a time",
+      items: [
+        "Glass in three levels: buttons lit from above with a bright edge, floating menus in a denser glass, and dialogs with a broad reflection and a frosted grain; text reads as clearly as before.",
+        "Solid glass, reduced transparency and forced colours keep it flat and opaque, as before.",
+        "Riwaq's official mark in the top bar: on its own when the menu or the wheel is collapsed, with Riwaq's name when it is expanded.",
+        "The Logo page now sets its colour only, with a preview of both states; the logo styles and the picture link are gone.",
+        "“Download subtitle” is now singular, since it saves one subtitle, and two subtitles with the same name are numbered.",
+        "A title's actions menu (right click on a card) is glass now, and row arrows no longer blur what is behind them while you scroll.",
+      ],
+    },
+  },
+  {
     version: "0.56.0",
     title: "فلاتر المصادر، ومجموعات تتحرك، وترجمة تحفظها",
     items: [

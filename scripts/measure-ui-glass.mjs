@@ -1,8 +1,8 @@
 // Before/after cost of the glass material (0.57, issue #158) on the same
 // machine, fixture and build mode: Home with 100 catalogs of 60 titles each
 // (one row per catalog, the CLAUDE.md benchmark), scrolled from top to
-// bottom at a steady rate; the poster menu and a dialog opened and timed to
-// their first painted frame; the renderer heap after GC. Builds alternate
+// bottom at a steady rate; the poster menu (cold, then warm) and a dialog
+// opened and timed to their first painted frame; the renderer heap after GC. Builds alternate
 // run by run, medians and ranges are reported, never a single sample.
 //
 //   npm run build:web
@@ -218,6 +218,12 @@ async function sample(site) {
     const menuMs = await menuWait;
     await page.keyboard.press("Escape");
     await page.locator(".poster-actions").waitFor({ state: "detached" });
+    // Again, warm: the second open of the same surface.
+    const menuAgain = painted(".poster-actions");
+    await page.locator(".poster-card").nth(5).click({ button: "right" });
+    const menuWarmMs = await menuAgain;
+    await page.keyboard.press("Escape");
+    await page.locator(".poster-actions").waitFor({ state: "detached" });
 
     // A dialog (level 3): the profiles window from the navigation.
     const dialogWait = painted(".modal[open]");
@@ -238,6 +244,7 @@ async function sample(site) {
       scrollDropped: scrollStats.dropped,
       scrollFrames: scrollStats.frames,
       menuMs: Math.round(menuMs),
+      menuWarmMs: Math.round(menuWarmMs),
       dialogMs: Math.round(dialogMs),
       heapMB:
         Math.round(
