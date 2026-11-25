@@ -1,5 +1,83 @@
 # Verification — Riwaq
 
+## 2026-11-22 (final readiness) — 0.57.0 Beta after Codex's independent review: Linux regression green, two Windows gates still open (unreleased)
+
+- Same branch `claude/bold-babbage-usgy33`, fast-forward from Codex's reviewed head `c22e4a2` (GitHub's PR head matched; PR #160 draft, mergeable, eight commits, 46 files; its CI `check` passed). Codex's `25d5a28` (subtitle labels), `780f0c1` (brand contrast), `f7de1c9` (glass contrast, Solid in the HUD, dialog backdrop) and `c22e4a2` (README links) are kept unchanged. This record is the only change; no code changed. Version stays 0.57.0. Nothing merged, tagged, released or deployed; Cloudflare and D1 untouched.
+- Codex's review of `c22e4a2` (its own report, outside the repository; not re-run here) was on Windows 11 x64 with Node 24.19.0 and Electron 44.9.3. It reported:
+  - `npm test` 1,425 pass of 1,431, with 6 Windows skips;
+  - `npm run package` (NSIS and portable) and `test-packaged.mjs --offline --stall-layout` 11/11;
+  - MPV, the HUD and F8 recovery natively, and an SRT saved byte for byte through the native Save dialog;
+  - the portable data upgrade from the published v0.56.0 executable (PIN, profiles, settings, collections, a download and its bytes);
+  - `test-accounts-mixed` 175/175 against v0.55.0, and the scroll measurement on an RTX 5070 with no consistent regression.
+
+  Its verdict: CONDITIONAL GO, with two gates left.
+
+- Run on Linux by Claude on `c22e4a2`, **Node 24.22.3**, npm 11.19.1, Playwright 1.63.0 with Chromium 157.0.8103.78:
+  - `npm ci` 0; **`npm test` 1430 pass, 1 Windows-only skip, 0 fail** (1431, CI's Linux count); `npm run check` 0; `npm run build` 0; `npm run build:web` 0.
+  - Chromium: `test-ui-brand-glass` **26/26**, `test-downloads-quality` **46/46**, `test-ui-feedback` **26/26**, `test-ui-nav-top` **54/54**, `test-ui-beta` **20/20**, `test-web` passed, `test-web-durability` **35/35**, `test-hud-keys` OK.
+  - `npm audit` lists the same 10 nodes (6 moderate, 4 high) as v0.56.0's lockfile. `ip` (GHSA-2p57-rm9w-gvfp) is called only in `bittorrent-tracker`'s tracker-server UDP parser, which Riwaq never runs. `minimatch` (GHSA-g3hv-75wg-m249) is in electron-builder's build chain. Neither was found reachable in the shipped app; both stay a separate dependency follow-up.
+- Static checks for the upgrade gate (not a substitute for it):
+  - The published v0.56.0 `SHA256SUMS.txt` matches GitHub's asset digests: the installer is `b58d15b7…6abb5c` (158,959,646 bytes) and the portable executable is `8af22b4d…a419d8`.
+  - `build` in `package.json` is identical between `ecb397b` and `c22e4a2`: `appId` is `app.riwaq.desktop`, `productName` is `Riwaq`, `perMachine` is false, and there is no custom `guid`. electron-builder is 26.18.1 in both lockfiles.
+  - Both installers therefore derive the NSIS GUID `fc1261ec-40e1-56ea-b738-fbb49466d632` (uninstall key `…\Uninstall\fc1261ec-40e1-56ea-b738-fbb49466d632`) and install under `%LOCALAPPDATA%\Programs\Riwaq`. Data stays in `%APPDATA%\Riwaq`.
+  - `scripts/test-upgrade.mjs` uses its own app ID and product name, so it does not cover this identity.
+- Platform for the accessibility gate:
+  - Electron 44.9.3 exposes `nativeTheme.prefersReducedTransparency` and, on Windows, `inForcedColorsMode`.
+  - Chromium reads Windows' "Transparency effects" from the `EnableTransparency` value under `HKCU\…\Themes\Personalize`.
+  - The glass CSS follows `prefers-reduced-transparency` and `forced-colors` without native code. Whether the value reaches Riwaq's renderer on Windows is part of the open gate.
+- Codex's P3 (the brand's axis and the wheel's lens) was measured with `wheelLayout`. The lens sits on slot `floor((n−1)/2)`, so an even number of visible destinations puts it off the arc's middle:
+  - 4 destinations: 2.3 px compact, 3.4 px open;
+  - 6 destinations: 0.9 and 1.3 px;
+  - 8 destinations: 0.4 and 0.7 px;
+  - the default 9, and every odd count, 0 px.
+
+  At least 3 destinations always show. Deferred: a fix would carry the lens's position from the wheel to the masthead.
+
+- **Not run** (no Windows machine or VM was attached to this session):
+  - the upgrade of an installed v0.56.0 NSIS copy to the 0.57.0 installer under the production identity, for the current user and for all users;
+  - Narrator in Arabic and English;
+  - Windows' real Transparency effects switch and contrast themes.
+
+  These two gates stay open for the release.
+
+## 2026-11-22 — 0.57.0 Beta prepared: #157 Download subtitle, #158 glass in three levels, #159 Riwaq's adaptive brand (unreleased)
+
+- Branch `claude/bold-babbage-usgy33` from `ecb397b` (the v0.56.0 merge of PR #155; v0.56.0 is the newest release and tag, so 0.57.0 is next). Commits: #157, #159, #158 and the release preparation. Design and measurements: [docs/GLASS-MATERIAL-0.57.md](docs/GLASS-MATERIAL-0.57.md); Flutter: [docs/ISSUE-158-GLASS-FLUTTER.md](docs/ISSUE-158-GLASS-FLUTTER.md). Nothing merged, tagged, released or deployed; Cloudflare untouched.
+- Run on Linux by Claude, **Node 24.22.3**, npm 11.19.1, Playwright 1.63.0 with Chromium 157.0.8103.78: `npm ci` 0; **`npm test` 1426 pass, 1 Windows-only skip, 0 fail** (1427; new: `brand` 6, two `subtitle-download` cases; `look`, `settings-wiring` and `player-menu-links` moved to the new contracts); `npm run check` 0; `npm run build` 0; `npm run build:web` 0.
+- New in Chromium: `scripts/test-ui-brand-glass.mjs` **26/26**:
+  - #159: the brand in the wheel and the rail, open and collapsed, Arabic and English, its mark on the icons' axis within 2 px. At 390, 768, 1024, 1440 and 1920 px it never overlaps the search, the drawer trigger or the utilities, and there is no horizontal scroll. The collapse buttons change it at once and it survives a reload.
+  - #159: 0.56.0 logo settings (`image` with a link, `name`, `mark` with a link) draw the mark only, are kept as saved, and **no request for the logo link is made**. Enter and Space on the brand open Home at its top, with a visible focus ring. The narrow drawer has its brand head, every button inside, and focus still on the navigation. The Logo page shows the preview of both states and the colour only, and Riwaq gold reaches the masthead.
+  - #158: the controls have no blur; the menu blurs 20 px and the dialog 24 px, both with grain; the depth order is controls < menu < dialog. Rest, hover, pressed, focus and chosen are five different computed looks (CDP `forcePseudoState`). Solid, emulated `prefers-reduced-transparency: reduce` and forced colours give no blur, grain or reflection. No backdrop-filter on any card, row, settings card or page surface, and no transition of layout or blur.
+  - #158 text contrast from pixels: dark secondary 13.29, menu 11.70, dialog heading 11.12, text 11.60; light 17.81, 15.00, 16.76, 16.62.
+- Neighbours, all on the final build:
+  - `test-ui-feedback` **26/26**, its glass contrast identical to 0.56.0's (dark: primary 10.07, secondary 17.47, choice 5.56, chosen 10.11, wheel label 14.71; light: 4.96, 6.74, 5.99, 4.96, 14.69; the reflections end above the text line). Its HUD bar check includes #151's chips with the new light.
+  - `test-downloads-quality` **44/44** in Arabic and English, "Download subtitle" under "Download video" (run with `RIWAQ_PLAYWRIGHT=/opt/node22/lib/node_modules/playwright`: Node 24's global folder has no Playwright here).
+  - `test-ui-nav-top` **54/54**, `test-ui-beta` **20/20**, `test-web` passed, `test-ui-overhaul` **17/17**, `test-ui-browse` **39/39**, `test-hud-keys` OK, `test-ui-review155` **20/20**, `test-ui-review155-round2` **16/16**. No page errors.
+- Performance, `scripts/measure-ui-glass.mjs`, v0.56.0's `dist-web` against this branch's, builds alternating. The workload was Home with 100 catalogs × 60 titles, one row per catalog (101 rows, 2,444 cards drawn), scrolled top to bottom at 1,600 px/s; headless Chromium with software compositing, where frames are paced at 16.7 ms.
+
+  | Metric (median, range) | 5 runs, before → after | 7 runs, before → after |
+  | --- | --- | --- |
+  | Scroll mean | 16.67 → 16.68 ms | 16.69 → 16.68 ms |
+  | Scroll p95 | 16.7 → 16.7 ms | 16.8 → 16.8 ms |
+  | Dropped frames of about 1,575 | 0 (0–4) → 1 (0–5) | 2 (0–2) → 1 (0–3) |
+  | Menu, first paint | 102 (88–160) → 123 (101–178) ms | 112 (103–121) → 110 (89–121) ms |
+  | Menu again (warm) | not measured | 107 (83–119) → 95 (86–119) ms |
+  | Dialog, first paint | 150 (126–203) → 148 (126–179) ms | 152 (117–158) → 156 (113–174) ms |
+  | Heap after GC | 23.20 → 23.07 MB | 23.23 → 23.23 MB |
+
+  No consistent difference beyond run-to-run noise: the 5-run menu median rose and the 7-run one fell, with overlapping ranges. The menu now really has its blur and grain, which 0.56.0's dead selector never gave it.
+- Screenshots of both builds (a scratch script outside the repository) cover:
+  - 1440 px in Arabic and English, dark and light, the wheel and the rail open and collapsed;
+  - 390, 768 and 1024 px, and the narrow drawers in both languages and both navigations;
+  - the dialog, the menu and Settings at 2× scale.
+
+  They were compared by eye: no clipping, overflow or misalignment, and no page errors. The issue's own screenshots (#158, #159) could not be opened here: GitHub's attachment host is outside the session's network policy.
+- **Not run:**
+  - Windows: Electron's real window, its native controls and the HUD window over MPV, DPAPI, packaging (`electron-builder --win nsis portable --x64 --publish never`), installers and the upgrade from v0.56.0.
+  - A real GPU (the glass's cost was measured with software compositing only).
+  - A screen reader, Firefox, `test-web-durability`, and the accounts scripts (no storage, account, sync, playback, update or Worker code changed).
+  - The native Save dialog with a real subtitle (#157 changed labels and English only).
+
 ## 2026-11-21 (tenth pass) — PR #155 after Codex's release acceptance: W4 with every carrier lost and a new device joining first (unreleased, draft)
 
 - Same branch `claude/loving-noether-3jcr1i`, fast-forward from `306be5f` (GitHub's PR head matched; PR draft; Codex's `3a66930` and `306be5f` kept unchanged): `8be4754` (W4) and this record. Cause, fix and limit: [docs/REVIEW-PR-155.md](docs/REVIEW-PR-155.md) "Tenth pass"; [docs/ACCOUNTS.md](docs/ACCOUNTS.md) "Clears and released apps". Version stays 0.56.0. Nothing merged, tagged, released or deployed; Cloudflare production and remote D1 neither read nor touched; no Worker change, no migration.

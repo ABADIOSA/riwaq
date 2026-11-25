@@ -32,10 +32,11 @@ import "./glass.css";
 import "./liquid.css";
 import "./wheel.css";
 import { watchErrors } from "./lib/diagnostics.js";
-import { savedScheme } from "./lib/scheme.js";
+import { savedScheme, watchForcedColors } from "./lib/scheme.js";
 
 // Recent interface errors for the diagnostic report (Settings → النظام).
 watchErrors();
+watchForcedColors();
 // The scheme this device drew last, until the app state arrives (#126).
 // The HUD's window is transparent over the picture and stays as it is.
 if (location.hash !== "#hud")

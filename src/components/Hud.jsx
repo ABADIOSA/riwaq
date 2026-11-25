@@ -300,6 +300,7 @@ export default function Hud() {
   }, [seekHover?.t, thumbMode, player.live, player.videoId]);
 
   const settings = state?.settings || {};
+  const appearance = resolveAppearance(settings);
   // The card's answer is kept per profile; "all" applies at the next rest
   // on the timeline (the same setting as Settings → the player page).
   const choosePreviews = (all) => {
@@ -490,12 +491,8 @@ export default function Hud() {
   return (
     <div
       key={uiLanguage}
-      className={`hud-stage ${shown ? "awake" : "asleep"}${settings.reduceMotion ? " reduced-motion" : ""}`}
-      style={
-        state
-          ? { "--hud-accent": resolveAppearance(state.settings).colors.accent }
-          : undefined
-      }
+      className={`hud-stage ${shown ? "awake" : "asleep"} glass-${appearance.glass}${settings.reduceMotion ? " reduced-motion" : ""}`}
+      style={state ? { "--hud-accent": appearance.colors.accent } : undefined}
       onMouseMove={(e) => {
         // Where the pointer is now, not only enter/leave: a menu that closes
         // under it (the sleep timer's) never reports leaving.

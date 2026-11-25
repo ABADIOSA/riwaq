@@ -42,7 +42,7 @@ export default {
   library: "library hide watched adult mature content",
   theme: "theme colors gradient presets",
   themes: "themes saved code share design",
-  logo: "logo icon taskbar image",
+  logo: "logo icon taskbar colour color brand sidebar",
   type: "type font fonts typeface",
   interface:
     "interface size corners density layout menu motion animation screensaver wheel navigation sidebar glass transparency effects",

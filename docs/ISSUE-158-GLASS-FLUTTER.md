@@ -17,6 +17,19 @@ Verified on Linux in Chromium (the web build; not on Windows): `scripts/test-ui-
 
 Not done, and why: per-card or per-button backdrop blur (CLAUDE.md, Performance: it repaints the page on every move); animated or pointer-tracking reflections (motion cost, reduced-motion and GPU budget); refraction or displacement of the backdrop (no CSS primitive does it without SVG filters that would run per frame on every surface). These are possible later, each measured against the 100 catalogs × 60 titles home first.
 
+## 1a. What ships in 0.57.0
+
+The larger material work: three levels of glass (controls, floating surfaces, dialogs) with a dome of reflected light, a lit top edge, a caustic at the foot, a two-part shadow and, on menus and dialogs, a frosted grain. It also fixes a menu that never had its glass and removes a per-row blur. See [GLASS-MATERIAL-0.57.md](GLASS-MATERIAL-0.57.md) for the design, the fallbacks and the before/after measurements.
+
+**New evidence on Flutter (the issue's follow-up, 2026-11-21).** The reference the requester pointed to, VyseTV (https://gitlab.com/ayman707-ux/vysetv), is itself a Flutter app. It embeds mpv (`mpv-build.lock.json`) on Windows, Android, macOS, Linux and iOS. That shows a Flutter media client with mpv is buildable, which section 3 below treated as an open seam.
+
+It does not change the decision:
+
+- VyseTV is GPL-3.0 and Riwaq is MIT, so none of its code could be reused. A Riwaq port would still be written from scratch.
+- Everything in section 3 that is specific to Riwaq still stands: `core/` (backups, accounts, sync clears, providers), DPAPI-sealed state, signed updates, the web edition and Arabic layouts.
+
+Its screenshots were studied for visual direction only (GLASS-MATERIAL-0.57.md, section 2).
+
 ## 2. Is Flutter needed for this?
 
 No. What the issue describes — gradients, reflections, translucency, blur, edge light, contrast in both schemes — is what CSS in Chromium already draws, and the app already draws it (`src/glass.css`, `src/liquid.css`, `src/wheel.css`). Flutter's `BackdropFilter` and shaders give comparable results, not better ones, for this kind of material. The limits Riwaq has with glass come from its own rules (no per-card blur, readability over pictures, Solid and reduced-transparency modes), not from the framework.

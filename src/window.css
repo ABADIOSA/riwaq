@@ -156,23 +156,14 @@
   will-change: opacity;
 }
 
-/* Logo & icon. */
-.app.logostyle-mark .brand-name,
-.app.logostyle-name .brand-mark {
-  display: none;
-}
+/* Logo & icon. The brand's layout follows the navigation (#159); only
+   its colour is a choice. */
 .app.logotint-gold .brand-mark span {
   border-color: #e7b66e;
 }
 .app.logotint-gold .brand-mark span:nth-child(2) {
   background: #e7b66e;
 }
-.brand-image {
-  max-width: 160px;
-  max-height: 56px;
-  object-fit: contain;
-}
-
 /* The ambient screensaver. */
 .screensaver {
   position: fixed;

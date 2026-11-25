@@ -1473,52 +1473,35 @@ button.dock-row {
   color: #fff;
 }
 
-/* Logo & icon. */
-.logo-choices {
+/* Logo & icon (issue #159): what the masthead shows in each state of the
+   navigation, drawn with the same mark and name. A preview, not a choice. */
+.brand-states {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 12px;
   margin: 10px 0 16px;
 }
-.logo-choices > button {
+.brand-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  margin: 0;
   padding: 18px 12px 12px;
   border-radius: var(--radius-lg, 16px);
   border: 1px solid var(--line);
   background: var(--raised, #1b1e22);
-  color: var(--muted);
 }
-.logo-choices > button.selected {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.logo-choices > button:disabled {
-  opacity: 0.45;
-}
-.logo-sample {
+.brand-sample {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   height: 44px;
   color: var(--text);
 }
-.logo-sample b {
-  font-size: 24px;
-}
-.logo-sample .brand-mark {
-  height: 30px;
-  width: 34px;
-}
-.logo-sample .brand-mark span {
-  width: 9px;
-}
-.logo-sample img {
-  max-height: 40px;
-  max-width: 120px;
-  object-fit: contain;
+.brand-state figcaption {
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 /* Ambience. */

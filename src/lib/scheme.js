@@ -6,6 +6,7 @@
  * colour (the app state arrives a moment later).
  */
 import { useEffect, useState } from "react";
+import { api, isWeb } from "./api.js";
 
 const QUERY = "(prefers-color-scheme: dark)";
 const SAVED = "riwaq.scheme";
@@ -20,6 +21,36 @@ const media = () => {
 
 /** Whether the system asks for dark; dark when it cannot be read. */
 export const systemDark = () => media()?.matches ?? true;
+
+/** A Windows contrast theme can reach Electron before the renderer's media
+ * query, or bypass that query after a reload. Use either signal. */
+export function watchForcedColors() {
+  const query = window.matchMedia("(forced-colors: active)");
+  let native = false;
+  let updated = false;
+  const paint = () =>
+    document.documentElement.classList.toggle(
+      "forced-colors",
+      native || query.matches,
+    );
+  const update = (forced) => {
+    if (typeof forced !== "boolean") return;
+    updated = true;
+    native = forced;
+    paint();
+  };
+  query.addEventListener("change", paint);
+  paint();
+  if (api && !isWeb) {
+    api.on?.("systemContrast", update);
+    api
+      .call("systemContrast")
+      .then((forced) => {
+        if (!updated) update(forced);
+      })
+      .catch(() => {});
+  }
+}
 
 export function useSystemDark() {
   const [dark, setDark] = useState(systemDark);

@@ -9,8 +9,9 @@ export default {
     "Your favourite channels have reached the limit ({n}); remove one to add another",
   "مصدر الترجمة يشير إلى عنوان على شبكتك، فلم تُحفظ":
     "The subtitle source points to an address on your network, so it was not saved",
+  // Singular since 0.57 (#157): one subtitle is saved at a time.
   "الإضافة التي جاءت منها هذه الترجمة لم تعد مثبتة":
-    "The addon these subtitles came from is no longer installed",
+    "The addon this subtitle came from is no longer installed",
   "انتهت المشاهدة التي طُلبت منها الترجمة؛ لم تُحفظ":
-    "The viewing these subtitles were requested from has ended; nothing was saved",
+    "The viewing this subtitle was requested from has ended; nothing was saved",
 };

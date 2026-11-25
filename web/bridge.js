@@ -100,6 +100,7 @@ const EVENTS = new Set([
   "playerRequest",
   "hudCommand",
   "sources",
+  "systemContrast",
   "window",
 ]);
 
@@ -875,6 +876,7 @@ export async function startBridge({ version, store }) {
       return music.source(a || {});
     },
     init: () => client.init(),
+    systemContrast: () => false,
     windowInfo: () => windowState(),
     windowControl: () => windowState(),
     windowDrag: () => false,

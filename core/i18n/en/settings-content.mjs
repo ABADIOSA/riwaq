@@ -12,15 +12,6 @@ export default {
   "سمة من صديق": "A theme from a friend",
   "أضفها إلى سماتك": "Add it to your themes",
   الشعار: "Logo",
-  "كيف يظهر شعار رِواق في القائمة.": "How Riwaq's logo appears in the menu.",
-  "الشعار والاسم": "Logo and name",
-  "الشعار فقط": "Logo only",
-  "الاسم فقط": "Name only",
-  صورتي: "My image",
-  "صورة شعارك (رابط https لصورة PNG أو SVG)":
-    "Your logo image (an https link to a PNG or SVG)",
-  "تُعرض الصورة كما هي؛ رِواق لا يرفعها إلى أي مكان.":
-    "The image shows as it is; Riwaq never uploads it anywhere.",
   "ذهبي رِواق": "Riwaq gold",
   "أيقونة التطبيق": "App icon",
   "أيقونة رِواق في شريط المهام أثناء تشغيله.":

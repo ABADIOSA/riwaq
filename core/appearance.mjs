@@ -260,10 +260,13 @@ export const DEFAULT_APPEARANCE = {
   ambientStrength: 24,
   ambientBlur: "medium",
   ambientFade: 700,
-  // Logo: the full mark and name, the mark alone, the name alone, or the
-  // viewer's own image; the mark follows the accent colour or stays gold.
-  logoStyle: "full",
+  // Logo colour: the mark follows the accent colour or stays Riwaq's gold.
   logoTint: "accent",
+  // Retired in 0.57 (issue #159, core/brand.mjs): the brand is always
+  // Riwaq's own mark, with its name where the navigation shows names.
+  // Kept, validated and never read, so a 0.56.0 device on the same account,
+  // a backup or a shared theme keeps what it had.
+  logoStyle: "full",
   logoImage: "",
   // The taskbar icon: Riwaq's own, or its mark drawn in the accent colour.
   appIcon: "classic",
@@ -422,12 +425,14 @@ export function safeAppearance(input, current = DEFAULT_APPEARANCE) {
     );
   if ("ambientFade" in input)
     next.ambientFade = number(input.ambientFade, 0, 2000, next.ambientFade);
+  next.logoTint = choose(input.logoTint, ["accent", "gold"], next.logoTint);
+  // Retired (#159): validated as 0.56.0 did, so the values travel back to
+  // a device that still draws them, and never read for drawing here.
   next.logoStyle = choose(
     input.logoStyle,
     ["full", "mark", "name", "image"],
     next.logoStyle,
   );
-  next.logoTint = choose(input.logoTint, ["accent", "gold"], next.logoTint);
   if (typeof input.logoImage === "string")
     next.logoImage = imageUrl(input.logoImage);
   if (next.logoStyle === "image" && !next.logoImage) next.logoStyle = "full";
@@ -634,6 +639,12 @@ export function themeVariables(input) {
     contrast(c.accent, "#111111") >= contrast(c.accent, "#FFFFFF")
       ? "#141210"
       : "#FFFFFF";
+  const brandTint =
+    a.logoTint === "gold" ? (isLight(c) ? "#9C6A22" : "#E7B66E") : c.accent;
+  // In compact navigation the mark is the Home button's only visible cue.
+  const visibleBrandTint = [brandTint, c.text, "#FFFFFF", "#000000"].find(
+    (color) => contrast(color, c.bg) >= 3,
+  );
   const radius = { sharp: 4, rounded: 10, soft: 18 }[a.radius];
   const gap = { compact: 10, comfortable: 16, spacious: 24 }[a.density];
   const font =
@@ -650,6 +661,7 @@ export function themeVariables(input) {
     "--muted": c.muted,
     "--line": `${c.line}`,
     "--accent": c.accent,
+    "--brand-tint": visibleBrandTint,
     "--accent-end": c.accentEnd,
     "--accent-soft": `${c.accent}26`,
     "--accent-ink": ink,
@@ -698,7 +710,6 @@ export function themeClasses(input) {
     `detailbg-${a.detailBackground}`,
     a.wallpaper ? "wall-on" : "",
     a.ambient === "artwork" ? "ambience-glow" : "",
-    `logostyle-${a.logoStyle}`,
     `logotint-${a.logoTint}`,
   ]
     .filter(Boolean)

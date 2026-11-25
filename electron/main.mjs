@@ -716,7 +716,13 @@ let cursorCheck = () => {};
 const cursorGate = new CursorGate((visible) => {
   if (process.platform === "win32") showSystemCursor(visible);
 });
-const HUD_EVENTS = new Set(["player", "state", "notice", "hudCommand"]);
+const HUD_EVENTS = new Set([
+  "player",
+  "state",
+  "notice",
+  "hudCommand",
+  "systemContrast",
+]);
 /**
  * An installation for every user of the PC lives under Program Files (the
  * installer's "all users" choice, issue #86); a per-user one under the
@@ -1037,6 +1043,7 @@ function windowState() {
     fullscreen: !!window?.isFullScreen(),
   };
 }
+const systemContrast = () => nativeTheme.inForcedColorsMode === true;
 let dragTimer = null;
 /**
  * "Drag the window from anywhere": the page reports a press on empty space
@@ -1809,6 +1816,7 @@ const methods = {
     return musicLibrary.source(a || {});
   },
   init: () => client.init(),
+  systemContrast,
   windowInfo: () => windowState(),
   windowControl: (a) => {
     if (!window) return windowState();
@@ -3153,6 +3161,7 @@ app
       const look = drawnLook();
       // Windows switching between light and dark repaints the native bar.
       nativeTheme.on("updated", applyTitleOverlay);
+      nativeTheme.on("updated", () => emit("systemContrast", systemContrast()));
       syncLanguage();
       window = new BrowserWindow({
         ...(runningFrame === "hybrid"

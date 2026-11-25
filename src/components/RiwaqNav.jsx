@@ -19,7 +19,9 @@ import {
 } from "lucide-react";
 import { lockScroll } from "../lib/scroll-lock.js";
 import RiwaqWheel from "./RiwaqWheel.jsx";
+import RiwaqMark from "./RiwaqMark.jsx";
 import { language } from "../../core/i18n.mjs";
+import { brandLayout } from "../../core/brand.mjs";
 export default function RiwaqNav({
   view,
   folderFrom,
@@ -95,6 +97,12 @@ export default function RiwaqNav({
     );
   };
   const wheel = appearance.navStyle !== "rail";
+  const brand = brandLayout({
+    narrow,
+    navStyle: wheel ? "wheel" : "rail",
+    wheelOpen,
+    sidebarCollapsed: collapsed,
+  });
   const sidebar = wheel ? wheelSidebar() : railSidebar();
   function wheelSidebar() {
     const open = narrow || wheelOpen;
@@ -309,33 +317,17 @@ export default function RiwaqNav({
         >
           <Menu size={22} />
         </button>
+        {/* Issue #159: Riwaq's own mark, with its name only where the
+            navigation shows names (core/brand.mjs). */}
         <button
-          className="riwaq-wordmark"
+          className={`riwaq-wordmark is-${brand}`}
+          data-brand={brand}
           onClick={() => go("home")}
           aria-label="رِواق — الرئيسية"
+          title={brand === "mark" ? "رِواق — الرئيسية" : undefined}
         >
-          {appearance.logoStyle === "image" ? (
-            <img
-              className="riwaq-custom-logo"
-              src={appearance.logoImage}
-              alt="رِواق"
-            />
-          ) : (
-            <>
-              {appearance.logoStyle !== "name" && (
-                <span className="riwaq-monogram" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                </span>
-              )}
-              {appearance.logoStyle !== "mark" && (
-                <b>
-                  رِواق<span>مساحة للحكاية</span>
-                </b>
-              )}
-            </>
-          )}
+          <RiwaqMark />
+          {brand === "full" && <b className="riwaq-brand-name">رِواق</b>}
         </button>
         {search}
         <div className="riwaq-utilities">{actions}</div>
@@ -352,6 +344,12 @@ export default function RiwaqNav({
             if (e.target === e.currentTarget) close();
           }}
         >
+          {/* The open drawer is the navigation expanded: the mark and the
+              name head it, as the masthead does beside an open sidebar. */}
+          <div className="riwaq-drawer-brand">
+            <RiwaqMark />
+            <b className="riwaq-brand-name">رِواق</b>
+          </div>
           {sidebar}
         </dialog>
       ) : (

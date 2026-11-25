@@ -2,6 +2,20 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { call } from "../lib/api.js";
 import "../downloads-quality.css";
 
+function SubtitleLabel({ choice: { label, ordinal }, detail = false }) {
+  const suffix = ordinal ? ` · ${ordinal}` : "";
+  return (
+    <span
+      className={detail ? "subtitle-label menu-detail" : "subtitle-label"}
+      dir="auto"
+      title={detail ? label + suffix : undefined}
+    >
+      <span className="subtitle-label-text">{label}</span>
+      {ordinal && <span className="subtitle-label-ordinal">{suffix}</span>}
+    </span>
+  );
+}
+
 /**
  * The player's right-click menu, drawn in the page that holds the controls
  * (the HUD over the picture, or the theater), as Harbor and Nuvio HTPC do.
@@ -149,7 +163,7 @@ export default function PlayerMenu({ at, onClose, onError, request = call }) {
               aria-describedby="subtitle-choices"
               onClick={pick(() => run("downloadSubtitles", { choice: c.id }))}
             >
-              <span dir="auto">{c.label}</span>
+              <SubtitleLabel choice={c} />
             </button>
           ))}
           <hr />
@@ -231,9 +245,7 @@ export default function PlayerMenu({ at, onClose, onError, request = call }) {
             تنزيل الترجمة
             {direct && (
               // Which subtitle is saved, so another language never is.
-              <span className="menu-detail" dir="auto" title={direct.label}>
-                {direct.label}
-              </span>
+              <SubtitleLabel choice={direct} detail />
             )}
           </button>
           {!subtitles.choices.length && (

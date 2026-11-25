@@ -12,7 +12,8 @@ const read = (path) =>
 // #113: Take a screenshot, Copy torrent link, Copy magnet link, Download
 // video. The torrent link is the address the torrent plays from on this
 // computer (for another player); the magnet is its hash and trackers.
-// #157 adds "Download subtitles" right under "Download video".
+// #157 adds "Download subtitle" (singular since 0.57: one track, one file)
+// right under "Download video".
 test("the player menu lists the four items of #113 in order, then #157's", () => {
   const menu = read("src/components/PlayerMenu.jsx");
   const items = menu.slice(menu.indexOf("التقط لقطة شاشة") - 80);
@@ -44,7 +45,7 @@ test("the player menu lists the four items of #113 in order, then #157's", () =>
       "Copy torrent link",
       "Copy magnet link",
       "Download video",
-      "Download subtitles",
+      "Download subtitle",
     ],
   );
   // No word about a missing torrent file is left from 0.53.0.

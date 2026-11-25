@@ -5,6 +5,7 @@ import { execSync, execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import assert from "node:assert/strict";
+import { subtitleMenu } from "../electron/subtitle-save.mjs";
 const require = createRequire(import.meta.url);
 const { chromium } = require(
   process.env.RIWAQ_PLAYWRIGHT ||
@@ -242,7 +243,7 @@ try {
     await page.locator(".player-menu").waitFor();
     await page.screenshot({ path: join(output, `menu-${lang}.png`) });
     await check(
-      `${lang}: the menu is #113's four items, then #157's Download subtitles, without redundant controls`,
+      `${lang}: the menu is #113's four items, then #157's Download subtitle, without redundant controls`,
       async () => {
         // An item's own words (its first text), without the line under it.
         const labels = await page
@@ -265,7 +266,7 @@ try {
                 "Copy torrent link",
                 "Copy magnet link",
                 "Download video",
-                "Download subtitles",
+                "Download subtitle",
               ],
         );
         assert.equal(await page.locator(".player-menu .menu-note").count(), 0);
@@ -341,7 +342,7 @@ try {
     };
     await openMenu({});
     await check(
-      `${lang}: #157 Download subtitles sits right under Download video and names the subtitle it saves`,
+      `${lang}: #157 Download subtitle sits right under Download video and names the subtitle it saves`,
       async () => {
         const order = await page
           .locator(".player-menu > button")
@@ -415,7 +416,7 @@ try {
         await page.locator(".subtitle-choice").first().waitFor();
         assert.match(
           await page.locator("#subtitle-choices").innerText(),
-          lang === "ar" ? /اختر الترجمة/ : /Choose the subtitles to save/,
+          lang === "ar" ? /اختر الترجمة/ : /Choose the subtitle to save/,
         );
         const box = await page.locator(".player-menu").boundingBox();
         assert.ok(box.width <= 320 && box.x + box.width <= 980);
@@ -432,6 +433,32 @@ try {
           (await actions()).map((a) => [a.action, a.choice]),
           [["downloadSubtitles", "t4"]],
         );
+      },
+    );
+    const longDuplicates = ["t3", "t4"].map((id) => ({
+      id,
+      kind: "addon",
+      lang: "ara",
+      title: long,
+      selected: false,
+    }));
+    await openMenu({ subtitles: subtitleMenu(longDuplicates, lang) });
+    await check(
+      `${lang}: #157 both ordinals are visible and accessible when the duplicate title is long`,
+      async () => {
+        await subtitleItem().click();
+        for (const number of [1, 2]) {
+          const item = page.getByRole("menuitem", {
+            name: new RegExp(` · ${number}$`),
+          });
+          assert.equal(await item.count(), 1);
+          const ordinal = item.getByText(`· ${number}`, { exact: true });
+          assert.equal(await ordinal.count(), 1);
+          const box = await item.boundingBox();
+          const digit = await ordinal.boundingBox();
+          assert.ok(digit.width > 0 && digit.x >= box.x);
+          assert.ok(digit.x + digit.width <= box.x + box.width);
+        }
       },
     );
     await openMenu({});

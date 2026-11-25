@@ -1,4 +1,4 @@
-// Issue #157: "Download subtitles" in the player menu. The bounded fetch
+// Issue #157: "Download subtitle" in the player menu. The bounded fetch
 // and file checks (core/subtitle-export.mjs) and main's choices and save
 // (electron/subtitle-save.mjs), over a loopback HTTP fixture, a temporary
 // folder and a stand-in Save dialog. No outside request is made.
@@ -363,6 +363,103 @@ test("choices: addon and local subtitles can be saved, embedded ones cannot; the
   assert.equal(embedded.reason, "مدمجة في ملف الفيديو");
   assert.equal(translate(embedded.reason, "en"), "Inside the video file");
   assert.equal(subtitleMenu([]).reason, "لا ترجمة محمّلة");
+});
+
+const addonChoice = (id, lang, extra = {}) => ({
+  id,
+  track: Number(id.slice(1)),
+  lang,
+  title: "",
+  selected: false,
+  kind: "addon",
+  url: `https://subs.example/${id}.srt`,
+  origin: "https://subs.example",
+  ...extra,
+});
+
+const displayedChoices = (menu, lang) =>
+  menu.choices.map(({ id, label, ordinal }) => [
+    id,
+    `${translate(label, lang)}${ordinal ? ` · ${ordinal}` : ""}`,
+  ]);
+
+test("0.57: two subtitles that would read the same are numbered, the rest keep their names", () => {
+  const menu = subtitleMenu([
+    addonChoice("t3", "ara"),
+    addonChoice("t4", "eng"),
+    addonChoice("t5", "ara", { selected: true }),
+    addonChoice("t6", "ara"),
+  ]);
+  // The selected one stays first; each Arabic one gets its place among them.
+  assert.deepEqual(displayedChoices(menu, "ar"), [
+    ["t5", "العربية · 1"],
+    ["t3", "العربية · 2"],
+    ["t4", "الإنجليزية"],
+    ["t6", "العربية · 3"],
+  ]);
+  assert.equal(displayedChoices(menu, "en")[1][1], "Arabic · 2");
+  // Nothing about where they came from reaches the page.
+  assert.ok(!JSON.stringify(menu).includes("subs.example"));
+});
+
+test("subtitle choice numbering keeps a track with an existing numeric title distinct", () => {
+  const sources = [
+    addonChoice("t1", "ara"),
+    addonChoice("t2", "ara"),
+    addonChoice("t3", "ara", { title: "2" }),
+  ];
+  for (const [lang, arabic] of [
+    ["ar", "العربية"],
+    ["en", "Arabic"],
+  ]) {
+    assert.deepEqual(displayedChoices(subtitleMenu(sources, lang), lang), [
+      ["t1", `${arabic} · 1`],
+      ["t2", `${arabic} · 3`],
+      ["t3", `${arabic} · 2`],
+    ]);
+  }
+});
+
+test("subtitle choices that collide only in English are numbered only in English", () => {
+  const sources = [
+    addonChoice("t1", "ara", { title: "العربية" }),
+    addonChoice("t2", "ara", { title: "Arabic" }),
+  ];
+  assert.deepEqual(displayedChoices(subtitleMenu(sources, "ar"), "ar"), [
+    ["t1", "العربية · العربية"],
+    ["t2", "العربية · Arabic"],
+  ]);
+  assert.deepEqual(displayedChoices(subtitleMenu(sources, "en"), "en"), [
+    ["t1", "Arabic · Arabic · 1"],
+    ["t2", "Arabic · Arabic · 2"],
+  ]);
+});
+
+test("0.57 (#157 follow-up): the English names one subtitle, never all of them", () => {
+  assert.equal(translate("تنزيل الترجمة", "en"), "Download subtitle");
+  assert.equal(translate("حفظ الترجمة", "en"), "Save subtitle");
+  assert.equal(
+    translate("اختر الترجمة التي تريد حفظها", "en"),
+    "Choose the subtitle to save",
+  );
+  assert.equal(
+    translate("حُفظت الترجمة «ar.srt»", "en"),
+    "Saved the subtitle as “ar.srt”",
+  );
+  for (const key of [
+    "تنزيل الترجمة",
+    "حفظ الترجمة",
+    "اختر الترجمة التي تريد حفظها",
+    "لم تعد هذه الترجمة في المشاهدة",
+    "اختر ترجمة من القائمة",
+    "انتهت مهلة تحميل الترجمة",
+    "تعذّر تحميل الترجمة من مصدرها",
+    "الإضافة التي جاءت منها هذه الترجمة لم تعد مثبتة",
+    "انتهت المشاهدة التي طُلبت منها الترجمة؛ لم تُحفظ",
+  ])
+    assert.doesNotMatch(translate(key, "en"), /\bsubtitles\b/, key);
+  // None at all stays plural.
+  assert.equal(translate("لا ترجمة محمّلة", "en"), "No subtitles loaded");
 });
 
 test("saving: the selected addon subtitle, the exact bytes, cancel writes nothing, a stale or embedded choice is refused", async () => {
